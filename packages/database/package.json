@@ -1,0 +1,25 @@
+{
+  "name": "@allvision/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "generate": "prisma generate --schema prisma/schema.prisma",
+    "migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
+    "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "seed": "tsx src/seed.ts",
+    "studio": "prisma studio --schema prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@types/bcrypt": "^6.0.0",
+    "bcrypt": "^6.0.0",
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.4.5"
+  }
+}

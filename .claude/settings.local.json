@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "PowerShell(Set-Location \"c:\\\\Allvision-Studio\"; $env:DATABASE_URL=\"postgresql://allvision:allvision_pass@localhost:5432/allvision\"; npx prisma migrate dev --name init --schema packages/database/prisma/schema.prisma 2>&1 | Select-Object -Last 30)",
+      "PowerShell(docker exec allvision-postgres psql -U allvision -d allvision -c \"SELECT 1\" 2>&1)",
+      "PowerShell($bytes = [System.IO.File]::ReadAllBytes\\(\"c:\\\\Allvision-Studio\\\\.env\"\\); \"$\\($bytes.Length\\) bytes, first 10: $\\($bytes[0..9] -join ','\\)\")",
+      "PowerShell(Set-Location \"c:\\\\Allvision-Studio\"; $env:DATABASE_URL = 'postgresql://allvision:allvision_pass@localhost:5432/allvision'; npx prisma migrate dev --name init --schema packages/database/prisma/schema.prisma 2>&1 | Out-String)",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5432 -State Listen | Select-Object -First 3 LocalAddress, OwningProcess; Get-Process -Id \\(Get-NetTCPConnection -LocalPort 5432 -State Listen | Select-Object -First 1 -ExpandProperty OwningProcess\\) | Select-Object Name, Id, Path)",
+      "PowerShell(foreach \\($pid in 24280, 8880\\) { try { $p = Get-Process -Id $pid -ErrorAction Stop; Write-Output \"$pid -> $\\($p.Name\\) [$\\($p.Path\\)]\" } catch { Write-Output \"$pid -> not found\" } })",
+      "PowerShell(foreach \\($id in 24280, 8880\\) { try { $p = Get-Process -Id $id -ErrorAction Stop; Write-Output \"$id -> $\\($p.Name\\) [$\\($p.Path\\)]\" } catch { Write-Output \"$id -> not found\" } })"
+    ]
+  }
+}

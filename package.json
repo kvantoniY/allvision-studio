@@ -1,0 +1,24 @@
+{
+  "name": "allvision-studio",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api,worker -c cyan,green,magenta \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:worker\"",
+    "dev:web": "npm run dev -w @allvision/web",
+    "dev:api": "npm run dev -w @allvision/api",
+    "dev:worker": "npm run dev -w @allvision/worker",
+    "build": "npm run build -w @allvision/shared && npm run generate -w @allvision/database && npm run build -w @allvision/api && npm run build -w @allvision/worker && npm run build -w @allvision/web",
+    "db:migrate": "prisma migrate dev --schema packages/database/prisma/schema.prisma",
+    "db:seed": "tsx packages/database/src/seed.ts",
+    "db:studio": "npx prisma studio --schema packages/database/prisma/schema.prisma",
+    "test": "npm test -w @allvision/api"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  }
+}

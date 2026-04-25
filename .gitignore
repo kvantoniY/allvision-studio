@@ -1,0 +1,44 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+.npm
+.pnp.*
+.yarn/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Prisma
+packages/database/src/generated/
+
+# User uploads / runtime data
+uploads/
+apps/api/uploads/
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+coverage/
+.turbo/
