@@ -66,6 +66,9 @@ export async function login(input: LoginInput) {
   if (!user) {
     throw new HttpError(401, 'INVALID_CREDENTIALS', 'Неверный email или пароль');
   }
+  if (user.deletedAt) {
+    throw new HttpError(401, 'ACCOUNT_DELETED', 'Аккаунт удалён');
+  }
   const ok = await bcrypt.compare(input.password, user.passwordHash);
   if (!ok) {
     throw new HttpError(401, 'INVALID_CREDENTIALS', 'Неверный email или пароль');

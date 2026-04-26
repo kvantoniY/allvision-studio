@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Coins, LogOut, Menu, Sparkles, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { DashboardSidebarMobile } from '@/components/dashboard/DashboardSidebarMobile';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,14 +34,19 @@ function initialsOf(name: string | null | undefined, email: string) {
 
 export function Header() {
   const { user, logout } = useAuth();
+  const pathname = usePathname();
+  const inDashboard = pathname?.startsWith('/dashboard') ?? false;
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
       <div className="container flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <span>Allvision Studio</span>
-        </Link>
+        <div className="flex items-center gap-2">
+          {inDashboard && <DashboardSidebarMobile />}
+          <Link href="/" className="flex items-center gap-2 font-semibold">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <span>Allvision Studio</span>
+          </Link>
+        </div>
 
         <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
           {navItems.map((item) => (

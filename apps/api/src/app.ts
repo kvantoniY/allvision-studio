@@ -5,6 +5,7 @@ import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import { router } from './routes';
 import { errorHandler } from './middleware/error-handler';
+import { requestLogger } from './middleware/request-logger';
 
 export const app = express();
 
@@ -20,6 +21,7 @@ app.use(
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+app.use(requestLogger);
 
 app.use('/api', router);
 

@@ -20,6 +20,7 @@ model User {
   messengerType MessengerType?
   passwordResetToken     String?
   passwordResetExpiresAt DateTime?
+  deletedAt     DateTime?
   createdAt     DateTime  @default(now())
 
   projects      Project[]

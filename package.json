@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n web,api,worker -c cyan,green,magenta \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:worker\"",
+    "dev": "concurrently -k --kill-others-on-fail --kill-signal SIGINT -n web,api,worker -c cyan,green,magenta \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:worker\"",
     "dev:web": "npm run dev -w @allvision/web",
     "dev:api": "npm run dev -w @allvision/api",
     "dev:worker": "npm run dev -w @allvision/worker",

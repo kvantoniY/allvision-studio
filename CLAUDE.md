@@ -100,3 +100,41 @@
 - Проверки: `npm run db:seed`, `npm run build -w @allvision/web`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `Select-String 'placehold\\.co|MVP-страница'` по web/seed.
 - Важно для проверки: если запущен `npm run dev`, root `npm run build` на Windows может упасть на `EPERM` при `prisma generate`, потому что активный API держит `query_engine-windows.dll.node`; остановить dev-сервер и повторить build.
 - Ручная проверка после запуска: `npm run dev`, открыть `/`, `/services`, `/services/photo-restore`, `/trends`, `/pricing`; проверить загрузку картинок, hover-эффекты и адаптивность 375px/768px/1440px.
+
+### Этап 1.4 — Личный кабинет ✅
+- Prisma: в `User` добавлено поле `deletedAt DateTime?`; миграция `packages/database/prisma/migrations/20260425163444_add_user_soft_delete`. В `apps/api/src/services/auth-service.ts` `login` теперь возвращает 401 `ACCOUNT_DELETED`, если `deletedAt` не null.
+- Schemas (`packages/shared/src/schemas/account.ts`): `updateProfileSchema`, `changeAccountPasswordSchema` (отдельно от `changePasswordSchema` из auth, чтобы не пересекаться по типам), `deleteAccountSchema` с literal `"УДАЛИТЬ"`. Соответствующие типы — в `packages/shared/src/types/account.ts` (`AccountUser`, `DashboardResponse`, `Paginated<T>`, `TransactionsResponse`, `PaymentsResponse`, `UpdateProfileResponse`).
+- API endpoints под `/api/account/*` (требуют `requireAuth`):
+  - `GET /api/account/dashboard` — агрегаты (`stats.totalProjects/completedProjects/activeOrders/totalSpent`), последние 4 проекта, активные заказы (статусы `NEW/NEGOTIATING/PRICE_SET/PAID/IN_PROGRESS/REVIEW`), последние 5 транзакций.
+  - `GET /api/account/transactions?page=&limit=&type=topup|spending|all` — пагинированный лог `TokenTransaction`.
+  - `GET /api/account/payments?page=&limit=` — пагинированные платежи юзера.
+  - `PATCH /api/account/profile` — обновление `name/avatar/messenger/messengerType`.
+  - `POST /api/account/profile/password` — смена пароля; при успехе **ротирует cookies** (новые `accessToken`/`refreshToken`).
+  - `DELETE /api/account` — soft-delete: ставит `deletedAt = now()`, заменяет email на `deleted_<id>@allvision.local` (чтобы освободить email под перерегистрацию), очищает auth-cookies. Полная чистка через 30 дней — на будущую джобу.
+- Реализация в `apps/api/src/services/account-service.ts` + роутер `apps/api/src/routes/account.ts`, подключён в `apps/api/src/routes/index.ts`.
+- Тесты `apps/api/src/__tests__/account.test.ts`: 401 без авторизации, корректная dashboard-структура, обновление профиля, валидация, неверный/верный oldPassword (с проверкой выдачи новых cookies), soft-delete + проверка флага в БД. Тесты используют один общий `request.agent`, чтобы не упереться в `authLimiter` (5 логинов/15 мин). `npm test -w @allvision/api` → 13/13.
+- Frontend RTK Query: `apps/web/src/store/api/account-api.ts` (`accountApi`, теги `User/Dashboard/Transactions/Payments`), хуки `useGetDashboardQuery`, `useGetTransactionsQuery`, `useGetPaymentsQuery`, `useUpdateProfileMutation`, `useChangePasswordMutation`, `useDeleteAccountMutation`. Подключён в `apps/web/src/store/index.ts`.
+- Layout кабинета: `apps/web/src/app/dashboard/layout.tsx` оборачивает `AuthGuard` + flex-структуру с `DashboardSidebar` (desktop) и контент-областью на `slate-950`. Sidebar — `apps/web/src/components/dashboard/DashboardSidebar.tsx` (общий контент через `DashboardSidebarContent`); мобильная версия — `apps/web/src/components/dashboard/DashboardSidebarMobile.tsx` через `Sheet`. Sidebar содержит: блок профиля, акцентный блок баланса (link на `/pricing`), 6 пунктов меню с активной violet-подсветкой, кнопку «Купить токены» внизу.
+- Header (`apps/web/src/components/layout/Header.tsx`): на путях `/dashboard/**` слева добавлена кнопка-гамбургер, открывающая мобильный sidebar (`DashboardSidebarMobile`); пункт «Кабинет» в dropdown был добавлен ранее, оставлен.
+- Страницы кабинета:
+  - `/dashboard` — приветствие, 4 stat-карточки, блок «Что хотите создать?» (3 quick-start карточки на услуги photo-restore/photo-animate/trends), сетка «Последние проекты» (2/3) + «Последние операции» (1/3), активные заказы (показываются если есть). При полном empty-state добавлен gradient-CTA блок «Начните прямо сейчас».
+  - `/dashboard/projects` — chip-фильтры по статусу, поиск, сетка `ProjectCard`. На 1.4 массив пуст — empty state.
+  - `/dashboard/orders` — `Tabs` (Все/Активные/Завершённые/Отменённые), `OrderCard`. На 1.4 пусто — empty state.
+  - `/dashboard/fairy-tales` — empty state с CTA на `/services/fairy-tale`.
+  - `/dashboard/billing` — карточка баланса сверху, `Tabs` «История транзакций» / «История платежей»; в транзакциях chip-фильтр all/topup/spending, таблица с пагинацией. У свежезарегистрированного юзера видно как минимум одну запись `welcome_bonus`. Empty state в платежах ведёт на `/pricing`.
+  - `/dashboard/profile` — 4 секции: Личные данные (аватар-плейсхолдер «скоро», name, email read-only, дата регистрации), Контактные данные (нативный `<select>` для `messengerType` — чтобы не добавлять новый shadcn-компонент, контакт строкой), Безопасность (раскрывающаяся форма смены пароля, после успеха toast «Пароль изменён, произведён повторный вход»), Удаление аккаунта (alert-блок + раскрывающаяся форма с confirmation = `УДАЛИТЬ` + текущий пароль, кнопка «Подтвердить удаление» disabled пока не введено; после удаления — `clearUser` + `authApi.util.resetApiState()` + редирект на `/`).
+- Переиспользуемые компоненты в `apps/web/src/components/dashboard/`:
+  - `EmptyState.tsx` (props: `icon/title/description/actions/size sm|md|lg`).
+  - `StatCard.tsx` (icon, label, value, hint, optional cta, accent `amber|violet|emerald|sky|default`).
+  - `ProjectCard.tsx`, `OrderCard.tsx` — карточки списков (используют `next/image`, бейдж статуса).
+  - `TransactionRow.tsx`, `PaymentRow.tsx` — строки таблиц биллинга.
+  - `DashboardSidebar.tsx` + `DashboardSidebarContent` (общий рендер для desktop и Sheet) + `DashboardSidebarMobile.tsx`.
+  - `sidebar-nav.tsx` (массив `SIDEBAR_ITEMS` + `isActive`), `labels.ts` (русские лейблы и цвета для `ProjectStatus/OrderStatus/OrderType` + `transactionDescription`, `formatDate`, `formatDateTime`).
+- Инвалидация Redux при изменениях профиля: `accountApi` дёргает теги `User/Dashboard`, дополнительно из mutation вручную вызывается `dispatch(authApi.util.invalidateTags(['Me']))`, чтобы Header и `useAuth` подхватили новые `name/messenger/tokenBalance`.
+- Нестандартные решения:
+  - Soft-delete освобождает email через `deleted_<id>@allvision.local`, а не оставляет оригинальный — это даёт юзеру возможность зарегистрироваться заново тем же email; флаг `deletedAt` сохраняется на самой записи для будущей джобы полной чистки.
+  - Тесты делают один `register` и переиспользуют `request.agent` — иначе многократный логин в одном файле упирается в `authLimiter` (5 за 15 минут).
+  - В worker (`apps/worker/src/index.ts`) поправлена пред-существующая ошибка типизации: `Parameters<typeof Worker>` → `ConstructorParameters<typeof Worker>`, иначе ломался корневой `npm run build`.
+  - `messengerType` редактируется через нативный `<select>` (а не shadcn `Select`), чтобы не вводить новую UI-зависимость на этапе 1.4.
+- Проверки, которые прошли: `npx prisma migrate dev --name add_user_soft_delete --schema packages/database/prisma/schema.prisma`, `npm run build -w @allvision/shared`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build` (root), `npm test -w @allvision/api` (13 passed).
+- Ручная проверка по чек-листу (рекомендуется после `npm run dev`): зайти как `user@allvision.studio` (баланс 500), открыть `/dashboard` → видеть приветствие, 4 stat-карточки, empty state «Готовы создать первое чудо?», 1 транзакцию `welcome_bonus`; проверить sidebar (active highlight, mobile-гамбургер из Header); открыть `/dashboard/billing` → tab «История транзакций» с 1 строкой, tab «История платежей» с empty state; в `/dashboard/profile` обновить имя — toast и обновление в Header; смена пароля → toast и login сохраняется; удалить аккаунт → редирект на `/`, повторная попытка login со старым email → 401.

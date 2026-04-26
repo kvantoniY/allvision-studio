@@ -31,14 +31,14 @@ export function HeroSection() {
           <p className="mt-6 max-w-2xl text-lg leading-8 text-indigo-100 md:text-xl">
             От реставрации старых фото до персональных мультиков для ребёнка — всё за несколько минут.
           </p>
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div>
-              <Button asChild size="lg" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+          <div className="mt-9 grid gap-3 sm:inline-grid sm:grid-cols-[260px_260px] sm:items-start">
+            <div className="w-full">
+              <Button asChild size="lg" className="h-14 w-full bg-amber-500 text-slate-950 hover:bg-amber-400">
                 <Link href="/register">Попробовать бесплатно</Link>
               </Button>
-              <div className="mt-2 text-center text-xs text-amber-100 sm:text-left">50 токенов в подарок</div>
+              <div className="mt-2 text-center text-xs font-semibold text-amber-100">50 токенов в подарок</div>
             </div>
-            <Button asChild size="lg" variant="outline" className="border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white">
+            <Button asChild size="lg" variant="outline" className="h-14 w-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white">
               <a href="#examples">
                 Смотреть примеры
                 <ArrowDown className="h-4 w-4" />

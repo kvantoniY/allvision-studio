@@ -26,3 +26,4 @@ export type {
 } from '@allvision/database';
 
 export * from './public';
+export * from './account';
