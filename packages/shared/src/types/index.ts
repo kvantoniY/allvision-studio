@@ -27,3 +27,4 @@ export type {
 
 export * from './public';
 export * from './account';
+export * from './queue';

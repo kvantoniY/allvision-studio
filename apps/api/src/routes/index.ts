@@ -4,6 +4,7 @@ import { authRouter } from './auth';
 import { publicRouter } from './public';
 import { accountRouter } from './account';
 import { paymentsRouter } from './payments';
+import { testRouter } from './test';
 
 export const router = Router();
 
@@ -12,3 +13,4 @@ router.use('/auth', authRouter);
 router.use('/public', publicRouter);
 router.use('/account', accountRouter);
 router.use('/payments', paymentsRouter);
+router.use('/test', testRouter); // TODO(1.6b): убрать после реализации /api/projects

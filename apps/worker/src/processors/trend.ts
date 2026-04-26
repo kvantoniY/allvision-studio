@@ -1,6 +1,8 @@
 import type { Job } from 'bullmq';
+import type { ProjectJobData } from '@allvision/shared';
 
-export async function processTrend(job: Job) {
-  console.log('[trend] processing', job.id, job.data);
-  // Реализация — на Этапе 1.4+.
+// Заглушка — см. photo-restore.ts.
+export async function processTrend(job: Job<ProjectJobData>) {
+  console.log(`[trend] job received: ${job.id}`, job.data);
+  return { ok: true, stub: true };
 }

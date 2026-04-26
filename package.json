@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev --schema packages/database/prisma/schema.prisma",
     "db:seed": "tsx packages/database/src/seed.ts",
     "db:studio": "npx prisma studio --schema packages/database/prisma/schema.prisma",
+    "demo:download": "tsx apps/api/scripts/download-demo-assets.ts",
     "test": "npm test -w @allvision/api"
   },
   "devDependencies": {

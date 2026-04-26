@@ -25,9 +25,38 @@ npm run db:migrate
 # 5. Наполнить БД демо-данными
 npm run db:seed
 
-# 6. Запустить всё сразу (web + api + worker)
+# 6. Скачать/сгенерировать демо-ассеты для MockAIProvider (опционально)
+npm run demo:download
+
+# 7. Запустить всё сразу (web + api + worker)
 npm run dev
 ```
+
+## Демо-ассеты
+
+После клонирования репо для разработки нужны демо-файлы для MockAIProvider —
+картинки и видео-плейсхолдеры, которые провайдер выдаёт как «результат AI».
+
+```bash
+npm run demo:download
+```
+
+Что делает скрипт:
+
+1. Скачивает 10 jpg с picsum.photos в `apps/api/demo-assets/photo-restore/`.
+2. Если установлен `ffmpeg` — генерирует 6 mp4 (1080x1080) для photo-animate
+   и 8 mp4 (1080x1920) для trends с эффектом «ken burns» из picsum-картинок.
+3. Если `ffmpeg` не установлен — выводит warning и просит положить mp4 вручную:
+   - `apps/api/demo-assets/photo-animate/animate-1.mp4 ... animate-6.mp4`
+   - `apps/api/demo-assets/trends/trend-1.mp4 ... trend-8.mp4`
+   - Бесплатные источники: pexels.com, mixkit.co, pixabay.com (5–10 сек роликов).
+
+JSON-шаблоны сценариев сказок (`fairy-tales/template-*.json`) лежат в репо
+и сюда не нужно ничего скачивать. Сами медиа (jpg/mp4) — локальные, в репо
+не коммитятся (см. `apps/api/demo-assets/.gitignore`).
+
+Без демо-ассетов MockAIProvider будет кидать `DEMO_ASSETS_EMPTY` при
+попытке генерации.
 
 Откроется:
 - Фронт — http://localhost:3000
