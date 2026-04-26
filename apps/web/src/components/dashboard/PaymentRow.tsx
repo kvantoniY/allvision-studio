@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { Payment, PaymentStatus } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -17,18 +18,27 @@ const STATUS_COLOR: Record<PaymentStatus, string> = {
   CANCELLED: 'bg-slate-600 text-slate-300',
 };
 
-export function PaymentRow({ payment }: { payment: Payment }) {
+export function PaymentRow({
+  payment,
+  onRepeat,
+  isRepeating,
+}: {
+  payment: Payment;
+  onRepeat?: (payment: Payment) => void;
+  isRepeating?: boolean;
+}) {
   const purpose = payment.purpose === 'TOPUP' ? 'Пополнение' : `Заказ #${payment.id.slice(0, 6)}`;
   const confirmationUrl =
     payment.metadata && typeof payment.metadata === 'object' && 'confirmationUrl' in payment.metadata
       ? String((payment.metadata as Record<string, unknown>).confirmationUrl)
       : undefined;
+  const confirmationHref = confirmationUrl ?? `/mock-payment/${payment.providerPaymentId ?? payment.id}`;
 
   return (
     <tr className="border-b border-slate-800">
       <td className="py-3 px-3 text-sm text-slate-400 whitespace-nowrap">{formatDateTime(payment.createdAt)}</td>
       <td className="py-3 px-3 text-sm font-semibold text-amber-300 whitespace-nowrap">
-        {payment.amountRub.toLocaleString('ru-RU')} ₽
+        {(payment.amountRub / 100).toLocaleString('ru-RU')} ₽
       </td>
       <td className="py-3 px-3 text-sm">{purpose}</td>
       <td className="py-3 px-3">
@@ -42,15 +52,13 @@ export function PaymentRow({ payment }: { payment: Payment }) {
         </span>
       </td>
       <td className="py-3 px-3">
-        {payment.status === 'PENDING' && confirmationUrl ? (
+        {payment.status === 'PENDING' ? (
           <Button asChild size="sm" variant="default">
-            <a href={confirmationUrl} target="_blank" rel="noreferrer">
-              Оплатить
-            </a>
+            <Link href={confirmationHref}>Завершить оплату</Link>
           </Button>
         ) : payment.status === 'FAILED' ? (
-          <Button size="sm" variant="outline" disabled>
-            Повторить
+          <Button size="sm" variant="outline" disabled={isRepeating} onClick={() => onRepeat?.(payment)}>
+            Повторить покупку
           </Button>
         ) : (
           <span className="text-xs text-slate-500">—</span>

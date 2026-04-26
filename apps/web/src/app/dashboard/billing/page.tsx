@@ -1,14 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useDispatch } from 'react-redux';
 import { Coins, Wallet } from 'lucide-react';
+import type { Payment } from '@allvision/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/hooks/use-toast';
+import type { AppDispatch } from '@/store';
 import { useGetTransactionsQuery, useGetPaymentsQuery } from '@/store/api/account-api';
+import { invalidatePaymentSideEffects, useTopupMutation } from '@/store/api/payments-api';
 import { TransactionRow } from '@/components/dashboard/TransactionRow';
 import { PaymentRow } from '@/components/dashboard/PaymentRow';
 import { EmptyState } from '@/components/dashboard/EmptyState';
@@ -20,20 +26,115 @@ const PAGE = 20;
 
 export default function BillingPage() {
   const { user } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const dispatch = useDispatch<AppDispatch>();
+  const { toast } = useToast();
   const [txTab, setTxTab] = useState<'transactions' | 'payments'>('transactions');
   const [txFilter, setTxFilter] = useState<TxFilter>('all');
   const [txPage, setTxPage] = useState(1);
   const [payPage, setPayPage] = useState(1);
+  const [pollPending, setPollPending] = useState(false);
+  const [repeatingPaymentId, setRepeatingPaymentId] = useState<string | null>(null);
+  const pendingIdsRef = useRef<Set<string>>(new Set());
+  const handledPaymentQueryRef = useRef('');
+  const [topup, { isLoading: isRepeating }] = useTopupMutation();
 
   const { data: txData, isLoading: txLoading } = useGetTransactionsQuery({
     page: txPage,
     limit: PAGE,
     type: txFilter,
   });
-  const { data: payData, isLoading: payLoading } = useGetPaymentsQuery({
-    page: payPage,
-    limit: PAGE,
-  });
+  const { data: payData, isLoading: payLoading } = useGetPaymentsQuery(
+    {
+      page: payPage,
+      limit: PAGE,
+    },
+    { pollingInterval: pollPending ? 5000 : 0 },
+  );
+
+  useEffect(() => {
+    const paymentResult = searchParams.get('payment');
+    if (!paymentResult) return;
+    const currentQuery = searchParams.toString();
+    if (handledPaymentQueryRef.current === currentQuery) return;
+    handledPaymentQueryRef.current = currentQuery;
+
+    const tokens = Number(searchParams.get('tokens') ?? 0);
+
+    if (paymentResult === 'success') {
+      toast({
+        title: tokens > 0 ? `Оплата прошла успешно! +${tokens} токенов на ваш баланс 🎉` : 'Оплата прошла успешно!',
+      });
+      invalidatePaymentSideEffects(dispatch);
+    }
+    if (paymentResult === 'failed') {
+      toast({ title: 'Платёж не прошёл', description: 'Платёж отклонён банком', variant: 'destructive' });
+      invalidatePaymentSideEffects(dispatch);
+    }
+    if (paymentResult === 'cancelled') {
+      toast({ title: 'Платёж отменён' });
+      invalidatePaymentSideEffects(dispatch);
+    }
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('payment');
+    params.delete('tokens');
+    const nextQuery = params.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+  }, [dispatch, pathname, router, searchParams, toast]);
+
+  useEffect(() => {
+    const items = payData?.items ?? [];
+    const previousPending = pendingIdsRef.current;
+    const completed = items.find((payment) => previousPending.has(payment.id) && payment.status === 'SUCCEEDED');
+    const nextPending = new Set(items.filter((payment) => payment.status === 'PENDING').map((payment) => payment.id));
+
+    if (completed) {
+      toast({
+        title:
+          completed.tokensAdded && completed.tokensAdded > 0
+            ? `Оплата прошла успешно! +${completed.tokensAdded} токенов на ваш баланс 🎉`
+            : 'Оплата прошла успешно!',
+      });
+      invalidatePaymentSideEffects(dispatch);
+    }
+
+    pendingIdsRef.current = nextPending;
+    setPollPending(nextPending.size > 0);
+  }, [dispatch, payData, toast]);
+
+  const repeatPayment = async (payment: Payment) => {
+    const metadata =
+      payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
+        ? (payment.metadata as Record<string, unknown>)
+        : {};
+    const tokenPackageId = typeof metadata.tokenPackageId === 'string' ? metadata.tokenPackageId : null;
+
+    if (!tokenPackageId) {
+      toast({
+        title: 'Не удалось повторить покупку',
+        description: 'У платежа нет привязки к пакету токенов.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setRepeatingPaymentId(payment.id);
+    try {
+      const result = await topup({ tokenPackageId }).unwrap();
+      router.push(result.confirmationUrl);
+    } catch {
+      toast({
+        title: 'Не удалось создать новый платёж',
+        description: 'Попробуйте ещё раз через несколько секунд.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRepeatingPaymentId(null);
+    }
+  };
 
   if (!user) return null;
 
@@ -164,7 +265,12 @@ export default function BillingPage() {
                       </thead>
                       <tbody>
                         {payData.items.map((p) => (
-                          <PaymentRow key={p.id} payment={p} />
+                          <PaymentRow
+                            key={p.id}
+                            payment={p}
+                            onRepeat={repeatPayment}
+                            isRepeating={isRepeating && repeatingPaymentId === p.id}
+                          />
                         ))}
                       </tbody>
                     </table>

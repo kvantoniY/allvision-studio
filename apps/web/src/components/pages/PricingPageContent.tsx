@@ -1,12 +1,18 @@
 'use client';
 
+import { useState } from 'react';
+import { TicketPercent } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { PricingCards } from '@/components/public/PricingCards';
 import { getPackageUsage, pricingFaqs } from '@/lib/public-content';
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
 
 export function PricingPageContent() {
   const { data, isLoading } = useGetTokenPackagesQuery();
+  const [promoCode, setPromoCode] = useState('');
+  const [promoMessage, setPromoMessage] = useState('');
 
   return (
     <section className="container py-14 md:py-20">
@@ -20,6 +26,40 @@ export function PricingPageContent() {
 
       <div className="mt-10">
         <PricingCards packages={data?.packages} isLoading={isLoading} fallbackHref="/login?redirect=/pricing" />
+      </div>
+
+      <div className="mx-auto mt-8 max-w-2xl rounded-lg border bg-card px-5 dark:border-slate-800">
+        <Accordion type="single" collapsible>
+          <AccordionItem value="promo" className="border-b-0">
+            <AccordionTrigger className="text-left">
+              <span className="inline-flex items-center gap-2">
+                <TicketPercent className="h-4 w-4 text-amber-400" />
+                У меня промокод
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Input
+                  value={promoCode}
+                  onChange={(event) => {
+                    setPromoCode(event.target.value);
+                    setPromoMessage('');
+                  }}
+                  placeholder="Введите код"
+                  className="uppercase"
+                />
+                <Button
+                  type="button"
+                  className="bg-amber-500 text-slate-950 hover:bg-amber-400"
+                  onClick={() => setPromoMessage('Промокоды появятся в ближайшее время')}
+                >
+                  Применить
+                </Button>
+              </div>
+              {promoMessage && <p className="mt-3 text-sm text-muted-foreground">{promoMessage}</p>}
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
 
       <div className="mt-12 overflow-hidden rounded-lg border bg-card dark:border-slate-800">

@@ -9,12 +9,13 @@ const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password'
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthRoute = authRoutes.some((route) => pathname === route);
+  const isMockPaymentRoute = pathname?.startsWith('/mock-payment') ?? false;
 
   return (
     <>
-      {!isAuthRoute && <Header />}
+      {!isAuthRoute && !isMockPaymentRoute && <Header />}
       <main className="flex-1">{children}</main>
-      {!isAuthRoute && <Footer />}
+      {!isAuthRoute && !isMockPaymentRoute && <Footer />}
     </>
   );
 }

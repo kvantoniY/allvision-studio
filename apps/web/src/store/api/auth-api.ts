@@ -17,23 +17,23 @@ export const authApi = createApi({
     baseUrl: `${API_URL}/api/auth`,
     credentials: 'include',
   }),
-  tagTypes: ['Me'],
+  tagTypes: ['Me', 'User'],
   endpoints: (build) => ({
     register: build.mutation<{ user: SafeUser }, RegisterInput>({
       query: (body) => ({ url: '/register', method: 'POST', body }),
-      invalidatesTags: ['Me'],
+      invalidatesTags: ['Me', 'User'],
     }),
     login: build.mutation<{ user: SafeUser }, LoginInput>({
       query: (body) => ({ url: '/login', method: 'POST', body }),
-      invalidatesTags: ['Me'],
+      invalidatesTags: ['Me', 'User'],
     }),
     logout: build.mutation<{ ok: true }, void>({
       query: () => ({ url: '/logout', method: 'POST' }),
-      invalidatesTags: ['Me'],
+      invalidatesTags: ['Me', 'User'],
     }),
     getMe: build.query<{ user: SafeUser }, void>({
       query: () => ({ url: '/me' }),
-      providesTags: ['Me'],
+      providesTags: ['Me', 'User'],
     }),
     forgotPassword: build.mutation<{ ok: true }, ForgotPasswordInput>({
       query: (body) => ({ url: '/forgot-password', method: 'POST', body }),

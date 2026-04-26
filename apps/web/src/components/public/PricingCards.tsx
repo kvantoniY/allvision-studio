@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Check, Coins, Sparkles } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Check, Coins, Loader2, Sparkles } from 'lucide-react';
 import type { PublicTokenPackage } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,6 +10,7 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useTopupMutation } from '@/store/api/payments-api';
 import { getPackageTotal } from '@/lib/public-content';
 import { cn } from '@/lib/utils';
 
@@ -20,7 +22,27 @@ type PricingCardsProps = {
 
 export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }: PricingCardsProps) {
   const { user } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
+  const [topup, { isLoading: isTopupLoading, originalArgs }] = useTopupMutation();
+
+  const handleBuy = async (tokenPackageId: string) => {
+    if (!user) {
+      router.push(fallbackHref);
+      return;
+    }
+
+    try {
+      const result = await topup({ tokenPackageId }).unwrap();
+      router.push(result.confirmationUrl);
+    } catch {
+      toast({
+        title: 'Не удалось создать платёж',
+        description: 'Попробуйте ещё раз через несколько секунд.',
+        variant: 'destructive',
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -87,14 +109,14 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
             {user ? (
               <Button
                 className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400"
-                onClick={() =>
-                  toast({
-                    title: 'Чекаут появится на следующем этапе',
-                    description: 'Баланс и mock-платежи уже подготовлены, но покупка пакетов будет подключена позже.',
-                  })
-                }
+                disabled={isTopupLoading}
+                onClick={() => handleBuy(pkg.id)}
               >
-                <Sparkles className="h-4 w-4" />
+                {isTopupLoading && originalArgs?.tokenPackageId === pkg.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
                 Купить
               </Button>
             ) : (

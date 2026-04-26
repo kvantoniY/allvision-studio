@@ -10,13 +10,11 @@ export function useAuth() {
   const dispatch = useDispatch<AppDispatch>();
   const { user, isAuthLoading } = useSelector((s: RootState) => s.auth);
 
-  const { data, error, isLoading, isFetching } = useGetMeQuery(undefined, {
-    skip: user !== null,
-  });
+  const { data, error, isLoading, isFetching } = useGetMeQuery();
   const [logoutMutation] = useLogoutMutation();
 
   useEffect(() => {
-    if (isLoading || isFetching) {
+    if ((isLoading || isFetching) && !user) {
       dispatch(setAuthLoading(true));
       return;
     }
