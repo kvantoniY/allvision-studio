@@ -254,6 +254,7 @@
 - Нестандартные решения и долги:
   - `TokenTransaction.reason` для списания выбран как `spending`, потому что существующий `/dashboard/billing` уже фильтрует chip `spending`.
   - Медиа в `apps/api/demo-assets/*` не коммитятся по `.gitignore`; для локального e2e после свежего checkout нужно `npm run demo:download`. В этой сессии команда скачала 10 jpg для `photo-restore`; video assets для 1.6c не генерировались, потому что `ffmpeg` не найден.
+  - `apps/api/src/utils/paths.ts` и `apps/worker/src/utils/paths.ts` резолвят относительные `UPLOADS_DIR`/`DEMO_ASSETS_ROOT` от корня workspace, а не от `apps/api` или `apps/worker`. Это важно при `npm run dev -w ...`: иначе worker ищет `./apps/api/demo-assets` как `apps/worker/apps/api/demo-assets` и падает с `DEMO_ASSETS_EMPTY`.
   - В `packages/database/package.json` добавлен `build = prisma generate`, потому что self-check требует `npm run build -w @allvision/database`, а такого script раньше не было.
   - Root `package.json` build переведён с нестабильно падавшего на Windows shorthand `npm run generate -w @allvision/database` на прямой `npx prisma generate --schema packages/database/prisma/schema.prisma`. Эквивалентный `npm --workspace @allvision/database run generate` проходил, но root build должен быть воспроизводим одной командой.
   - Услуги 2 (`photo-animate`) и 3 (`trends`) остаются заглушками до 1.6c. NSFW, email-уведомления, share-кнопка и реальный AI-provider не делались.

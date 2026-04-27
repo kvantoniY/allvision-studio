@@ -1,4 +1,3 @@
-import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -7,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import { router } from './routes';
 import { errorHandler } from './middleware/error-handler';
 import { requestLogger } from './middleware/request-logger';
+import { resolveWorkspacePath } from './utils/paths';
 
 export const app = express();
 
@@ -32,7 +32,7 @@ app.use(cookieParser());
 app.use(requestLogger);
 
 // Раздача загруженных файлов (LocalFileStorage). В prod заменим на Yandex S3.
-const uploadsDir = path.resolve(process.cwd(), process.env.UPLOADS_DIR ?? './uploads');
+const uploadsDir = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
 app.use(
   '/static',
   express.static(uploadsDir, {

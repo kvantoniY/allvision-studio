@@ -4,6 +4,7 @@ import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import type { AIProvider, StorageProvider } from '@allvision/shared';
 import { MockAIProvider } from './mock-ai-provider';
+import { resolveWorkspacePath } from '../utils/paths';
 
 let storageSingleton: StorageProvider | undefined;
 let aiSingleton: AIProvider | undefined;
@@ -60,7 +61,7 @@ export function getStorageProvider(): StorageProvider {
   if (storageSingleton) return storageSingleton;
   const provider = process.env.STORAGE_PROVIDER ?? 'local';
   if (provider === 'local') {
-    const rootDir = path.resolve(process.cwd(), process.env.UPLOADS_DIR ?? './uploads');
+    const rootDir = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
     const publicBaseUrl = `${process.env.PUBLIC_API_URL ?? 'http://localhost:4000'}/static`;
     storageSingleton = new WorkerLocalFileStorage(rootDir, publicBaseUrl);
     return storageSingleton;
@@ -74,7 +75,7 @@ export function getAIProvider(): AIProvider {
   if (provider === 'mock') {
     aiSingleton = new MockAIProvider({
       storageProvider: getStorageProvider(),
-      demoAssetsRoot: process.env.DEMO_ASSETS_ROOT,
+      demoAssetsRoot: resolveWorkspacePath(process.env.DEMO_ASSETS_ROOT ?? './apps/api/demo-assets'),
     });
     return aiSingleton;
   }
