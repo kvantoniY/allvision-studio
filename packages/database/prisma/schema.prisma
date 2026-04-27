@@ -95,7 +95,7 @@ model Trend {
   aiModel         String
   aiConfig        Json
   tags            String[]
-  priceTokens     Int
+  priceTokens     Int?
   isActive        Boolean   @default(true)
   sortOrder       Int       @default(0)
   viewsCount      Int       @default(0)
@@ -136,7 +136,7 @@ model Project {
 
   user            User           @relation(fields: [userId], references: [id])
   service         Service        @relation(fields: [serviceId], references: [id])
-  trend           Trend?         @relation(fields: [trendId], references: [id])
+  trend           Trend?         @relation(fields: [trendId], references: [id], onDelete: SetNull)
 }
 
 enum ProjectStatus {

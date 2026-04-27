@@ -5,6 +5,7 @@ import type {
   PublicServicesResponse,
   PublicSettingsResponse,
   PublicTokenPackagesResponse,
+  PublicTrend,
   PublicTrendResponse,
   PublicTrendsResponse,
   ContactResponse,
@@ -43,7 +44,21 @@ const publicTrendSelect = {
   viewsCount: true,
   usedCount: true,
   serviceId: true,
+  service: { select: { priceTokens: true } },
 };
+
+type PublicTrendRow = Omit<PublicTrend, 'priceTokens'> & {
+  priceTokens: number | null;
+  service: { priceTokens: number };
+};
+
+function toPublicTrend(trend: PublicTrendRow): PublicTrend {
+  const { service, ...publicTrend } = trend;
+  return {
+    ...publicTrend,
+    priceTokens: trend.priceTokens ?? service.priceTokens,
+  };
+}
 
 const publicSettingMap = {
   support_telegram: 'supportTelegram',
@@ -96,7 +111,7 @@ publicRouter.get('/trends', async (req: Request, res: Response<PublicTrendsRespo
       orderBy: { sortOrder: 'asc' },
       select: publicTrendSelect,
     });
-    res.json({ trends });
+    res.json({ trends: trends.map(toPublicTrend) });
   } catch (e) {
     next(e);
   }
@@ -109,7 +124,7 @@ publicRouter.get('/trends/:id', async (req: Request, res: Response<PublicTrendRe
       select: publicTrendSelect,
     });
     if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Тренд не найден');
-    res.json({ trend });
+    res.json({ trend: toPublicTrend(trend) });
   } catch (e) {
     next(e);
   }

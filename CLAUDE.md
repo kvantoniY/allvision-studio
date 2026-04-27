@@ -300,3 +300,11 @@
 - Проверки:
   - Прошли: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`.
   - `npm test -w @allvision/api` → 8 suites passed, **55 tests passed** (до 1.6c-1 было 50).
+
+### Миграция перед 1.6c-2 — Trend.priceTokens optional ✅
+- Ошибочная миграция `20260427115349_trend_price_tokens_optional_and_project_trend_set_null` была компенсирована: она временно сделала nullable `Service.priceTokens`, что неверно для базовой цены услуги.
+- Корректная compensating-миграция `20260427120157_fix_trend_price_tokens_optional` возвращает `Service.priceTokens` в `NOT NULL` и делает `Trend.priceTokens` nullable (`Int?`).
+- Семантика `Trend.priceTokens = null`: брать цену из связанной услуги `Service.priceTokens`. Списание в `/api/projects` будет переведено на `trend.priceTokens ?? service.priceTokens` в этапе 1.6c-2.
+- `Project.trendId` явно зафиксирован в `schema.prisma` как `onDelete: SetNull`; на уровне FK это уже было задано в init-миграции `20260424114350_init`, поэтому новая FK-миграция не понадобилась.
+- Публичный API трендов адаптирован к nullable-цене: `GET /api/public/trends` и `GET /api/public/trends/:id` отдают resolved `priceTokens`, подставляя цену услуги, если цена тренда `null`.
+- Проверки: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`, `npm test -w @allvision/api` → 8 suites passed, **55 tests passed**.
