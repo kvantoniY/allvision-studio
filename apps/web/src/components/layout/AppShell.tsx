@@ -10,12 +10,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isAuthRoute = authRoutes.some((route) => pathname === route);
   const isMockPaymentRoute = pathname?.startsWith('/mock-payment') ?? false;
+  const isAdminRoute = pathname?.startsWith('/admin') ?? false;
 
   return (
     <>
-      {!isAuthRoute && !isMockPaymentRoute && <Header />}
+      {!isAuthRoute && !isMockPaymentRoute && !isAdminRoute && <Header />}
       <main className="flex-1">{children}</main>
-      {!isAuthRoute && !isMockPaymentRoute && <Footer />}
+      {!isAuthRoute && !isMockPaymentRoute && !isAdminRoute && <Footer />}
     </>
   );
 }

@@ -12,15 +12,15 @@ import { useCreateProjectMutation } from '@/store/api/projects-api';
 import { cn } from '@/lib/utils';
 import { humanProjectError } from './ProjectUploader';
 
-const TOKENS_COST = 150;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 type TrendUploaderProps = {
   trendId: string;
+  tokensCost: number;
 };
 
-export function TrendUploader({ trendId }: TrendUploaderProps) {
+export function TrendUploader({ trendId, tokensCost }: TrendUploaderProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const { toast } = useToast();
@@ -89,7 +89,7 @@ export function TrendUploader({ trendId }: TrendUploaderProps) {
     );
   }
 
-  if (user.tokenBalance < TOKENS_COST) {
+  if (user.tokenBalance < tokensCost) {
     return (
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-5">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -97,7 +97,7 @@ export function TrendUploader({ trendId }: TrendUploaderProps) {
             <Wallet className="mt-1 h-5 w-5 text-amber-300" />
             <div>
               <div className="font-semibold text-amber-100">
-                Не хватает токенов: ваш баланс {user.tokenBalance}, нужно {TOKENS_COST}
+                Не хватает токенов: ваш баланс {user.tokenBalance}, нужно {tokensCost}
               </div>
               <p className="mt-1 text-sm text-amber-100/70">Пополните баланс, чтобы создать видео по тренду.</p>
             </div>
@@ -181,7 +181,7 @@ export function TrendUploader({ trendId }: TrendUploaderProps) {
                 disabled={!file || isCreating}
               >
                 {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
-                Создать видео за 150 токенов
+                Создать видео за {tokensCost} токенов
               </Button>
             </div>
           </div>

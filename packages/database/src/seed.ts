@@ -249,15 +249,19 @@ async function main() {
 
   // Очистка: удаляем транзакции и пользователей, которых сидируем.
   await prisma.tokenTransaction.deleteMany({});
-  await prisma.user.deleteMany({
-    where: { email: { in: ['admin@allvision.studio', 'user@allvision.studio'] } },
-  });
-
   const adminHash = await bcrypt.hash('admin123', BCRYPT_COST);
   const userHash = await bcrypt.hash('user123', BCRYPT_COST);
 
-  const admin = await prisma.user.create({
-    data: {
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@allvision.studio' },
+    update: {
+      passwordHash: adminHash,
+      name: 'Admin',
+      role: 'ADMIN',
+      tokenBalance: 10000,
+      deletedAt: null,
+    },
+    create: {
       email: 'admin@allvision.studio',
       passwordHash: adminHash,
       name: 'Admin',
@@ -266,8 +270,16 @@ async function main() {
     },
   });
 
-  const user = await prisma.user.create({
-    data: {
+  const user = await prisma.user.upsert({
+    where: { email: 'user@allvision.studio' },
+    update: {
+      passwordHash: userHash,
+      name: 'Test User',
+      role: 'USER',
+      tokenBalance: 500,
+      deletedAt: null,
+    },
+    create: {
       email: 'user@allvision.studio',
       passwordHash: userHash,
       name: 'Test User',

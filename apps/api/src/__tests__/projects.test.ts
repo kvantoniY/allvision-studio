@@ -421,6 +421,54 @@ describe('POST /api/projects', () => {
       }),
     );
   });
+
+  it('uses service price when Trend.priceTokens is null', async () => {
+    await prisma.trend.update({ where: { id: testTrend.id }, data: { priceTokens: null } });
+    const { cookie, userId } = await createAuthedUser(`projects-trend-null-price-${RUN_ID}@example.com`, 300);
+    jest.spyOn(queuesModule, 'addProjectJob').mockResolvedValue({ id: 'job-null-price' } as any);
+
+    const res = await request(app)
+      .post('/api/projects')
+      .set('Cookie', cookie)
+      .field('serviceSlug', 'trends')
+      .field('trendId', testTrend.id)
+      .attach('image', await imageBuffer(), { filename: 'photo.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.project.tokensCost).toBe(150);
+
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(user.tokenBalance).toBe(150);
+  });
+
+  it('uses custom Trend.priceTokens and rejects insufficient balance for that price', async () => {
+    await prisma.trend.update({ where: { id: testTrend.id }, data: { priceTokens: 250 } });
+    jest.spyOn(queuesModule, 'addProjectJob').mockResolvedValue({ id: 'job-custom-price' } as any);
+
+    const enough = await createAuthedUser(`projects-trend-custom-price-${RUN_ID}@example.com`, 300);
+    const ok = await request(app)
+      .post('/api/projects')
+      .set('Cookie', enough.cookie)
+      .field('serviceSlug', 'trends')
+      .field('trendId', testTrend.id)
+      .attach('image', await imageBuffer(), { filename: 'photo.png', contentType: 'image/png' });
+
+    expect(ok.status).toBe(201);
+    expect(ok.body.project.tokensCost).toBe(250);
+    const enoughUser = await prisma.user.findUniqueOrThrow({ where: { id: enough.userId } });
+    expect(enoughUser.tokenBalance).toBe(50);
+
+    const low = await createAuthedUser(`projects-trend-custom-price-low-${RUN_ID}@example.com`, 200);
+    const insufficient = await request(app)
+      .post('/api/projects')
+      .set('Cookie', low.cookie)
+      .field('serviceSlug', 'trends')
+      .field('trendId', testTrend.id)
+      .attach('image', await imageBuffer(), { filename: 'photo.png', contentType: 'image/png' });
+
+    expect(insufficient.status).toBe(402);
+    expect(insufficient.body.error.code).toBe('INSUFFICIENT_TOKENS');
+  });
 });
 
 describe('GET /api/projects', () => {

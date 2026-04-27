@@ -9,7 +9,15 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
   'image/webp': 'webp',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
 };
+
+const ALLOWED_TREND_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
+const ALLOWED_TREND_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const MAX_TREND_PREVIEW_SIZE = 50 * 1024 * 1024;
+const MAX_TREND_THUMBNAIL_SIZE = 5 * 1024 * 1024;
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -89,6 +97,41 @@ export async function uploadResult(
   const e = ext(contentType);
   const key = `results/${projectId}/${crypto.randomUUID()}.${e}`;
   return getStorageProvider().upload({ key, body: buffer, contentType });
+}
+
+export async function uploadTrendPreview(
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string }> {
+  if (buffer.length > MAX_TREND_PREVIEW_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Р¤Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№');
+  }
+  if (!ALLOWED_TREND_VIDEO_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'РќРµРїРѕРґРґРµСЂР¶РёРІР°РµРјС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р°');
+  }
+
+  const key = `trend-assets/previews/${crypto.randomUUID()}.${ext(contentType)}`;
+  return getStorageProvider().upload({ key, body: buffer, contentType });
+}
+
+export async function uploadTrendThumbnail(
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string }> {
+  if (buffer.length > MAX_TREND_THUMBNAIL_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Р¤Р°Р№Р» СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№');
+  }
+  if (!ALLOWED_TREND_IMAGE_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'РќРµРїРѕРґРґРµСЂР¶РёРІР°РµРјС‹Р№ С„РѕСЂРјР°С‚ С„Р°Р№Р»Р°');
+  }
+
+  const processed = await validateAndProcessImage(buffer);
+  const key = `trend-assets/thumbnails/${crypto.randomUUID()}.${ext(processed.contentType)}`;
+  return getStorageProvider().upload({
+    key,
+    body: processed.buffer,
+    contentType: processed.contentType,
+  });
 }
 
 export async function deleteFile(key: string): Promise<void> {

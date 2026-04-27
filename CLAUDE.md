@@ -308,3 +308,40 @@
 - `Project.trendId` явно зафиксирован в `schema.prisma` как `onDelete: SetNull`; на уровне FK это уже было задано в init-миграции `20260424114350_init`, поэтому новая FK-миграция не понадобилась.
 - Публичный API трендов адаптирован к nullable-цене: `GET /api/public/trends` и `GET /api/public/trends/:id` отдают resolved `priceTokens`, подставляя цену услуги, если цена тренда `null`.
 - Проверки: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`, `npm test -w @allvision/api` → 8 suites passed, **55 tests passed**.
+
+### Этап 1.6c-2 — Админский CRUD трендов ✅
+- Pre-flight:
+  - Подтверждены `User.role` (`Role { USER, ADMIN }`), `Trend.sortOrder Int`, `Trend.priceTokens Int?`, `Project.trendId` с явным `onDelete: SetNull`.
+  - Админская зона до этапа отсутствовала: не было `/api/admin/*` и route group `apps/web/src/app/(admin)`.
+  - `admin@allvision.studio / admin123` и `user@allvision.studio / user123` в `packages/database/src/seed.ts` переведены с `create` на `upsert`; поля `emailVerified` в текущей Prisma-схеме нет, поэтому оно не выставляется.
+- Backend:
+  - Новый middleware `apps/api/src/middleware/require-admin.ts`: работает после `requireAuth`, без `req.user` возвращает 401 `UNAUTHORIZED`, для не-admin — 403 `FORBIDDEN_ADMIN_ONLY`.
+  - Новый namespace `/api/admin` подключён через `apps/api/src/routes/admin/index.ts`; `/api/admin/trends` реализует list/detail/create/update/delete/reorder.
+  - `GET /api/admin/trends`: пагинация `page/limit`, фильтры `serviceSlug/isActive/search`, сортировка `sortOrder asc, createdAt desc`, возвращает полный Trend + `service { slug,title,priceTokens }`.
+  - `POST /api/admin/trends`: multipart `previewVideo + thumbnail`, валидация shared zod-схемой `packages/shared/src/schemas/admin-trends.ts`, `aiConfig` парсится как JSON object, `sortOrder = max + 1`, `usedCount=0`, услуга только `trends`.
+  - `PATCH /api/admin/trends/:id`: все поля и файлы optional; `sortOrder` через PATCH не меняется. При замене файлов новые ассеты загружаются до update, старые удаляются только после успешного update.
+  - `DELETE /api/admin/trends/:id`: hard-delete; если есть проекты `PENDING/PROCESSING` с этим `trendId`, возвращает 409 `TREND_IN_USE`. Завершённые/failed проекты остаются за счёт FK `onDelete: SetNull`.
+  - `POST /api/admin/trends/:id/reorder`: атомарный swap `sortOrder` с ближайшим соседом в рамках той же услуги; на краю возвращает `{ ok: true, moved: false }`.
+  - `fileService`: добавлены `uploadTrendPreview` (`trend-assets/previews`, video mp4/webm/mov, 50 MB) и `uploadTrendThumbnail` (`trend-assets/thumbnails`, jpeg/png/webp, 5 MB, через `validateAndProcessImage`). В Prisma thumbnail хранится в существующем поле `Trend.referenceImg`.
+  - `apps/api/src/middleware/upload.ts`: добавлены `uploadSingleVideo` и `uploadTrendAssets` (`previewVideo`, `thumbnail`).
+  - `POST /api/projects` для `trends` теперь списывает `trend.priceTokens ?? service.priceTokens`. `Trend.priceTokens=null` означает «цена услуги».
+- Frontend:
+  - Добавлен server-side helper `apps/web/src/lib/auth.ts`: `requireAdminPage()` читает `/api/auth/me`, гостя отправляет на `/login?redirect=/admin/trends`, обычного user — на `/dashboard`.
+  - Route group `apps/web/src/app/(admin)/layout.tsx` рендерит отдельный admin-shell с rose-акцентом, логином админа, ссылкой «Выйти из админки» на `/dashboard` и sidebar: «Тренды» активный, «Юзеры»/«Проекты» disabled.
+  - `AppShell` скрывает обычные Header/Footer на `/admin/**`, чтобы админка визуально не смешивалась с публичным сайтом и user dashboard.
+  - `apps/web/src/store/api/admin-trends-api.ts`: RTK Query slice `list/get/create/update/delete/reorder`, tag `AdminTrend`; после мутаций инвалидирует публичный `publicApi` tag `Trends`, чтобы `/trends` обновлялся сразу.
+  - `/admin/trends`: таблица thumbnail/title/prompt/price/used/isActive/sortOrder/actions, client-side search по текущей странице, статус-фильтр, toggle `isActive`, кнопки up/down, edit, delete с confirm dialog.
+  - `/admin/trends/new`: форма создания с JSON textarea `aiConfig`, client-side `JSON.parse`, required `previewVideo` и `thumbnail`, preview thumbnail.
+  - `/admin/trends/[id]`: форма редактирования с optional file replace, текущим video link и thumbnail preview, footer-кнопкой delete.
+  - `apps/web/src/components/services/TrendUploader.tsx` больше не хардкодит 150: получает resolved `tokensCost` из публичного `Trend.priceTokens`, поэтому `/trends/[id]` показывает и проверяет кастомную цену.
+- Тесты:
+  - Добавлен `apps/api/src/__tests__/admin-trends.test.ts`: 401/403, list-фильтры, create happy path, create без файлов, `INVALID_AI_CONFIG`, patch текстом, patch replace file + `deleteFile`, delete 404/409/happy path, reorder edge и swap.
+  - `apps/api/src/__tests__/projects.test.ts`: добавлены проверки `Trend.priceTokens=null` → списание цены услуги 150 и `Trend.priceTokens=250` → списание 250, баланс 200 получает 402.
+  - `npm test -w @allvision/api` → 9 suites passed, **70 tests passed**.
+- Проверки:
+  - Прошли: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`, `npx tsc -p packages/database/tsconfig.json --noEmit`, `npm test -w @allvision/api`.
+  - На Windows один запуск `next build` может завершиться кодом `3221225477` без диагностик; повторный запуск и root build прошли, ранее это уже фиксировалось как нестабильность static worker.
+- Долги/TODO:
+  - Админский CRUD юзеров и проектов, ручные возвраты токенов и аналитика `usedCount` остаются на 1.8/2.x.
+  - Drag-and-drop reorder, bulk-операции и soft-delete трендов не делались.
+  - Отдельного поля `Trend.thumbnail` в схеме нет; thumbnail админки использует `referenceImg`. Если потребуется отдельная семантика thumbnail/reference, нужен отдельный миграционный этап.

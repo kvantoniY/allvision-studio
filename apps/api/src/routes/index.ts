@@ -5,6 +5,7 @@ import { publicRouter } from './public';
 import { accountRouter } from './account';
 import { paymentsRouter } from './payments';
 import { projectsRouter } from './projects';
+import { adminRouter } from './admin';
 
 export const router = Router();
 
@@ -14,3 +15,4 @@ router.use('/public', publicRouter);
 router.use('/account', accountRouter);
 router.use('/payments', paymentsRouter);
 router.use('/projects', projectsRouter);
+router.use('/admin', adminRouter);

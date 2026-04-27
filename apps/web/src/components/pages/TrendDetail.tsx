@@ -82,7 +82,7 @@ export function TrendDetail({ id }: TrendDetailProps) {
             <p className="mt-3 leading-7 text-muted-foreground">{trend.prompt}</p>
           </div>
           <div className="mt-7">
-            <TrendUploader trendId={trend.id} />
+            <TrendUploader trendId={trend.id} tokensCost={trend.priceTokens} />
           </div>
         </div>
       </div>

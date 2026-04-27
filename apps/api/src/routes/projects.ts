@@ -132,7 +132,7 @@ projectsRouter.post(
 
       const { buffer, contentType } = await validateAndProcessImage(req.file.buffer);
       const userId = req.user!.id;
-      const tokensCost = service.priceTokens;
+      const tokensCost = trend?.priceTokens ?? service.priceTokens;
       const uploaded = await uploadUserImage(userId, buffer, contentType);
       uploadedKey = uploaded.key;
 
