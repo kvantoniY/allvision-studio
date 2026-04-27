@@ -262,3 +262,41 @@
   - Pre-flight эквивалентно выполнен через PowerShell/`rg`, потому что `grep` и `/bin/bash` отсутствуют в окружении. Подтверждены: `photo-restore` в seed, `model Project`, `MockAIProvider.restorePhoto/getJobStatus`, helpers `markProjectCompleted/markProjectFailed/updateProjectProgress`, очереди, upload helpers, заглушка `photo-restore` до правки. `Service.priceTokens === 20`; `Service.isActive` берётся из Prisma default `true` и при test upsert явно выставляется `true`.
   - Прошли: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build` (root). `next build` оставляет warning на `<img>` в result view, потому что в контракте результата явно нужен `<img>`; build exit code 0.
   - `npm test -w @allvision/api` сейчас не прошёл из-за внешнего окружения: Postgres на `localhost:5433` недоступен, Docker Desktop service `com.docker.service` остановлен и `Start-Service` не имеет прав (`Cannot open com.docker.service`). Итоговый счётчик Jest при этом видит 50 тестов total (было 41, стало +9); 17 успели пройти, 33 DB-зависимых упали на `Can't reach database server at localhost:5433`.
+
+### Этап 1.6c-1 — Услуги №2 «Оживление фото» и №3 «Тренды» end-to-end ✅
+- Pre-flight перед изменениями:
+  - Через PowerShell/`rg` подтверждены seed-записи `photo-animate` и `trends`, цены `80` и `150`, наличие `prisma.trend`/`Trend` seed-данных.
+  - Видеодемо лежит на месте: `apps/api/demo-assets/photo-animate/animate-1..4.mp4` и `apps/api/demo-assets/trends/trend-1..4.mp4`.
+  - Заглушки `photo-animate.ts`/`trend.ts` были на месте до правки, публичные `GET /api/public/trends` и `GET /api/public/trends/:id` существуют как routes `/trends` в `publicRouter` под mount `/api/public`.
+- Shared/API контракт:
+  - `packages/shared/src/types/queue.ts`: `ProjectJobData.inputImageUrl` удалён. Единый контракт теперь `inputImages: string[]`; для трендов добавлено optional `trendId?: string`.
+  - `packages/shared/src/schemas/projects.ts`: `createProjectSchema` расширена `trendId`; для `serviceSlug='trends'` отсутствие `trendId` даёт `400 TREND_REQUIRED`.
+  - `apps/api/src/routes/projects.ts`: `POST /api/projects` теперь поддерживает `photo-restore`, `photo-animate`, `trends`; `SERVICE_NOT_SUPPORTED_YET` снят для услуг 2/3, прочие slug по-прежнему `404 SERVICE_NOT_FOUND`.
+  - Для `photo-animate`: один upload `image` (jpeg/png/webp до 25 MB через существующий middleware), цена берётся из `Service.priceTokens=80`, title `Анимация фото — DD.MM.YYYY HH:mm`, job в `QUEUE_NAMES.PHOTO_ANIMATE`.
+  - Для `trends`: multipart `image + serviceSlug=trends + trendId`; `Trend` ищется по id, `!trend || !trend.isActive` → `404 TREND_NOT_FOUND`, `trend.serviceId !== service.id` → `400 TREND_SERVICE_MISMATCH`; `Project.trendId` записывается, title `Тренд: <trend.title> — DD.MM.YYYY HH:mm`, job в `QUEUE_NAMES.TREND` с `trendId`.
+  - Списание токенов для тренда использует цену услуги `Service.priceTokens=150`, не `Trend.priceTokens`. `trend.usedCount` в API не инкрементится.
+  - `GET /api/projects/:id` больше не отдаёт алиас `service.name`; контракт `service: { slug, title, category }`, фронт читает `service.title`.
+- Worker:
+  - `apps/worker/src/processors/photo-restore.ts`: переведён на `job.data.inputImages[0]`; при пустом входе `markProjectFailed(projectId, 'No input image provided', { refundTokens: true })` без throw.
+  - `apps/worker/src/processors/photo-animate.ts`: реальный processor вместо заглушки. Проверяет проект/user/status, переводит в `PROCESSING`, вызывает `aiProvider.animateImage({ imageUrl, config: {} })`, сохраняет `aiProviderJobId`, poll `getJobStatus` каждые 1500 мс максимум 60 итераций, успешный результат сохраняет в `resultVideo`, `resultThumbnail=null`.
+  - `apps/worker/src/processors/trend.ts`: реальный processor. После проверки проекта загружает `Trend` по `job.data.trendId`; если нет — fail+refund. Вызывает `aiProvider.generateTrend({ imageUrl, trendPrompt: trend.prompt, model: trend.aiModel, config: trend.aiConfig })`, результат сохраняет в `resultVideo`.
+  - После успешного `markProjectCompleted` для тренда отдельной операцией инкрементится `trend.usedCount`; ошибка инкремента логируется warning и не откатывает завершённый проект.
+  - Оба processor'а сохраняют поведение 1.6b: exception до перехода в `PROCESSING` rethrow для BullMQ retry; exception после `PROCESSING` делает fail+refund и не rethrow'ится, чтобы не получить двойной refund.
+- Frontend:
+  - `apps/web/src/components/services/ProjectUploader.tsx`: общий uploader для `photo-restore` и `photo-animate` с native drag-and-drop, preview, client-side MIME/25 MB validation, auth/balance states и человекочитаемыми toast-ошибками.
+  - `PhotoRestoreUploader.tsx` стал тонкой обёрткой над `ProjectUploader`; добавлен `PhotoAnimateUploader.tsx` и встроен в существующую страницу `/services/photo-animate` через `ServiceDetail`, без переписывания hero/описания/галереи.
+  - `apps/web/src/components/services/TrendUploader.tsx`: отдельная форма для `/trends/[id]`, потому что нужно передавать `trendId`. Гость → `/login?redirect=/trends/{id}`, balance < 150 → `/pricing`, success → `/dashboard/projects/{project.id}`.
+  - `apps/web/src/components/pages/TrendDetail.tsx`: вместо заглушки «создание позже» добавлен блок `TrendUploader`; каталог `/trends` остаётся read-only.
+  - `apps/web/src/app/dashboard/projects/[id]/ProjectPageContent.tsx`: результат-image оставлен через `<img>` с точечным `// eslint-disable-next-line @next/next/no-img-element`; retry-link теперь ведёт на `/services/photo-restore`, `/services/photo-animate` или `/trends/{trendId}` в зависимости от проекта.
+  - `apps/web/src/components/dashboard/ProjectCard.tsx`: video-проекты показывают `resultVideo` через `<video muted preload="metadata">`; если результата нет — placeholder, pending/processing/failed не показывают исходное фото как результат.
+- Тесты:
+  - `apps/api/src/__tests__/projects.test.ts` расширен и переведён на прямые auth cookies через `signAccessToken`, чтобы не упираться в auth rate limit.
+  - Добавлены проверки: happy path `photo-animate` (`QUEUE_NAMES.PHOTO_ANIMATE`, списание 80), `photo-animate` insufficient balance 79→402, `TREND_REQUIRED`, `TREND_NOT_FOUND`, `TREND_SERVICE_MISMATCH`, happy path `trends` (`QUEUE_NAMES.TREND`, списание 150, `Project.trendId`, `trendId` в job data).
+  - Queue по-прежнему мокается через `jest.spyOn(queuesModule, 'addProjectJob')`; Redis для этих tests не нужен.
+- Нестандартные решения и заметки:
+  - Для self-check пришлось остановить локальный `npm run dev` из `C:\Allvision-Studio`, потому что активные API/worker процессы держали `node_modules/.prisma/client/query_engine-windows.dll.node` и `npm run build -w @allvision/database` падал на `EPERM` rename.
+  - `next build` на Windows печатает пост-build сообщение `Static worker exited with code: 3221225477`, но команда завершается exit code 0; `<img>` warning подавлен точечно.
+  - Админский CRUD трендов, thumbnail для video, NSFW/email/share и реальный AI-provider не делались.
+- Проверки:
+  - Прошли: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`.
+  - `npm test -w @allvision/api` → 8 suites passed, **55 tests passed** (до 1.6c-1 было 50).

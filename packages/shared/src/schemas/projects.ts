@@ -3,6 +3,15 @@ import { ProjectStatus } from '../types';
 
 export const createProjectSchema = z.object({
   serviceSlug: z.string().min(1),
+  trendId: z.string().min(1).optional(),
+}).superRefine((data, ctx) => {
+  if (data.serviceSlug === 'trends' && !data.trendId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['trendId'],
+      message: 'TREND_REQUIRED',
+    });
+  }
 });
 
 export const listProjectsQuerySchema = z.object({

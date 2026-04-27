@@ -11,7 +11,14 @@ import * as queues from '../queues';
 
 export const projectsRouter = Router();
 
-const unsupportedAutoServices = new Set(['photo-animate', 'trends']);
+type AutoServiceSlug = 'photo-restore' | 'photo-animate' | 'trends';
+
+const supportedAutoServices = new Set<string>(['photo-restore', 'photo-animate', 'trends']);
+const serviceQueueName: Record<AutoServiceSlug, typeof QUEUE_NAMES.PHOTO_RESTORE | typeof QUEUE_NAMES.PHOTO_ANIMATE | typeof QUEUE_NAMES.TREND> = {
+  'photo-restore': QUEUE_NAMES.PHOTO_RESTORE,
+  'photo-animate': QUEUE_NAMES.PHOTO_ANIMATE,
+  trends: QUEUE_NAMES.TREND,
+};
 
 const projectCreateSelect = {
   id: true,
@@ -42,7 +49,7 @@ const projectListSelect = {
   completedAt: true,
 } as const;
 
-function projectTitle(): string {
+function formatProjectDate(): string {
   const when = new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
     month: '2-digit',
@@ -53,7 +60,26 @@ function projectTitle(): string {
   })
     .format(new Date())
     .replace(',', '');
+  return when;
+}
+
+function projectTitle(serviceSlug: AutoServiceSlug, trendTitle?: string): string {
+  const when = formatProjectDate();
+  if (serviceSlug === 'photo-animate') return `Анимация фото — ${when}`;
+  if (serviceSlug === 'trends') return `Тренд: ${trendTitle ?? 'Видео'} — ${when}`;
   return `Улучшение фото — ${when}`;
+}
+
+function parseCreateProjectBody(body: unknown) {
+  const parsed = createProjectSchema.safeParse(body);
+  if (!parsed.success) {
+    const isTrendRequired = parsed.error.errors.some((issue) => issue.message === 'TREND_REQUIRED');
+    if (isTrendRequired) {
+      throw new HttpError(400, 'TREND_REQUIRED', 'Trend is required');
+    }
+    throw parsed.error;
+  }
+  return parsed.data;
 }
 
 function isPrismaNotFound(error: unknown): boolean {
@@ -81,17 +107,27 @@ projectsRouter.post(
         throw new HttpError(400, 'FILE_REQUIRED', 'Image file is required');
       }
 
-      const { serviceSlug } = createProjectSchema.parse(req.body);
-      if (unsupportedAutoServices.has(serviceSlug)) {
-        throw new HttpError(400, 'SERVICE_NOT_SUPPORTED_YET', 'Service is not supported yet');
-      }
-      if (serviceSlug !== 'photo-restore') {
+      const { serviceSlug, trendId } = parseCreateProjectBody(req.body);
+      if (!supportedAutoServices.has(serviceSlug)) {
         throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
       }
+      const autoServiceSlug = serviceSlug as AutoServiceSlug;
 
       const service = await prisma.service.findUnique({ where: { slug: serviceSlug } });
       if (!service || !service.isActive) {
         throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+      }
+
+      const trend = autoServiceSlug === 'trends'
+        ? await prisma.trend.findUnique({ where: { id: trendId! } })
+        : null;
+      if (autoServiceSlug === 'trends') {
+        if (!trend || !trend.isActive) {
+          throw new HttpError(404, 'TREND_NOT_FOUND', 'Trend not found');
+        }
+        if (trend.serviceId !== service.id) {
+          throw new HttpError(400, 'TREND_SERVICE_MISMATCH', 'Trend belongs to another service');
+        }
       }
 
       const { buffer, contentType } = await validateAndProcessImage(req.file.buffer);
@@ -117,7 +153,8 @@ projectsRouter.post(
               tokensCost,
               serviceId: service.id,
               userId,
-              title: projectTitle(),
+              trendId: trend?.id,
+              title: projectTitle(autoServiceSlug, trend?.title),
             },
             select: projectCreateSelect,
           });
@@ -144,16 +181,16 @@ projectsRouter.post(
       }
 
       try {
-        await queues.addProjectJob(QUEUE_NAMES.PHOTO_RESTORE, {
+        await queues.addProjectJob(serviceQueueName[autoServiceSlug], {
           projectId: project.id,
           userId,
-          inputImageUrl: uploaded.url,
           serviceId: service.id,
+          trendId: trend?.id,
           inputImages: [uploaded.url],
           aiConfig: {},
         });
       } catch (err) {
-        logger.error(`Failed to enqueue photo-restore project ${project.id}`, err);
+        logger.error(`Failed to enqueue ${autoServiceSlug} project ${project.id}`, err);
 
         try {
           await prisma.project.update({
@@ -269,13 +306,7 @@ projectsRouter.get('/:id', requireAuth, async (req: Request, res: Response, next
       throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Project not found');
     }
 
-    res.json({
-      ...project,
-      service: {
-        ...project.service,
-        name: project.service.title,
-      },
-    });
+    res.json(project);
   } catch (err) {
     next(err);
   }

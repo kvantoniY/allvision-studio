@@ -1,29 +1,36 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { ImageIcon } from 'lucide-react';
+import { ImageIcon, Video } from 'lucide-react';
 import type { Project } from '@allvision/shared';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDate } from './labels';
 
 export function ProjectCard({ project }: { project: Project }) {
-  const preview = project.resultThumbnail ?? project.resultImage ?? project.inputImages?.[0];
+  const previewImage = project.resultThumbnail ?? project.resultImage;
   return (
     <Link href={`/dashboard/projects/${project.id}`} className="group">
       <Card className="bg-slate-900 border-slate-800 transition hover:border-violet-500/50 hover:shadow-[0_0_0_1px_rgba(139,92,246,0.2)]">
         <CardContent className="p-0">
           <div className="aspect-video relative overflow-hidden rounded-t-lg bg-slate-800">
-            {preview ? (
+            {previewImage ? (
               <Image
-                src={preview}
+                src={previewImage}
                 alt={project.title}
                 fill
                 className="object-cover transition group-hover:scale-105"
                 sizes="(max-width: 768px) 100vw, 33vw"
               />
+            ) : project.resultVideo ? (
+              <video
+                src={project.resultVideo}
+                muted
+                preload="metadata"
+                className="h-full w-full object-cover transition group-hover:scale-105"
+              />
             ) : (
               <div className="grid h-full place-items-center text-slate-600">
-                <ImageIcon className="h-10 w-10" />
+                {project.tokensCost >= 80 ? <Video className="h-10 w-10" /> : <ImageIcon className="h-10 w-10" />}
               </div>
             )}
             <span

@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { PhotoRestoreUploader } from '@/components/services/PhotoRestoreUploader';
+import { PhotoAnimateUploader } from '@/components/services/PhotoAnimateUploader';
 import {
   getServiceActionLabel,
   getServiceBadgeLabel,
@@ -64,6 +65,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const isOrderOnly = service.processingType === 'MANUAL';
   const isTokenService = service.processingType !== 'MANUAL';
   const isPhotoRestore = service.slug === 'photo-restore';
+  const isPhotoAnimate = service.slug === 'photo-animate';
   const hasEnoughTokens = !!user && user.tokenBalance >= service.priceTokens;
   const registerHref = `/register?redirect=/services/${service.slug}`;
 
@@ -95,6 +97,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
             {isPhotoRestore ? (
               <div className="w-full">
                 <PhotoRestoreUploader />
+              </div>
+            ) : isPhotoAnimate ? (
+              <div className="w-full">
+                <PhotoAnimateUploader />
               </div>
             ) : !user ? (
               <Button asChild size="lg" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
@@ -130,7 +136,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                 </Button>
               </>
             )}
-            {user && isTokenService && !isPhotoRestore && !hasEnoughTokens && (
+            {user && isTokenService && !isPhotoRestore && !isPhotoAnimate && !hasEnoughTokens && (
               <span className="text-sm text-muted-foreground">Баланс: {user.tokenBalance} токенов</span>
             )}
           </div>

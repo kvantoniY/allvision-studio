@@ -7,14 +7,15 @@ import { markProjectCompleted, markProjectFailed, updateProjectProgress } from '
 
 export async function processPhotoRestore(job: Job<ProjectJobData>) {
   const { projectId, userId } = job.data;
-  const inputImageUrl = job.data.inputImageUrl ?? job.data.inputImages?.[0];
+  const imageUrl = job.data.inputImages?.[0];
   const aiProvider = getAIProvider();
 
   let movedToProcessing = false;
 
   try {
-    if (!inputImageUrl) {
-      throw new Error('Missing input image URL');
+    if (!imageUrl) {
+      await markProjectFailed(projectId, 'No input image provided', { refundTokens: true });
+      return;
     }
 
     const project = await prisma.project.findUnique({ where: { id: projectId } });
@@ -37,7 +38,7 @@ export async function processPhotoRestore(job: Job<ProjectJobData>) {
     });
     movedToProcessing = true;
 
-    const handle = await aiProvider.restorePhoto({ imageUrl: inputImageUrl, config: {} });
+    const handle = await aiProvider.restorePhoto({ imageUrl, config: {} });
     await prisma.project.update({
       where: { id: projectId },
       data: { aiProviderJobId: handle.providerJobId },

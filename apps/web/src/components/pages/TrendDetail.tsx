@@ -6,9 +6,8 @@ import { Camera, Coins, Play, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/use-auth';
 import { useGetTrendQuery } from '@/store/api/public-api';
+import { TrendUploader } from '@/components/services/TrendUploader';
 
 type TrendDetailProps = {
   id: string;
@@ -16,8 +15,6 @@ type TrendDetailProps = {
 
 export function TrendDetail({ id }: TrendDetailProps) {
   const { data, isLoading, isError } = useGetTrendQuery(id);
-  const { user } = useAuth();
-  const { toast } = useToast();
   const trend = data?.trend;
 
   if (isLoading) {
@@ -85,24 +82,7 @@ export function TrendDetail({ id }: TrendDetailProps) {
             <p className="mt-3 leading-7 text-muted-foreground">{trend.prompt}</p>
           </div>
           <div className="mt-7">
-            {user ? (
-              <Button
-                size="lg"
-                className="bg-amber-500 text-slate-950 hover:bg-amber-400"
-                onClick={() =>
-                  toast({
-                    title: 'Создание тренда появится позже',
-                    description: 'Каталог и авторизация готовы, генерация со своим фото будет подключена на следующем этапе.',
-                  })
-                }
-              >
-                Создать этот тренд со своим фото
-              </Button>
-            ) : (
-              <Button asChild size="lg" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
-                <Link href={`/login?redirect=/trends/${trend.id}`}>Создать этот тренд со своим фото</Link>
-              </Button>
-            )}
+            <TrendUploader trendId={trend.id} />
           </div>
         </div>
       </div>

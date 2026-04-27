@@ -39,6 +39,12 @@ function isActiveStatus(status?: ProjectStatus) {
   return status === 'PENDING' || status === 'PROCESSING';
 }
 
+function retryHrefFor(project: ProjectDetails) {
+  if (project.service.slug === 'photo-animate') return '/services/photo-animate';
+  if (project.service.slug === 'trends') return project.trendId ? `/trends/${project.trendId}` : '/trends';
+  return '/services/photo-restore';
+}
+
 export function ProjectPageContent({ id, initialProject }: ProjectPageContentProps) {
   const [lastStatus, setLastStatus] = useState<ProjectStatus | undefined>(initialProject?.status);
   const projectQuery = useGetProjectQuery(id);
@@ -91,6 +97,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const completedAt = live?.completedAt ?? project.completedAt;
   const inputImage = project.inputImages?.[0];
   const resultUrl = resultImage ?? resultVideo ?? resultThumbnail;
+  const retryHref = retryHrefFor(project);
 
   return (
     <div className="space-y-6">
@@ -109,7 +116,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
             </Badge>
           </div>
           <p className="mt-2 text-sm text-slate-400">
-            {project.service.name} · создан {formatDateTime(project.createdAt)}
+            {project.service.title} · создан {formatDateTime(project.createdAt)}
             {completedAt ? ` · готов ${formatDateTime(completedAt)}` : ''}
           </p>
         </div>
@@ -155,6 +162,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
               <div className="space-y-5">
                 <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                   {resultImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={resultImage} alt="Результат улучшения" className="max-h-[520px] w-full object-contain" />
                   ) : resultVideo ? (
                     <video src={resultVideo} controls className="max-h-[520px] w-full" />
@@ -187,7 +195,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                   </AlertDescription>
                 </Alert>
                 <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
-                  <Link href="/services/photo-restore">
+                  <Link href={retryHref}>
                     <RotateCcw className="h-4 w-4" />
                     Попробовать снова
                   </Link>

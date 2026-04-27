@@ -13,7 +13,6 @@ export type ProjectSummary = Pick<
 export type ProjectService = {
   slug: string;
   title: string;
-  name: string;
   category: ServiceCategory;
 };
 
