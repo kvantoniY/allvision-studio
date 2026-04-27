@@ -11,7 +11,7 @@
     "dev:web": "npm run dev -w @allvision/web",
     "dev:api": "npm run dev -w @allvision/api",
     "dev:worker": "npm run dev -w @allvision/worker",
-    "build": "npm run build -w @allvision/shared && npm run generate -w @allvision/database && npm run build -w @allvision/api && npm run build -w @allvision/worker && npm run build -w @allvision/web",
+    "build": "npm run build -w @allvision/shared && npx prisma generate --schema packages/database/prisma/schema.prisma && npm run build -w @allvision/api && npm run build -w @allvision/worker && npm run build -w @allvision/web",
     "db:migrate": "prisma migrate dev --schema packages/database/prisma/schema.prisma",
     "db:seed": "tsx packages/database/src/seed.ts",
     "db:studio": "npx prisma studio --schema packages/database/prisma/schema.prisma",

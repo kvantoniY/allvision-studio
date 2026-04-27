@@ -10,6 +10,7 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 export interface ProjectJobData {
   projectId: string;
   userId: string;
+  inputImageUrl?: string;
   serviceId: string;
   trendId?: string;
   inputImages: string[];

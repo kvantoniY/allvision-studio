@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { useGetDashboardQuery } from '@/store/api/account-api';
+import { useListProjectsQuery } from '@/store/api/projects-api';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
@@ -49,6 +50,7 @@ const QUICK_START = [
 export default function DashboardPage() {
   const { user } = useAuth();
   const { data, isLoading } = useGetDashboardQuery();
+  const { data: projectsData, isLoading: isProjectsLoading } = useListProjectsQuery({ page: 1, limit: 3 });
 
   if (!user) return null;
 
@@ -66,7 +68,8 @@ export default function DashboardPage() {
     );
   }
 
-  const { stats, recentProjects, activeOrders, recentTransactions } = data;
+  const { stats, activeOrders, recentTransactions } = data;
+  const recentProjects = projectsData?.items ?? [];
 
   return (
     <div className="space-y-8">
@@ -145,7 +148,13 @@ export default function DashboardPage() {
             </Link>
           </CardHeader>
           <CardContent>
-            {recentProjects.length === 0 ? (
+            {isProjectsLoading ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {Array.from({ length: 2 }).map((_, index) => (
+                  <Skeleton key={index} className="h-64 rounded-lg" />
+                ))}
+              </div>
+            ) : (projectsData?.total ?? 0) === 0 ? (
               <EmptyState
                 icon={<ImageIcon className="h-full w-full" />}
                 title="Готовы создать первое чудо?"
@@ -223,7 +232,7 @@ export default function DashboardPage() {
         </section>
       )}
 
-      {recentProjects.length === 0 && activeOrders.length === 0 && (
+      {!isProjectsLoading && (projectsData?.total ?? 0) === 0 && activeOrders.length === 0 && (
         <Card className="bg-gradient-to-br from-violet-600/10 to-fuchsia-600/10 border-violet-500/20">
           <CardContent className="flex flex-col items-center gap-4 p-8 text-center">
             <Sparkles className="h-10 w-10 text-violet-400" />

@@ -209,3 +209,55 @@
   - Билды: `npm run build -w @allvision/shared`, `-w @allvision/api`, `-w @allvision/worker`, `-w @allvision/web`, `npm run build` (root).
   - Ручной smoke (после `npm run demo:download` и `npm run dev`): залогиниться (user@allvision.studio / user123), затем `curl -X POST http://localhost:4000/api/test/upload -H "Cookie: accessToken=..." -F "image=@some.jpg"` → получить `{url, key, dimensions}`, открыть `url` в браузере → видеть свою картинку. На диске появится `uploads/user-uploads/<userId>/<YYYY-MM>/<uuid>.jpg`. В логах worker: `Worker ready: photo-restore (concurrency: 2)` ×4 для каждой очереди.
 - ⚠️ Тестовый эндпоинт `POST /api/test/upload` после ручной проверки **должен быть удалён** в этапе 1.6b при появлении реального `/api/projects`. Это явный TODO в `apps/api/src/routes/test.ts` и `apps/api/src/routes/index.ts`.
+
+### Этап 1.6b — Услуга №1 «Улучшение фото» end-to-end ✅
+- Backend/API:
+  - Созданы `packages/shared/src/schemas/projects.ts` и экспорт в `packages/shared/src/schemas/index.ts`: `createProjectSchema` и `listProjectsQuerySchema` (`page`, `limit`, `status`, `serviceSlug`).
+  - `apps/api/src/middleware/rate-limit.ts`: добавлен `projectCreateLimiter` — 10 запросов / 60 секунд / на `req.user.id`, fallback на IP только если user по какой-то причине отсутствует.
+  - Создан `apps/api/src/routes/projects.ts`, подключён в `apps/api/src/routes/index.ts` как `/api/projects`.
+  - Удалён временный smoke endpoint `POST /api/test/upload`: файл `apps/api/src/routes/test.ts` удалён, регистрация `/test` снята. Проверка `rg "test/upload" apps` возвращает пусто.
+  - `packages/shared/src/types/queue.ts`: `ProjectJobData` расширен optional `inputImageUrl`, чтобы новый `/api/projects` мог передавать прямой URL входного фото; старые поля `serviceId/inputImages/aiConfig` сохранены для совместимости существующих тестов очереди и будущих услуг 2-3.
+- API-контракт `/api/projects`:
+  - `POST /api/projects`: middleware order `requireAuth → projectCreateLimiter → uploadSinglePhoto`; принимает multipart `image` + `serviceSlug`.
+  - На этапе 1.6b реализован только `serviceSlug='photo-restore'`. `photo-animate` и `trends` возвращают `400 SERVICE_NOT_SUPPORTED_YET`; любой другой slug — `404 SERVICE_NOT_FOUND`.
+  - Файл валидируется через `validateAndProcessImage(req.file.buffer)`. Затем файл загружается через `uploadUserImage(userId, buffer, contentType)` до транзакции; если транзакция падает, API вызывает `deleteFile(key)` в catch, логирует ошибку удаления и пробрасывает исходную ошибку.
+  - Prisma transaction: атомарное списание `User.tokenBalance` через `tx.user.update({ where: { id, tokenBalance: { gte: tokensCost } } })`; при `P2025` возвращается `402 INSUFFICIENT_TOKENS`. Затем создаётся `Project(status=PENDING, progress=0, inputImages=[url], tokensCost=20, title='Улучшение фото — DD.MM.YYYY HH:mm')` и `TokenTransaction(reason='spending', amount=-20, refId=project.id, balanceAfter=новый баланс)`.
+  - После транзакции ставится BullMQ job: `addProjectJob(QUEUE_NAMES.PHOTO_RESTORE, { projectId, userId, inputImageUrl, serviceId, inputImages, aiConfig })`.
+  - Если `addProjectJob` падает (Redis down): проект помечается `FAILED` с `errorMessage='Queue unavailable'`, отдельной транзакцией делается refund (`User.tokenBalance += tokensCost`, `TokenTransaction(reason='refund', amount=+tokensCost, refId=project.id)`), загруженный файл удаляется, API возвращает `503 QUEUE_UNAVAILABLE`. Если refund-транзакция сама падает — ошибка логируется, но клиент всё равно получает 503.
+  - `GET /api/projects/:id`: owner check через `findFirst({ id, userId })`, чужой/отсутствующий проект возвращает `404 PROJECT_NOT_FOUND`; отдаётся Project без `aiProviderLogs`, с `service: { slug, title, name, category }` (`name` алиасит существующее поле `Service.title`, потому что в Prisma нет поля `name`).
+  - `GET /api/projects/:id/status`: лёгкий polling endpoint без include и тяжёлых полей: `{ id, status, progress, resultImage, resultVideo, resultThumbnail, errorMessage, completedAt }`.
+  - `GET /api/projects`: owner list, сортировка `createdAt desc`, server-side фильтры `status/serviceSlug`, пагинация `{ items, total, page, limit }`, без `aiProviderLogs/aiProviderJobId`.
+- Worker:
+  - `apps/worker/src/processors/photo-restore.ts` полностью переписан: больше нет `return { ok: true, stub: true }`.
+  - Алгоритм: проверяет существование проекта и `status === PENDING`; переводит в `PROCESSING`; вызывает `getAIProvider().restorePhoto({ imageUrl, config: {} })`; сохраняет `aiProviderJobId`; затем polling `getJobStatus(handle)` каждые 1500 мс, максимум 60 итераций (90 секунд safety timeout).
+  - `processing` → `updateProjectProgress(projectId, status.progress)` + `await sleep(1500)`.
+  - `failed` → один вызов `markProjectFailed(projectId, message, { refundTokens: true })`.
+  - `completed` → требует `resultUrl`, принимает `resultType=image|video`; для video логирует warning и сохраняет в `resultVideo`, image — в `resultImage`; завершает через `markProjectCompleted`.
+  - Timeout → `markProjectFailed(projectId, 'AI processing timeout', { refundTokens: true })`.
+  - Exception до перехода в `PROCESSING` пробрасывается — BullMQ может ретраить, потому что токены ещё не надо возвращать процессором. Exception после перехода в `PROCESSING` не rethrow'ится: processor делает refund + `FAILED` без BullMQ retry, чтобы повторный retry не начислил refund второй раз.
+  - Добавлен маленький локальный `apps/worker/src/utils/logger.ts`, потому что в worker не было общего logger и тянуть `winston`/api logger в worker не нужно.
+- Frontend/RTK Query:
+  - Создан `apps/web/src/store/api/projects-api.ts`: `createProject`, `getProject`, `getProjectStatus`, `listProjects`; tag types `Project`, `ProjectStatus`; после `createProject` инвалидируются списки проектов.
+  - Side effects после `createProject`: helper `invalidateProjectSideEffects` инвалидирует `accountApi` tags `User/Dashboard/Transactions` и `authApi` tags `Me/User`, чтобы баланс, dashboard и история транзакций обновлялись после списания.
+  - Slice подключён в `apps/web/src/store/index.ts` (reducer + middleware).
+- Frontend/UI:
+  - Создан `apps/web/src/components/services/PhotoRestoreUploader.tsx` и встроен в существующую `/services/photo-restore` через `ServiceDetail`, не переписывая hero/описание/галерею.
+  - Uploader: гость видит «Войти и улучшить» → `/login?redirect=/services/photo-restore`; user с балансом < 20 видит блок нехватки токенов и кнопку `/pricing`; user с балансом ≥ 20 видит native drag-and-drop/click upload (один JPEG/PNG/WebP до 25 MB), preview, «Заменить», «Улучшить за 20 токенов». После success — `router.push('/dashboard/projects/{id}')`; ошибки мапятся на человекочитаемые toast-сообщения.
+  - Созданы `apps/web/src/app/dashboard/projects/[id]/page.tsx` и `ProjectPageContent.tsx`: server wrapper проверяет `PROJECT_NOT_FOUND` через `notFound()`, client content делает `getProject` для метаданных и `getProjectStatus` с polling 3000 мс до `COMPLETED/FAILED`.
+  - Создан `apps/web/src/components/ui/progress.tsx` — локальный shadcn-like Progress без новой зависимости.
+  - `apps/web/src/app/dashboard/projects/page.tsx`: список теперь читает `useListProjectsQuery({ page: 1, limit: 20, status })`; chip-фильтры статуса идут server-side, поиск по title остаётся client-side.
+  - `apps/web/src/app/dashboard/page.tsx`: секция «Последние проекты» теперь читает `useListProjectsQuery({ page: 1, limit: 3 })`; empty state остаётся при `total === 0`.
+  - `apps/web/next.config.mjs`: добавлены `localhost:4000/static/**` и `127.0.0.1:4000/static/**` для отображения загруженных user/result images через `next/image`.
+- Тесты:
+  - Добавлен `apps/api/src/__tests__/projects.test.ts`: 9 проверок — 401 без auth, 400 без файла, 400 неверный MIME, 404 unknown slug, 400 `photo-animate`, 402 `INSUFFICIENT_TOKENS`, 201 happy path со списанием и `TokenTransaction(reason='spending')`, 404 для чужого проекта, пагинация 25 проектов (`page=2&limit=10`).
+  - Очередь в tests мокается через `jest.spyOn(queuesModule, 'addProjectJob')`; реальный Redis не нужен для happy path.
+- Нестандартные решения и долги:
+  - `TokenTransaction.reason` для списания выбран как `spending`, потому что существующий `/dashboard/billing` уже фильтрует chip `spending`.
+  - Медиа в `apps/api/demo-assets/*` не коммитятся по `.gitignore`; для локального e2e после свежего checkout нужно `npm run demo:download`. В этой сессии команда скачала 10 jpg для `photo-restore`; video assets для 1.6c не генерировались, потому что `ffmpeg` не найден.
+  - В `packages/database/package.json` добавлен `build = prisma generate`, потому что self-check требует `npm run build -w @allvision/database`, а такого script раньше не было.
+  - Root `package.json` build переведён с нестабильно падавшего на Windows shorthand `npm run generate -w @allvision/database` на прямой `npx prisma generate --schema packages/database/prisma/schema.prisma`. Эквивалентный `npm --workspace @allvision/database run generate` проходил, но root build должен быть воспроизводим одной командой.
+  - Услуги 2 (`photo-animate`) и 3 (`trends`) остаются заглушками до 1.6c. NSFW, email-уведомления, share-кнопка и реальный AI-provider не делались.
+- Проверки:
+  - Pre-flight эквивалентно выполнен через PowerShell/`rg`, потому что `grep` и `/bin/bash` отсутствуют в окружении. Подтверждены: `photo-restore` в seed, `model Project`, `MockAIProvider.restorePhoto/getJobStatus`, helpers `markProjectCompleted/markProjectFailed/updateProjectProgress`, очереди, upload helpers, заглушка `photo-restore` до правки. `Service.priceTokens === 20`; `Service.isActive` берётся из Prisma default `true` и при test upsert явно выставляется `true`.
+  - Прошли: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build` (root). `next build` оставляет warning на `<img>` в result view, потому что в контракте результата явно нужен `<img>`; build exit code 0.
+  - `npm test -w @allvision/api` сейчас не прошёл из-за внешнего окружения: Postgres на `localhost:5433` недоступен, Docker Desktop service `com.docker.service` остановлен и `Start-Service` не имеет прав (`Cannot open com.docker.service`). Итоговый счётчик Jest при этом видит 50 тестов total (было 41, стало +9); 17 успели пройти, 33 DB-зависимых упали на `Can't reach database server at localhost:5433`.

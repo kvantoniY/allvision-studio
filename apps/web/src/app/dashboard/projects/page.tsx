@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/dashboard/EmptyState';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import type { Project, ProjectStatus } from '@allvision/shared';
 import { cn } from '@/lib/utils';
+import { useListProjectsQuery } from '@/store/api/projects-api';
 
 const FILTERS: { value: 'ALL' | ProjectStatus; label: string }[] = [
   { value: 'ALL', label: 'Все' },
@@ -20,9 +21,12 @@ const FILTERS: { value: 'ALL' | ProjectStatus; label: string }[] = [
 export default function ProjectsPage() {
   const [filter, setFilter] = useState<'ALL' | ProjectStatus>('ALL');
   const [search, setSearch] = useState('');
-
-  // На этапе 1.4 — пока пусто. Реальная загрузка появится на этапе 1.6.
-  const projects: Project[] = [];
+  const { data, isLoading } = useListProjectsQuery({
+    page: 1,
+    limit: 20,
+    status: filter === 'ALL' ? undefined : filter,
+  });
+  const projects: Project[] = data?.items ?? [];
 
   const visible = projects
     .filter((p) => filter === 'ALL' || p.status === filter)
@@ -64,7 +68,13 @@ export default function ProjectsPage() {
         </CardContent>
       </Card>
 
-      {visible.length === 0 ? (
+      {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Card key={index} className="h-64 bg-slate-900 border-slate-800" />
+          ))}
+        </div>
+      ) : (data?.total ?? 0) === 0 ? (
         <Card className="bg-slate-900 border-slate-800">
           <CardContent className="p-6">
             <EmptyState
@@ -77,6 +87,17 @@ export default function ProjectsPage() {
                 { label: 'Оживить фото', href: '/services/photo-animate', variant: 'outline' },
                 { label: 'Все услуги', href: '/services', variant: 'outline' },
               ]}
+            />
+          </CardContent>
+        </Card>
+      ) : visible.length === 0 ? (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <EmptyState
+              size="lg"
+              icon={<Search className="h-full w-full" />}
+              title="Ничего не найдено"
+              description="Попробуйте изменить поиск или фильтр статуса"
             />
           </CardContent>
         </Card>
