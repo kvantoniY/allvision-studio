@@ -15,6 +15,7 @@ model User {
   name          String?
   avatar        String?
   tokenBalance  Int       @default(0)
+  freeCharacterUsed Boolean @default(false)
   role          Role      @default(USER)
   messenger     String?
   messengerType MessengerType?
@@ -28,6 +29,9 @@ model User {
   orders        Order[]
   tokenTxns     TokenTransaction[]
   fairyTales    FairyTaleScriptRecord[]
+  characters    Character[]
+  scenes        Scene[]
+  episodes      Episode[]
 }
 
 enum Role {
@@ -242,6 +246,8 @@ model Payment {
 
   user              User          @relation(fields: [userId], references: [id])
   order             Order?
+  character         Character?
+  scene             Scene?
 }
 
 enum PaymentStatus {
@@ -254,6 +260,225 @@ enum PaymentStatus {
 enum PaymentPurpose {
   TOPUP
   ORDER
+}
+
+// === AI-персонажи ===
+model Character {
+  id              String           @id @default(cuid())
+  userId          String
+  name            String
+  type            CharacterType
+  gender          CharacterGender?
+  ageGroup        String?
+  description     String?          @db.Text
+
+  // Reference images — основа подхода
+  referenceImages String[]
+  primaryImageId  Int              @default(0)
+
+  // Метаданные
+  consentGiven    Boolean          @default(false)
+  consentAt       DateTime?
+  nsfwChecked     Boolean          @default(false)
+  status          CharacterStatus  @default(DRAFT)
+
+  // Статистика
+  episodesCount   Int              @default(0)
+  lastUsedAt      DateTime?
+
+  // Тарификация
+  isPaid          Boolean          @default(false)
+  paymentId       String?          @unique
+
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user            User             @relation(fields: [userId], references: [id])
+  payment         Payment?         @relation(fields: [paymentId], references: [id])
+  episodes        EpisodeCharacter[]
+  reports         AbuseReport[]
+}
+
+enum CharacterType {
+  HUMAN
+  PET
+  GROUP
+  MASCOT
+}
+
+enum CharacterGender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum CharacterStatus {
+  DRAFT
+  PROCESSING
+  READY
+  REJECTED
+  PAYMENT_PENDING
+}
+
+// === Сцены (локации) ===
+model Scene {
+  id              String       @id @default(cuid())
+  userId          String
+  name            String
+  description     String       @db.Text
+  referenceImages String[]
+  category        String?
+
+  isPaid          Boolean      @default(false)
+  paymentId       String?      @unique
+
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+
+  user            User         @relation(fields: [userId], references: [id])
+  payment         Payment?     @relation(fields: [paymentId], references: [id])
+  episodes        Episode[]
+}
+
+// === Эпизоды (генерации с персонажами/сценами) ===
+model Episode {
+  id              String        @id @default(cuid())
+  userId          String
+  title           String
+  status          EpisodeStatus @default(PENDING)
+  progress        Int           @default(0)
+
+  // Откуда сценарий
+  templateId      String?
+  customScenario  String?       @db.Text
+
+  // Параметры
+  durationSeconds Int           @default(5)
+  style           String?
+  aspectRatio     String        @default("9:16")
+
+  // Сцена
+  sceneId         String?
+
+  // Результаты
+  resultImage     String?
+  resultVideo     String?
+  resultThumbnail String?
+
+  // Тарификация
+  tokensCost      Int
+  errorMessage    String?       @db.Text
+
+  // AI-метаданные
+  aiProviderJobId String?
+  aiProviderLogs  Json?
+
+  // Соцшеринг
+  isPublic        Boolean       @default(false)
+  shareCount      Int           @default(0)
+  watermarkRemoved Boolean      @default(false)
+
+  createdAt       DateTime      @default(now())
+  completedAt     DateTime?
+
+  user            User          @relation(fields: [userId], references: [id])
+  template        ScenarioTemplate? @relation(fields: [templateId], references: [id])
+  scene           Scene?        @relation(fields: [sceneId], references: [id])
+  characters      EpisodeCharacter[]
+  reports         AbuseReport[]
+}
+
+enum EpisodeStatus {
+  PENDING
+  PROCESSING_IMAGE
+  PROCESSING_VIDEO
+  COMPLETED
+  FAILED
+}
+
+// === Связь Эпизодов и Персонажей (M:N) ===
+model EpisodeCharacter {
+  episodeId       String
+  characterId     String
+  role            String?
+
+  episode         Episode      @relation(fields: [episodeId], references: [id])
+  character       Character    @relation(fields: [characterId], references: [id])
+
+  @@id([episodeId, characterId])
+}
+
+// === Шаблоны сценариев (каталог) ===
+model ScenarioTemplate {
+  id                  String       @id @default(cuid())
+  slug                String       @unique
+  title               String
+  shortDesc           String
+  description         String       @db.Text
+  category            String
+
+  previewVideo        String
+  previewImage        String
+
+  // Конфиг
+  promptTemplate      String       @db.Text
+  characterRoles      Json
+  needsScene          Boolean      @default(false)
+  recommendedDuration Int          @default(10)
+  defaultStyle        String       @default("cinematic")
+
+  aiProvider          String       @default("fal")
+  aiModel             String
+  aiConfig            Json
+
+  priceTokens         Int
+
+  tags                String[]
+  popularityScore     Int          @default(0)
+  isActive            Boolean      @default(true)
+  isFeatured          Boolean      @default(false)
+  sortOrder           Int          @default(0)
+
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  episodes            Episode[]
+}
+
+// === Жалобы на злоупотребления ===
+model AbuseReport {
+  id              String       @id @default(cuid())
+  reporterUserId  String?
+  reporterEmail   String?
+  characterId     String?
+  episodeId       String?
+  reason          AbuseReason
+  description     String       @db.Text
+  status          ReportStatus @default(NEW)
+  adminNotes      String?      @db.Text
+  resolvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+
+  character       Character?   @relation(fields: [characterId], references: [id])
+  episode         Episode?     @relation(fields: [episodeId], references: [id])
+}
+
+enum AbuseReason {
+  UNCONSENTED_FACE
+  CELEBRITY
+  MINOR
+  HARASSMENT
+  DEFAMATION
+  OTHER
+}
+
+enum ReportStatus {
+  NEW
+  REVIEWING
+  RESOLVED_REMOVED
+  RESOLVED_NO_ACTION
+  REJECTED
 }
 
 // === Транзакции токенов (лог) ===

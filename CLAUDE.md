@@ -345,3 +345,9 @@
   - Админский CRUD юзеров и проектов, ручные возвраты токенов и аналитика `usedCount` остаются на 1.8/2.x.
   - Drag-and-drop reorder, bulk-операции и soft-delete трендов не делались.
   - Отдельного поля `Trend.thumbnail` в схеме нет; thumbnail админки использует `referenceImg`. Если потребуется отдельная семантика thumbnail/reference, нужен отдельный миграционный этап.
+
+### Миграция перед 1.6.5a — V3-модели БД ✅
+- Добавлены V3-модели AI-студии из `Allvision-Studio-V3-Extension.md`: `Character`, `Scene`, `Episode`, `EpisodeCharacter`, `ScenarioTemplate`, `AbuseReport`.
+- Миграция: `20260428124535_add_studio_characters_scenes_episodes_templates`; размер — 6 новых таблиц и 6 enum'ов (`CharacterType`, `CharacterGender`, `CharacterStatus`, `EpisodeStatus`, `AbuseReason`, `ReportStatus`).
+- `User` получил `freeCharacterUsed Boolean @default(false)` и обратные связи `characters`, `scenes`, `episodes`; существующие поля и старые миграции не трогались. В `Payment` добавлены только обратные relation-поля `character`/`scene`, необходимые Prisma для связей `Character.payment` и `Scene.payment`.
+- Seed-данные, API, UI и бизнес-логика не добавлялись.
