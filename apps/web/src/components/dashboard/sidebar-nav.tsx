@@ -1,4 +1,4 @@
-import { BookOpen, FileText, Home, ImageIcon, User, Wallet } from 'lucide-react';
+import { BookOpen, FileText, Film, Home, ImageIcon, Map, User, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -7,13 +7,32 @@ export type SidebarItem = {
   icon: LucideIcon;
 };
 
-export const SIDEBAR_ITEMS: SidebarItem[] = [
-  { href: '/dashboard', label: 'Главная', icon: Home },
-  { href: '/dashboard/projects', label: 'Мои проекты', icon: ImageIcon },
-  { href: '/dashboard/orders', label: 'Мои заказы', icon: FileText },
-  { href: '/dashboard/fairy-tales', label: 'Мои сказки', icon: BookOpen },
-  { href: '/dashboard/billing', label: 'История платежей', icon: Wallet },
-  { href: '/dashboard/profile', label: 'Профиль', icon: User },
+export type SidebarSection = {
+  label?: string;
+  items: SidebarItem[];
+};
+
+export const SIDEBAR_SECTIONS: SidebarSection[] = [
+  {
+    items: [{ href: '/dashboard', label: 'Главная', icon: Home }],
+  },
+  {
+    label: 'Моя студия',
+    items: [
+      { href: '/dashboard/characters', label: 'Персонажи', icon: Users },
+      { href: '/dashboard/scenes', label: 'Сцены', icon: Map },
+      { href: '/dashboard/episodes', label: 'Эпизоды', icon: Film },
+    ],
+  },
+  {
+    items: [
+      { href: '/dashboard/projects', label: 'Старые услуги', icon: ImageIcon },
+      { href: '/dashboard/orders', label: 'Мои заказы', icon: FileText },
+      { href: '/dashboard/fairy-tales', label: 'Мои сказки', icon: BookOpen },
+      { href: '/dashboard/billing', label: 'История платежей', icon: Wallet },
+      { href: '/dashboard/profile', label: 'Профиль', icon: User },
+    ],
+  },
 ];
 
 export function isActive(itemHref: string, pathname: string): boolean {

@@ -5,6 +5,9 @@ import { accountApi } from './api/account-api';
 import { paymentsApi } from './api/payments-api';
 import { projectsApi } from './api/projects-api';
 import { adminTrendsApi } from './api/admin-trends-api';
+import { charactersApi } from './api/characters-api';
+import { scenesApi } from './api/scenes-api';
+import { adminScenarioTemplatesApi } from './api/admin-scenario-templates-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -16,6 +19,9 @@ export const store = configureStore({
     [paymentsApi.reducerPath]: paymentsApi.reducer,
     [projectsApi.reducerPath]: projectsApi.reducer,
     [adminTrendsApi.reducerPath]: adminTrendsApi.reducer,
+    [charactersApi.reducerPath]: charactersApi.reducer,
+    [scenesApi.reducerPath]: scenesApi.reducer,
+    [adminScenarioTemplatesApi.reducerPath]: adminScenarioTemplatesApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -25,6 +31,9 @@ export const store = configureStore({
       paymentsApi.middleware,
       projectsApi.middleware,
       adminTrendsApi.middleware,
+      charactersApi.middleware,
+      scenesApi.middleware,
+      adminScenarioTemplatesApi.middleware,
     ),
 });
 

@@ -360,3 +360,12 @@
 - Нестандартное: добавлена пустая миграция `20260428140107_explicit_episode_set_null_v3`, чтобы явно зафиксировать в `schema.prisma` `Episode.template` и `Episode.scene` как `onDelete: SetNull`; фактический SQL уже был `ON DELETE SET NULL`.
 - Проверки: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`, `npx prisma migrate status --schema packages/database/prisma/schema.prisma`, `npm test -w @allvision/api` → 12 suites passed, **98 tests passed**.
 - TODO 1.6.5b: NSFW-проверка персонажей, тарификация первого/второго персонажа, workflow замены reference-фото и мастер создания персонажа.
+
+### Этап 1.6.5a (шаг 2.2) — Frontend V3: каталоги Персонажей/Сцен/Эпизодов и админка шаблонов ✅
+- RTK Query: добавлены `characters-api.ts`, `scenes-api.ts`, `admin-scenario-templates-api.ts`; все зарегистрированы в store. `createCharacter` инвалидирует `accountApi` Dashboard, admin-шаблоны инвалидируют будущий public tag `ScenarioTemplates`.
+- Навигация: dashboard sidebar получил группу «Моя студия» (`Персонажи`, `Сцены`, `Эпизоды`), старые `/dashboard/projects` сохранены как «Старые услуги». Admin sidebar получил `/admin/scenario-templates` с active-state через новый `AdminSidebarNav`.
+- Страницы: `/dashboard/characters`, `/dashboard/characters/new`, `/dashboard/characters/[id]`; `/dashboard/scenes`, `/dashboard/scenes/new`, `/dashboard/scenes/[id]`; `/dashboard/episodes` empty state; `/admin/scenario-templates`, `/admin/scenario-templates/new`, `/admin/scenario-templates/[id]`.
+- Компоненты: `MultiImageUploader`, `CharacterCard`, `SceneCard`, `v3-labels`, `AdminScenarioTemplateForm`. Формы создания простые, без мастера/NSFW/тарификации; reference-фото в edit не заменяются.
+- Нестандартное: счётчики «Моя студия» на `/dashboard` берутся через `listCharacters`/`listScenes`, `episodes` пока `0`, чтобы не трогать backend dashboard endpoint в frontend-шаге.
+- Проверки: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`, `npm test -w @allvision/api` → **98 tests passed**.
+- TODO 1.6.5b: заменить простую форму персонажа на 4-шаговый мастер, добавить NSFW и тарификацию персонажей. TODO 1.6.5c: workflow/list Episode, публичный каталог ScenarioTemplate и сидинг стартовых шаблонов.

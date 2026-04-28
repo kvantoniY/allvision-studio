@@ -1,13 +1,7 @@
 import Link from 'next/link';
-import { BarChart3, FolderKanban, Sparkles, Users } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { requireAdminPage } from '@/lib/auth';
-import { cn } from '@/lib/utils';
-
-const navItems = [
-  { href: '/admin/trends', label: 'Тренды', icon: BarChart3, active: true, disabled: false },
-  { href: '#', label: 'Юзеры', icon: Users, active: false, disabled: true },
-  { href: '#', label: 'Проекты', icon: FolderKanban, active: false, disabled: true },
-];
+import { AdminSidebarNav } from '@/components/admin/AdminSidebarNav';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const me = await requireAdminPage();
@@ -34,31 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
       <div className="flex min-h-[calc(100vh-64px)]">
         <aside className="hidden w-64 shrink-0 border-r border-zinc-800 bg-zinc-950 p-4 lg:block">
-          <nav className="grid gap-1">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const className = cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition',
-                item.active && 'bg-rose-500 text-white',
-                !item.active && !item.disabled && 'text-slate-300 hover:bg-zinc-900 hover:text-white',
-                item.disabled && 'cursor-not-allowed text-slate-600',
-              );
-              if (item.disabled) {
-                return (
-                  <span key={item.label} className={className} aria-disabled="true">
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </span>
-                );
-              }
-              return (
-                <Link key={item.label} href={item.href} className={className}>
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <AdminSidebarNav />
         </aside>
         <main className="min-w-0 flex-1 bg-zinc-950">
           <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">{children}</div>

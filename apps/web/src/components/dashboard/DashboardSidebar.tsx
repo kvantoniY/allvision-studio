@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
-import { SIDEBAR_ITEMS, isActive } from './sidebar-nav';
+import { SIDEBAR_SECTIONS, isActive } from './sidebar-nav';
 
 function initialsOf(name: string | null | undefined, email: string) {
   if (name) {
@@ -49,26 +49,37 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
       </Link>
 
       <nav className="flex flex-1 flex-col gap-1">
-        {SIDEBAR_ITEMS.map((item) => {
-          const active = isActive(item.href, pathname);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                active
-                  ? 'bg-violet-600 text-white shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
-                  : 'text-slate-300 hover:bg-slate-800 hover:text-white',
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          );
-        })}
+        {SIDEBAR_SECTIONS.map((section, sectionIndex) => (
+          <div key={section.label ?? sectionIndex} className={cn(sectionIndex > 0 && 'mt-3 border-t border-slate-800 pt-3')}>
+            {section.label && (
+              <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                {section.label}
+              </div>
+            )}
+            <div className="grid gap-1">
+              {section.items.map((item) => {
+                const active = isActive(item.href, pathname);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={onNavigate}
+                    className={cn(
+                      'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-violet-600 text-white shadow-[0_0_0_1px_rgba(139,92,246,0.5)]'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white',
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">

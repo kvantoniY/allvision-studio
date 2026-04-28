@@ -15,12 +15,15 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/use-auth';
 import { useGetDashboardQuery } from '@/store/api/account-api';
+import { useListCharactersQuery } from '@/store/api/characters-api';
 import { useListProjectsQuery } from '@/store/api/projects-api';
+import { useListScenesQuery } from '@/store/api/scenes-api';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import { OrderCard } from '@/components/dashboard/OrderCard';
 import { transactionDescription, formatDate } from '@/components/dashboard/labels';
+import { StudioMetricIcon } from '@/components/studio/v3-labels';
 import { cn } from '@/lib/utils';
 
 const QUICK_START = [
@@ -51,6 +54,8 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { data, isLoading } = useGetDashboardQuery();
   const { data: projectsData, isLoading: isProjectsLoading } = useListProjectsQuery({ page: 1, limit: 3 });
+  const { data: charactersData } = useListCharactersQuery();
+  const { data: scenesData } = useListScenesQuery();
 
   if (!user) return null;
 
@@ -70,6 +75,29 @@ export default function DashboardPage() {
 
   const { stats, activeOrders, recentTransactions } = data;
   const recentProjects = projectsData?.items ?? [];
+  const studioMetrics = [
+    {
+      kind: 'characters' as const,
+      label: 'Персонажи',
+      value: charactersData?.items.length ?? 0,
+      href: '/dashboard/characters',
+      cta: 'Создать первого',
+    },
+    {
+      kind: 'scenes' as const,
+      label: 'Сцены',
+      value: scenesData?.items.length ?? 0,
+      href: '/dashboard/scenes',
+      cta: 'Создать первую',
+    },
+    {
+      kind: 'episodes' as const,
+      label: 'Эпизоды',
+      value: 0,
+      href: '/dashboard/episodes',
+      cta: 'Скоро',
+    },
+  ];
 
   return (
     <div className="space-y-8">
@@ -214,6 +242,30 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-xl font-semibold">Моя студия</h2>
+        <div className="grid gap-4 md:grid-cols-3">
+          {studioMetrics.map((metric) => (
+            <Link key={metric.kind} href={metric.href} className="group">
+              <Card className="h-full border-slate-800 bg-slate-900 transition hover:border-violet-500/50 hover:-translate-y-0.5">
+                <CardContent className="flex h-full flex-col gap-4 p-5">
+                  <span className="grid h-11 w-11 place-items-center rounded-md bg-violet-500/10 text-violet-300">
+                    <StudioMetricIcon kind={metric.kind} className="h-5 w-5" />
+                  </span>
+                  <div className="flex-1">
+                    <div className="text-sm text-slate-400">{metric.label}</div>
+                    <div className="mt-1 text-3xl font-bold text-white">{metric.value}</div>
+                  </div>
+                  <div className="text-sm text-violet-300 transition group-hover:text-violet-200">
+                    {metric.value === 0 ? metric.cta : 'Открыть'}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </section>
 
       {activeOrders.length > 0 && (

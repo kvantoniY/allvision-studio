@@ -18,7 +18,7 @@ export const publicApi = createApi({
     baseUrl: `${API_URL}/api/public`,
     credentials: 'include',
   }),
-  tagTypes: ['Services', 'Trends', 'TokenPackages', 'PublicSettings'],
+  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings'],
   endpoints: (build) => ({
     getServices: build.query<PublicServicesResponse, void>({
       query: () => ({ url: '/services' }),
