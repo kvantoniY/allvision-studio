@@ -10,6 +10,12 @@ export {
   FairyTaleTier,
   PaymentStatus,
   PaymentPurpose,
+  CharacterType,
+  CharacterGender,
+  CharacterStatus,
+  EpisodeStatus,
+  AbuseReason,
+  ReportStatus,
 } from '@allvision/database';
 
 export type {
@@ -23,6 +29,12 @@ export type {
   TokenTransaction,
   TokenPackage,
   Setting,
+  Character,
+  Scene,
+  Episode,
+  EpisodeCharacter,
+  ScenarioTemplate,
+  AbuseReport,
 } from '@allvision/database';
 
 export * from './public';

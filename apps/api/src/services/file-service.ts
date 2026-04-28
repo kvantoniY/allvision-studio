@@ -18,6 +18,12 @@ const ALLOWED_TREND_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quic
 const ALLOWED_TREND_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const MAX_TREND_PREVIEW_SIZE = 50 * 1024 * 1024;
 const MAX_TREND_THUMBNAIL_SIZE = 5 * 1024 * 1024;
+const ALLOWED_V3_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ALLOWED_V3_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
+const MAX_CHARACTER_REFERENCE_SIZE = 10 * 1024 * 1024;
+const MAX_SCENE_REFERENCE_SIZE = 10 * 1024 * 1024;
+const MAX_TEMPLATE_PREVIEW_SIZE = 50 * 1024 * 1024;
+const MAX_TEMPLATE_IMAGE_SIZE = 5 * 1024 * 1024;
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -127,6 +133,85 @@ export async function uploadTrendThumbnail(
 
   const processed = await validateAndProcessImage(buffer);
   const key = `trend-assets/thumbnails/${crypto.randomUUID()}.${ext(processed.contentType)}`;
+  return getStorageProvider().upload({
+    key,
+    body: processed.buffer,
+    contentType: processed.contentType,
+  });
+}
+
+export async function uploadCharacterReference(
+  userId: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string; dimensions: { width: number; height: number } }> {
+  if (buffer.length > MAX_CHARACTER_REFERENCE_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'File is too large');
+  }
+  if (!ALLOWED_V3_IMAGE_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Unsupported file format');
+  }
+
+  const processed = await validateAndProcessImage(buffer);
+  const key = `character-references/${userId}/${crypto.randomUUID()}.${ext(processed.contentType)}`;
+  const { url } = await getStorageProvider().upload({
+    key,
+    body: processed.buffer,
+    contentType: processed.contentType,
+  });
+  return { url, key, dimensions: processed.dimensions };
+}
+
+export async function uploadSceneReference(
+  userId: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string; dimensions: { width: number; height: number } }> {
+  if (buffer.length > MAX_SCENE_REFERENCE_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'File is too large');
+  }
+  if (!ALLOWED_V3_IMAGE_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Unsupported file format');
+  }
+
+  const processed = await validateAndProcessImage(buffer);
+  const key = `scene-references/${userId}/${crypto.randomUUID()}.${ext(processed.contentType)}`;
+  const { url } = await getStorageProvider().upload({
+    key,
+    body: processed.buffer,
+    contentType: processed.contentType,
+  });
+  return { url, key, dimensions: processed.dimensions };
+}
+
+export async function uploadTemplatePreview(
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string }> {
+  if (buffer.length > MAX_TEMPLATE_PREVIEW_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'File is too large');
+  }
+  if (!ALLOWED_V3_VIDEO_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Unsupported file format');
+  }
+
+  const key = `template-assets/previews/${crypto.randomUUID()}.${ext(contentType)}`;
+  return getStorageProvider().upload({ key, body: buffer, contentType });
+}
+
+export async function uploadTemplateImage(
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string }> {
+  if (buffer.length > MAX_TEMPLATE_IMAGE_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'File is too large');
+  }
+  if (!ALLOWED_V3_IMAGE_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Unsupported file format');
+  }
+
+  const processed = await validateAndProcessImage(buffer);
+  const key = `template-assets/images/${crypto.randomUUID()}.${ext(processed.contentType)}`;
   return getStorageProvider().upload({
     key,
     body: processed.buffer,

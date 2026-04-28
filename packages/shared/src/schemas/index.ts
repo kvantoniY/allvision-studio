@@ -3,3 +3,6 @@ export * from './public';
 export * from './account';
 export * from './projects';
 export * from './admin-trends';
+export * from './characters';
+export * from './scenes';
+export * from './admin-scenario-templates';

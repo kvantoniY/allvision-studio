@@ -383,8 +383,8 @@ model Episode {
   completedAt     DateTime?
 
   user            User          @relation(fields: [userId], references: [id])
-  template        ScenarioTemplate? @relation(fields: [templateId], references: [id])
-  scene           Scene?        @relation(fields: [sceneId], references: [id])
+  template        ScenarioTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  scene           Scene?        @relation(fields: [sceneId], references: [id], onDelete: SetNull)
   characters      EpisodeCharacter[]
   reports         AbuseReport[]
 }

@@ -351,3 +351,12 @@
 - Миграция: `20260428124535_add_studio_characters_scenes_episodes_templates`; размер — 6 новых таблиц и 6 enum'ов (`CharacterType`, `CharacterGender`, `CharacterStatus`, `EpisodeStatus`, `AbuseReason`, `ReportStatus`).
 - `User` получил `freeCharacterUsed Boolean @default(false)` и обратные связи `characters`, `scenes`, `episodes`; существующие поля и старые миграции не трогались. В `Payment` добавлены только обратные relation-поля `character`/`scene`, необходимые Prisma для связей `Character.payment` и `Scene.payment`.
 - Seed-данные, API, UI и бизнес-логика не добавлялись.
+
+### Этап 1.6.5a (шаг 2.1) — Backend V3: Character, Scene, ScenarioTemplate ✅
+- Backend V3 добавлен без UI/RTK Query: user CRUD `/api/characters` и `/api/scenes`, admin CRUD `/api/admin/scenario-templates`, owner-check через `findFirst({ id, userId })`, admin-check через `requireAuth -> requireAdmin`.
+- `file-service` расширен V3-ассетами: `character-references/{userId}`, `scene-references/{userId}`, `template-assets/previews`, `template-assets/images`; multer middleware добавлены для `images[]` и `previewVideo + previewImage`.
+- Shared zod-схемы вынесены в `characters.ts`, `scenes.ts`, `admin-scenario-templates.ts`; Prisma enum/type re-export расширен V3-моделями.
+- Удаление Character/Scene/ScenarioTemplate блокируется активными Episode (`PENDING/PROCESSING_IMAGE/PROCESSING_VIDEO`); asset cleanup best-effort. Для Character перед hard-delete удаляются неактивные `EpisodeCharacter` связи, чтобы завершённые эпизоды не ломали удаление.
+- Нестандартное: добавлена пустая миграция `20260428140107_explicit_episode_set_null_v3`, чтобы явно зафиксировать в `schema.prisma` `Episode.template` и `Episode.scene` как `onDelete: SetNull`; фактический SQL уже был `ON DELETE SET NULL`.
+- Проверки: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`, `npx prisma migrate status --schema packages/database/prisma/schema.prisma`, `npm test -w @allvision/api` → 12 suites passed, **98 tests passed**.
+- TODO 1.6.5b: NSFW-проверка персонажей, тарификация первого/второго персонажа, workflow замены reference-фото и мастер создания персонажа.
