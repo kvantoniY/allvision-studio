@@ -1,0 +1,1 @@
+export const CHARACTER_SLOT_PRICE_TOKENS = 200;

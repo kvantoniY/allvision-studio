@@ -6,6 +6,7 @@ import type {
   AIJobHandle,
   AIJobStatus,
   FairyTaleScript,
+  NSFWCheckResult,
   StorageProvider,
 } from '@allvision/shared';
 
@@ -176,6 +177,17 @@ export class MockAIProvider implements AIProvider {
       durationMinutes: params.durationMinutes || parsed.durationMinutes,
       tokensCost: 5,
     };
+  }
+
+  async checkNSFW(imageUrl: string): Promise<NSFWCheckResult> {
+    const delayMs = 500 + Math.floor(Math.random() * 1000);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+
+    if (imageUrl.toLowerCase().includes('nsfw')) {
+      return { safe: false, score: 0.98, reason: 'EXPLICIT_CONTENT' };
+    }
+
+    return { safe: true, score: 0.05 };
   }
 
   async getJobStatus(handle: AIJobHandle): Promise<AIJobStatus> {

@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@allvision/shared'],
+  experimental: {
+    cpus: 1,
+  },
   images: {
     remotePatterns: [
       {

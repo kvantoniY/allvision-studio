@@ -369,3 +369,23 @@
 - Нестандартное: счётчики «Моя студия» на `/dashboard` берутся через `listCharacters`/`listScenes`, `episodes` пока `0`, чтобы не трогать backend dashboard endpoint в frontend-шаге.
 - Проверки: `npm run build -w @allvision/shared`, `npm run build -w @allvision/database`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build`, `npm test -w @allvision/api` → **98 tests passed**.
 - TODO 1.6.5b: заменить простую форму персонажа на 4-шаговый мастер, добавить NSFW и тарификацию персонажей. TODO 1.6.5c: workflow/list Episode, публичный каталог ScenarioTemplate и сидинг стартовых шаблонов.
+
+### Этап 1.6.5b — Мастер персонажа + NSFW + тарификация ✅
+- Архитектурное решение по оплате Character: не создаём `Payment`/invoice для second+ slot. Используется tokens-модель продукта: `CHARACTER_SLOT_PRICE_TOKENS = 200`, списание `TokenTransaction(reason='character_slot', amount=-200, refId=character.id)`, `Character.paymentId` остаётся nullable и пока не используется.
+- Backend `/api/characters`: первый персонаж по `User.freeCharacterUsed=false` создаётся бесплатно, в transaction выставляет `freeCharacterUsed=true`, `isPaid=false`, `status=PROCESSING`. Второй и следующие атомарно списывают 200 токенов через `tokenBalance >= 200`; при нехватке возвращается `402 INSUFFICIENT_TOKENS`.
+- Добавлена очередь `QUEUE_NAMES.CHARACTER_NSFW` и `addCharacterJob({ characterId, userId })`; worker-процессор `processCharacterNsfw` подключён с concurrency 4. Queue failure после создания помечает Character `REJECTED`; paid slot получает refund, free slot сбрасывает `freeCharacterUsed=false`.
+- Mock NSFW-паттерн детерминированный: `MockAIProvider.checkNSFW(imageUrl)` ждёт 500-1500ms, URL с substring `nsfw` возвращает `{ safe:false, reason:'EXPLICIT_CONTENT' }`, остальные URL safe `{ safe:true, score:0.05 }`.
+- Worker helpers `markCharacterReady` и `markCharacterRejected`: safe images переводят в `READY` и `nsfwChecked=true`; reject переводит в `REJECTED`, paid slot получает `TokenTransaction(reason='refund', amount=+200)`, free slot сбрасывает `freeCharacterUsed=false`. Refund защищён от дублей по существующему refund-транзакту на `refId=character.id`.
+- Добавлен `PATCH /api/characters/:id/reference-images`: multipart `images[]` 1-5 + optional `primaryImageId`, busy guard `409 CHARACTER_BUSY`, atomic replace referenceImages/primary/status PROCESSING/nsfwChecked=false, best-effort удаление старых файлов и новый NSFW job. Добавлен fallback `POST /api/characters/:id/nsfw-check` для DRAFT.
+- Frontend `/dashboard/characters/new`: простая форма заменена на wizard с шагами фото -> метаданные -> consent -> оплата. Шаг оплаты показывается только при `me.freeCharacterUsed=true`, баланс <200 ведёт на `/pricing`, success redirect: `/dashboard/characters/[id]?status=processing`.
+- Frontend `/dashboard/characters/[id]`: состояния `PROCESSING` с polling 2000ms, `READY` с replace-фото flow, `REJECTED` с alert и текстом возврата paid-токенов, `DRAFT` с запуском проверки. Редактирование name/description/gender/ageGroup осталось отдельным от статуса.
+- Dashboard metric "Персонажи" теперь считает только `status='READY'`. Billing labels знают `character_slot`.
+- Build-stability: `apps/web/next.config.mjs` получил `experimental.cpus=1`, чтобы Next static worker на Windows не падал случайно во время root build.
+- Проверки: `npm test -w @allvision/api` -> 12 suites passed, **117 tests passed**. `npm run build -w @allvision/shared`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`, `npm run build` прошли.
+- Smoke 1.6.5b:
+  - User balance 500, `freeCharacterUsed=false`: первый персонаж через wizard steps 1-2-3 -> `PROCESSING` -> worker через 1-2 sec переводит `READY`; баланс не меняется, `freeCharacterUsed=true`.
+  - Второй персонаж: появляется step 4 "Оплата 200"; после создания баланс 300, в `/dashboard/billing` транзакция `character_slot -200`.
+  - Третий с балансом 100: API возвращает 402, wizard остаётся на оплате и показывает toast.
+  - URL reference image с substring `nsfw`: worker переводит в `REJECTED`; paid character получает refund, free character сбрасывает `freeCharacterUsed=false`.
+  - Replace reference-images у READY персонажа: `PATCH /reference-images` возвращает `PROCESSING`, затем worker переводит обратно в `READY`.
+- TODO 1.6.5c: workflow/list Episode, публичный каталог ScenarioTemplate, сидинг стартовых сценариев, реальный AI/NSFW provider вместо mock.

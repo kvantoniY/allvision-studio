@@ -3,6 +3,7 @@ export const QUEUE_NAMES = {
   PHOTO_ANIMATE: 'photo-animate',
   TREND: 'trend',
   FAIRY_TALE_SCRIPT: 'fairy-tale-script',
+  CHARACTER_NSFW: 'character-nsfw',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -25,4 +26,9 @@ export interface FairyTaleJobData {
   moralLesson: string;
   additionalDetails?: string;
   durationMinutes: number;
+}
+
+export interface CharacterNsfwJobData {
+  characterId: string;
+  userId: string;
 }

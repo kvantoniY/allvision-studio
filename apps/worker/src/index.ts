@@ -6,11 +6,13 @@ import { processPhotoRestore } from './processors/photo-restore';
 import { processPhotoAnimate } from './processors/photo-animate';
 import { processTrend } from './processors/trend';
 import { processFairyTaleScript } from './processors/fairy-tale-script';
+import { processCharacterNsfw } from './processors/character-nsfw';
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const CONCURRENCY = 2;
+const CHARACTER_NSFW_CONCURRENCY = 4;
 
-// BullMQ требует maxRetriesPerRequest: null для блокирующих команд.
+// BullMQ requires maxRetriesPerRequest: null for blocking commands.
 const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, lazyConnect: false });
 
 const time = () => new Date().toLocaleTimeString('ru-RU', { hour12: false });
@@ -22,19 +24,22 @@ const queues: Array<[QueueName, Processor]> = [
   [QUEUE_NAMES.PHOTO_ANIMATE, processPhotoAnimate as Processor],
   [QUEUE_NAMES.TREND, processTrend as Processor],
   [QUEUE_NAMES.FAIRY_TALE_SCRIPT, processFairyTaleScript as Processor],
+  [QUEUE_NAMES.CHARACTER_NSFW, processCharacterNsfw as Processor],
 ];
 
-const workers = queues.map(
-  ([name, processor]) => new Worker(name, processor, { connection, concurrency: CONCURRENCY }),
-);
+const workers = queues.map(([name, processor]) => {
+  const concurrency = name === QUEUE_NAMES.CHARACTER_NSFW ? CHARACTER_NSFW_CONCURRENCY : CONCURRENCY;
+  return new Worker(name, processor, { connection, concurrency });
+});
 
 let readyCount = 0;
 workers.forEach((w) => {
   w.on('ready', () => {
     readyCount += 1;
-    log(`\x1b[32m✓\x1b[0m Worker ready: ${w.name} (concurrency: ${CONCURRENCY})`);
+    const concurrency = w.name === QUEUE_NAMES.CHARACTER_NSFW ? CHARACTER_NSFW_CONCURRENCY : CONCURRENCY;
+    log(`Worker ready: ${w.name} (concurrency: ${concurrency})`);
     if (readyCount === workers.length) {
-      log(`\x1b[32m✓\x1b[0m Все воркеры запущены: ${queues.map(([n]) => n).join(', ')}`);
+      log(`All workers started: ${queues.map(([n]) => n).join(', ')}`);
     }
   });
   w.on('active', (job) => log(`[${w.name}] job started: ${job.id}`));
@@ -51,19 +56,19 @@ let shuttingDown = false;
 async function shutdown(signal: string) {
   if (shuttingDown) return;
   shuttingDown = true;
-  log(`Получен ${signal}, останавливаю...`);
+  log(`Received ${signal}, shutting down...`);
   const timer = setTimeout(() => {
-    err('Принудительное завершение по таймауту');
+    err('Forced shutdown by timeout');
     process.exit(1);
   }, 5000);
   timer.unref();
   try {
     await Promise.all(workers.map((w) => w.close()));
     await connection.quit();
-    log('Worker остановлен');
+    log('Worker stopped');
     process.exit(0);
   } catch (e) {
-    err(`Ошибка при остановке: ${(e as Error).message}`);
+    err(`Shutdown error: ${(e as Error).message}`);
     process.exit(1);
   }
 }

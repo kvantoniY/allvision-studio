@@ -31,7 +31,15 @@ export interface AIProvider {
     durationMinutes: number; // фикс 3 на старте, но параметризуем на будущее
   }): Promise<FairyTaleScript>;
 
+  checkNSFW(imageUrl: string): Promise<NSFWCheckResult>;
+
   getJobStatus(handle: AIJobHandle): Promise<AIJobStatus>;
+}
+
+export interface NSFWCheckResult {
+  safe: boolean;
+  score: number;
+  reason?: string;
 }
 
 export interface AIJobHandle {

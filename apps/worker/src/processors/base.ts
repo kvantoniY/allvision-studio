@@ -1,4 +1,5 @@
-import { prisma, ProjectStatus } from '@allvision/database';
+import { CharacterStatus, prisma, ProjectStatus } from '@allvision/database';
+import { CHARACTER_SLOT_PRICE_TOKENS } from '@allvision/shared';
 
 export async function updateProjectProgress(
   projectId: string,
@@ -73,5 +74,91 @@ export async function markProjectFailed(
         },
       });
     }
+  });
+}
+
+export async function markCharacterReady(characterId: string) {
+  await prisma.$transaction(async (tx) => {
+    const character = await tx.character.findUnique({
+      where: { id: characterId },
+      select: { id: true, userId: true, isPaid: true },
+    });
+    if (!character) return;
+
+    await tx.character.update({
+      where: { id: characterId },
+      data: {
+        status: CharacterStatus.READY,
+        nsfwChecked: true,
+      },
+    });
+
+    if (!character.isPaid) {
+      await tx.user.update({
+        where: { id: character.userId },
+        data: { freeCharacterUsed: true },
+      });
+    }
+  });
+}
+
+export async function markCharacterRejected(
+  characterId: string,
+  _reason: string,
+  options: { refundIfPaid?: boolean } = {},
+) {
+  const refundIfPaid = options.refundIfPaid ?? true;
+
+  await prisma.$transaction(async (tx) => {
+    const character = await tx.character.findUnique({
+      where: { id: characterId },
+      select: { id: true, userId: true, isPaid: true, status: true },
+    });
+    if (!character) return;
+
+    await tx.character.update({
+      where: { id: characterId },
+      data: {
+        status: CharacterStatus.REJECTED,
+        nsfwChecked: true,
+      },
+    });
+
+    if (!character.isPaid) {
+      await tx.user.update({
+        where: { id: character.userId },
+        data: { freeCharacterUsed: false },
+      });
+      return;
+    }
+
+    if (!refundIfPaid || character.status === CharacterStatus.REJECTED) return;
+
+    const existingRefund = await tx.tokenTransaction.findFirst({
+      where: {
+        userId: character.userId,
+        refId: characterId,
+        reason: 'refund',
+        amount: CHARACTER_SLOT_PRICE_TOKENS,
+      },
+      select: { id: true },
+    });
+    if (existingRefund) return;
+
+    const user = await tx.user.update({
+      where: { id: character.userId },
+      data: { tokenBalance: { increment: CHARACTER_SLOT_PRICE_TOKENS } },
+      select: { tokenBalance: true },
+    });
+
+    await tx.tokenTransaction.create({
+      data: {
+        userId: character.userId,
+        amount: CHARACTER_SLOT_PRICE_TOKENS,
+        reason: 'refund',
+        refId: characterId,
+        balanceAfter: user.tokenBalance,
+      },
+    });
   });
 }

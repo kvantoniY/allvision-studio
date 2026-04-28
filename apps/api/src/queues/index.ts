@@ -2,6 +2,7 @@ import { Queue, type JobsOptions } from 'bullmq';
 import IORedis, { type Redis } from 'ioredis';
 import {
   QUEUE_NAMES,
+  type CharacterNsfwJobData,
   type FairyTaleJobData,
   type ProjectJobData,
   type QueueName,
@@ -46,6 +47,14 @@ export async function addProjectJob(
 export async function addFairyTaleScriptJob(data: FairyTaleJobData, opts?: JobsOptions) {
   return getQueue(QUEUE_NAMES.FAIRY_TALE_SCRIPT).add(
     QUEUE_NAMES.FAIRY_TALE_SCRIPT,
+    data,
+    opts,
+  );
+}
+
+export async function addCharacterJob(data: CharacterNsfwJobData, opts?: JobsOptions) {
+  return getQueue(QUEUE_NAMES.CHARACTER_NSFW).add(
+    QUEUE_NAMES.CHARACTER_NSFW,
     data,
     opts,
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ImagePlus, Star, X } from 'lucide-react';
+import { ImagePlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +19,7 @@ type MultiImageUploaderProps = {
   onPrimaryChange?: (id: string) => void;
   disabled?: boolean;
   className?: string;
+  hint?: string;
 };
 
 const acceptedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -39,6 +40,7 @@ export function MultiImageUploader({
   onPrimaryChange,
   disabled,
   className,
+  hint,
 }: MultiImageUploaderProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const valueRef = useRef(value);
@@ -85,6 +87,7 @@ export function MultiImageUploader({
 
   return (
     <div className={cn('space-y-3', className)}>
+      {hint && <p className="text-sm leading-6 text-slate-400">{hint}</p>}
       <button
         type="button"
         disabled={disabled}
@@ -128,35 +131,32 @@ export function MultiImageUploader({
           {value.map((image) => {
             const isPrimary = image.id === primary;
             return (
-              <div key={image.id} className="relative aspect-square overflow-hidden rounded-md border border-slate-800 bg-slate-900">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image.previewUrl} alt="" className="h-full w-full object-cover" />
-                <div className="absolute inset-x-1 top-1 flex items-center justify-between gap-1">
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant={isPrimary ? 'default' : 'outline'}
-                    className="h-8 w-8"
-                    onClick={() => onPrimaryChange?.(image.id)}
-                    aria-label="Сделать главным"
-                  >
-                    <Star className={cn('h-4 w-4', isPrimary && 'fill-current')} />
-                  </Button>
+              <div key={image.id} className="overflow-hidden rounded-md border border-slate-800 bg-slate-900">
+                <div className="relative aspect-square">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={image.previewUrl} alt="" className="h-full w-full object-cover" />
                   <Button
                     type="button"
                     size="icon"
                     variant="destructive"
-                    className="h-8 w-8"
+                    className="absolute right-1 top-1 h-8 w-8"
                     onClick={() => remove(image.id)}
                     aria-label="Удалить изображение"
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-                {isPrimary && (
-                  <div className="absolute bottom-1 left-1 rounded bg-violet-600 px-2 py-1 text-[11px] font-medium text-white">
-                    Главное
-                  </div>
+                {onPrimaryChange && (
+                  <label className="flex min-h-10 items-center gap-2 border-t border-slate-800 px-2 text-xs text-slate-200">
+                    <input
+                      type="radio"
+                      name="primary-image"
+                      checked={isPrimary}
+                      onChange={() => onPrimaryChange(image.id)}
+                      className="h-4 w-4"
+                    />
+                    Главное фото
+                  </label>
                 )}
               </div>
             );

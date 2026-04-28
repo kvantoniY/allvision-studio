@@ -32,6 +32,11 @@ export const updateCharacterSchema = z.object({
   isActive: booleanFromForm.optional(),
 });
 
+export const replaceCharacterReferenceImagesSchema = z.object({
+  primaryImageId: z.preprocess(emptyToUndefined, z.coerce.number().int().min(0).optional()),
+});
+
 export type ListCharactersQuery = z.infer<typeof listCharactersQuerySchema>;
 export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
 export type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
+export type ReplaceCharacterReferenceImagesInput = z.infer<typeof replaceCharacterReferenceImagesSchema>;

@@ -54,7 +54,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { data, isLoading } = useGetDashboardQuery();
   const { data: projectsData, isLoading: isProjectsLoading } = useListProjectsQuery({ page: 1, limit: 3 });
-  const { data: charactersData } = useListCharactersQuery();
+  const { data: charactersData } = useListCharactersQuery({ status: 'READY' });
   const { data: scenesData } = useListScenesQuery();
 
   if (!user) return null;

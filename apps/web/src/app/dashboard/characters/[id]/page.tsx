@@ -2,17 +2,19 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { CharacterGender } from '@allvision/shared';
-import { ArrowLeft, Save, Trash2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, RefreshCw, Save, Trash2 } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { MultiImageUploader, type SelectedImage } from '@/components/ui/multi-image-uploader';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -25,6 +27,8 @@ import { toast } from '@/hooks/use-toast';
 import {
   useDeleteCharacterMutation,
   useGetCharacterQuery,
+  useReplaceCharacterReferenceImagesMutation,
+  useStartCharacterCheckMutation,
   useUpdateCharacterMutation,
 } from '@/store/api/characters-api';
 import { cn } from '@/lib/utils';
@@ -37,15 +41,26 @@ function apiErrorMessage(error: unknown) {
   const code = (error as { data?: { error?: { code?: string; message?: string } } })?.data?.error?.code;
   if (code === 'CHARACTER_IN_USE') return 'Невозможно удалить: персонаж используется в активных эпизодах';
   if (code === 'INVALID_PRIMARY_IMAGE_ID') return 'Выберите существующее главное фото';
+  if (code === 'CHARACTER_BUSY') return 'Проверка уже идёт. Дождитесь завершения';
+  if (code === 'FILE_REQUIRED') return 'Добавьте хотя бы одно фото';
+  if (code === 'QUEUE_UNAVAILABLE') return 'Проверка фото временно недоступна';
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Операция не выполнена';
 }
 
 export default function CharacterEditPage({ params }: PageProps) {
   const router = useRouter();
-  const { data, isLoading } = useGetCharacterQuery(params.id);
+  const [polling, setPolling] = useState(false);
+  const { data, isLoading } = useGetCharacterQuery(params.id, {
+    pollingInterval: polling ? 2000 : 0,
+  });
   const [updateCharacter, updateState] = useUpdateCharacterMutation();
   const [deleteCharacter, deleteState] = useDeleteCharacterMutation();
+  const [replaceReferences, replaceState] = useReplaceCharacterReferenceImagesMutation();
+  const [startCheck, startCheckState] = useStartCharacterCheckMutation();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [replaceImages, setReplaceImages] = useState<SelectedImage[]>([]);
+  const [replacePrimaryId, setReplacePrimaryId] = useState<string | null>(null);
 
   const character = data?.character;
   const [name, setName] = useState('');
@@ -55,6 +70,10 @@ export default function CharacterEditPage({ params }: PageProps) {
   const [primaryImageId, setPrimaryImageId] = useState(0);
 
   useEffect(() => {
+    setPolling(character?.status === 'PROCESSING');
+  }, [character?.status]);
+
+  useEffect(() => {
     if (!character) return;
     setName(character.name);
     setDescription(character.description ?? '');
@@ -62,6 +81,13 @@ export default function CharacterEditPage({ params }: PageProps) {
     setAgeGroup(character.ageGroup ?? '');
     setPrimaryImageId(character.primaryImageId);
   }, [character]);
+
+  const orderedReplaceImages = useMemo(() => {
+    if (!replacePrimaryId) return replaceImages;
+    const primary = replaceImages.find((image) => image.id === replacePrimaryId);
+    if (!primary) return replaceImages;
+    return [primary, ...replaceImages.filter((image) => image.id !== replacePrimaryId)];
+  }, [replaceImages, replacePrimaryId]);
 
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -95,6 +121,44 @@ export default function CharacterEditPage({ params }: PageProps) {
     }
   };
 
+  const openReplace = () => {
+    setReplaceImages([]);
+    setReplacePrimaryId(null);
+    setReplaceOpen(true);
+  };
+
+  const submitReplace = async () => {
+    if (!character) return;
+    if (replaceImages.length === 0) {
+      toast({ title: 'Добавьте хотя бы одно фото', variant: 'destructive' });
+      return;
+    }
+
+    const form = new FormData();
+    orderedReplaceImages.forEach((image) => form.append('images', image.file));
+    form.append('primaryImageId', '0');
+
+    try {
+      await replaceReferences({ id: character.id, body: form }).unwrap();
+      setReplaceOpen(false);
+      setPolling(true);
+      toast({ title: 'Фото заменены. Запущена проверка' });
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const runCheck = async () => {
+    if (!character) return;
+    try {
+      await startCheck(character.id).unwrap();
+      setPolling(true);
+      toast({ title: 'Проверка запущена' });
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -120,6 +184,8 @@ export default function CharacterEditPage({ params }: PageProps) {
     );
   }
 
+  const canReplace = character.status === 'READY' || character.status === 'REJECTED';
+
   return (
     <>
       <div className="space-y-6">
@@ -141,11 +207,64 @@ export default function CharacterEditPage({ params }: PageProps) {
               </span>
             </div>
           </div>
-          <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
-            <Trash2 className="h-4 w-4" />
-            Удалить персонажа
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {canReplace && (
+              <Button type="button" variant="outline" onClick={openReplace}>
+                <RefreshCw className="h-4 w-4" />
+                Заменить фото
+              </Button>
+            )}
+            <Button type="button" variant="destructive" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="h-4 w-4" />
+              Удалить персонажа
+            </Button>
+          </div>
         </div>
+
+        {character.status === 'PROCESSING' && (
+          <Alert className="border-sky-500/40 bg-sky-500/10 text-sky-100">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <AlertTitle>Проверяем фото</AlertTitle>
+            <AlertDescription>Это займёт несколько секунд.</AlertDescription>
+          </Alert>
+        )}
+
+        {character.status === 'READY' && (
+          <Alert className="border-emerald-500/40 bg-emerald-500/10 text-emerald-100">
+            <CheckCircle2 className="h-4 w-4" />
+            <AlertTitle>Персонаж готов</AlertTitle>
+            <AlertDescription>Его можно использовать в будущих эпизодах.</AlertDescription>
+          </Alert>
+        )}
+
+        {character.status === 'REJECTED' && (
+          <Alert variant="destructive" className="border-red-500/40 bg-red-500/10">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Фото не прошли проверку</AlertTitle>
+            <AlertDescription>
+              К сожалению, фото не прошли проверку. Загрузите другие изображения.
+              {character.isPaid ? ' Токены возвращены на баланс.' : ''}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {character.status === 'DRAFT' && (
+          <Alert className="border-amber-500/40 bg-amber-500/10 text-amber-100">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Проверка ещё не запускалась</AlertTitle>
+            <AlertDescription>
+              <Button
+                type="button"
+                size="sm"
+                className="mt-3"
+                onClick={runCheck}
+                disabled={startCheckState.isLoading}
+              >
+                Запустить проверку
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
           <form onSubmit={save}>
@@ -153,7 +272,7 @@ export default function CharacterEditPage({ params }: PageProps) {
               <CardContent className="space-y-5 p-6">
                 <div className="space-y-2">
                   <Label htmlFor="name">Имя</Label>
-                  <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+                  <Input id="name" value={name} onChange={(event) => setName(event.target.value)} required />
                 </div>
                 <div className="grid gap-5 md:grid-cols-2">
                   <div className="space-y-2">
@@ -161,7 +280,7 @@ export default function CharacterEditPage({ params }: PageProps) {
                     <select
                       id="gender"
                       value={gender}
-                      onChange={(e) => setGender(e.target.value as CharacterGender | '')}
+                      onChange={(event) => setGender(event.target.value as CharacterGender | '')}
                       className="h-10 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
                     >
                       <option value="">Не указано</option>
@@ -172,15 +291,12 @@ export default function CharacterEditPage({ params }: PageProps) {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="ageGroup">Возрастная группа</Label>
-                    <Input id="ageGroup" value={ageGroup} onChange={(e) => setAgeGroup(e.target.value)} />
+                    <Input id="ageGroup" value={ageGroup} onChange={(event) => setAgeGroup(event.target.value)} />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="description">Описание</Label>
-                  <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={5} />
-                </div>
-                <div className="rounded-md border border-slate-800 bg-slate-950 p-4 text-sm text-slate-400">
-                  Замена reference-фото будет доступна в следующем обновлении.
+                  <Textarea id="description" value={description} onChange={(event) => setDescription(event.target.value)} rows={5} />
                 </div>
                 <div className="flex justify-end">
                   <Button type="submit" disabled={updateState.isLoading || !name.trim()}>
@@ -194,7 +310,14 @@ export default function CharacterEditPage({ params }: PageProps) {
 
           <Card className="border-slate-800 bg-slate-900">
             <CardContent className="space-y-4 p-4">
-              <div className="text-sm font-medium text-slate-200">Reference-фото</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-medium text-slate-200">Reference-фото</div>
+                {canReplace && (
+                  <Button type="button" size="sm" variant="outline" onClick={openReplace}>
+                    Заменить
+                  </Button>
+                )}
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 {character.referenceImages.map((image, index) => (
                   <button
@@ -219,6 +342,42 @@ export default function CharacterEditPage({ params }: PageProps) {
           </Card>
         </div>
       </div>
+
+      {replaceOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-3xl rounded-lg border border-slate-800 bg-slate-950 p-6 shadow-xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Заменить фото</h2>
+                <p className="mt-1 text-sm text-slate-400">Новый набор снова пройдёт проверку.</p>
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setReplaceOpen(false)} disabled={replaceState.isLoading}>
+                Закрыть
+              </Button>
+            </div>
+            <MultiImageUploader
+              value={replaceImages}
+              onChange={(nextImages) => {
+                setReplaceImages(nextImages);
+                if (!replacePrimaryId && nextImages[0]) setReplacePrimaryId(nextImages[0].id);
+              }}
+              maxFiles={5}
+              primaryId={replacePrimaryId}
+              onPrimaryChange={setReplacePrimaryId}
+              disabled={replaceState.isLoading}
+              hint="Загрузите 1-5 новых reference-фото. Главное фото будет первым в наборе."
+            />
+            <div className="mt-6 flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={() => setReplaceOpen(false)} disabled={replaceState.isLoading}>
+                Отмена
+              </Button>
+              <Button type="button" onClick={submitReplace} disabled={replaceState.isLoading || replaceImages.length === 0}>
+                Заменить фото
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmDialog
         open={deleteOpen}

@@ -1,6 +1,7 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { Character, CharacterStatus, CharacterType } from '@allvision/shared';
 import { accountApi } from './account-api';
+import { authApi } from './auth-api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -16,6 +17,11 @@ export type CharactersResponse = {
 export type UpdateCharacterArg = {
   id: string;
   body: Partial<Pick<Character, 'name' | 'description' | 'gender' | 'ageGroup' | 'primaryImageId' | 'isActive'>>;
+};
+
+export type ReplaceCharacterReferenceImagesArg = {
+  id: string;
+  body: FormData;
 };
 
 export const charactersApi = createApi({
@@ -48,12 +54,21 @@ export const charactersApi = createApi({
       invalidatesTags: ['Character'],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         await queryFulfilled;
-        dispatch(accountApi.util.invalidateTags(['Dashboard']));
+        dispatch(accountApi.util.invalidateTags(['Dashboard', 'Transactions']));
+        dispatch(authApi.util.invalidateTags(['Me', 'User']));
       },
     }),
     updateCharacter: build.mutation<{ character: Character }, UpdateCharacterArg>({
       query: ({ id, body }) => ({ url: `/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _error, { id }) => ['Character', { type: 'Character', id }],
+    }),
+    replaceCharacterReferenceImages: build.mutation<{ character: Character }, ReplaceCharacterReferenceImagesArg>({
+      query: ({ id, body }) => ({ url: `/${id}/reference-images`, method: 'PATCH', body }),
+      invalidatesTags: (_result, _error, { id }) => ['Character', { type: 'Character', id }],
+    }),
+    startCharacterCheck: build.mutation<{ character: Character }, string>({
+      query: (id) => ({ url: `/${id}/nsfw-check`, method: 'POST' }),
+      invalidatesTags: (_result, _error, id) => ['Character', { type: 'Character', id }],
     }),
     deleteCharacter: build.mutation<{ ok: true }, string>({
       query: (id) => ({ url: `/${id}`, method: 'DELETE' }),
@@ -67,5 +82,7 @@ export const {
   useGetCharacterQuery,
   useCreateCharacterMutation,
   useUpdateCharacterMutation,
+  useReplaceCharacterReferenceImagesMutation,
+  useStartCharacterCheckMutation,
   useDeleteCharacterMutation,
 } = charactersApi;
