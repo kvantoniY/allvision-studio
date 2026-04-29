@@ -18,6 +18,20 @@ export interface AIProvider {
     config: Record<string, any>;
   }): Promise<AIJobHandle>;
 
+  generateEpisodeImage(params: {
+    prompt: string;
+    characterReferences: string[];
+    sceneReference?: string;
+    style: string;
+    aspectRatio: string;
+  }): Promise<AIJobHandle>;
+
+  animateEpisodeVideo(params: {
+    imageUrl: string;
+    durationSeconds: number;
+    style: string;
+  }): Promise<AIJobHandle>;
+
   /**
    * Синхронная генерация текстового сценария (услуга 6).
    * В отличие от видео-задач — возвращает результат сразу (10-15 сек).

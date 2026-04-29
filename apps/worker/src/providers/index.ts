@@ -76,6 +76,8 @@ export function getAIProvider(): AIProvider {
     aiSingleton = new MockAIProvider({
       storageProvider: getStorageProvider(),
       demoAssetsRoot: resolveWorkspacePath(process.env.DEMO_ASSETS_ROOT ?? './apps/api/demo-assets'),
+      minDurationMs: process.env.MOCK_AI_MIN_DURATION_MS ? Number(process.env.MOCK_AI_MIN_DURATION_MS) : undefined,
+      maxDurationMs: process.env.MOCK_AI_MAX_DURATION_MS ? Number(process.env.MOCK_AI_MAX_DURATION_MS) : undefined,
     });
     return aiSingleton;
   }

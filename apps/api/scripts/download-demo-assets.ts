@@ -16,13 +16,24 @@ import https from 'node:https';
 import { pipeline } from 'node:stream/promises';
 
 const ROOT = path.resolve(__dirname, '..', 'demo-assets');
+const UPLOADS_ROOT = path.resolve(__dirname, '..', '..', '..', 'uploads');
 const PHOTO_RESTORE_DIR = path.join(ROOT, 'photo-restore');
 const PHOTO_ANIMATE_DIR = path.join(ROOT, 'photo-animate');
 const TRENDS_DIR = path.join(ROOT, 'trends');
+const EPISODE_IMAGES_DIR = path.join(ROOT, 'episodes', 'images');
+const EPISODE_VIDEOS_DIR = path.join(ROOT, 'episodes', 'videos');
+const TEMPLATE_IMAGES_DIR = path.join(ROOT, 'templates', 'images');
+const TEMPLATE_PREVIEWS_DIR = path.join(ROOT, 'templates', 'previews');
+const UPLOAD_TEMPLATE_IMAGES_DIR = path.join(UPLOADS_ROOT, 'template-assets', 'images');
+const UPLOAD_TEMPLATE_PREVIEWS_DIR = path.join(UPLOADS_ROOT, 'template-assets', 'previews');
 
 const PHOTO_RESTORE_COUNT = 10;
 const PHOTO_ANIMATE_COUNT = 6;
 const TRENDS_COUNT = 8;
+const TEMPLATE_COUNT = 9;
+const SAMPLE_VIDEO_URLS = [
+  'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
+];
 
 const c = {
   reset: '\x1b[0m',
@@ -88,6 +99,14 @@ function hasFfmpeg(): boolean {
   }
 }
 
+function listFiles(dir: string, extensions: string[]) {
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((file) => extensions.includes(path.extname(file).toLowerCase()))
+    .map((file) => path.join(dir, file));
+}
+
 async function downloadPhotoRestore() {
   await ensureDir(PHOTO_RESTORE_DIR);
   for (let i = 1; i <= PHOTO_RESTORE_COUNT; i++) {
@@ -126,7 +145,8 @@ async function generateVideo(stillUrl: string, dest: string, w: number, h: numbe
 async function generateAnimateVideos(ffmpegAvailable: boolean) {
   await ensureDir(PHOTO_ANIMATE_DIR);
   if (!ffmpegAvailable) {
-    warn('ffmpeg не найден — пропускаю генерацию photo-animate видео');
+    warn('ffmpeg не найден — скачиваю короткие mp4-плейсхолдеры для photo-animate');
+    await downloadVideoPlaceholders(PHOTO_ANIMATE_DIR, 'animate', PHOTO_ANIMATE_COUNT);
     return;
   }
   for (let i = 1; i <= PHOTO_ANIMATE_COUNT; i++) {
@@ -149,7 +169,8 @@ async function generateAnimateVideos(ffmpegAvailable: boolean) {
 async function generateTrendVideos(ffmpegAvailable: boolean) {
   await ensureDir(TRENDS_DIR);
   if (!ffmpegAvailable) {
-    warn('ffmpeg не найден — пропускаю генерацию trends видео');
+    warn('ffmpeg не найден — скачиваю короткие mp4-плейсхолдеры для trends');
+    await downloadVideoPlaceholders(TRENDS_DIR, 'trend', TRENDS_COUNT);
     return;
   }
   for (let i = 1; i <= TRENDS_COUNT; i++) {
@@ -169,9 +190,72 @@ async function generateTrendVideos(ffmpegAvailable: boolean) {
   }
 }
 
+async function downloadVideoPlaceholders(dir: string, prefix: string, count: number) {
+  await ensureDir(dir);
+  for (let i = 1; i <= count; i += 1) {
+    const dest = path.join(dir, `${prefix}-${i}.mp4`);
+    if (fs.existsSync(dest)) {
+      skip(`${path.relative(ROOT, dest)} уже существует`);
+      continue;
+    }
+    const url = SAMPLE_VIDEO_URLS[(i - 1) % SAMPLE_VIDEO_URLS.length];
+    log(`скачиваю ${path.basename(dest)} из ${url}`);
+    try {
+      await downloadFile(url, dest);
+      ok(path.relative(ROOT, dest));
+    } catch (e) {
+      err(`${path.basename(dest)} не скачан: ${(e as Error).message}`);
+    }
+  }
+}
+
+async function copyFallbackAssets() {
+  await Promise.all([
+    ensureDir(EPISODE_IMAGES_DIR),
+    ensureDir(EPISODE_VIDEOS_DIR),
+    ensureDir(TEMPLATE_IMAGES_DIR),
+    ensureDir(TEMPLATE_PREVIEWS_DIR),
+    ensureDir(UPLOAD_TEMPLATE_IMAGES_DIR),
+    ensureDir(UPLOAD_TEMPLATE_PREVIEWS_DIR),
+  ]);
+
+  const images = listFiles(PHOTO_RESTORE_DIR, ['.jpg', '.jpeg', '.png', '.webp']);
+  const videos = listFiles(PHOTO_ANIMATE_DIR, ['.mp4', '.webm', '.mov']);
+
+  if (images.length === 0) {
+    warn('photo-restore пуст — episode/template images нужно положить вручную');
+  } else {
+    for (let i = 1; i <= TEMPLATE_COUNT; i += 1) {
+      const source = images[(i - 1) % images.length];
+      const episodeDest = path.join(EPISODE_IMAGES_DIR, `episode-${i}.jpg`);
+      const templateDest = path.join(TEMPLATE_IMAGES_DIR, `seed-${i}.jpg`);
+      const uploadTemplateDest = path.join(UPLOAD_TEMPLATE_IMAGES_DIR, `seed-${i}.jpg`);
+      if (!fs.existsSync(episodeDest)) await fs.promises.copyFile(source, episodeDest);
+      if (!fs.existsSync(templateDest)) await fs.promises.copyFile(source, templateDest);
+      if (!fs.existsSync(uploadTemplateDest)) await fs.promises.copyFile(source, uploadTemplateDest);
+    }
+    ok(`episodes/images, templates/images и uploads/template-assets/images заполнены из photo-restore (${TEMPLATE_COUNT} файлов)`);
+  }
+
+  if (videos.length === 0) {
+    warn('photo-animate пуст — episode/template videos нужно положить вручную или установить ffmpeg');
+  } else {
+    for (let i = 1; i <= TEMPLATE_COUNT; i += 1) {
+      const source = videos[(i - 1) % videos.length];
+      const episodeDest = path.join(EPISODE_VIDEOS_DIR, `episode-${i}.mp4`);
+      const templateDest = path.join(TEMPLATE_PREVIEWS_DIR, `seed-${i}.mp4`);
+      const uploadTemplateDest = path.join(UPLOAD_TEMPLATE_PREVIEWS_DIR, `seed-${i}.mp4`);
+      if (!fs.existsSync(episodeDest)) await fs.promises.copyFile(source, episodeDest);
+      if (!fs.existsSync(templateDest)) await fs.promises.copyFile(source, templateDest);
+      if (!fs.existsSync(uploadTemplateDest)) await fs.promises.copyFile(source, uploadTemplateDest);
+    }
+    ok(`episodes/videos, templates/previews и uploads/template-assets/previews заполнены из photo-animate (${TEMPLATE_COUNT} файлов)`);
+  }
+}
+
 function printFfmpegWarning() {
   console.log('');
-  warn('ffmpeg не установлен — видео-демо нужно положить вручную:');
+  warn('ffmpeg не установлен — используются скачанные mp4-плейсхолдеры; их можно заменить вручную:');
   console.log(
     `  - apps/api/demo-assets/photo-animate/animate-1.mp4 ... animate-${PHOTO_ANIMATE_COUNT}.mp4 (1080x1080, 5-10 сек)`,
   );
@@ -199,6 +283,7 @@ async function main() {
 
   await generateAnimateVideos(ffmpegAvailable);
   await generateTrendVideos(ffmpegAvailable);
+  await copyFallbackAssets();
 
   if (!ffmpegAvailable) printFfmpegWarning();
 

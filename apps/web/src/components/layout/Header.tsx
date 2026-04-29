@@ -21,6 +21,7 @@ import { useAuth } from '@/hooks/use-auth';
 const navItems = [
   { href: '/services', label: 'Услуги' },
   { href: '/trends', label: 'Тренды' },
+  { href: '/scenarios', label: 'Сценарии' },
   { href: '/pricing', label: 'Цены' },
 ];
 

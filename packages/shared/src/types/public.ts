@@ -29,6 +29,33 @@ export type PublicTrend = {
   serviceId: string;
 };
 
+export type PublicScenarioTemplateRole = {
+  role: string;
+  required: boolean;
+  label: string;
+};
+
+export type PublicScenarioTemplate = {
+  id: string;
+  slug: string;
+  title: string;
+  shortDesc: string;
+  description: string;
+  category: string;
+  previewVideo: string | null;
+  previewImage: string | null;
+  promptTemplate: string;
+  characterRoles: PublicScenarioTemplateRole[];
+  needsScene: boolean;
+  recommendedDuration: number;
+  defaultStyle: string;
+  priceTokens: number;
+  tags: string[];
+  popularityScore: number;
+  isFeatured: boolean;
+  sortOrder: number;
+};
+
 export type PublicTokenPackage = {
   id: string;
   title: string;
@@ -53,6 +80,8 @@ export type PublicServicesResponse = { services: PublicService[] };
 export type PublicServiceResponse = { service: PublicService };
 export type PublicTrendsResponse = { trends: PublicTrend[] };
 export type PublicTrendResponse = { trend: PublicTrend };
+export type PublicScenarioTemplatesResponse = { templates: PublicScenarioTemplate[] };
+export type PublicScenarioTemplateResponse = { template: PublicScenarioTemplate };
 export type PublicTokenPackagesResponse = { packages: PublicTokenPackage[] };
 export type PublicSettingsResponse = { settings: PublicSettings };
 export type ContactResponse = { ok: true };

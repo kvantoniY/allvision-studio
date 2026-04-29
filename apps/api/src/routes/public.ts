@@ -4,6 +4,9 @@ import type {
   PublicServiceResponse,
   PublicServicesResponse,
   PublicSettingsResponse,
+  PublicScenarioTemplate,
+  PublicScenarioTemplateResponse,
+  PublicScenarioTemplatesResponse,
   PublicTokenPackagesResponse,
   PublicTrend,
   PublicTrendResponse,
@@ -47,6 +50,27 @@ const publicTrendSelect = {
   service: { select: { priceTokens: true } },
 };
 
+const publicScenarioTemplateSelect = {
+  id: true,
+  slug: true,
+  title: true,
+  shortDesc: true,
+  description: true,
+  category: true,
+  previewVideo: true,
+  previewImage: true,
+  promptTemplate: true,
+  characterRoles: true,
+  needsScene: true,
+  recommendedDuration: true,
+  defaultStyle: true,
+  priceTokens: true,
+  tags: true,
+  popularityScore: true,
+  isFeatured: true,
+  sortOrder: true,
+};
+
 type PublicTrendRow = Omit<PublicTrend, 'priceTokens'> & {
   priceTokens: number | null;
   service: { priceTokens: number };
@@ -57,6 +81,24 @@ function toPublicTrend(trend: PublicTrendRow): PublicTrend {
   return {
     ...publicTrend,
     priceTokens: trend.priceTokens ?? service.priceTokens,
+  };
+}
+
+function toPublicScenarioTemplate(template: {
+  characterRoles: unknown;
+} & Omit<PublicScenarioTemplate, 'characterRoles'>): PublicScenarioTemplate {
+  const roles = Array.isArray(template.characterRoles) ? template.characterRoles : [];
+  return {
+    ...template,
+    characterRoles: roles
+      .filter((role): role is PublicScenarioTemplate['characterRoles'][number] =>
+        Boolean(role && typeof role === 'object' && 'role' in role && 'label' in role),
+      )
+      .map((role) => ({
+        role: String(role.role),
+        label: String(role.label),
+        required: Boolean(role.required),
+      })),
   };
 }
 
@@ -129,6 +171,48 @@ publicRouter.get('/trends/:id', async (req: Request, res: Response<PublicTrendRe
     next(e);
   }
 });
+
+publicRouter.get(
+  '/scenario-templates',
+  async (req: Request, res: Response<PublicScenarioTemplatesResponse>, next: NextFunction) => {
+    try {
+      const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+      const isFeatured = req.query.isFeatured === 'true' ? true : undefined;
+
+      const templates = await prisma.scenarioTemplate.findMany({
+        where: {
+          isActive: true,
+          ...(category ? { category } : {}),
+          ...(isFeatured === true ? { isFeatured: true } : {}),
+        },
+        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+        select: publicScenarioTemplateSelect,
+      });
+
+      res.json({ templates: templates.map(toPublicScenarioTemplate) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+publicRouter.get(
+  '/scenario-templates/:slug',
+  async (req: Request, res: Response<PublicScenarioTemplateResponse>, next: NextFunction) => {
+    try {
+      const template = await prisma.scenarioTemplate.findFirst({
+        where: { slug: req.params.slug, isActive: true },
+        select: publicScenarioTemplateSelect,
+      });
+      if (!template) {
+        throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон сценария не найден');
+      }
+      res.json({ template: toPublicScenarioTemplate(template) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 publicRouter.get('/token-packages', async (_req: Request, res: Response<PublicTokenPackagesResponse>, next: NextFunction) => {
   try {

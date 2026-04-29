@@ -3,6 +3,7 @@ import IORedis, { type Redis } from 'ioredis';
 import {
   QUEUE_NAMES,
   type CharacterNsfwJobData,
+  type EpisodeJobData,
   type FairyTaleJobData,
   type ProjectJobData,
   type QueueName,
@@ -55,6 +56,14 @@ export async function addFairyTaleScriptJob(data: FairyTaleJobData, opts?: JobsO
 export async function addCharacterJob(data: CharacterNsfwJobData, opts?: JobsOptions) {
   return getQueue(QUEUE_NAMES.CHARACTER_NSFW).add(
     QUEUE_NAMES.CHARACTER_NSFW,
+    data,
+    opts,
+  );
+}
+
+export async function addEpisodeJob(data: EpisodeJobData, opts?: JobsOptions) {
+  return getQueue(QUEUE_NAMES.EPISODE).add(
+    QUEUE_NAMES.EPISODE,
     data,
     opts,
   );

@@ -18,6 +18,7 @@ import { useGetDashboardQuery } from '@/store/api/account-api';
 import { useListCharactersQuery } from '@/store/api/characters-api';
 import { useListProjectsQuery } from '@/store/api/projects-api';
 import { useListScenesQuery } from '@/store/api/scenes-api';
+import { useListEpisodesQuery } from '@/store/api/episodes-api';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
@@ -56,6 +57,7 @@ export default function DashboardPage() {
   const { data: projectsData, isLoading: isProjectsLoading } = useListProjectsQuery({ page: 1, limit: 3 });
   const { data: charactersData } = useListCharactersQuery({ status: 'READY' });
   const { data: scenesData } = useListScenesQuery();
+  const { data: episodesData } = useListEpisodesQuery({ page: 1, limit: 50 });
 
   if (!user) return null;
 
@@ -93,9 +95,9 @@ export default function DashboardPage() {
     {
       kind: 'episodes' as const,
       label: 'Эпизоды',
-      value: 0,
+      value: episodesData?.items.filter((episode) => episode.status !== 'FAILED').length ?? 0,
       href: '/dashboard/episodes',
-      cta: 'Скоро',
+      cta: 'Создать первый',
     },
   ];
 

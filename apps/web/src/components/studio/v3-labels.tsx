@@ -34,6 +34,7 @@ export const TEMPLATE_CATEGORY_LABEL: Record<string, string> = {
   wedding: 'Свадьба',
   birthday: 'День рождения',
   newyear: 'Новый год',
+  family: 'Семья',
   memorial: 'Память',
   kids: 'Детям',
   holiday: 'Праздник',

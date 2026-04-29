@@ -10,7 +10,7 @@ import type {
   StorageProvider,
 } from '@allvision/shared';
 
-type MockService = 'photo-restore' | 'photo-animate' | 'trend';
+type MockService = 'photo-restore' | 'photo-animate' | 'trend' | 'episode-image' | 'episode-video';
 type ResultType = 'image' | 'video';
 
 interface MockJobState {
@@ -36,12 +36,16 @@ const SERVICE_DIRS: Record<MockService, string> = {
   'photo-restore': 'photo-restore',
   'photo-animate': 'photo-animate',
   trend: 'trends',
+  'episode-image': 'episodes/images',
+  'episode-video': 'episodes/videos',
 };
 
 const SERVICE_RESULT_TYPE: Record<MockService, ResultType> = {
   'photo-restore': 'image',
   'photo-animate': 'video',
   trend: 'video',
+  'episode-image': 'image',
+  'episode-video': 'video',
 };
 
 const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
@@ -91,7 +95,13 @@ export class MockAIProvider implements AIProvider {
   private pickAsset(service: MockService): { filePath: string; resultType: ResultType } {
     const resultType = SERVICE_RESULT_TYPE[service];
     const dir = path.join(this.demoAssetsRoot, SERVICE_DIRS[service]);
-    const files = listAssets(dir, resultType);
+    let files = listAssets(dir, resultType);
+    if (files.length === 0 && service === 'episode-image') {
+      files = listAssets(path.join(this.demoAssetsRoot, SERVICE_DIRS['photo-restore']), resultType);
+    }
+    if (files.length === 0 && service === 'episode-video') {
+      files = listAssets(path.join(this.demoAssetsRoot, SERVICE_DIRS['photo-animate']), resultType);
+    }
     if (files.length === 0) {
       throw new Error(
         `DEMO_ASSETS_EMPTY: папка ${dir} пуста или не существует. Запустите: npm run demo:download`,
@@ -137,6 +147,24 @@ export class MockAIProvider implements AIProvider {
     config: Record<string, any>;
   }): Promise<AIJobHandle> {
     return this.createJob('trend');
+  }
+
+  async generateEpisodeImage(_params: {
+    prompt: string;
+    characterReferences: string[];
+    sceneReference?: string;
+    style: string;
+    aspectRatio: string;
+  }): Promise<AIJobHandle> {
+    return this.createJob('episode-image');
+  }
+
+  async animateEpisodeVideo(_params: {
+    imageUrl: string;
+    durationSeconds: number;
+    style: string;
+  }): Promise<AIJobHandle> {
+    return this.createJob('episode-video');
   }
 
   async generateFairyTaleScript(params: {

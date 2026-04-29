@@ -23,6 +23,11 @@ function verticalImage(seed: string) {
   return image(seed, 600, 1067);
 }
 
+function staticAsset(key: string) {
+  const baseUrl = process.env.PUBLIC_API_URL ?? 'http://localhost:4000';
+  return `${baseUrl.replace(/\/+$/, '')}/static/${key.replace(/^\/+/, '')}`;
+}
+
 const services = [
   {
     slug: 'photo-restore',
@@ -241,6 +246,167 @@ const trendSeed = [
   },
 ];
 
+const scenarioTemplates = [
+  {
+    slug: 'papa-superhero',
+    title: 'Папа-супергерой',
+    shortDesc: 'Короткий геройский эпизод, где главный герой спасает день в знакомой сцене.',
+    description: 'Персонаж появляется в семейной локации, получает супергеройский плащ и делает эффектный добрый поступок. Подходит для детского поздравления, семейного чата или сюрприза папе.',
+    category: 'kids',
+    promptTemplate: '{{character_main}} становится добрым супергероем в сцене {{scene}}. Кинематографичный кадр, теплый семейный юмор, героический жест, без опасности.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Главный герой' },
+      { role: 'secondary', required: false, label: 'Второй герой' },
+    ],
+    needsScene: true,
+    recommendedDuration: 10,
+    defaultStyle: 'cinematic',
+    priceTokens: 150,
+    tags: ['семья', 'дети', 'супергерой'],
+    isFeatured: true,
+  },
+  {
+    slug: 'wedding-dance',
+    title: 'Свадебный танец',
+    shortDesc: 'Нежный танец двух героев в праздничной сцене.',
+    description: 'Два персонажа танцуют в свадебной атмосфере: мягкий свет, плавная камера, ощущение торжества и тепла. Хорошо подходит для годовщины или поздравления молодоженам.',
+    category: 'wedding',
+    promptTemplate: '{{character_main}} и {{character_secondary}} танцуют свадебный танец в сцене {{scene}}. Мягкий свет, романтичная камера, реалистичный стиль.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Первый герой' },
+      { role: 'main', required: true, label: 'Второй герой' },
+    ],
+    needsScene: true,
+    recommendedDuration: 10,
+    defaultStyle: 'realistic',
+    priceTokens: 150,
+    tags: ['свадьба', 'танец', 'романтика'],
+    isFeatured: true,
+  },
+  {
+    slug: 'new-year-greeting',
+    title: 'С Новым годом!',
+    shortDesc: 'Праздничное новогоднее поздравление с одним героем.',
+    description: 'Главный герой оказывается среди огней, конфетти и праздничных деталей, улыбается и передает теплое новогоднее настроение.',
+    category: 'newyear',
+    promptTemplate: '{{character_main}} поздравляет с Новым годом в сказочной праздничной атмосфере. Елочные огни, конфетти, теплый свет, радостная эмоция.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Главный герой' },
+    ],
+    needsScene: false,
+    recommendedDuration: 5,
+    defaultStyle: 'cinematic',
+    priceTokens: 100,
+    tags: ['новый год', 'поздравление'],
+    isFeatured: true,
+  },
+  {
+    slug: 'birthday-hero',
+    title: 'День рождения именинника',
+    shortDesc: 'Яркое поздравление с именинником в центре внимания.',
+    description: 'Герой появляется в праздничной сцене с тортом, свечами и мягким движением камеры. Формат подходит для сторис и семейного поздравления.',
+    category: 'birthday',
+    promptTemplate: '{{character_main}} празднует день рождения в сцене {{scene}}. Торт, свечи, шарики, радость, крупный кинематографичный план.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Именинник' },
+      { role: 'secondary', required: false, label: 'Гость' },
+    ],
+    needsScene: true,
+    recommendedDuration: 10,
+    defaultStyle: 'cinematic',
+    priceTokens: 150,
+    tags: ['день рождения', 'праздник'],
+    isFeatured: true,
+  },
+  {
+    slug: 'pet-comic-hero',
+    title: 'Питомец-герой комикса',
+    shortDesc: 'Питомец превращается в героя яркой комикс-сцены.',
+    description: 'Кошка, собака или другой питомец получает выразительный комикс-образ: динамичные линии, смешной геройский момент и узнаваемый характер.',
+    category: 'pets',
+    promptTemplate: '{{character_main}} как герой комикса в сцене {{scene}}. Яркая графика, динамичные линии, веселый героический момент.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Питомец' },
+    ],
+    needsScene: true,
+    recommendedDuration: 5,
+    defaultStyle: 'cartoon',
+    priceTokens: 100,
+    tags: ['питомцы', 'комикс'],
+    isFeatured: false,
+  },
+  {
+    slug: 'grandma-visit',
+    title: 'В гостях у бабушки',
+    shortDesc: 'Теплый семейный эпизод с двумя героями.',
+    description: 'Два героя встречаются в уютной домашней сцене: чай, мягкий свет, семейная близость и спокойное движение камеры.',
+    category: 'family',
+    promptTemplate: '{{character_main}} и {{character_secondary}} встречаются в сцене {{scene}}. Уютный семейный момент, чай, улыбки, мягкий свет.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Первый герой' },
+      { role: 'secondary', required: true, label: 'Второй герой' },
+    ],
+    needsScene: true,
+    recommendedDuration: 10,
+    defaultStyle: 'realistic',
+    priceTokens: 150,
+    tags: ['семья', 'уют'],
+    isFeatured: false,
+  },
+  {
+    slug: 'old-photo-memory',
+    title: 'Воспоминание на старом фото',
+    shortDesc: 'Винтажный памятный эпизод в стиле ожившего фото.',
+    description: 'Герой появляется в теплой винтажной атмосфере: пленочное зерно, бережный свет, ощущение семейного архива и памяти.',
+    category: 'memorial',
+    promptTemplate: '{{character_main}} в бережном воспоминании на старом фото. Винтажный свет, пленочное зерно, спокойная камера, уважительное настроение.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Главный герой' },
+    ],
+    needsScene: false,
+    recommendedDuration: 15,
+    defaultStyle: 'vintage',
+    priceTokens: 200,
+    tags: ['память', 'архив', 'винтаж'],
+    isFeatured: false,
+  },
+  {
+    slug: 'knight-cosplay',
+    title: 'Косплей: рыцарь',
+    shortDesc: 'Веселая фантазийная сцена с героем-рыцарем.',
+    description: 'Главный герой получает рыцарский образ и оказывается в игровой сцене приключения. Подходит для детей, семейных шуток и ярких сторис.',
+    category: 'kids',
+    promptTemplate: '{{character_main}} становится добрым рыцарем в сцене {{scene}}. Сказочный замок, плащ, мягкий свет, приключенческое настроение.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Рыцарь' },
+    ],
+    needsScene: true,
+    recommendedDuration: 10,
+    defaultStyle: 'cartoon',
+    priceTokens: 150,
+    tags: ['дети', 'косплей', 'фэнтези'],
+    isFeatured: false,
+  },
+  {
+    slug: 'family-disco',
+    title: 'Танец на дискотеке',
+    shortDesc: 'Веселый семейный танец с двумя героями.',
+    description: 'Герои танцуют в яркой сцене с огнями и легкой ретро-атмосферой. Формат хорошо работает для семейных поздравлений и веселых сообщений.',
+    category: 'family',
+    promptTemplate: '{{character_main}} и {{character_secondary}} танцуют в сцене {{scene}}. Цветные огни, музыка, улыбки, легкий ретро-вайб.',
+    characterRoles: [
+      { role: 'main', required: true, label: 'Первый танцор' },
+      { role: 'secondary', required: false, label: 'Второй танцор' },
+    ],
+    needsScene: true,
+    recommendedDuration: 10,
+    defaultStyle: 'cinematic',
+    priceTokens: 150,
+    tags: ['семья', 'танец', 'веселье'],
+    isFeatured: false,
+  },
+];
+
 async function main() {
   await prisma.trend.deleteMany({});
   await prisma.service.deleteMany({ where: { slug: { in: services.map((service) => service.slug) } } });
@@ -312,6 +478,34 @@ async function main() {
     })),
   });
 
+  for (const [index, template] of scenarioTemplates.entries()) {
+    await prisma.scenarioTemplate.upsert({
+      where: { slug: template.slug },
+      update: {
+        ...template,
+        previewVideo: staticAsset(`template-assets/previews/seed-${index + 1}.mp4`),
+        previewImage: staticAsset(`template-assets/images/seed-${index + 1}.jpg`),
+        aiProvider: 'mock',
+        aiModel: 'mock-episode-v1',
+        aiConfig: {},
+        popularityScore: 0,
+        isActive: true,
+        sortOrder: (index + 1) * 10,
+      },
+      create: {
+        ...template,
+        previewVideo: staticAsset(`template-assets/previews/seed-${index + 1}.mp4`),
+        previewImage: staticAsset(`template-assets/images/seed-${index + 1}.jpg`),
+        aiProvider: 'mock',
+        aiModel: 'mock-episode-v1',
+        aiConfig: {},
+        popularityScore: 0,
+        isActive: true,
+        sortOrder: (index + 1) * 10,
+      },
+    });
+  }
+
   await prisma.tokenPackage.createMany({
     data: [
       { title: 'Старт', tokens: 100, priceRub: 99, bonus: 0, sortOrder: 10 },
@@ -346,7 +540,7 @@ async function main() {
   console.log('[seed] created accounts:');
   console.log(`  admin: ${admin.email} / admin123  (balance ${admin.tokenBalance})`);
   console.log(`  user:  ${user.email}  / user123   (balance ${user.tokenBalance})`);
-  console.log(`[seed] created public catalog: ${services.length} services, ${trendSeed.length} trends, 4 token packages`);
+  console.log(`[seed] created public catalog: ${services.length} services, ${trendSeed.length} trends, ${scenarioTemplates.length} scenario templates, 4 token packages`);
 }
 
 main()

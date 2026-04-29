@@ -1,4 +1,4 @@
-import { CharacterStatus, prisma, ProjectStatus } from '@allvision/database';
+import { CharacterStatus, EpisodeStatus, prisma, ProjectStatus } from '@allvision/database';
 import { CHARACTER_SLOT_PRICE_TOKENS } from '@allvision/shared';
 
 export async function updateProjectProgress(
@@ -157,6 +157,96 @@ export async function markCharacterRejected(
         amount: CHARACTER_SLOT_PRICE_TOKENS,
         reason: 'refund',
         refId: characterId,
+        balanceAfter: user.tokenBalance,
+      },
+    });
+  });
+}
+
+export async function updateEpisodeProgress(
+  episodeId: string,
+  progress: number,
+  status?: EpisodeStatus,
+) {
+  await prisma.episode.update({
+    where: { id: episodeId },
+    data: {
+      progress,
+      ...(status ? { status } : {}),
+    },
+  });
+}
+
+export interface EpisodeResult {
+  resultImage?: string;
+  resultVideo?: string;
+  resultThumbnail?: string;
+}
+
+export async function markEpisodeCompleted(episodeId: string, result: EpisodeResult) {
+  await prisma.episode.update({
+    where: { id: episodeId },
+    data: {
+      status: EpisodeStatus.COMPLETED,
+      progress: 100,
+      completedAt: new Date(),
+      resultImage: result.resultImage ?? null,
+      resultVideo: result.resultVideo ?? null,
+      resultThumbnail: result.resultThumbnail ?? null,
+      errorMessage: null,
+    },
+  });
+}
+
+export async function markEpisodeFailed(
+  episodeId: string,
+  errorMessage: string,
+  options: { refundTokens?: boolean } = {},
+) {
+  const refundTokens = options.refundTokens ?? true;
+
+  await prisma.$transaction(async (tx) => {
+    const episode = await tx.episode.findUnique({
+      where: { id: episodeId },
+      select: { id: true, userId: true, status: true },
+    });
+    if (!episode) return;
+
+    await tx.episode.update({
+      where: { id: episodeId },
+      data: {
+        status: EpisodeStatus.FAILED,
+        errorMessage,
+      },
+    });
+
+    if (!refundTokens || episode.status === EpisodeStatus.FAILED) return;
+
+    const spending = await tx.tokenTransaction.findFirst({
+      where: {
+        userId: episode.userId,
+        refId: episodeId,
+        reason: 'spending',
+        amount: { lt: 0 },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { amount: true },
+    });
+    const refundAmount = Math.abs(spending?.amount ?? 0);
+    if (refundAmount <= 0) return;
+
+    const user = await tx.user.update({
+      where: { id: episode.userId },
+      data: { tokenBalance: { increment: refundAmount } },
+      select: { tokenBalance: true },
+    });
+
+    await tx.tokenTransaction.create({
+      data: {
+        userId: episode.userId,
+        amount: refundAmount,
+        reason: 'refund',
+        refId: episodeId,
         balanceAfter: user.tokenBalance,
       },
     });

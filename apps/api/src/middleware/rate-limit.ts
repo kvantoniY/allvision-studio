@@ -32,3 +32,13 @@ export const projectCreateLimiter = rateLimit({
   keyGenerator: (req: Request) => req.user?.id ?? ipKeyGenerator(req.ip ?? ''),
   message: { error: { code: 'RATE_LIMITED', message: 'Слишком много проектов. Попробуйте через минуту.' } },
 });
+
+/** 10 созданий эпизода на пользователя за минуту. */
+export const episodeCreateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => req.user?.id ?? ipKeyGenerator(req.ip ?? ''),
+  message: { error: { code: 'RATE_LIMITED', message: 'Слишком много эпизодов. Попробуйте через минуту.' } },
+});

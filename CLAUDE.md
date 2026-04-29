@@ -389,3 +389,39 @@
   - URL reference image с substring `nsfw`: worker переводит в `REJECTED`; paid character получает refund, free character сбрасывает `freeCharacterUsed=false`.
   - Replace reference-images у READY персонажа: `PATCH /reference-images` возвращает `PROCESSING`, затем worker переводит обратно в `READY`.
 - TODO 1.6.5c: workflow/list Episode, публичный каталог ScenarioTemplate, сидинг стартовых сценариев, реальный AI/NSFW provider вместо mock.
+
+### Этап 1.6.5c — Workflow Эпизода + Каталог Шаблонов + Watermark + Re-generation ✅
+- V3 закрыт: основной product workflow "сценарий -> персонажи -> сцена -> эпизод" реализован end-to-end на mock AI.
+- Seed:
+  - Добавлено 9 стартовых `ScenarioTemplate` через upsert: `papa-superhero`, `wedding-dance`, `new-year-greeting`, `birthday-hero`, `pet-comic-hero`, `grandma-visit`, `old-photo-memory`, `knight-cosplay`, `family-disco`.
+  - Категории покрывают `kids`, `wedding`, `newyear`, `birthday`, `pets`, `family`, `memorial`; 4 шаблона featured.
+  - Все шаблоны используют `aiModel='mock-episode-v1'`, flat price 100/150/200 по длительности, `characterRoles`, `needsScene`, `promptTemplate` с `{{character_main}}`, `{{character_secondary}}`, `{{scene}}`.
+  - Preview URL сидятся в `/static/template-assets/images/seed-N.jpg` и `/static/template-assets/previews/seed-N.mp4`; `scripts/download-demo-assets.ts` заполняет и `demo-assets`, и обслуживаемую `uploads/template-assets`.
+- Backend:
+  - Новый `/api/episodes`: create/list/detail/status/regenerate/remove-watermark/delete.
+  - Создание списывает `template.priceTokens`, создаёт `Episode`, `EpisodeCharacter`, `TokenTransaction(reason='spending')`, затем ставит `addEpisodeJob`.
+  - `EPISODE_REGENERATION_PRICE_TOKENS = 30`, `EPISODE_WATERMARK_REMOVAL_PRICE_TOKENS = 60`; скидок/наценок нет.
+  - Regenerate разрешён только для `COMPLETED/FAILED`, сбрасывает result-поля и `watermarkRemoved=false`.
+  - Remove-watermark backend-only: атомарно списывает 60 и ставит `watermarkRemoved=true`, worker не запускается.
+  - Delete hard-delete блокируется для `PENDING/PROCESSING_IMAGE/PROCESSING_VIDEO`, result-файлы чистятся best-effort.
+- Worker:
+  - Добавлена очередь `QUEUE_NAMES.EPISODE`, concurrency 1.
+  - `processEpisode`: stage A `PROCESSING_IMAGE` 5-50%, stage B `PROCESSING_VIDEO` 50-99%, completion пишет `resultImage/resultVideo/resultThumbnail`.
+  - `MockAIProvider.generateEpisodeImage()` берёт картинки из `demo-assets/episodes/images` с fallback на `photo-restore`; `animateEpisodeVideo()` берёт видео из `demo-assets/episodes/videos` с fallback на `photo-animate`.
+  - Refund-логика для episode failure берёт `abs(amount)` последней отрицательной `TokenTransaction(reason='spending', refId=episode.id)`, поэтому failed regenerate возвращает 30, а не исходную цену эпизода.
+- Frontend:
+  - Публичный каталог `/scenarios` и detail `/scenarios/[slug]` работают через public RTK Query slice `public-scenario-templates-api.ts`.
+  - `/dashboard/episodes/new` — 5-шаговый wizard: template, characters, conditional scene, settings, confirm; `?templateId=` пропускает первый шаг.
+  - `/dashboard/episodes` теперь список реальных эпизодов; `/dashboard/episodes/[id]` показывает polling progress, completed player, regenerate/remove-watermark/delete actions.
+  - `EpisodeVideoPlayer` рендерит `<video>` и overlay "Allvision Studio" только если `watermarkRemoved=false`.
+  - `/dashboard` считает episodes через `listEpisodes`, исключая `FAILED`.
+- Архитектурный долг:
+  - Watermark в MVP — только React overlay в нашем плеере. Сервер не модифицирует видео; скачанный файл остаётся без burn-in watermark. Для production нужен ffmpeg-burn watermark в worker и отдельная no-watermark asset-цепочка.
+  - `customScenario` ограничен zod max 500 chars. На mock provider безопасно; перед реальными AI нужна prompt moderation (V2).
+- Demo-assets:
+  - Если `ffmpeg` отсутствует, `download-demo-assets.ts` скачивает короткий mp4-плейсхолдер и размножает его для `photo-animate`, `trends`, `episodes/videos`, `templates/previews`.
+- Тесты/проверки:
+  - Добавлен `apps/api/src/__tests__/episodes.test.ts`: create validation, insufficient tokens, happy path, queue refund, list/detail/status, regenerate, watermark, delete, worker integration со spy provider.
+  - В текущей Windows-среде `npm test -w @allvision/api` не смог стартовать из-за недоступного PostgreSQL `localhost:5433`; Docker Desktop не поднял daemon (`docker info` не видит `dockerDesktopLinuxEngine`). До инфраструктурного падения Jest обнаруживает 137 tests total.
+  - Прошли: `npm run build -w @allvision/shared`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npx tsc -p packages/database/tsconfig.json --noEmit`, `npm run build -w @allvision/web`.
+  - `npm run build` прошёл один раз полностью; повторный root build поймал известный Windows/Next crash `3221225477` на web-этапе, после чего отдельный `npm run build -w @allvision/web` прошёл.

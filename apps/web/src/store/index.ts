@@ -7,6 +7,7 @@ import { projectsApi } from './api/projects-api';
 import { adminTrendsApi } from './api/admin-trends-api';
 import { charactersApi } from './api/characters-api';
 import { scenesApi } from './api/scenes-api';
+import { episodesApi } from './api/episodes-api';
 import { adminScenarioTemplatesApi } from './api/admin-scenario-templates-api';
 import { authReducer } from './slices/auth-slice';
 
@@ -21,6 +22,7 @@ export const store = configureStore({
     [adminTrendsApi.reducerPath]: adminTrendsApi.reducer,
     [charactersApi.reducerPath]: charactersApi.reducer,
     [scenesApi.reducerPath]: scenesApi.reducer,
+    [episodesApi.reducerPath]: episodesApi.reducer,
     [adminScenarioTemplatesApi.reducerPath]: adminScenarioTemplatesApi.reducer,
   },
   middleware: (getDefault) =>
@@ -33,6 +35,7 @@ export const store = configureStore({
       adminTrendsApi.middleware,
       charactersApi.middleware,
       scenesApi.middleware,
+      episodesApi.middleware,
       adminScenarioTemplatesApi.middleware,
     ),
 });

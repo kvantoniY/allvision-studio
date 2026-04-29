@@ -7,10 +7,12 @@ import { processPhotoAnimate } from './processors/photo-animate';
 import { processTrend } from './processors/trend';
 import { processFairyTaleScript } from './processors/fairy-tale-script';
 import { processCharacterNsfw } from './processors/character-nsfw';
+import { processEpisode } from './processors/episode';
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const CONCURRENCY = 2;
 const CHARACTER_NSFW_CONCURRENCY = 4;
+const EPISODE_CONCURRENCY = 1;
 
 // BullMQ requires maxRetriesPerRequest: null for blocking commands.
 const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, lazyConnect: false });
@@ -25,10 +27,16 @@ const queues: Array<[QueueName, Processor]> = [
   [QUEUE_NAMES.TREND, processTrend as Processor],
   [QUEUE_NAMES.FAIRY_TALE_SCRIPT, processFairyTaleScript as Processor],
   [QUEUE_NAMES.CHARACTER_NSFW, processCharacterNsfw as Processor],
+  [QUEUE_NAMES.EPISODE, processEpisode as Processor],
 ];
 
 const workers = queues.map(([name, processor]) => {
-  const concurrency = name === QUEUE_NAMES.CHARACTER_NSFW ? CHARACTER_NSFW_CONCURRENCY : CONCURRENCY;
+  const concurrency =
+    name === QUEUE_NAMES.CHARACTER_NSFW
+      ? CHARACTER_NSFW_CONCURRENCY
+      : name === QUEUE_NAMES.EPISODE
+        ? EPISODE_CONCURRENCY
+        : CONCURRENCY;
   return new Worker(name, processor, { connection, concurrency });
 });
 
@@ -36,7 +44,12 @@ let readyCount = 0;
 workers.forEach((w) => {
   w.on('ready', () => {
     readyCount += 1;
-    const concurrency = w.name === QUEUE_NAMES.CHARACTER_NSFW ? CHARACTER_NSFW_CONCURRENCY : CONCURRENCY;
+    const concurrency =
+      w.name === QUEUE_NAMES.CHARACTER_NSFW
+        ? CHARACTER_NSFW_CONCURRENCY
+        : w.name === QUEUE_NAMES.EPISODE
+          ? EPISODE_CONCURRENCY
+          : CONCURRENCY;
     log(`Worker ready: ${w.name} (concurrency: ${concurrency})`);
     if (readyCount === workers.length) {
       log(`All workers started: ${queues.map(([n]) => n).join(', ')}`);
