@@ -1,3 +1,7 @@
+import { z } from 'zod';
+import { GenerationKind as PrismaGenerationKind } from '@allvision/database';
+import type { GenerationKind, GenerationStatus } from '@allvision/database';
+
 export {
   AvatarStatus,
   AvatarType,
@@ -63,3 +67,79 @@ export function isTerminalGenerationStatus(status: GenerationStatusValue) {
 export function isMediaGenerationKind(kind: GenerationKindValue) {
   return kind === 'AUDIO' || kind === 'IMAGE' || kind === 'VIDEO';
 }
+
+export type CreateGenerationDto = {
+  kind: GenerationKind;
+  mode: string;
+  prompt?: string;
+  inputImages?: string[];
+  inputVideo?: string;
+  inputAudio?: string;
+  avatarIds?: string[];
+  sceneId?: string;
+  voiceId?: string;
+  durationSeconds?: number;
+  aspectRatio?: string;
+  style?: string;
+  aiConfig?: Record<string, unknown>;
+  threadId?: string;
+  parentGenerationId?: string;
+  coinsCost: number;
+};
+
+export type GenerationResponseDto = {
+  id: string;
+  userId: string;
+  kind: GenerationKind;
+  mode: string;
+  status: GenerationStatus;
+  progress: number;
+  prompt?: string | null;
+  inputImages: string[];
+  inputVideo?: string | null;
+  inputAudio?: string | null;
+  avatarIds: string[];
+  sceneId?: string | null;
+  voiceId?: string | null;
+  aiProvider: string;
+  aiModel: string;
+  aiConfig?: unknown;
+  durationSeconds?: number | null;
+  aspectRatio?: string | null;
+  style?: string | null;
+  resultText?: string | null;
+  resultImage?: string | null;
+  resultVideo?: string | null;
+  resultAudio?: string | null;
+  resultThumbnail?: string | null;
+  coinsCost: number;
+  parentGenerationId?: string | null;
+  watermarkRemoved: boolean;
+  threadId?: string | null;
+  aiProviderJobId?: string | null;
+  errorMessage?: string | null;
+  createdAt: Date | string;
+  completedAt?: Date | string | null;
+};
+
+export type GenerationStatusDto = {
+  id: string;
+  status: GenerationStatus;
+  progress: number;
+  resultText?: string | null;
+  resultImage?: string | null;
+  resultVideo?: string | null;
+  resultAudio?: string | null;
+  resultThumbnail?: string | null;
+  errorMessage?: string | null;
+  completedAt?: Date | string | null;
+};
+
+export const listGenerationsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  kind: z.nativeEnum(PrismaGenerationKind).optional(),
+  threadId: z.string().min(1).optional(),
+});
+
+export type ListGenerationsQueryDto = z.infer<typeof listGenerationsQuerySchema>;

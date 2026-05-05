@@ -6,15 +6,17 @@ export type AccountUser = {
   name: string | null;
   role: Role;
   coinBalance: number;
-  avatar?: string | null;
-  tokenBalance?: number;
+  emailVerified: boolean;
+  freeAvatarUsed: boolean;
+  freeVoiceUsed: boolean;
   createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
 export type DashboardStats = {
   totalGenerations: number;
   completedGenerations: number;
-  activeGenerations: number;
+  processingGenerations: number;
   totalCoinsSpent: number;
 };
 
@@ -29,9 +31,9 @@ export type Paginated<T> = {
   items: T[];
   total: number;
   page: number;
+  limit: number;
   totalPages: number;
 };
 
 export type TransactionsResponse = Paginated<CoinTransaction>;
-
 export type UpdateProfileResponse = { user: AccountUser };

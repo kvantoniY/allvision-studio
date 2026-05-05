@@ -1,28 +1,17 @@
 import { z } from 'zod';
-const MessengerType = {
-  TELEGRAM: 'TELEGRAM',
-  WHATSAPP: 'WHATSAPP',
-  VK: 'VK',
-  PHONE: 'PHONE',
-} as const;
 
 export const updateProfileSchema = z.object({
-  name: z.string().min(2, 'Минимум 2 символа').max(100, 'Максимум 100 символов').optional(),
-  avatar: z.string().url('Некорректный URL').nullable().optional(),
-  messenger: z.string().max(200).nullable().optional(),
-  messengerType: z.nativeEnum(MessengerType).nullable().optional(),
+  name: z.string().trim().min(2, 'Minimum 2 characters').max(100, 'Maximum 100 characters').optional(),
 });
 
 export const changeAccountPasswordSchema = z.object({
-  oldPassword: z.string().min(1, 'Введите текущий пароль'),
-  newPassword: z.string().min(8, 'Минимум 8 символов'),
+  oldPassword: z.string().min(1, 'Enter current password'),
+  newPassword: z.string().min(8, 'Minimum 8 characters'),
 });
 
 export const deleteAccountSchema = z.object({
-  password: z.string().min(1, 'Введите пароль'),
-  confirmation: z.literal('УДАЛИТЬ', {
-    errorMap: () => ({ message: 'Введите слово УДАЛИТЬ для подтверждения' }),
-  }),
+  password: z.string().min(1, 'Enter password'),
+  confirmation: z.string().optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

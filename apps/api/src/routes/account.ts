@@ -34,17 +34,6 @@ accountRouter.get('/transactions', async (req: Request, res: Response, next: Nex
   }
 });
 
-accountRouter.get('/payments', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-    const data = await account.listPayments(req.user!.id, { page, limit });
-    res.json(data);
-  } catch (e) {
-    next(e);
-  }
-});
-
 accountRouter.patch('/profile', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = updateProfileSchema.parse(req.body);
@@ -58,8 +47,8 @@ accountRouter.patch('/profile', async (req: Request, res: Response, next: NextFu
 accountRouter.post('/profile/password', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { oldPassword, newPassword } = changeAccountPasswordSchema.parse(req.body);
-    const tokens = await account.changePassword(req.user!.id, oldPassword, newPassword);
-    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+    const authTokens = await account.changePassword(req.user!.id, oldPassword, newPassword);
+    setAuthCookies(res, authTokens.accessToken, authTokens.refreshToken);
     res.json({ ok: true });
   } catch (e) {
     next(e);

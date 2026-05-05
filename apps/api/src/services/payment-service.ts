@@ -1,172 +1,97 @@
+import crypto from 'node:crypto';
 import { prisma } from '@allvision/database';
-import type { Payment } from '@allvision/database';
 import { HttpError } from '../utils/http-error';
 import { getPaymentProvider } from './payment-provider';
 
-type PaymentListItem = Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;
+type PaymentStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+
+export type CoinTopupPayment = {
+  id: string;
+  userId: string;
+  amountRub: number;
+  coinsAdded: number;
+  status: PaymentStatus;
+  provider: string;
+  providerPaymentId?: string;
+  confirmationUrl?: string;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
+  paidAt?: Date;
+};
+
+type PaymentListItem = Pick<CoinTopupPayment, 'id' | 'amountRub' | 'coinsAdded' | 'status'>;
+
+const payments = new Map<string, CoinTopupPayment>();
 
 function paymentProviderName() {
   return process.env.PAYMENT_PROVIDER ?? 'mock';
 }
 
-function providerEventToStatus(type: string) {
+function providerEventToStatus(type: string): PaymentStatus {
   if (type === 'payment.succeeded') return 'SUCCEEDED';
   if (type === 'payment.failed') return 'FAILED';
   if (type === 'payment.cancelled') return 'CANCELLED';
   throw new HttpError(400, 'UNSUPPORTED_PAYMENT_EVENT', 'Unsupported payment event');
 }
 
-function buildConfirmationMetadata(metadata: Record<string, unknown>, confirmationUrl: string) {
-  return {
-    ...metadata,
-    confirmationUrl,
-  };
-}
-
 export async function createTopupPayment(
   userId: string,
-  tokenPackageId: string,
+  params: { coins: number; amountRub: number },
 ): Promise<{ payment: PaymentListItem; confirmationUrl: string }> {
-  const pkg = await prisma.tokenPackage.findUnique({ where: { id: tokenPackageId } });
-  if (!pkg) {
-    throw new HttpError(404, 'TOKEN_PACKAGE_NOT_FOUND', 'Token package not found');
+  if (params.coins <= 0) {
+    throw new HttpError(400, 'INVALID_COINS_AMOUNT', 'Coins amount must be positive');
   }
-  if (!pkg.isActive) {
-    throw new HttpError(400, 'TOKEN_PACKAGE_INACTIVE', 'Token package is inactive');
+  if (params.amountRub <= 0) {
+    throw new HttpError(400, 'INVALID_PAYMENT_AMOUNT', 'Payment amount must be positive');
   }
 
-  const tokensAdded = pkg.tokens + pkg.bonus;
+  const id = `topup_${crypto.randomUUID()}`;
+  const provider = paymentProviderName();
   const metadata = {
-    tokenPackageId: pkg.id,
-    packageTitle: pkg.title,
-    baseTokens: pkg.tokens,
-    bonusTokens: pkg.bonus,
+    paymentId: id,
+    coins: String(params.coins),
+    amountRub: String(params.amountRub),
   };
 
-  const payment = await prisma.payment.create({
-    data: {
-      userId,
-      amountRub: pkg.priceRub * 100,
-      tokensAdded,
-      status: 'PENDING',
-      provider: paymentProviderName(),
-      purpose: 'TOPUP',
-      metadata,
-    },
-  });
-
   const providerPayment = await getPaymentProvider().createPayment({
-    amountRub: payment.amountRub,
+    amountRub: params.amountRub,
     userId,
     purpose: 'topup',
-    metadata: {
-      paymentId: payment.id,
-      tokenPackageId: pkg.id,
-      packageTitle: pkg.title,
-      baseTokens: String(pkg.tokens),
-      bonusTokens: String(pkg.bonus),
-    },
+    metadata,
   });
 
-  const updated = await prisma.payment.update({
-    where: { id: payment.id },
-    data: {
-      providerPaymentId: providerPayment.paymentId,
-      metadata: buildConfirmationMetadata(metadata, providerPayment.confirmationUrl),
-    },
-  });
-
-  return {
-    payment: {
-      id: updated.id,
-      amountRub: updated.amountRub,
-      tokensAdded: updated.tokensAdded,
-    },
-    confirmationUrl: providerPayment.confirmationUrl,
-  };
-}
-
-export async function createOrderPayment(
-  userId: string,
-  orderId: string,
-): Promise<{ payment: PaymentListItem; confirmationUrl: string }> {
-  const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) {
-    throw new HttpError(404, 'ORDER_NOT_FOUND', 'Order not found');
-  }
-  if (order.userId !== userId) {
-    throw new HttpError(403, 'FORBIDDEN', 'Payment belongs to another user');
-  }
-  if (order.status !== 'PRICE_SET') {
-    throw new HttpError(400, 'ORDER_PRICE_NOT_SET', 'Order is not ready for payment');
-  }
-  if (order.priceRub == null) {
-    throw new HttpError(400, 'ORDER_PRICE_MISSING', 'Order price is missing');
-  }
-  if (order.paymentId) {
-    throw new HttpError(400, 'ORDER_PAYMENT_EXISTS', 'Order already has a payment');
-  }
-
-  const metadata = {
-    orderId: order.id,
-    orderType: order.type,
-  };
-
-  const payment = await prisma.payment.create({
-    data: {
-      userId,
-      amountRub: order.priceRub * 100,
-      tokensAdded: null,
-      status: 'PENDING',
-      provider: paymentProviderName(),
-      purpose: 'ORDER',
-      metadata,
-    },
-  });
-
-  const providerPayment = await getPaymentProvider().createPayment({
-    amountRub: payment.amountRub,
+  const payment: CoinTopupPayment = {
+    id,
     userId,
-    purpose: 'order',
-    metadata: {
-      paymentId: payment.id,
-      orderId: order.id,
-      orderType: order.type,
-    },
-  });
+    amountRub: params.amountRub,
+    coinsAdded: params.coins,
+    status: 'PENDING',
+    provider,
+    providerPaymentId: providerPayment.paymentId,
+    confirmationUrl: providerPayment.confirmationUrl,
+    metadata,
+    createdAt: new Date(),
+  };
 
-  const updated = await prisma.payment.update({
-    where: { id: payment.id },
-    data: {
-      providerPaymentId: providerPayment.paymentId,
-      metadata: buildConfirmationMetadata(metadata, providerPayment.confirmationUrl),
-    },
-  });
-
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { paymentId: updated.id },
-  });
+  payments.set(payment.id, payment);
+  payments.set(providerPayment.paymentId, payment);
 
   return {
     payment: {
-      id: updated.id,
-      amountRub: updated.amountRub,
-      tokensAdded: updated.tokensAdded,
+      id: payment.id,
+      amountRub: payment.amountRub,
+      coinsAdded: payment.coinsAdded,
+      status: payment.status,
     },
     confirmationUrl: providerPayment.confirmationUrl,
   };
 }
 
-export async function findPaymentByIdOrProviderId(id: string): Promise<Payment | null> {
-  return prisma.payment.findFirst({
-    where: {
-      OR: [{ id }, { providerPaymentId: id }],
-    },
-  });
+export async function findPaymentByIdOrProviderId(id: string): Promise<CoinTopupPayment | null> {
+  return payments.get(id) ?? null;
 }
 
-export async function getPaymentForUser(userId: string, id: string): Promise<Payment> {
+export async function getPaymentForUser(userId: string, id: string): Promise<CoinTopupPayment> {
   const payment = await findPaymentByIdOrProviderId(id);
   if (!payment) {
     throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
@@ -177,7 +102,7 @@ export async function getPaymentForUser(userId: string, id: string): Promise<Pay
   return payment;
 }
 
-export async function getPaymentStatusForUser(userId: string, id: string): Promise<{ status: Payment['status'] }> {
+export async function getPaymentStatusForUser(userId: string, id: string): Promise<{ status: PaymentStatus }> {
   const payment = await getPaymentForUser(userId, id);
   return { status: payment.status };
 }
@@ -185,9 +110,7 @@ export async function getPaymentStatusForUser(userId: string, id: string): Promi
 export async function handlePaymentWebhook(rawBody: Buffer, signature: string): Promise<{ ok: true }> {
   const event = await getPaymentProvider().verifyWebhook(rawBody, signature);
   const status = providerEventToStatus(event.type);
-  const payment = await prisma.payment.findFirst({
-    where: { providerPaymentId: event.providerPaymentId },
-  });
+  const payment = payments.get(event.providerPaymentId) ?? payments.get(event.paymentId);
 
   if (!payment) {
     throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
@@ -198,55 +121,34 @@ export async function handlePaymentWebhook(rawBody: Buffer, signature: string): 
   }
 
   if (status !== 'SUCCEEDED') {
-    await prisma.payment.update({
-      where: { id: payment.id },
-      data: { status },
-    });
+    payment.status = status;
+    payments.set(payment.id, payment);
+    if (payment.providerPaymentId) payments.set(payment.providerPaymentId, payment);
     return { ok: true };
   }
 
   await prisma.$transaction(async (tx) => {
-    const currentPayment = await tx.payment.findUnique({ where: { id: payment.id } });
-    if (!currentPayment || currentPayment.status === 'SUCCEEDED') {
-      return;
-    }
+    const user = await tx.user.update({
+      where: { id: payment.userId },
+      data: { coinBalance: { increment: payment.coinsAdded } },
+    });
 
-    await tx.payment.update({
-      where: { id: payment.id },
+    await tx.coinTransaction.create({
       data: {
-        status: 'SUCCEEDED',
-        paidAt: new Date(),
+        userId: payment.userId,
+        amount: payment.coinsAdded,
+        reason: 'topup',
+        refType: 'Topup',
+        refId: payment.id,
+        balanceAfter: user.coinBalance,
       },
     });
-
-    if (payment.purpose === 'TOPUP') {
-      const tokensAdded = payment.tokensAdded ?? 0;
-      const user = await tx.user.update({
-        where: { id: payment.userId },
-        data: {
-          tokenBalance: {
-            increment: tokensAdded,
-          },
-        },
-      });
-
-      await tx.tokenTransaction.create({
-        data: {
-          userId: payment.userId,
-          amount: tokensAdded,
-          reason: 'topup',
-          refId: payment.id,
-          balanceAfter: user.tokenBalance,
-        },
-      });
-      return;
-    }
-
-    await tx.order.updateMany({
-      where: { paymentId: payment.id },
-      data: { status: 'PAID' },
-    });
   });
+
+  payment.status = 'SUCCEEDED';
+  payment.paidAt = new Date();
+  payments.set(payment.id, payment);
+  if (payment.providerPaymentId) payments.set(payment.providerPaymentId, payment);
 
   return { ok: true };
 }

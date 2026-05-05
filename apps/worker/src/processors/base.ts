@@ -1,254 +1,69 @@
-import { CharacterStatus, EpisodeStatus, prisma, ProjectStatus } from '@allvision/database';
-import { CHARACTER_SLOT_PRICE_TOKENS } from '@allvision/shared';
+import { GenerationStatus, prisma } from '@allvision/database';
 
-export async function updateProjectProgress(
-  projectId: string,
-  progress: number,
-  status?: ProjectStatus,
-) {
-  await prisma.project.update({
-    where: { id: projectId },
+type GenerationResultPatch = {
+  resultText?: string | null;
+  resultImage?: string | null;
+  resultVideo?: string | null;
+  resultAudio?: string | null;
+  resultThumbnail?: string | null;
+};
+
+export async function updateGenerationProgress(id: string, progress: number) {
+  return prisma.generation.update({
+    where: { id },
     data: {
-      progress,
-      ...(status ? { status } : {}),
+      status: GenerationStatus.PROCESSING,
+      progress: Math.max(0, Math.min(100, progress)),
     },
   });
 }
 
-export interface ProjectResult {
-  resultImage?: string;
-  resultVideo?: string;
-  resultThumbnail?: string;
-}
-
-export async function markProjectCompleted(projectId: string, result: ProjectResult) {
-  await prisma.project.update({
-    where: { id: projectId },
+export async function markGenerationCompleted(id: string, result: GenerationResultPatch) {
+  return prisma.generation.update({
+    where: { id },
     data: {
-      status: ProjectStatus.COMPLETED,
+      ...result,
+      status: GenerationStatus.COMPLETED,
       progress: 100,
+      errorMessage: null,
       completedAt: new Date(),
-      resultImage: result.resultImage ?? null,
-      resultVideo: result.resultVideo ?? null,
-      resultThumbnail: result.resultThumbnail ?? null,
     },
   });
 }
 
-export async function markProjectFailed(
-  projectId: string,
-  errorMessage: string,
-  options: { refundTokens?: boolean } = {},
+export async function markGenerationFailed(
+  id: string,
+  message: string,
+  options: { refundCoins?: boolean } = {},
 ) {
-  const refundTokens = options.refundTokens ?? true;
-
-  await prisma.$transaction(async (tx) => {
-    const project = await tx.project.findUnique({
-      where: { id: projectId },
-      select: { id: true, userId: true, tokensCost: true, status: true },
-    });
-    if (!project) return;
-
-    await tx.project.update({
-      where: { id: projectId },
+  return prisma.$transaction(async (tx) => {
+    const generation = await tx.generation.update({
+      where: { id },
       data: {
-        status: ProjectStatus.FAILED,
-        errorMessage,
+        status: GenerationStatus.FAILED,
+        errorMessage: message,
+        completedAt: new Date(),
       },
     });
 
-    if (refundTokens && project.tokensCost > 0) {
+    if (options.refundCoins && generation.coinsCost > 0) {
       const user = await tx.user.update({
-        where: { id: project.userId },
-        data: { tokenBalance: { increment: project.tokensCost } },
-        select: { tokenBalance: true },
+        where: { id: generation.userId },
+        data: { coinBalance: { increment: generation.coinsCost } },
       });
 
-      await tx.tokenTransaction.create({
+      await tx.coinTransaction.create({
         data: {
-          userId: project.userId,
-          amount: project.tokensCost,
+          userId: generation.userId,
+          amount: generation.coinsCost,
           reason: 'refund',
-          refId: projectId,
-          balanceAfter: user.tokenBalance,
+          refType: 'Generation',
+          refId: generation.id,
+          balanceAfter: user.coinBalance,
         },
       });
     }
-  });
-}
 
-export async function markCharacterReady(characterId: string) {
-  await prisma.$transaction(async (tx) => {
-    const character = await tx.character.findUnique({
-      where: { id: characterId },
-      select: { id: true, userId: true, isPaid: true },
-    });
-    if (!character) return;
-
-    await tx.character.update({
-      where: { id: characterId },
-      data: {
-        status: CharacterStatus.READY,
-        nsfwChecked: true,
-      },
-    });
-
-    if (!character.isPaid) {
-      await tx.user.update({
-        where: { id: character.userId },
-        data: { freeCharacterUsed: true },
-      });
-    }
-  });
-}
-
-export async function markCharacterRejected(
-  characterId: string,
-  _reason: string,
-  options: { refundIfPaid?: boolean } = {},
-) {
-  const refundIfPaid = options.refundIfPaid ?? true;
-
-  await prisma.$transaction(async (tx) => {
-    const character = await tx.character.findUnique({
-      where: { id: characterId },
-      select: { id: true, userId: true, isPaid: true, status: true },
-    });
-    if (!character) return;
-
-    await tx.character.update({
-      where: { id: characterId },
-      data: {
-        status: CharacterStatus.REJECTED,
-        nsfwChecked: true,
-      },
-    });
-
-    if (!character.isPaid) {
-      await tx.user.update({
-        where: { id: character.userId },
-        data: { freeCharacterUsed: false },
-      });
-      return;
-    }
-
-    if (!refundIfPaid || character.status === CharacterStatus.REJECTED) return;
-
-    const existingRefund = await tx.tokenTransaction.findFirst({
-      where: {
-        userId: character.userId,
-        refId: characterId,
-        reason: 'refund',
-        amount: CHARACTER_SLOT_PRICE_TOKENS,
-      },
-      select: { id: true },
-    });
-    if (existingRefund) return;
-
-    const user = await tx.user.update({
-      where: { id: character.userId },
-      data: { tokenBalance: { increment: CHARACTER_SLOT_PRICE_TOKENS } },
-      select: { tokenBalance: true },
-    });
-
-    await tx.tokenTransaction.create({
-      data: {
-        userId: character.userId,
-        amount: CHARACTER_SLOT_PRICE_TOKENS,
-        reason: 'refund',
-        refId: characterId,
-        balanceAfter: user.tokenBalance,
-      },
-    });
-  });
-}
-
-export async function updateEpisodeProgress(
-  episodeId: string,
-  progress: number,
-  status?: EpisodeStatus,
-) {
-  await prisma.episode.update({
-    where: { id: episodeId },
-    data: {
-      progress,
-      ...(status ? { status } : {}),
-    },
-  });
-}
-
-export interface EpisodeResult {
-  resultImage?: string;
-  resultVideo?: string;
-  resultThumbnail?: string;
-}
-
-export async function markEpisodeCompleted(episodeId: string, result: EpisodeResult) {
-  await prisma.episode.update({
-    where: { id: episodeId },
-    data: {
-      status: EpisodeStatus.COMPLETED,
-      progress: 100,
-      completedAt: new Date(),
-      resultImage: result.resultImage ?? null,
-      resultVideo: result.resultVideo ?? null,
-      resultThumbnail: result.resultThumbnail ?? null,
-      errorMessage: null,
-    },
-  });
-}
-
-export async function markEpisodeFailed(
-  episodeId: string,
-  errorMessage: string,
-  options: { refundTokens?: boolean } = {},
-) {
-  const refundTokens = options.refundTokens ?? true;
-
-  await prisma.$transaction(async (tx) => {
-    const episode = await tx.episode.findUnique({
-      where: { id: episodeId },
-      select: { id: true, userId: true, status: true },
-    });
-    if (!episode) return;
-
-    await tx.episode.update({
-      where: { id: episodeId },
-      data: {
-        status: EpisodeStatus.FAILED,
-        errorMessage,
-      },
-    });
-
-    if (!refundTokens || episode.status === EpisodeStatus.FAILED) return;
-
-    const spending = await tx.tokenTransaction.findFirst({
-      where: {
-        userId: episode.userId,
-        refId: episodeId,
-        reason: 'spending',
-        amount: { lt: 0 },
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { amount: true },
-    });
-    const refundAmount = Math.abs(spending?.amount ?? 0);
-    if (refundAmount <= 0) return;
-
-    const user = await tx.user.update({
-      where: { id: episode.userId },
-      data: { tokenBalance: { increment: refundAmount } },
-      select: { tokenBalance: true },
-    });
-
-    await tx.tokenTransaction.create({
-      data: {
-        userId: episode.userId,
-        amount: refundAmount,
-        reason: 'refund',
-        refId: episodeId,
-        balanceAfter: user.tokenBalance,
-      },
-    });
+    return generation;
   });
 }

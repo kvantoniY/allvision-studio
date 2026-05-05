@@ -1,8 +1,11 @@
 import { Router } from 'express';
-import { adminTrendsRouter } from './trends';
-import { adminScenarioTemplatesRouter } from './scenario-templates';
+import { requireAuth } from '../../middleware/auth';
+import { requireAdmin } from '../../middleware/require-admin';
 
 export const adminRouter = Router();
 
-adminRouter.use('/trends', adminTrendsRouter);
-adminRouter.use('/scenario-templates', adminScenarioTemplatesRouter);
+adminRouter.use(requireAuth, requireAdmin);
+
+adminRouter.get('/health', (_req, res) => {
+  res.json({ status: 'ok' });
+});

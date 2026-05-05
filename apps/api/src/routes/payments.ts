@@ -7,22 +7,14 @@ import * as payments from '../services/payment-service';
 export const paymentsRouter = Router();
 
 const topupSchema = z.object({
-  tokenPackageId: z.string().min(1),
+  coins: z.coerce.number().int().min(1),
+  amountRub: z.coerce.number().int().min(1),
 });
 
 paymentsRouter.post('/topup', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = topupSchema.parse(req.body);
-    const result = await payments.createTopupPayment(req.user!.id, data.tokenPackageId);
-    res.json(result);
-  } catch (e) {
-    next(e);
-  }
-});
-
-paymentsRouter.post('/order/:orderId', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const result = await payments.createOrderPayment(req.user!.id, req.params.orderId);
+    const result = await payments.createTopupPayment(req.user!.id, data);
     res.json(result);
   } catch (e) {
     next(e);

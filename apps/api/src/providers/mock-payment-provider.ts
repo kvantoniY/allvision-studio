@@ -19,7 +19,7 @@ export class MockPaymentProvider implements PaymentProvider {
   async createPayment(params: {
     amountRub: number;
     userId: string;
-    purpose: 'topup' | 'order';
+    purpose: 'topup';
     metadata: Record<string, string>;
   }): Promise<{ paymentId: string; confirmationUrl: string }> {
     const paymentId = params.metadata.paymentId ?? `mock_${crypto.randomUUID()}`;

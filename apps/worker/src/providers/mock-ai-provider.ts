@@ -2,51 +2,32 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
-  AIProvider,
   AIJobHandle,
   AIJobStatus,
-  FairyTaleScript,
+  AIProvider,
+  GenerationKind,
   NSFWCheckResult,
   StorageProvider,
 } from '@allvision/shared';
 
-type MockService = 'photo-restore' | 'photo-animate' | 'trend' | 'episode-image' | 'episode-video';
-type ResultType = 'image' | 'video';
+type ResultType = 'text' | 'audio' | 'image' | 'video';
 
 interface MockJobState {
   startedAt: number;
   durationMs: number;
-  resultDemoPath: string;
+  kind: GenerationKind;
+  mode: string;
   resultType: ResultType;
-  service: MockService;
+  resultDemoPath?: string;
   cachedResultUrl?: string;
-  cachedResultKey?: string;
 }
 
 export interface MockAIProviderOptions {
   storageProvider: StorageProvider;
   demoAssetsRoot?: string;
-  /** Минимальная задержка задачи (мс). Дефолт 5000. */
   minDurationMs?: number;
-  /** Максимальная задержка задачи (мс). Дефолт 15000. */
   maxDurationMs?: number;
 }
-
-const SERVICE_DIRS: Record<MockService, string> = {
-  'photo-restore': 'photo-restore',
-  'photo-animate': 'photo-animate',
-  trend: 'trends',
-  'episode-image': 'episodes/images',
-  'episode-video': 'episodes/videos',
-};
-
-const SERVICE_RESULT_TYPE: Record<MockService, ResultType> = {
-  'photo-restore': 'image',
-  'photo-animate': 'video',
-  trend: 'video',
-  'episode-image': 'image',
-  'episode-video': 'video',
-};
 
 const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -59,32 +40,37 @@ function inferContentType(ext: string, fallback: ResultType): string {
   if (e === '.mp4') return 'video/mp4';
   if (e === '.webm') return 'video/webm';
   if (e === '.mov') return 'video/quicktime';
-  return fallback === 'image' ? 'image/jpeg' : 'video/mp4';
+  return fallback === 'image' ? 'image/jpeg' : fallback === 'audio' ? 'audio/mpeg' : 'video/mp4';
 }
 
 function listAssets(dir: string, expected: ResultType): string[] {
   if (!fs.existsSync(dir)) return [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   return entries
-    .filter((e) => e.isFile())
-    .map((e) => path.join(dir, e.name))
-    .filter((p) => {
-      const ext = path.extname(p).toLowerCase();
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.join(dir, entry.name))
+    .filter((filePath) => {
+      const ext = path.extname(filePath).toLowerCase();
       return expected === 'image' ? IMAGE_EXTS.has(ext) : VIDEO_EXTS.has(ext);
     });
+}
+
+function resultTypeForKind(kind: GenerationKind): ResultType {
+  if (kind === 'TEXT') return 'text';
+  if (kind === 'AUDIO') return 'audio';
+  if (kind === 'IMAGE') return 'image';
+  return 'video';
 }
 
 export class MockAIProvider implements AIProvider {
   name = 'mock';
 
-  private storage: StorageProvider;
+  private jobs = new Map<string, MockJobState>();
   private demoAssetsRoot: string;
   private minDurationMs: number;
   private maxDurationMs: number;
-  private jobs = new Map<string, MockJobState>();
 
-  constructor(options: MockAIProviderOptions) {
-    this.storage = options.storageProvider;
+  constructor(private options: MockAIProviderOptions) {
     this.demoAssetsRoot = path.resolve(
       options.demoAssetsRoot ?? process.env.DEMO_ASSETS_ROOT ?? './apps/api/demo-assets',
     );
@@ -92,143 +78,82 @@ export class MockAIProvider implements AIProvider {
     this.maxDurationMs = options.maxDurationMs ?? 15000;
   }
 
-  private pickAsset(service: MockService): { filePath: string; resultType: ResultType } {
-    const resultType = SERVICE_RESULT_TYPE[service];
-    const dir = path.join(this.demoAssetsRoot, SERVICE_DIRS[service]);
-    let files = listAssets(dir, resultType);
-    if (files.length === 0 && service === 'episode-image') {
-      files = listAssets(path.join(this.demoAssetsRoot, SERVICE_DIRS['photo-restore']), resultType);
-    }
-    if (files.length === 0 && service === 'episode-video') {
-      files = listAssets(path.join(this.demoAssetsRoot, SERVICE_DIRS['photo-animate']), resultType);
-    }
-    if (files.length === 0) {
-      throw new Error(
-        `DEMO_ASSETS_EMPTY: папка ${dir} пуста или не существует. Запустите: npm run demo:download`,
-      );
-    }
-    const filePath = files[Math.floor(Math.random() * files.length)];
-    return { filePath, resultType };
-  }
-
-  private createJob(service: MockService): AIJobHandle {
-    const { filePath, resultType } = this.pickAsset(service);
-    const jobId = crypto.randomUUID();
+  async createGeneration(params: {
+    generationId: string;
+    kind: GenerationKind;
+    mode: string;
+  }): Promise<AIJobHandle> {
+    const providerJobId = crypto.randomUUID();
     const span = this.maxDurationMs - this.minDurationMs;
     const durationMs = this.minDurationMs + Math.floor(Math.random() * Math.max(1, span));
-    this.jobs.set(jobId, {
+    const resultType = resultTypeForKind(params.kind);
+    const resultDemoPath = this.pickDemoAsset(params.mode, resultType);
+
+    this.jobs.set(providerJobId, {
       startedAt: Date.now(),
       durationMs,
-      resultDemoPath: filePath,
+      kind: params.kind,
+      mode: params.mode,
       resultType,
-      service,
+      resultDemoPath,
     });
-    return { providerJobId: jobId };
+
+    return { providerJobId, metadata: { generationId: params.generationId } };
   }
 
-  async restorePhoto(_params: {
-    imageUrl: string;
-    config: Record<string, any>;
-  }): Promise<AIJobHandle> {
-    return this.createJob('photo-restore');
-  }
+  private pickDemoAsset(mode: string, resultType: ResultType): string | undefined {
+    if (resultType !== 'image' && resultType !== 'video') return undefined;
 
-  async animateImage(_params: {
-    imageUrl: string;
-    config: Record<string, any>;
-  }): Promise<AIJobHandle> {
-    return this.createJob('photo-animate');
-  }
+    const candidates =
+      resultType === 'image'
+        ? ['photo-restore']
+        : mode.includes('animate')
+          ? ['photo-animate', 'trends']
+          : ['trends', 'photo-animate'];
 
-  async generateTrend(_params: {
-    imageUrl: string;
-    trendPrompt: string;
-    model: string;
-    config: Record<string, any>;
-  }): Promise<AIJobHandle> {
-    return this.createJob('trend');
-  }
-
-  async generateEpisodeImage(_params: {
-    prompt: string;
-    characterReferences: string[];
-    sceneReference?: string;
-    style: string;
-    aspectRatio: string;
-  }): Promise<AIJobHandle> {
-    return this.createJob('episode-image');
-  }
-
-  async animateEpisodeVideo(_params: {
-    imageUrl: string;
-    durationSeconds: number;
-    style: string;
-  }): Promise<AIJobHandle> {
-    return this.createJob('episode-video');
-  }
-
-  async generateFairyTaleScript(params: {
-    childName: string;
-    childAge: number;
-    moralLesson: string;
-    additionalDetails?: string;
-    durationMinutes: number;
-  }): Promise<FairyTaleScript> {
-    const dir = path.join(this.demoAssetsRoot, 'fairy-tales');
-    if (!fs.existsSync(dir)) {
-      throw new Error(`DEMO_ASSETS_EMPTY: ${dir}`);
+    for (const dir of candidates) {
+      const files = listAssets(path.join(this.demoAssetsRoot, dir), resultType);
+      if (files.length > 0) return files[Math.floor(Math.random() * files.length)];
     }
-    const templates = fs
-      .readdirSync(dir)
-      .filter((f) => /^template-.+\.json$/i.test(f));
-    if (templates.length === 0) {
-      throw new Error(`DEMO_ASSETS_EMPTY: нет JSON-шаблонов сказок в ${dir}`);
-    }
-    const file = templates[Math.floor(Math.random() * templates.length)];
-    const raw = fs.readFileSync(path.join(dir, file), 'utf8');
 
-    const replacements: Record<string, string> = {
-      '{{childName}}': params.childName,
-      '{{childAge}}': String(params.childAge),
-      '{{moralLesson}}': params.moralLesson,
-      '{{additionalDetails}}': params.additionalDetails ?? '',
-    };
-
-    const replaced = Object.entries(replacements).reduce(
-      (s, [from, to]) => s.split(from).join(to),
-      raw,
-    );
-
-    const parsed = JSON.parse(replaced) as Omit<FairyTaleScript, 'tokensCost'>;
-    return {
-      ...parsed,
-      durationMinutes: params.durationMinutes || parsed.durationMinutes,
-      tokensCost: 5,
-    };
+    return undefined;
   }
 
-  async checkNSFW(imageUrl: string): Promise<NSFWCheckResult> {
-    const delayMs = 500 + Math.floor(Math.random() * 1000);
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
-
-    if (imageUrl.toLowerCase().includes('nsfw')) {
+  async checkNSFW(inputUrl: string): Promise<NSFWCheckResult> {
+    if (inputUrl.toLowerCase().includes('nsfw')) {
       return { safe: false, score: 0.98, reason: 'EXPLICIT_CONTENT' };
     }
-
     return { safe: true, score: 0.05 };
   }
 
   async getJobStatus(handle: AIJobHandle): Promise<AIJobStatus> {
     const state = this.jobs.get(handle.providerJobId);
-    if (!state) {
-      throw new Error('JOB_NOT_FOUND');
-    }
+    if (!state) throw new Error('JOB_NOT_FOUND');
 
     const elapsed = Date.now() - state.startedAt;
-
     if (elapsed < state.durationMs) {
-      const progress = Math.min(99, Math.round((elapsed / state.durationMs) * 100));
-      return { status: 'processing', progress };
+      return {
+        status: 'processing',
+        progress: Math.min(99, Math.round((elapsed / state.durationMs) * 100)),
+      };
+    }
+
+    if (state.resultType === 'text') {
+      return {
+        status: 'completed',
+        progress: 100,
+        resultText: 'Mock text generation result.',
+        resultType: 'text',
+      };
+    }
+
+    if (!state.resultDemoPath) {
+      return {
+        status: 'completed',
+        progress: 100,
+        resultUrl: '/static/placeholders/preset-default.jpg',
+        resultType: state.resultType,
+      };
     }
 
     if (state.cachedResultUrl) {
@@ -244,10 +169,9 @@ export class MockAIProvider implements AIProvider {
     const buffer = await fs.promises.readFile(state.resultDemoPath);
     const key = `results/mock/${handle.providerJobId}${ext}`;
     const contentType = inferContentType(ext, state.resultType);
-    const { url } = await this.storage.upload({ key, body: buffer, contentType });
+    const { url } = await this.options.storageProvider.upload({ key, body: buffer, contentType });
 
     state.cachedResultUrl = url;
-    state.cachedResultKey = key;
 
     return {
       status: 'completed',

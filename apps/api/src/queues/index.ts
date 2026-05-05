@@ -2,10 +2,8 @@ import { Queue, type JobsOptions } from 'bullmq';
 import IORedis, { type Redis } from 'ioredis';
 import {
   QUEUE_NAMES,
-  type CharacterNsfwJobData,
-  type EpisodeJobData,
-  type FairyTaleJobData,
-  type ProjectJobData,
+  type GenerationJobData,
+  type NsfwCheckJobData,
   type QueueName,
 } from '@allvision/shared';
 
@@ -37,36 +35,12 @@ export function getQueue(name: QueueName): Queue {
   return q;
 }
 
-export async function addProjectJob(
-  name: typeof QUEUE_NAMES.PHOTO_RESTORE | typeof QUEUE_NAMES.PHOTO_ANIMATE | typeof QUEUE_NAMES.TREND,
-  data: ProjectJobData,
-  opts?: JobsOptions,
-) {
-  return getQueue(name).add(name, data, opts);
+export async function addGenerationJob(data: GenerationJobData, opts?: JobsOptions) {
+  return getQueue(QUEUE_NAMES.GENERATION).add(QUEUE_NAMES.GENERATION, data, opts);
 }
 
-export async function addFairyTaleScriptJob(data: FairyTaleJobData, opts?: JobsOptions) {
-  return getQueue(QUEUE_NAMES.FAIRY_TALE_SCRIPT).add(
-    QUEUE_NAMES.FAIRY_TALE_SCRIPT,
-    data,
-    opts,
-  );
-}
-
-export async function addCharacterJob(data: CharacterNsfwJobData, opts?: JobsOptions) {
-  return getQueue(QUEUE_NAMES.CHARACTER_NSFW).add(
-    QUEUE_NAMES.CHARACTER_NSFW,
-    data,
-    opts,
-  );
-}
-
-export async function addEpisodeJob(data: EpisodeJobData, opts?: JobsOptions) {
-  return getQueue(QUEUE_NAMES.EPISODE).add(
-    QUEUE_NAMES.EPISODE,
-    data,
-    opts,
-  );
+export async function addNsfwCheckJob(data: NsfwCheckJobData, opts?: JobsOptions) {
+  return getQueue(QUEUE_NAMES.NSFW_CHECK).add(QUEUE_NAMES.NSFW_CHECK, data, opts);
 }
 
 export async function closeQueues() {

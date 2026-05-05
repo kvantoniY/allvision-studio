@@ -2,7 +2,7 @@ export interface PaymentProvider {
   createPayment(params: {
     amountRub: number;
     userId: string;
-    purpose: 'topup' | 'order';
+    purpose: 'topup';
     metadata: Record<string, string>;
   }): Promise<{ paymentId: string; confirmationUrl: string }>;
 
