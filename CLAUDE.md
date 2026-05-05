@@ -47,25 +47,71 @@
 
 Ассеты создаются один раз и переиспользуются в множестве услуг.
 
+### Реестр блоков (программная часть pipelines)
+
+Блок — это атомарная AI-операция, описанная в коде. Каждый блок:
+
+- `inputSchema` (zod) — что блок принимает.
+- `outputSchema` — что возвращает (URL файла + metadata).
+- `paramsSchema` — какие параметры админ может настроить.
+- `supportedModels` — список моделей с метаданными (название, tier hint, estimatedCost).
+- `executor` — функция `(params, ctx) → output`, с прогрессом через `ctx.reportProgress(percent)`.
+
+Стартовый набор блоков (P1, минимум под первые 5 услуг):
+
+- `image-restore` — восстановление старого фото.
+- `image-upscale` — увеличение разрешения.
+- `image-to-video` — анимация фото в видео.
+- `face-swap-video` — свап лица в готовом видео.
+- `video-compose` — финальная сборка через ffmpeg (watermark, музыка, титры).
+- `text-to-video` — генерация видео по промпту.
+
+Остальные блоки (`text-to-image`, `text-to-speech`, `voice-clone`, `audio-mix`, `image-edit`, `image-stylize`, `add-subtitles` и т.д.) добавляются отдельными этапами, когда появляются услуги, которым они нужны.
+
+Реестр блоков (`apps/worker/src/blocks/registry.ts`) — статичный TypeScript-объект. Реестр автоматически экспортируется в API через эндпоинт `GET /api/admin/blocks`, чтобы админка показывала список доступных блоков и их параметров.
+
 ### Pipeline-подход (готовые решения)
 
-Каждое «готовое решение» — это **pipeline** в `apps/worker/src/pipelines/{slug}.ts`. Pipeline — последовательность AI-шагов с прогрессом, обновляемая через общий ctx-helper.
+Pipeline услуги — это последовательность шагов (steps), полностью описанная в БД. Шаги собираются админом в `/admin/services` через табличный конструктор: список шагов сверху вниз, drag-handle для перестановки, у каждого шага раскрывающаяся форма параметров.
 
-Pipelines **зарегистрированы статически в коде** через `pipelines/registry.ts`. Это намеренно: pipeline определяет «как технически работает» (выбор модели по tier'у, последовательность шагов, обработка ошибок) и не должен меняться через интерфейс.
+Pipeline хранится в `Service.pipelineConfig: Json` как массив:
+
+```json
+[
+  { "id": "step_1", "blockSlug": "image-restore", "params": { "model": "gfpgan" } },
+  { "id": "step_2", "blockSlug": "image-to-video", "params": { "model": "{{tier_model}}", "duration": 5, "prompt": "..." } },
+  { "id": "step_3", "blockSlug": "video-compose", "params": { "watermark": true } }
+]
+```
+
+Шаги могут ссылаться на результаты предыдущих через плейсхолдеры (`{{step_1.output}}`), на ввод юзера (`{{user.photo}}`, `{{user.name}}`), на выбранный tier (`{{tier_model}}` подставит модель Standard или Pro).
+
+Универсальный исполнитель в worker (`pipeline-runner.ts`) принимает массив шагов и состояние, прогоняет последовательно с прогрессом по общему процессу.
+
+В первой версии — только линейные pipelines, без if/else. Ветвления добавляются отдельным этапом, когда понадобятся.
 
 ### Admin services (готовые решения как продуктовые единицы)
 
-Сама **услуга** (что юзер видит на витрине) хранится в БД и редактируется админом через `/admin/services`. Каждая услуга:
+Услуга в БД (`Service`, расширение существующей модели `Trend`) хранит:
 
-- `pipelineSlug` — какой pipeline вызвать (выбор из зарегистрированных в коде).
-- `aiModelStandard`, `aiModelPro` — конкретные модели для двух tier'ов.
-- `priceCoinsStandard`, `priceCoinsPro` — цены.
-- `promptTemplate` — параметризуемый промпт с плейсхолдерами `{{user_input}}`, `{{avatar}}`, и т.д.
+- `slug` — URL-идентификатор.
+- `title`, `shortDesc`, `description` — тексты для витрины.
 - `category` — Ностальгия / Тренды / Дети / Особые поводы.
-- `previewImage`, `previewVideo`, `title`, `shortDesc`, `description`.
+- `pipelineConfig: Json` — массив шагов pipeline (см. выше).
+- `userInputForm: Json` — описание формы для юзера на странице услуги (поля, типы, валидация).
+- `priceCoinsStandard`, `priceCoinsPro` — цены за два tier'а.
+- `previewImage`, `previewVideo` — для каталога и страницы услуги.
 - `isActive`, `isFeatured`, `sortOrder`.
 
-Это даёт разделение: программист пишет один pipeline «оживить фото», админ создаёт 5 услуг на его основе с разными промптами, превью и ценами («Оживить свадебное фото», «Оживить армейское фото», «Оживить детское фото»).
+Админ в `/admin/services` создаёт и редактирует услуги полностью через UI:
+
+- Конструктор pipeline (табличный, с drag-handle).
+- Редактор формы юзера.
+- Калькулятор себестоимости (сумма estimatedCost всех шагов).
+- Тестовый прогон с моковыми данными.
+- Управление превью и метаданными.
+
+Программист в код добавляет новые блоки в реестр, когда появляется потребность в новой AI-операции.
 
 ### Admin custom orders (заказы — полностью data-driven)
 
@@ -115,22 +161,24 @@ Pipelines **зарегистрированы статически в коде** 
 
 ## План перепрофилирования
 
-### Этап P1 — Расширение БД и pipeline-фреймворк
+### Этап P1 — БД, реестр блоков, pipeline-runner (бэкенд без UI)
 
-- Расширение модели Trend → ServicePreset с полями pipelineSlug, aiModelStandard/Pro, priceCoinsStandard/Pro, category, promptTemplate.
+- Расширение модели Trend → Service с полями pipelineConfig, userInputForm, priceCoinsStandard/Pro, category.
 - Категории как enum (Ностальгия / Тренды / Дети / Особые поводы).
-- Pipeline registry в worker, базовый ctx с прогрессом по шагам.
+- Реестр блоков в коде (6 стартовых блоков, mock-implementations).
+- Универсальный pipeline-runner в worker.
+- API endpoints: список блоков для админки, тестовый прогон pipeline.
 - Миграция БД, seed обновлённый.
 
-### Этап P2 — Пилотные pipelines
+### Этап P2 — Админка услуг с табличным конструктором (UI)
 
-- 4-5 готовых решений на mock'ах:
-  - photo-revive (оживление старого фото, шаги: restore → animate → compose).
-  - meme-face-swap (face swap в публичный мем).
-  - kid-in-cartoon (ребёнок в стилизованном мире).
-  - retro-2017 (фото в эстетике 2017).
-  - anniversary-card (юбилейная видео-открытка).
-- Для каждого pipeline mock возвращает demo-asset, прогресс по шагам.
+- `/admin/services` CRUD: список, создание, редактирование.
+- Табличный конструктор pipeline (список шагов, drag-handle, форма параметров для каждого).
+- Конструктор формы юзера (`UserInputForm`).
+- Тестовый прогон в админке с моковыми данными и просмотром логов каждого шага.
+- Калькулятор себестоимости.
+- Управление превью (image/video) и метаданными.
+- Toggle isActive/isFeatured, sortOrder.
 
 ### Этап P3 — Frontend перепаковка
 
