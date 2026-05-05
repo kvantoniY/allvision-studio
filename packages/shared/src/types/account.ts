@@ -1,37 +1,28 @@
-import type {
-  Order,
-  Payment,
-  Project,
-  Role,
-  MessengerType,
-  TokenTransaction,
-} from '@allvision/database';
+import type { CoinTransaction, Generation, Role } from './generation';
 
 export type AccountUser = {
   id: string;
   email: string;
   name: string | null;
-  avatar: string | null;
-  tokenBalance: number;
   role: Role;
-  messenger: string | null;
-  messengerType: MessengerType | null;
+  coinBalance: number;
+  avatar?: string | null;
+  tokenBalance?: number;
   createdAt: Date | string;
 };
 
 export type DashboardStats = {
-  totalProjects: number;
-  completedProjects: number;
-  activeOrders: number;
-  totalSpent: number;
+  totalGenerations: number;
+  completedGenerations: number;
+  activeGenerations: number;
+  totalCoinsSpent: number;
 };
 
 export type DashboardResponse = {
   user: AccountUser;
   stats: DashboardStats;
-  recentProjects: Project[];
-  activeOrders: Order[];
-  recentTransactions: TokenTransaction[];
+  recentGenerations: Generation[];
+  recentTransactions: CoinTransaction[];
 };
 
 export type Paginated<T> = {
@@ -41,7 +32,6 @@ export type Paginated<T> = {
   totalPages: number;
 };
 
-export type TransactionsResponse = Paginated<TokenTransaction>;
-export type PaymentsResponse = Paginated<Payment>;
+export type TransactionsResponse = Paginated<CoinTransaction>;
 
 export type UpdateProfileResponse = { user: AccountUser };

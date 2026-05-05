@@ -1,4 +1,14 @@
-import type { ProcessingType, ServiceCategory } from '@allvision/database';
+import type { GenerationKind, PresetCategory } from './generation';
+
+export type PublicServiceCategory =
+  | 'PHOTO_RESTORE'
+  | 'PHOTO_ANIMATE'
+  | 'TREND'
+  | 'CARTOON_CUSTOM'
+  | 'REALISTIC_CUSTOM'
+  | 'FAIRY_TALE';
+
+export type PublicProcessingType = 'AUTO' | 'MANUAL' | 'HYBRID';
 
 export type PublicService = {
   id: string;
@@ -6,11 +16,11 @@ export type PublicService = {
   title: string;
   description: string;
   shortDesc: string;
-  category: ServiceCategory;
+  category: PublicServiceCategory;
   priceTokens: number;
   coverImage: string | null;
   galleryImages: string[];
-  processingType: ProcessingType;
+  processingType: PublicProcessingType;
   sortOrder: number;
 };
 
@@ -27,6 +37,26 @@ export type PublicTrend = {
   viewsCount: number;
   usedCount: number;
   serviceId: string;
+};
+
+export type PublicPresetRecipe = {
+  id: string;
+  slug: string;
+  title: string;
+  shortDesc: string;
+  description: string;
+  category: PresetCategory;
+  kind: GenerationKind;
+  mode: string;
+  promptHint: string | null;
+  needsInput: boolean;
+  acceptedInput: string | null;
+  coinsCost: number;
+  previewImage: string;
+  previewVideo: string | null;
+  tags: string[];
+  isFeatured: boolean;
+  sortOrder: number;
 };
 
 export type PublicScenarioTemplateRole = {
@@ -80,6 +110,8 @@ export type PublicServicesResponse = { services: PublicService[] };
 export type PublicServiceResponse = { service: PublicService };
 export type PublicTrendsResponse = { trends: PublicTrend[] };
 export type PublicTrendResponse = { trend: PublicTrend };
+export type PublicPresetRecipesResponse = { presets: PublicPresetRecipe[] };
+export type PublicPresetRecipeResponse = { preset: PublicPresetRecipe };
 export type PublicScenarioTemplatesResponse = { templates: PublicScenarioTemplate[] };
 export type PublicScenarioTemplateResponse = { template: PublicScenarioTemplate };
 export type PublicTokenPackagesResponse = { packages: PublicTokenPackage[] };

@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { MessengerType } from '@allvision/database';
+const MessengerType = {
+  TELEGRAM: 'TELEGRAM',
+  WHATSAPP: 'WHATSAPP',
+  VK: 'VK',
+  PHONE: 'PHONE',
+} as const;
 
 export const updateProfileSchema = z.object({
   name: z.string().min(2, 'Минимум 2 символа').max(100, 'Максимум 100 символов').optional(),
