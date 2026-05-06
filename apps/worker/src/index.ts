@@ -8,6 +8,7 @@ import { processTrend } from './processors/trend';
 import { processFairyTaleScript } from './processors/fairy-tale-script';
 import { processCharacterNsfw } from './processors/character-nsfw';
 import { processEpisode } from './processors/episode';
+import { processServicePipeline } from './processors/service-pipeline';
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const CONCURRENCY = 2;
@@ -28,6 +29,7 @@ const queues: Array<[QueueName, Processor]> = [
   [QUEUE_NAMES.FAIRY_TALE_SCRIPT, processFairyTaleScript as Processor],
   [QUEUE_NAMES.CHARACTER_NSFW, processCharacterNsfw as Processor],
   [QUEUE_NAMES.EPISODE, processEpisode as Processor],
+  [QUEUE_NAMES.SERVICE_PIPELINE, processServicePipeline as Processor],
 ];
 
 const workers = queues.map(([name, processor]) => {

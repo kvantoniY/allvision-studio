@@ -7,6 +7,7 @@ import {
   type FairyTaleJobData,
   type ProjectJobData,
   type QueueName,
+  type ServicePipelineJobData,
 } from '@allvision/shared';
 
 let connectionSingleton: Redis | undefined;
@@ -64,6 +65,14 @@ export async function addCharacterJob(data: CharacterNsfwJobData, opts?: JobsOpt
 export async function addEpisodeJob(data: EpisodeJobData, opts?: JobsOptions) {
   return getQueue(QUEUE_NAMES.EPISODE).add(
     QUEUE_NAMES.EPISODE,
+    data,
+    opts,
+  );
+}
+
+export async function addServicePipelineJob(data: ServicePipelineJobData, opts?: JobsOptions) {
+  return getQueue(QUEUE_NAMES.SERVICE_PIPELINE).add(
+    QUEUE_NAMES.SERVICE_PIPELINE,
     data,
     opts,
   );

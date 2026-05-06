@@ -5,6 +5,7 @@ export const QUEUE_NAMES = {
   FAIRY_TALE_SCRIPT: 'fairy-tale-script',
   CHARACTER_NSFW: 'character-nsfw',
   EPISODE: 'episode',
+  SERVICE_PIPELINE: 'service-pipeline',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -36,5 +37,10 @@ export interface CharacterNsfwJobData {
 
 export interface EpisodeJobData {
   episodeId: string;
+  userId: string;
+}
+
+export interface ServicePipelineJobData {
+  projectId: string;
   userId: string;
 }

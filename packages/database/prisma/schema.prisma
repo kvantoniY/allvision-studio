@@ -9,29 +9,29 @@ datasource db {
 
 // === Пользователи ===
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  passwordHash  String
-  name          String?
-  avatar        String?
-  tokenBalance  Int       @default(0)
-  freeCharacterUsed Boolean @default(false)
-  role          Role      @default(USER)
-  messenger     String?
-  messengerType MessengerType?
+  id                     String         @id @default(cuid())
+  email                  String         @unique
+  passwordHash           String
+  name                   String?
+  avatar                 String?
+  tokenBalance           Int            @default(0)
+  freeCharacterUsed      Boolean        @default(false)
+  role                   Role           @default(USER)
+  messenger              String?
+  messengerType          MessengerType?
   passwordResetToken     String?
   passwordResetExpiresAt DateTime?
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
+  deletedAt              DateTime?
+  createdAt              DateTime       @default(now())
 
-  projects      Project[]
-  payments      Payment[]
-  orders        Order[]
-  tokenTxns     TokenTransaction[]
-  fairyTales    FairyTaleScriptRecord[]
-  characters    Character[]
-  scenes        Scene[]
-  episodes      Episode[]
+  projects   Project[]
+  payments   Payment[]
+  orders     Order[]
+  tokenTxns  TokenTransaction[]
+  fairyTales FairyTaleScriptRecord[]
+  characters Character[]
+  scenes     Scene[]
+  episodes   Episode[]
 }
 
 enum Role {
@@ -48,27 +48,37 @@ enum MessengerType {
 
 // === Каталог услуг ===
 model Service {
-  id              String    @id @default(cuid())
-  slug            String    @unique
-  title           String
-  description     String    @db.Text
-  shortDesc       String
-  category        ServiceCategory
-  priceTokens     Int
-  costUsd         Float
-  coverImage      String?
-  galleryImages   String[]
-  isActive        Boolean   @default(true)
-  sortOrder       Int       @default(0)
-  aiProvider      String?
-  aiModel         String?
-  aiConfig        Json?
-  processingType  ProcessingType
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String          @id @default(cuid())
+  slug           String          @unique
+  title          String
+  description    String          @db.Text
+  shortDesc      String
+  category       ServiceCategory
+  priceTokens    Int
+  costUsd        Float
+  coverImage     String?
+  galleryImages  String[]
+  isActive       Boolean         @default(true)
+  isFeatured     Boolean         @default(false)
+  sortOrder      Int             @default(0)
+  aiProvider     String?
+  aiModel        String?
+  aiConfig       Json?
+  processingType ProcessingType
 
-  trends          Trend[]
-  projects        Project[]
+  // Data-driven gift factory pipeline (P1+)
+  pipelineConfig     Json?
+  userInputForm      Json?
+  priceCoinsStandard Int?
+  priceCoinsPro      Int?
+  previewImage       String?
+  previewVideo       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  trends   Trend[]
+  projects Project[]
 }
 
 enum ServiceCategory {
@@ -78,69 +88,81 @@ enum ServiceCategory {
   CARTOON_CUSTOM
   REALISTIC_CUSTOM
   FAIRY_TALE
+
+  // Gift factory categories (P1+)
+  NOSTALGIA
+  TRENDS_MEMES
+  KIDS_HEROES
+  SPECIAL_OCCASIONS
 }
+
 enum ProcessingType {
-  AUTO   // услуги 1-3: полный автомат
+  AUTO // услуги 1-3: полный автомат
   MANUAL // услуги 4-5: только ручной заказ
   HYBRID // услуга 6: AI-генерация части + ручная часть
 }
 
 // === Тренды ===
 model Trend {
-  id              String    @id @default(cuid())
-  title           String
-  description     String?
-  previewVideo    String
-  referenceImg    String?
-  referenceVideo  String?
-  prompt          String    @db.Text
-  negativePrompt  String?   @db.Text
-  aiProvider      String
-  aiModel         String
-  aiConfig        Json
-  tags            String[]
-  priceTokens     Int?
-  isActive        Boolean   @default(true)
-  sortOrder       Int       @default(0)
-  viewsCount      Int       @default(0)
-  usedCount       Int       @default(0)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String   @id @default(cuid())
+  title          String
+  description    String?
+  previewVideo   String
+  referenceImg   String?
+  referenceVideo String?
+  prompt         String   @db.Text
+  negativePrompt String?  @db.Text
+  aiProvider     String
+  aiModel        String
+  aiConfig       Json
+  tags           String[]
+  priceTokens    Int?
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  viewsCount     Int      @default(0)
+  usedCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  serviceId       String
-  service         Service   @relation(fields: [serviceId], references: [id])
-  projects        Project[]
+  serviceId String
+  service   Service   @relation(fields: [serviceId], references: [id])
+  projects  Project[]
 }
 
 // === Проекты (услуги 1-3) ===
 model Project {
-  id              String         @id @default(cuid())
-  userId          String
-  serviceId       String
-  trendId         String?
-  title           String
-  status          ProjectStatus  @default(PENDING)
-  progress        Int            @default(0)
+  id        String        @id @default(cuid())
+  userId    String
+  serviceId String
+  trendId   String?
+  title     String
+  status    ProjectStatus @default(PENDING)
+  progress  Int           @default(0)
 
-  inputImages     String[]
-  inputText       String?        @db.Text
+  inputImages String[]
+  inputText   String?  @db.Text
 
   resultImage     String?
   resultVideo     String?
   resultThumbnail String?
 
-  tokensCost      Int
-  errorMessage    String?        @db.Text
+  tokensCost   Int
+  errorMessage String? @db.Text
 
   aiProviderJobId String?
   aiProviderLogs  Json?
 
-  createdAt       DateTime       @default(now())
-  completedAt     DateTime?
+  pipelineSnapshot Json?
+  selectedTier     String?
+  userInputs       Json?
+  stepProgress     Json?
 
-  user            User           @relation(fields: [userId], references: [id])
-  service         Service        @relation(fields: [serviceId], references: [id])
-  trend           Trend?         @relation(fields: [trendId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user    User    @relation(fields: [userId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+  trend   Trend?  @relation(fields: [trendId], references: [id], onDelete: SetNull)
 }
 
 enum ProjectStatus {
@@ -152,37 +174,37 @@ enum ProjectStatus {
 
 // === Заказы (услуги 4-5-6) ===
 model Order {
-  id               String       @id @default(cuid())
-  userId           String
-  type             OrderType
-  status           OrderStatus  @default(NEW)
+  id     String      @id @default(cuid())
+  userId String
+  type   OrderType
+  status OrderStatus @default(NEW)
 
-  durationMinutes  Int
-  scenario         String       @db.Text
-  referenceFiles   String[]
-  contactInfo      String
+  durationMinutes Int
+  scenario        String   @db.Text
+  referenceFiles  String[]
+  contactInfo     String
 
-  adminNotes       String?      @db.Text
+  adminNotes       String? @db.Text
   scenesCount      Int?
   charactersCount  Int?
   complexityFactor Float?
 
-  priceRub         Int?
-  priceTokens      Int?
+  priceRub    Int?
+  priceTokens Int?
 
-  resultVideo      String?
-  resultDelivered  Boolean      @default(false)
+  resultVideo     String?
+  resultDelivered Boolean @default(false)
 
-  fairyTaleScriptId String?     @unique
+  fairyTaleScriptId String?                @unique
   fairyTaleScript   FairyTaleScriptRecord? @relation(fields: [fairyTaleScriptId], references: [id])
   fairyTaleTier     FairyTaleTier?
 
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user             User         @relation(fields: [userId], references: [id])
-  paymentId        String?      @unique
-  payment          Payment?     @relation(fields: [paymentId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+  paymentId String?  @unique
+  payment   Payment? @relation(fields: [paymentId], references: [id])
 }
 
 enum OrderType {
@@ -195,6 +217,7 @@ enum FairyTaleTier {
   BASIC
   EXTENDED
 }
+
 enum OrderStatus {
   NEW
   NEGOTIATING
@@ -208,46 +231,46 @@ enum OrderStatus {
 
 // === Сценарии сказок (услуга 6) ===
 model FairyTaleScriptRecord {
-  id                String    @id @default(cuid())
+  id                String  @id @default(cuid())
   userId            String
   childName         String
   childAge          Int
-  moralLesson       String    @db.Text
-  additionalDetails String?   @db.Text
-  durationMinutes   Int       @default(3)
+  moralLesson       String  @db.Text
+  additionalDetails String? @db.Text
+  durationMinutes   Int     @default(3)
 
-  title             String
-  content           Json
-  rawText           String    @db.Text
+  title   String
+  content Json
+  rawText String @db.Text
 
-  tokensCost        Int
-  isApproved        Boolean   @default(false)
-  approvedAt        DateTime?
+  tokensCost Int
+  isApproved Boolean   @default(false)
+  approvedAt DateTime?
 
-  createdAt         DateTime  @default(now())
+  createdAt DateTime @default(now())
 
-  user              User      @relation(fields: [userId], references: [id])
-  order             Order?
+  user  User   @relation(fields: [userId], references: [id])
+  order Order?
 }
 
 // === Платежи ===
 model Payment {
-  id                String        @id @default(cuid())
+  id                String         @id @default(cuid())
   userId            String
   amountRub         Int
   tokensAdded       Int?
-  status            PaymentStatus @default(PENDING)
-  provider          String        @default("mock")
+  status            PaymentStatus  @default(PENDING)
+  provider          String         @default("mock")
   providerPaymentId String?
   purpose           PaymentPurpose
   metadata          Json?
-  createdAt         DateTime      @default(now())
+  createdAt         DateTime       @default(now())
   paidAt            DateTime?
 
-  user              User          @relation(fields: [userId], references: [id])
-  order             Order?
-  character         Character?
-  scene             Scene?
+  user      User       @relation(fields: [userId], references: [id])
+  order     Order?
+  character Character?
+  scene     Scene?
 }
 
 enum PaymentStatus {
@@ -264,40 +287,40 @@ enum PaymentPurpose {
 
 // === AI-персонажи ===
 model Character {
-  id              String           @id @default(cuid())
-  userId          String
-  name            String
-  type            CharacterType
-  gender          CharacterGender?
-  ageGroup        String?
-  description     String?          @db.Text
+  id          String           @id @default(cuid())
+  userId      String
+  name        String
+  type        CharacterType
+  gender      CharacterGender?
+  ageGroup    String?
+  description String?          @db.Text
 
   // Reference images — основа подхода
   referenceImages String[]
-  primaryImageId  Int              @default(0)
+  primaryImageId  Int      @default(0)
 
   // Метаданные
-  consentGiven    Boolean          @default(false)
-  consentAt       DateTime?
-  nsfwChecked     Boolean          @default(false)
-  status          CharacterStatus  @default(DRAFT)
+  consentGiven Boolean         @default(false)
+  consentAt    DateTime?
+  nsfwChecked  Boolean         @default(false)
+  status       CharacterStatus @default(DRAFT)
 
   // Статистика
-  episodesCount   Int              @default(0)
-  lastUsedAt      DateTime?
+  episodesCount Int       @default(0)
+  lastUsedAt    DateTime?
 
   // Тарификация
-  isPaid          Boolean          @default(false)
-  paymentId       String?          @unique
+  isPaid    Boolean @default(false)
+  paymentId String? @unique
 
-  isActive        Boolean          @default(true)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user            User             @relation(fields: [userId], references: [id])
-  payment         Payment?         @relation(fields: [paymentId], references: [id])
-  episodes        EpisodeCharacter[]
-  reports         AbuseReport[]
+  user     User               @relation(fields: [userId], references: [id])
+  payment  Payment?           @relation(fields: [paymentId], references: [id])
+  episodes EpisodeCharacter[]
+  reports  AbuseReport[]
 }
 
 enum CharacterType {
@@ -323,43 +346,43 @@ enum CharacterStatus {
 
 // === Сцены (локации) ===
 model Scene {
-  id              String       @id @default(cuid())
+  id              String   @id @default(cuid())
   userId          String
   name            String
-  description     String       @db.Text
+  description     String   @db.Text
   referenceImages String[]
   category        String?
 
-  isPaid          Boolean      @default(false)
-  paymentId       String?      @unique
+  isPaid    Boolean @default(false)
+  paymentId String? @unique
 
-  isActive        Boolean      @default(true)
-  createdAt       DateTime     @default(now())
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
 
-  user            User         @relation(fields: [userId], references: [id])
-  payment         Payment?     @relation(fields: [paymentId], references: [id])
-  episodes        Episode[]
+  user     User      @relation(fields: [userId], references: [id])
+  payment  Payment?  @relation(fields: [paymentId], references: [id])
+  episodes Episode[]
 }
 
 // === Эпизоды (генерации с персонажами/сценами) ===
 model Episode {
-  id              String        @id @default(cuid())
-  userId          String
-  title           String
-  status          EpisodeStatus @default(PENDING)
-  progress        Int           @default(0)
+  id       String        @id @default(cuid())
+  userId   String
+  title    String
+  status   EpisodeStatus @default(PENDING)
+  progress Int           @default(0)
 
   // Откуда сценарий
-  templateId      String?
-  customScenario  String?       @db.Text
+  templateId     String?
+  customScenario String? @db.Text
 
   // Параметры
-  durationSeconds Int           @default(5)
+  durationSeconds Int     @default(5)
   style           String?
-  aspectRatio     String        @default("9:16")
+  aspectRatio     String  @default("9:16")
 
   // Сцена
-  sceneId         String?
+  sceneId String?
 
   // Результаты
   resultImage     String?
@@ -367,26 +390,26 @@ model Episode {
   resultThumbnail String?
 
   // Тарификация
-  tokensCost      Int
-  errorMessage    String?       @db.Text
+  tokensCost   Int
+  errorMessage String? @db.Text
 
   // AI-метаданные
   aiProviderJobId String?
   aiProviderLogs  Json?
 
   // Соцшеринг
-  isPublic        Boolean       @default(false)
-  shareCount      Int           @default(0)
-  watermarkRemoved Boolean      @default(false)
+  isPublic         Boolean @default(false)
+  shareCount       Int     @default(0)
+  watermarkRemoved Boolean @default(false)
 
-  createdAt       DateTime      @default(now())
-  completedAt     DateTime?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
 
-  user            User          @relation(fields: [userId], references: [id])
-  template        ScenarioTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  scene           Scene?        @relation(fields: [sceneId], references: [id], onDelete: SetNull)
-  characters      EpisodeCharacter[]
-  reports         AbuseReport[]
+  user       User               @relation(fields: [userId], references: [id])
+  template   ScenarioTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  scene      Scene?             @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  characters EpisodeCharacter[]
+  reports    AbuseReport[]
 }
 
 enum EpisodeStatus {
@@ -399,69 +422,69 @@ enum EpisodeStatus {
 
 // === Связь Эпизодов и Персонажей (M:N) ===
 model EpisodeCharacter {
-  episodeId       String
-  characterId     String
-  role            String?
+  episodeId   String
+  characterId String
+  role        String?
 
-  episode         Episode      @relation(fields: [episodeId], references: [id])
-  character       Character    @relation(fields: [characterId], references: [id])
+  episode   Episode   @relation(fields: [episodeId], references: [id])
+  character Character @relation(fields: [characterId], references: [id])
 
   @@id([episodeId, characterId])
 }
 
 // === Шаблоны сценариев (каталог) ===
 model ScenarioTemplate {
-  id                  String       @id @default(cuid())
-  slug                String       @unique
-  title               String
-  shortDesc           String
-  description         String       @db.Text
-  category            String
+  id          String @id @default(cuid())
+  slug        String @unique
+  title       String
+  shortDesc   String
+  description String @db.Text
+  category    String
 
-  previewVideo        String
-  previewImage        String
+  previewVideo String
+  previewImage String
 
   // Конфиг
-  promptTemplate      String       @db.Text
+  promptTemplate      String  @db.Text
   characterRoles      Json
-  needsScene          Boolean      @default(false)
-  recommendedDuration Int          @default(10)
-  defaultStyle        String       @default("cinematic")
+  needsScene          Boolean @default(false)
+  recommendedDuration Int     @default(10)
+  defaultStyle        String  @default("cinematic")
 
-  aiProvider          String       @default("fal")
-  aiModel             String
-  aiConfig            Json
+  aiProvider String @default("fal")
+  aiModel    String
+  aiConfig   Json
 
-  priceTokens         Int
+  priceTokens Int
 
-  tags                String[]
-  popularityScore     Int          @default(0)
-  isActive            Boolean      @default(true)
-  isFeatured          Boolean      @default(false)
-  sortOrder           Int          @default(0)
+  tags            String[]
+  popularityScore Int      @default(0)
+  isActive        Boolean  @default(true)
+  isFeatured      Boolean  @default(false)
+  sortOrder       Int      @default(0)
 
-  createdAt           DateTime     @default(now())
-  updatedAt           DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  episodes            Episode[]
+  episodes Episode[]
 }
 
 // === Жалобы на злоупотребления ===
 model AbuseReport {
-  id              String       @id @default(cuid())
-  reporterUserId  String?
-  reporterEmail   String?
-  characterId     String?
-  episodeId       String?
-  reason          AbuseReason
-  description     String       @db.Text
-  status          ReportStatus @default(NEW)
-  adminNotes      String?      @db.Text
-  resolvedAt      DateTime?
-  createdAt       DateTime     @default(now())
+  id             String       @id @default(cuid())
+  reporterUserId String?
+  reporterEmail  String?
+  characterId    String?
+  episodeId      String?
+  reason         AbuseReason
+  description    String       @db.Text
+  status         ReportStatus @default(NEW)
+  adminNotes     String?      @db.Text
+  resolvedAt     DateTime?
+  createdAt      DateTime     @default(now())
 
-  character       Character?   @relation(fields: [characterId], references: [id])
-  episode         Episode?     @relation(fields: [episodeId], references: [id])
+  character Character? @relation(fields: [characterId], references: [id])
+  episode   Episode?   @relation(fields: [episodeId], references: [id])
 }
 
 enum AbuseReason {
@@ -483,27 +506,27 @@ enum ReportStatus {
 
 // === Транзакции токенов (лог) ===
 model TokenTransaction {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   userId       String
   amount       Int
   reason       String
   refId        String?
   balanceAfter Int
-  createdAt    DateTime  @default(now())
+  createdAt    DateTime @default(now())
 
-  user         User      @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
 // === Пакеты токенов ===
 model TokenPackage {
-  id          String   @id @default(cuid())
-  title       String
-  tokens      Int
-  priceRub    Int
-  bonus       Int      @default(0)
-  isPopular   Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
+  id        String  @id @default(cuid())
+  title     String
+  tokens    Int
+  priceRub  Int
+  bonus     Int     @default(0)
+  isPopular Boolean @default(false)
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
 }
 
 // === Настройки (key-value) ===

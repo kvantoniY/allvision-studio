@@ -213,6 +213,47 @@ Pipeline хранится в `Service.pipelineConfig: Json` как массив:
 - Базовое SEO, аналитика.
 - Лендинги для трафика по категориям.
 
+## Этап P1 ✅
+
+Миграция `20260506093024_add_data_driven_services`:
+
+- `ServiceCategory` расширен gift-factory категориями: `NOSTALGIA`, `TRENDS_MEMES`, `KIDS_HEROES`, `SPECIAL_OCCASIONS`.
+- Существующая модель `Service` расширена полями `pipelineConfig`, `userInputForm`, `priceCoinsStandard`, `priceCoinsPro`, `previewImage`, `previewVideo`, `isFeatured`.
+- Существующая модель `Project` используется как generation-equivalent для P1 и расширена полями `pipelineSnapshot`, `selectedTier`, `userInputs`, `stepProgress`.
+
+Реестр блоков:
+
+- Добавлен shared-каталог блоков в `packages/shared/src/blocks` для API/admin UI.
+- Исполняемый registry в `apps/worker/src/blocks/registry.ts`.
+- 6 стартовых mock-блоков: `image-restore`, `image-upscale`, `image-to-video`, `face-swap-video`, `video-compose`, `text-to-video`.
+- API не импортирует worker напрямую: сериализуемая metadata живёт в shared, executors — в worker.
+
+Pipeline-runner:
+
+- `apps/worker/src/pipeline-runner.ts` исполняет линейный `pipelineConfig` сверху вниз.
+- Поддержаны плейсхолдеры `{{user.field}}`, `{{step_1.output}}`, `{{step_1.url}}` и tier-select объект `{ standard, pro }`.
+- Прогресс шага агрегируется в общий `Project.progress`, состояние шагов сохраняется в `Project.stepProgress`.
+- При ошибке runner переводит `Project` в `FAILED` через существующий refund-паттерн `markProjectFailed`.
+
+API:
+
+- `GET /api/admin/blocks` возвращает каталог доступных блоков для будущей админки.
+- `POST /api/admin/services/:id/test-run` создаёт zero-cost `Project` с `pipelineSnapshot` и ставит job в новую очередь `service-pipeline`.
+
+Тесты и проверки:
+
+- Добавлено 9 тестов: 2 API (`admin-blocks`) и 7 worker (`blocks-registry`, `pipeline-runner`).
+- API: `139 passed`.
+- Worker: `7 passed`.
+- Всего по API+worker: 146 tests.
+- Все builds зелёные, включая root `npm run build`.
+
+Нестандартные решения и долги:
+
+- Отдельную модель `Generation` в P1 не вводили: в текущей Studio v1 уже есть `Project` со статусом, прогрессом, результатами и refund-логикой. Это снижает риск и сохраняет старые 137 тестов.
+- Старые очереди `photo-restore`, `photo-animate`, `trend`, `episode` оставлены для обратной совместимости. Новый data-driven flow идёт через `service-pipeline`.
+- Seed пока не создаёт реальные gift-factory услуги; это остаётся для P3/P4 вместе с витриной и админкой.
+
 ## Конвенции разработки
 
 - Промпты на этапы пишет ассистент (Claude в чате), исполняет Claude Code.

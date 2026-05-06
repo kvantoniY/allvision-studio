@@ -1,0 +1,41 @@
+import { z } from 'zod';
+import { getBlockCatalogItem } from '@allvision/shared';
+import type { BlockDefinition } from './types';
+import {
+  anyInputSchema,
+  asObject,
+  blockOutputSchema,
+  estimateFromSupportedModel,
+  readInputUrl,
+  tierModelParamsSchema,
+  waitForAIJob,
+} from './utils';
+
+const catalog = getBlockCatalogItem('image-to-video');
+if (!catalog) throw new Error('Block catalog metadata missing: image-to-video');
+
+const paramsSchema = z.object({
+  model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  duration: z.number().min(1).max(30).optional(),
+  prompt: z.string().optional(),
+});
+
+export const imageToVideoBlock: BlockDefinition = {
+  ...catalog,
+  inputSchema: anyInputSchema,
+  outputSchema: blockOutputSchema,
+  paramsSchema,
+  estimatedCostCoins: (params) =>
+    estimateFromSupportedModel(params, 20, catalog.supportedModels),
+  async executor(params, input, ctx) {
+    const parsed = paramsSchema.parse(params);
+    await ctx.reportProgress(5);
+    const handle = await ctx.getAIProvider().animateImage({
+      imageUrl: readInputUrl(input),
+      config: asObject(parsed),
+    });
+    const output = await waitForAIJob({ handle, ctx, expectedType: 'video' });
+    await ctx.reportProgress(100);
+    return output;
+  },
+};

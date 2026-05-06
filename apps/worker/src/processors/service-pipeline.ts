@@ -1,0 +1,49 @@
+import type { Job } from 'bullmq';
+import { prisma } from '@allvision/database';
+import type { ServicePipelineJobData } from '@allvision/shared';
+import { markProjectFailed } from './base';
+import { runPipeline } from '../pipeline-runner';
+import { logger } from '../utils/logger';
+
+export async function processServicePipeline(job: Job<ServicePipelineJobData>) {
+  const { projectId, userId } = job.data;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      id: true,
+      userId: true,
+      status: true,
+      pipelineSnapshot: true,
+      userInputs: true,
+      selectedTier: true,
+    },
+  });
+
+  if (!project) {
+    logger.error(`[service-pipeline] Project ${projectId} not found`);
+    return;
+  }
+  if (project.userId !== userId) {
+    logger.error(`[service-pipeline] Project ${projectId} belongs to another user`);
+    return;
+  }
+  if (project.status !== 'PENDING') {
+    logger.warn(`[service-pipeline] Project ${projectId} already in status ${project.status}, skipping`);
+    return;
+  }
+  if (!project.pipelineSnapshot) {
+    await markProjectFailed(projectId, 'Missing pipelineSnapshot', { refundTokens: true });
+    return;
+  }
+
+  await runPipeline({
+    generationId: project.id,
+    pipelineConfig: project.pipelineSnapshot,
+    userInputs:
+      project.userInputs && typeof project.userInputs === 'object' && !Array.isArray(project.userInputs)
+        ? (project.userInputs as Record<string, unknown>)
+        : {},
+    selectedTier: project.selectedTier === 'pro' ? 'pro' : 'standard',
+  });
+}
