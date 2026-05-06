@@ -24,6 +24,8 @@ const MAX_CHARACTER_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_SCENE_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_TEMPLATE_PREVIEW_SIZE = 50 * 1024 * 1024;
 const MAX_TEMPLATE_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_SERVICE_PREVIEW_VIDEO_SIZE = 50 * 1024 * 1024;
+const MAX_SERVICE_PREVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -212,6 +214,39 @@ export async function uploadTemplateImage(
 
   const processed = await validateAndProcessImage(buffer);
   const key = `template-assets/images/${crypto.randomUUID()}.${ext(processed.contentType)}`;
+  return getStorageProvider().upload({
+    key,
+    body: processed.buffer,
+    contentType: processed.contentType,
+  });
+}
+
+export async function uploadServicePreview(
+  buffer: Buffer,
+  contentType: string,
+  kind: 'image' | 'video',
+): Promise<{ url: string; key: string }> {
+  if (kind === 'video') {
+    if (buffer.length > MAX_SERVICE_PREVIEW_VIDEO_SIZE) {
+      throw new HttpError(413, 'FILE_TOO_LARGE', 'File is too large');
+    }
+    if (!ALLOWED_V3_VIDEO_MIME.has(contentType)) {
+      throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Unsupported file format');
+    }
+
+    const key = `service-assets/videos/${crypto.randomUUID()}.${ext(contentType)}`;
+    return getStorageProvider().upload({ key, body: buffer, contentType });
+  }
+
+  if (buffer.length > MAX_SERVICE_PREVIEW_IMAGE_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'File is too large');
+  }
+  if (!ALLOWED_V3_IMAGE_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Unsupported file format');
+  }
+
+  const processed = await validateAndProcessImage(buffer);
+  const key = `service-assets/images/${crypto.randomUUID()}.${ext(processed.contentType)}`;
   return getStorageProvider().upload({
     key,
     body: processed.buffer,

@@ -133,7 +133,7 @@ model Trend {
 model Project {
   id        String        @id @default(cuid())
   userId    String
-  serviceId String
+  serviceId String?
   trendId   String?
   title     String
   status    ProjectStatus @default(PENDING)
@@ -160,9 +160,9 @@ model Project {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
 
-  user    User    @relation(fields: [userId], references: [id])
-  service Service @relation(fields: [serviceId], references: [id])
-  trend   Trend?  @relation(fields: [trendId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id])
+  service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  trend   Trend?   @relation(fields: [trendId], references: [id], onDelete: SetNull)
 }
 
 enum ProjectStatus {

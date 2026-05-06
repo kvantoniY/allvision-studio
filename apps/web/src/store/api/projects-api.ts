@@ -30,7 +30,16 @@ export type ProjectStatusResponse = Pick<
   | 'resultThumbnail'
   | 'errorMessage'
   | 'completedAt'
->;
+> & {
+  stepProgress?: Array<{
+    stepId: string;
+    blockSlug: string;
+    status: string;
+    progress: number;
+    output?: unknown;
+    errorMessage?: string;
+  }>;
+};
 
 export type ProjectsQuery = {
   page?: number;

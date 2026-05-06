@@ -9,6 +9,7 @@ import { charactersApi } from './api/characters-api';
 import { scenesApi } from './api/scenes-api';
 import { episodesApi } from './api/episodes-api';
 import { adminScenarioTemplatesApi } from './api/admin-scenario-templates-api';
+import { adminServicesApi } from './api/admin-services-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -24,6 +25,7 @@ export const store = configureStore({
     [scenesApi.reducerPath]: scenesApi.reducer,
     [episodesApi.reducerPath]: episodesApi.reducer,
     [adminScenarioTemplatesApi.reducerPath]: adminScenarioTemplatesApi.reducer,
+    [adminServicesApi.reducerPath]: adminServicesApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -37,6 +39,7 @@ export const store = configureStore({
       scenesApi.middleware,
       episodesApi.middleware,
       adminScenarioTemplatesApi.middleware,
+      adminServicesApi.middleware,
     ),
 });
 

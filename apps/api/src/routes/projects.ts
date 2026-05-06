@@ -273,6 +273,7 @@ projectsRouter.get('/:id/status', requireAuth, async (req: Request, res: Respons
         resultThumbnail: true,
         errorMessage: true,
         completedAt: true,
+        stepProgress: true,
       },
     });
 

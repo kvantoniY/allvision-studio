@@ -10,7 +10,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen bg-zinc-950 text-slate-100">
       <header className="border-b border-rose-500/20 bg-zinc-950/95">
         <div className="flex h-16 items-center justify-between px-5 lg:px-8">
-          <Link href="/admin/trends" className="flex items-center gap-2 font-semibold">
+          <Link href="/admin/services" className="flex items-center gap-2 font-semibold">
             <Sparkles className="h-5 w-5 text-rose-400" />
             <span>Allvision Admin</span>
           </Link>

@@ -46,6 +46,22 @@ function trendAssetFileFilter(
   cb(new Error(`INVALID_MIME: ${file.mimetype}`));
 }
 
+function serviceAssetFileFilter(
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+) {
+  if (file.fieldname === 'previewVideo') {
+    videoFileFilter(_req, file, cb);
+    return;
+  }
+  if (file.fieldname === 'previewImage') {
+    imageFileFilter(_req, file, cb);
+    return;
+  }
+  cb(new Error(`INVALID_MIME: ${file.mimetype}`));
+}
+
 const baseMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE },
@@ -76,6 +92,12 @@ const templateAssetsMulter = multer({
   fileFilter: trendAssetFileFilter,
 });
 
+const serviceAssetsMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_VIDEO_SIZE },
+  fileFilter: serviceAssetFileFilter,
+});
+
 export const uploadSinglePhoto = baseMulter.single('image');
 export const uploadMultiplePhotos = baseMulter.array('images', 5);
 export const uploadSingleVideo = videoMulter.single('video');
@@ -88,4 +110,8 @@ export const uploadSceneReferences = v3ReferenceMulter.array('images', 3);
 export const uploadTemplateAssets = templateAssetsMulter.fields([
   { name: 'previewVideo', maxCount: 1 },
   { name: 'previewImage', maxCount: 1 },
+]);
+export const uploadServiceAssets = serviceAssetsMulter.fields([
+  { name: 'previewImage', maxCount: 1 },
+  { name: 'previewVideo', maxCount: 1 },
 ]);

@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Clapperboard, FolderKanban, Users } from 'lucide-react';
+import { BarChart3, Clapperboard, FolderKanban, Sparkles, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
+  { href: '/admin/services', label: 'Услуги', icon: Sparkles, disabled: false },
   { href: '/admin/trends', label: 'Тренды', icon: BarChart3, disabled: false },
   { href: '/admin/scenario-templates', label: 'Шаблоны сценариев', icon: Clapperboard, disabled: false },
   { href: '#', label: 'Юзеры', icon: Users, disabled: true },

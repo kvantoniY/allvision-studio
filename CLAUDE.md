@@ -161,7 +161,7 @@ Pipeline хранится в `Service.pipelineConfig: Json` как массив:
 
 ## План перепрофилирования
 
-### Этап P1 — БД, реестр блоков, pipeline-runner (бэкенд без UI)
+### Этап P1 ✅ — БД, реестр блоков, pipeline-runner (бэкенд без UI)
 
 - Расширение модели Trend → Service с полями pipelineConfig, userInputForm, priceCoinsStandard/Pro, category.
 - Категории как enum (Ностальгия / Тренды / Дети / Особые поводы).
@@ -170,7 +170,7 @@ Pipeline хранится в `Service.pipelineConfig: Json` как массив:
 - API endpoints: список блоков для админки, тестовый прогон pipeline.
 - Миграция БД, seed обновлённый.
 
-### Этап P2 — Админка услуг с табличным конструктором (UI)
+### Этап P2 ✅ — Админка услуг с табличным конструктором (UI)
 
 - `/admin/services` CRUD: список, создание, редактирование.
 - Табличный конструктор pipeline (список шагов, drag-handle, форма параметров для каждого).
@@ -187,11 +187,11 @@ Pipeline хранится в `Service.pipelineConfig: Json` как массив:
 - Каталог услуг по категориям.
 - Обновление dashboard юзера под новую витрину.
 
-### Этап P4 — Полная админка готовых решений
+### Этап P4 — Расширение админки готовых решений
 
-- `/admin/services` — CRUD услуг с выбором pipelineSlug, моделей, цен, превью, категории.
-- Drag-and-drop sort внутри категории, toggle isActive/isFeatured.
-- Замена ассетов (preview), live-preview на странице услуги.
+- Полировка data-driven конструктора: версии pipeline, шаблоны услуг, расширенные проверки плейсхолдеров.
+- Drag-and-drop sort внутри категории, bulk-actions, массовое включение/скрытие.
+- Замена ассетов (preview), live-preview на публичной странице услуги после P3.
 
 ### Этап P5 — Полная админка заказов (data-driven)
 
@@ -253,6 +253,42 @@ API:
 - Отдельную модель `Generation` в P1 не вводили: в текущей Studio v1 уже есть `Project` со статусом, прогрессом, результатами и refund-логикой. Это снижает риск и сохраняет старые 137 тестов.
 - Старые очереди `photo-restore`, `photo-animate`, `trend`, `episode` оставлены для обратной совместимости. Новый data-driven flow идёт через `service-pipeline`.
 - Seed пока не создаёт реальные gift-factory услуги; это остаётся для P3/P4 вместе с витриной и админкой.
+
+## Этап P2 ✅
+
+Миграция `20260506100420_admin_services_project_service_set_null`:
+
+- `Project.serviceId` сделан nullable с `onDelete: SetNull`, чтобы завершённые проекты выживали при удалении услуги.
+- Активные проекты в `PENDING/PROCESSING` всё равно блокируют delete через API.
+
+Backend:
+
+- Добавлен полный CRUD `/api/admin/services`: list/get/create/update/delete/reorder/duplicate.
+- `POST/PATCH` принимают multipart `previewImage` и `previewVideo` плюс JSON-поле `data`.
+- Добавлены `uploadServiceAssets` и `fileService.uploadServicePreview(...)` для `service-assets/images` и `service-assets/videos`.
+- Shared-схема `packages/shared/src/schemas/admin-services.ts` валидирует `pipelineConfig`, `userInputForm`, уникальные step/field id, существование blockSlug и ссылки плейсхолдеров только на user fields или предыдущие шаги.
+- PATCH умеет безопасно переключать legacy-сервисы без `pipelineConfig`, чтобы старая Studio v1 база не ломала новый список услуг.
+
+Admin UI:
+
+- Добавлены страницы `/admin/services`, `/admin/services/new`, `/admin/services/[id]`.
+- В списке есть фильтры category/status/featured/search, preview thumbnail, цены Standard/Pro, быстрые toggle isActive/isFeatured, reorder, test-run, duplicate и delete.
+- Форма услуги содержит секции: основное, превью, цены, pipeline, форма юзера, тестовый прогон.
+- Pipeline-конструктор использует `@dnd-kit/core` + `@dnd-kit/sortable`: drag-handle, collapse/expand, динамический рендер параметров по JSON schema блока, model tier-select `{ standard, pro }`.
+- UserInputForm builder поддерживает `text`, `textarea`, `photo`, `select`, `avatar`, обязательный единственный `tier` field и live preview.
+- Test-run панель запускает `POST /api/admin/services/:id/test-run` и поллит существующий `/api/projects/:id/status`, показывая общий прогресс, `stepProgress`, output и финальный результат.
+
+Тесты и проверки:
+
+- Добавлено 19 API-тестов `admin-services`: auth/admin, validation ошибок pipeline/form, slug collision, create/list/get, filters, update preview cleanup, legacy PATCH, delete blocking/set-null, reorder, duplicate collision.
+- API: `158 passed`.
+- Worker: `7 passed`.
+- Все builds зелёные, включая root `npm run build`.
+
+Долги:
+
+- Frontend component tests не добавлялись: в проекте нет готовой frontend test infra под builder, новую инфраструктуру в P2 не поднимали.
+- User-facing витрина и реальный сервисный flow остаются для P3.
 
 ## Конвенции разработки
 
