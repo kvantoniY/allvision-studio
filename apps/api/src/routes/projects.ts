@@ -45,6 +45,10 @@ const projectListSelect = {
   resultThumbnail: true,
   tokensCost: true,
   errorMessage: true,
+  pipelineSnapshot: true,
+  selectedTier: true,
+  userInputs: true,
+  stepProgress: true,
   createdAt: true,
   completedAt: true,
 } as const;

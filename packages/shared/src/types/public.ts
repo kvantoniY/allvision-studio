@@ -8,8 +8,14 @@ export type PublicService = {
   shortDesc: string;
   category: ServiceCategory;
   priceTokens: number;
+  priceCoinsStandard: number | null;
+  priceCoinsPro: number | null;
   coverImage: string | null;
   galleryImages: string[];
+  previewImage: string | null;
+  previewVideo: string | null;
+  isFeatured: boolean;
+  userInputForm?: unknown;
   processingType: ProcessingType;
   sortOrder: number;
 };

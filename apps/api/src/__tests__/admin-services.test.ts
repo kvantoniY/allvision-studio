@@ -390,8 +390,8 @@ describe('/api/admin/services', () => {
   it('reorders services inside the same category', async () => {
     const first = await createService({ ...validData(`service-${RUN_ID}-first`), title: `Service ${RUN_ID} First` });
     const second = await createService({ ...validData(`service-${RUN_ID}-second`), title: `Service ${RUN_ID} Second` });
-    await prisma.service.update({ where: { id: first.id }, data: { sortOrder: 10 } });
-    await prisma.service.update({ where: { id: second.id }, data: { sortOrder: 20 } });
+    await prisma.service.update({ where: { id: first.id }, data: { sortOrder: -20 } });
+    await prisma.service.update({ where: { id: second.id }, data: { sortOrder: -10 } });
 
     const moved = await request(app)
       .post(`/api/admin/services/${second.id}/reorder`)
@@ -404,8 +404,8 @@ describe('/api/admin/services', () => {
       prisma.service.findUniqueOrThrow({ where: { id: first.id } }),
       prisma.service.findUniqueOrThrow({ where: { id: second.id } }),
     ]);
-    expect(updatedSecond.sortOrder).toBe(10);
-    expect(updatedFirst.sortOrder).toBe(20);
+    expect(updatedSecond.sortOrder).toBe(-20);
+    expect(updatedFirst.sortOrder).toBe(-10);
 
     const edge = await request(app)
       .post(`/api/admin/services/${second.id}/reorder`)

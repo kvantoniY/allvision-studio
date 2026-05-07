@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { ServicesCatalog } from '@/components/pages/ServicesCatalog';
 
 export const metadata: Metadata = {
-  title: 'Все услуги',
-  description: 'Каталог услуг Allvision Studio: AI-реставрация фото, оживление портретов, трендовые видео и персональные ролики на заказ.',
+  title: 'Цифровые подарки',
+  description: 'Каталог Allvision Studio: оживление старых фото, трендовые видео, дети-герои и видео-открытки к особым поводам.',
 };
 
 export default function ServicesPage() {

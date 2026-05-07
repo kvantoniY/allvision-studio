@@ -290,6 +290,45 @@ Admin UI:
 - Frontend component tests не добавлялись: в проекте нет готовой frontend test infra под builder, новую инфраструктуру в P2 не поднимали.
 - User-facing витрина и реальный сервисный flow остаются для P3.
 
+## Этап P3a ✅
+
+Seed пилотных услуг:
+
+- Добавлены 4 активные gift-factory услуги через `packages/database/src/seed.ts`:
+  - `revive-old-photo` — `NOSTALGIA`, featured, 200/450 коинов.
+  - `face-in-trend` — `TRENDS_MEMES`, 250/500 коинов.
+  - `kid-cartoon-hero` — `KIDS_HEROES`, featured, 350/700 коинов.
+  - `anniversary-card` — `SPECIAL_OCCASIONS`, 300/650 коинов.
+- Все услуги сидятся как `Service` с `pipelineConfig`, `userInputForm`, tier-field и snapshot-ready steps.
+- Demo-assets локально могут быть пустыми после переустановки Windows, поэтому preview в seed использует fallback `picsum.photos`; рабочие mock-result assets восстанавливаются через `npm run demo:download`.
+- Тестовый пользователь `user@allvision.studio / user123` сидится с балансом 25 коинов для проверки недостаточного баланса.
+
+Backend:
+
+- Добавлен публичный router `/api/services`.
+- `GET /api/services` отдаёт только активные gift-factory услуги, поддерживает `category` и `featured`, не раскрывает `pipelineConfig`.
+- `GET /api/services/:slug` отдаёт деталь услуги и `userInputForm`, но не внутренний pipeline.
+- `POST /api/services/:slug/launch` под auth принимает multipart user inputs, валидирует форму, загружает photo-поля в `user-inputs/{userId}/{projectId}`, атомарно списывает `tokenBalance`, создаёт `Project` с `pipelineSnapshot`, `selectedTier`, `userInputs`, `stepProgress` и ставит job в `service-pipeline`.
+- При ошибке постановки job проект переводится в `FAILED`, коины возвращаются через `TokenTransaction(reason='refund')`.
+- Старый `/api/public/services` оставлен совместимым по типам, но новая витрина использует `/api/services`.
+
+Frontend:
+
+- Добавлен RTK Query slice `servicesApi`: `listServices`, `getService`, `launchService`.
+- `/services` переписан под витрину цифровых подарков: hero, featured-блок и 4 категории.
+- `/services/[slug]` рендерит preview, описание, tier-selector Standard/Pro, динамическую форму из `userInputForm`, баланс пользователя и запуск через FormData.
+- Гость видит CTA входа, пользователь с недостаточным балансом — переход на `/pricing`.
+- `/dashboard/projects/[id]` теперь имеет два режима: legacy Studio v1 и data-driven pipeline. Для новых проектов показывает исходные материалы, прогресс каждого шага из `stepProgress`, output шагов и финальный результат.
+- В UI используется слово «коины», но нижний слой БД пока сохраняет историческое поле `tokenBalance`.
+
+Тесты и проверки:
+
+- Добавлено 12 API-тестов: `services-public` и `services-launch`.
+- Обновлён P2 reorder-тест, чтобы он не зависел от seeded gift services в тех же категориях.
+- API: `170 passed`.
+- Worker: `7 passed`.
+- Root `npm run build` зелёный.
+
 ## Конвенции разработки
 
 - Промпты на этапы пишет ассистент (Claude в чате), исполняет Claude Code.

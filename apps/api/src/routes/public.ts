@@ -28,8 +28,13 @@ const publicServiceSelect = {
   shortDesc: true,
   category: true,
   priceTokens: true,
+  priceCoinsStandard: true,
+  priceCoinsPro: true,
   coverImage: true,
   galleryImages: true,
+  previewImage: true,
+  previewVideo: true,
+  isFeatured: true,
   processingType: true,
   sortOrder: true,
 };

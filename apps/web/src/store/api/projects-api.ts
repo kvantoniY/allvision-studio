@@ -17,7 +17,7 @@ export type ProjectService = {
 };
 
 export type ProjectDetails = Project & {
-  service: ProjectService;
+  service: ProjectService | null;
 };
 
 export type ProjectStatusResponse = Pick<

@@ -195,6 +195,233 @@ const services = [
   },
 ];
 
+const giftFactoryServices = [
+  {
+    slug: 'revive-old-photo',
+    title: 'Оживить старое фото',
+    shortDesc: 'Восстановим качество и добавим лёгкую анимацию',
+    description:
+      'Загрузите старое фото из семейного архива. Мы аккуратно восстановим детали, улучшим качество и превратим снимок в короткое тёплое видео с мягким движением.',
+    category: ServiceCategory.NOSTALGIA,
+    priceTokens: 200,
+    priceCoinsStandard: 200,
+    priceCoinsPro: 450,
+    costUsd: 0,
+    coverImage: image('gift-revive-old-photo'),
+    galleryImages: [image('gift-revive-gallery-1'), image('gift-revive-gallery-2')],
+    previewImage: image('gift-revive-old-photo-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'mock',
+    aiModel: 'mock-data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 1,
+    userInputForm: [
+      { id: 'photo', type: 'photo', label: 'Фотография', required: true, hint: 'JPG/PNG, до 25MB' },
+      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'image-restore',
+        input: '{{user.photo}}',
+        params: { model: { standard: 'gfpgan', pro: 'nano-banana-restore' }, strength: 0.75 },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'image-to-video',
+        input: '{{step_1.output}}',
+        params: {
+          duration: 5,
+          model: { standard: 'kling-2.6', pro: 'seedance-2.0' },
+          prompt: 'subtle gentle animation, soft smile, slight head movement',
+        },
+      },
+      {
+        id: 'step_3',
+        blockSlug: 'video-compose',
+        input: '{{step_2.output}}',
+        params: { watermark: true, title: 'Allvision memory' },
+      },
+    ],
+  },
+  {
+    slug: 'face-in-trend',
+    title: 'Я в трендовом видео',
+    shortDesc: 'Подставим ваше лицо в короткий трендовый ролик',
+    description:
+      'Выберите тренд и загрузите фото лица. Сервис соберёт вертикальное видео на mock-pipeline: face swap, финальная сборка и watermark для демо-версии.',
+    category: ServiceCategory.TRENDS_MEMES,
+    priceTokens: 250,
+    priceCoinsStandard: 250,
+    priceCoinsPro: 500,
+    costUsd: 0,
+    coverImage: image('gift-face-in-trend'),
+    galleryImages: [image('gift-face-trend-gallery-1'), image('gift-face-trend-gallery-2')],
+    previewImage: image('gift-face-in-trend-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'mock',
+    aiModel: 'mock-data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 2,
+    userInputForm: [
+      { id: 'face', type: 'photo', label: 'Ваше фото лица', required: true, hint: 'Лучше всего работает портрет анфас' },
+      {
+        id: 'trend',
+        type: 'select',
+        label: 'Какой тренд',
+        required: true,
+        options: [
+          { value: 'dance-toxis', label: 'Танец Toxis' },
+          { value: 'dance-apple', label: 'Apple dance' },
+        ],
+      },
+      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'face-swap-video',
+        input: '{{user.face}}',
+        params: {
+          templateVideo: '{{user.trend}}',
+          prompt: 'face swap into selected trend {{user.trend}}',
+          model: { standard: 'faceswap-lite', pro: 'faceswap-pro' },
+        },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'video-compose',
+        input: '{{step_1.output}}',
+        params: { watermark: true, title: 'Allvision trend' },
+      },
+    ],
+  },
+  {
+    slug: 'kid-cartoon-hero',
+    title: 'Ребёнок-герой мультика',
+    shortDesc: 'Превратим фото ребёнка в короткий мульт-сюжет',
+    description:
+      'Загрузите фото ребёнка, напишите имя и выберите оригинальный стилизованный мир. Pipeline создаёт короткое видео в добром мульт-настроении без использования чужих IP.',
+    category: ServiceCategory.KIDS_HEROES,
+    priceTokens: 350,
+    priceCoinsStandard: 350,
+    priceCoinsPro: 700,
+    costUsd: 0,
+    coverImage: image('gift-kid-cartoon-hero'),
+    galleryImages: [image('gift-kid-cartoon-gallery-1'), image('gift-kid-cartoon-gallery-2')],
+    previewImage: image('gift-kid-cartoon-hero-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'mock',
+    aiModel: 'mock-data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 3,
+    userInputForm: [
+      { id: 'child_photo', type: 'photo', label: 'Фото ребёнка', required: true },
+      { id: 'child_name', type: 'text', label: 'Имя ребёнка', required: true, hint: 'Будет в видео', maxLength: 60 },
+      {
+        id: 'world',
+        type: 'select',
+        label: 'Мир',
+        required: true,
+        options: [
+          { value: 'color-truck', label: 'Цветной грузовичок в долине радуги' },
+          { value: 'forest-girl', label: 'Лесная девочка и большой друг' },
+        ],
+      },
+      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'image-to-video',
+        input: '{{user.child_photo}}',
+        params: {
+          duration: 8,
+          model: { standard: 'kling-2.6', pro: 'seedance-2.0' },
+          prompt: 'child {{user.child_name}} as hero in {{user.world}} cartoon style',
+        },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'video-compose',
+        input: '{{step_1.output}}',
+        params: { watermark: true, title: '{{user.child_name}}' },
+      },
+    ],
+  },
+  {
+    slug: 'anniversary-card',
+    title: 'Юбилейная видео-открытка',
+    shortDesc: 'Соберём тёплую видео-открытку из фотографии',
+    description:
+      'Подойдёт для дня рождения, юбилея или годовщины. Загрузите фотографию, выберите повод, а pipeline восстановит фото, добавит праздничное движение и финальную сборку.',
+    category: ServiceCategory.SPECIAL_OCCASIONS,
+    priceTokens: 300,
+    priceCoinsStandard: 300,
+    priceCoinsPro: 650,
+    costUsd: 0,
+    coverImage: image('gift-anniversary-card'),
+    galleryImages: [image('gift-anniversary-gallery-1'), image('gift-anniversary-gallery-2')],
+    previewImage: image('gift-anniversary-card-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'mock',
+    aiModel: 'mock-data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 4,
+    userInputForm: [
+      { id: 'photos', type: 'photo', label: 'Фотография юбиляра', required: true },
+      {
+        id: 'occasion',
+        type: 'select',
+        label: 'Повод',
+        required: true,
+        options: [
+          { value: 'birthday', label: 'День рождения' },
+          { value: 'wedding-anniv', label: 'Годовщина свадьбы' },
+          { value: 'jubilee', label: 'Юбилей' },
+        ],
+      },
+      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'image-restore',
+        input: '{{user.photos}}',
+        params: { model: { standard: 'gfpgan', pro: 'nano-banana-restore' }, strength: 0.8 },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'image-to-video',
+        input: '{{step_1.output}}',
+        params: {
+          duration: 6,
+          model: { standard: 'kling-2.6', pro: 'seedance-2.0' },
+          prompt: 'festive {{user.occasion}} celebration mood',
+        },
+      },
+      {
+        id: 'step_3',
+        blockSlug: 'video-compose',
+        input: '{{step_2.output}}',
+        params: { watermark: true, title: 'Allvision celebration' },
+      },
+    ],
+  },
+];
+
 const trendSeed = [
   {
     title: 'Виральный танец "Jump Shot"',
@@ -442,7 +669,7 @@ async function main() {
       passwordHash: userHash,
       name: 'Test User',
       role: 'USER',
-      tokenBalance: 500,
+      tokenBalance: 25,
       deletedAt: null,
     },
     create: {
@@ -450,7 +677,7 @@ async function main() {
       passwordHash: userHash,
       name: 'Test User',
       role: 'USER',
-      tokenBalance: 500,
+      tokenBalance: 25,
     },
   });
 
@@ -458,6 +685,14 @@ async function main() {
   for (const service of services) {
     const created = await prisma.service.create({ data: service });
     createdServices.set(created.slug, created.id);
+  }
+
+  for (const service of giftFactoryServices) {
+    await prisma.service.upsert({
+      where: { slug: service.slug },
+      update: service,
+      create: service,
+    });
   }
 
   const trendsServiceId = createdServices.get('trends');
@@ -540,7 +775,7 @@ async function main() {
   console.log('[seed] created accounts:');
   console.log(`  admin: ${admin.email} / admin123  (balance ${admin.tokenBalance})`);
   console.log(`  user:  ${user.email}  / user123   (balance ${user.tokenBalance})`);
-  console.log(`[seed] created public catalog: ${services.length} services, ${trendSeed.length} trends, ${scenarioTemplates.length} scenario templates, 4 token packages`);
+  console.log(`[seed] created public catalog: ${services.length} legacy services, ${giftFactoryServices.length} gift services, ${trendSeed.length} trends, ${scenarioTemplates.length} scenario templates, 4 token packages`);
 }
 
 main()

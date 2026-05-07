@@ -1,62 +1,218 @@
 'use client';
 
-import { AlertCircle } from 'lucide-react';
-import { useMemo, useState } from 'react';
-import { ServiceCard } from '@/components/public/ServiceCard';
+import Image from 'next/image';
+import Link from 'next/link';
+import { AlertCircle, ArrowRight, Baby, Clapperboard, Gift, Heart, Sparkles } from 'lucide-react';
+import type { PublicService, ServiceCategory } from '@allvision/shared';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useGetServicesQuery } from '@/store/api/public-api';
+import { useListServicesQuery } from '@/store/api/services-api';
+import { cn } from '@/lib/utils';
 
-const filters = [
-  { value: 'all', label: 'Все' },
-  { value: 'AUTO', label: 'Автоматические' },
-  { value: 'MANUAL', label: 'На заказ' },
-  { value: 'kids', label: 'Для детей' },
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+
+const categories: Array<{
+  value: ServiceCategory;
+  label: string;
+  description: string;
+  icon: typeof Heart;
+  anchor: string;
+}> = [
+  {
+    value: 'NOSTALGIA',
+    label: 'Ностальгия',
+    description: 'Оживление архивных фотографий, восстановление деталей и мягкие видео-воспоминания.',
+    icon: Heart,
+    anchor: 'nostalgia',
+  },
+  {
+    value: 'TRENDS_MEMES',
+    label: 'Тренды и мемы',
+    description: 'Лицо в популярных видеоформатах, танцы, мемные сцены и быстрые вау-ролики.',
+    icon: Clapperboard,
+    anchor: 'trends',
+  },
+  {
+    value: 'KIDS_HEROES',
+    label: 'Дети-герои',
+    description: 'Добрые стилизованные миры, где ребёнок становится главным героем истории.',
+    icon: Baby,
+    anchor: 'kids',
+  },
+  {
+    value: 'SPECIAL_OCCASIONS',
+    label: 'Особые поводы',
+    description: 'Видео-открытки и персональные сюжеты для юбилеев, свадеб и семейных дат.',
+    icon: Gift,
+    anchor: 'occasions',
+  },
 ];
 
-export function ServicesCatalog() {
-  const [filter, setFilter] = useState('all');
-  const { data, isLoading, isError } = useGetServicesQuery();
+function mediaUrl(value?: string | null) {
+  if (!value) return null;
+  if (value.startsWith('/static/')) return `${API_URL}${value}`;
+  return value;
+}
 
-  const services = useMemo(() => {
-    const all = data?.services ?? [];
-    if (filter === 'all') return all;
-    if (filter === 'kids') return all.filter((service) => service.category === 'FAIRY_TALE' || service.slug === 'cartoon-custom');
-    return all.filter((service) => service.processingType === filter);
-  }, [data?.services, filter]);
+function priceFrom(service: PublicService) {
+  return service.priceCoinsStandard ?? service.priceTokens;
+}
+
+function previewFrom(service: PublicService) {
+  return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? 'https://picsum.photos/seed/allvision-service/900/600';
+}
+
+function ServiceTile({ service, featured = false }: { service: PublicService; featured?: boolean }) {
+  const previewVideo = mediaUrl(service.previewVideo);
+  const previewImage = previewFrom(service);
 
   return (
-    <section className="container py-14 md:py-20">
-      <div className="max-w-3xl">
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Каталог</p>
-        <h1 className="mt-3 text-4xl font-black leading-none tracking-tight md:text-6xl">Все услуги Allvision Studio</h1>
-        <p className="mt-5 text-lg leading-8 text-muted-foreground">
-          Выберите быстрый AI-формат или ручной заказ под конкретную идею. На карточках сразу видно, сколько стоит запуск и как устроена обработка.
-        </p>
-      </div>
+    <Card className="group flex h-full overflow-hidden border-slate-800 bg-slate-900 transition duration-300 hover:-translate-y-1 hover:border-amber-400/70 hover:shadow-xl hover:shadow-amber-500/10">
+      <Link href={`/services/${service.slug}`} className="flex w-full flex-col">
+        <div className={cn('relative overflow-hidden bg-slate-950', featured ? 'aspect-[16/9]' : 'aspect-[4/3]')}>
+          {previewVideo ? (
+            <video
+              src={previewVideo}
+              muted
+              loop
+              playsInline
+              autoPlay
+              className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <Image
+              src={previewImage}
+              alt={service.title}
+              fill
+              sizes={featured ? '(max-width: 1024px) 100vw, 33vw' : '(max-width: 1024px) 100vw, 25vw'}
+              className="object-cover transition duration-500 group-hover:scale-105"
+            />
+          )}
+          {service.isFeatured && (
+            <Badge className="absolute left-3 top-3 border-amber-300/60 bg-amber-400 text-slate-950">
+              Популярное
+            </Badge>
+          )}
+        </div>
+        <CardContent className="flex flex-1 flex-col p-5">
+          <div className="flex flex-1 flex-col gap-3">
+            <h3 className="text-xl font-bold tracking-tight text-slate-50">{service.title}</h3>
+            <p className="line-clamp-3 text-sm leading-6 text-slate-400">{service.shortDesc}</p>
+          </div>
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Цена</div>
+              <div className="text-lg font-bold text-amber-400">от {priceFrom(service)} коинов</div>
+            </div>
+            <span className="grid h-10 w-10 place-items-center rounded-md border border-slate-700 bg-slate-800 text-slate-100 transition group-hover:border-amber-400 group-hover:text-amber-300">
+              <ArrowRight className="h-4 w-4" />
+            </span>
+          </div>
+        </CardContent>
+      </Link>
+    </Card>
+  );
+}
 
-      <Tabs value={filter} onValueChange={setFilter} className="mt-8">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
-          {filters.map((item) => (
-            <TabsTrigger key={item.value} value={item.value} className="rounded-md border border-slate-800 bg-slate-900 px-4 py-2 transition hover:bg-slate-800 data-[state=active]:border-indigo-500 data-[state=active]:bg-slate-800">
-              {item.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+export function ServicesCatalog() {
+  const { data, isLoading, isError } = useListServicesQuery();
+  const services = data?.services ?? [];
+  const featured = services.filter((service) => service.isFeatured);
+
+  return (
+    <div className="pb-16">
+      <section className="container py-12 md:py-16">
+        <div className="grid gap-8 lg:grid-cols-[1fr_0.7fr] lg:items-end">
+          <div className="max-w-4xl">
+            <Badge className="border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/10">
+              AI-фабрика подарков
+            </Badge>
+            <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight md:text-6xl">
+              Цифровые подарки, которые удивят
+            </h1>
+            <p className="mt-5 text-lg leading-8 text-slate-300">
+              Выберите повод, загрузите фото или пару деталей, а Allvision соберёт готовый ролик, открытку или мем за несколько минут.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {categories.map((category) => (
+              <Button key={category.value} asChild variant="outline" className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800">
+                <a href={`#${category.anchor}`}>{category.label}</a>
+              </Button>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {isError && (
-        <div className="mt-8 flex max-w-2xl items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          <AlertCircle className="h-5 w-5" />
-          Не удалось загрузить услуги. Проверьте API и seed.
-        </div>
+        <section className="container">
+          <Alert variant="destructive" className="max-w-2xl">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Не удалось загрузить каталог</AlertTitle>
+            <AlertDescription>Проверьте API и seed пилотных услуг.</AlertDescription>
+          </Alert>
+        </section>
       )}
 
-      <div className="mt-8 grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {isLoading
-          ? Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-[520px] rounded-lg" />)
-          : services.map((service) => <ServiceCard key={service.id} service={service} detailed />)}
-      </div>
-    </section>
+      {isLoading ? (
+        <section className="container grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <Skeleton key={index} className="h-[360px] rounded-lg" />
+          ))}
+        </section>
+      ) : (
+        <>
+          {featured.length > 0 && (
+            <section className="container">
+              <div className="mb-5 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-amber-400" />
+                <h2 className="text-2xl font-bold tracking-tight">Популярные подарки</h2>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                {featured.map((service) => (
+                  <ServiceTile key={service.id} service={service} featured />
+                ))}
+              </div>
+            </section>
+          )}
+
+          <div className="container mt-14 space-y-14">
+            {categories.map((category) => {
+              const Icon = category.icon;
+              const items = services.filter((service) => service.category === category.value);
+              return (
+                <section key={category.value} id={category.anchor} className="scroll-mt-24">
+                  <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="max-w-3xl">
+                      <div className="flex items-center gap-3">
+                        <span className="grid h-10 w-10 place-items-center rounded-md border border-slate-700 bg-slate-900 text-amber-300">
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <h2 className="text-3xl font-bold tracking-tight">{category.label}</h2>
+                      </div>
+                      <p className="mt-3 leading-7 text-slate-400">{category.description}</p>
+                    </div>
+                  </div>
+                  {items.length > 0 ? (
+                    <div className="grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                      {items.map((service) => (
+                        <ServiceTile key={service.id} service={service} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-8 text-sm text-slate-400">
+                      В этой категории пока нет активных услуг.
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }

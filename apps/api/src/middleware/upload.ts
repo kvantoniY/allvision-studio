@@ -115,3 +115,4 @@ export const uploadServiceAssets = serviceAssetsMulter.fields([
   { name: 'previewImage', maxCount: 1 },
   { name: 'previewVideo', maxCount: 1 },
 ]);
+export const uploadServiceLaunchInputs = baseMulter.any();

@@ -26,6 +26,7 @@ const MAX_TEMPLATE_PREVIEW_SIZE = 50 * 1024 * 1024;
 const MAX_TEMPLATE_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_SERVICE_PREVIEW_VIDEO_SIZE = 50 * 1024 * 1024;
 const MAX_SERVICE_PREVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_USER_INPUT_IMAGE_SIZE = 25 * 1024 * 1024;
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -252,6 +253,31 @@ export async function uploadServicePreview(
     body: processed.buffer,
     contentType: processed.contentType,
   });
+}
+
+export async function uploadUserInput(
+  userId: string,
+  projectId: string,
+  fieldId: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string; dimensions: { width: number; height: number } }> {
+  if (buffer.length > MAX_USER_INPUT_IMAGE_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'File is too large');
+  }
+  if (!ALLOWED_V3_IMAGE_MIME.has(contentType)) {
+    throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Unsupported file format');
+  }
+
+  const processed = await validateAndProcessImage(buffer);
+  const safeFieldId = fieldId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const key = `user-inputs/${userId}/${projectId}/${safeFieldId}-${crypto.randomUUID()}.${ext(processed.contentType)}`;
+  const { url } = await getStorageProvider().upload({
+    key,
+    body: processed.buffer,
+    contentType: processed.contentType,
+  });
+  return { url, key, dimensions: processed.dimensions };
 }
 
 export async function deleteFile(key: string): Promise<void> {
