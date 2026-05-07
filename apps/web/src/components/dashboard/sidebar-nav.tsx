@@ -14,7 +14,7 @@ export type SidebarSection = {
 
 export const SIDEBAR_SECTIONS: SidebarSection[] = [
   {
-    items: [{ href: '/dashboard', label: 'Главная', icon: Home }],
+    items: [{ href: '/dashboard', label: 'Кабинет', icon: Home }],
   },
   {
     label: 'Моя студия',
@@ -26,10 +26,10 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
   },
   {
     items: [
-      { href: '/dashboard/projects', label: 'Старые услуги', icon: ImageIcon },
-      { href: '/dashboard/orders', label: 'Мои заказы', icon: FileText },
-      { href: '/dashboard/fairy-tales', label: 'Мои сказки', icon: BookOpen },
-      { href: '/dashboard/billing', label: 'История платежей', icon: Wallet },
+      { href: '/dashboard/projects', label: 'Проекты', icon: ImageIcon },
+      { href: '/dashboard/orders', label: 'Заказы', icon: FileText },
+      { href: '/dashboard/fairy-tales', label: 'Сказки', icon: BookOpen },
+      { href: '/dashboard/billing', label: 'Биллинг', icon: Wallet },
       { href: '/dashboard/profile', label: 'Профиль', icon: User },
     ],
   },

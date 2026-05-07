@@ -38,7 +38,7 @@ function apiErrorMessage(error: unknown) {
   if (code === 'CONSENT_REQUIRED') return 'Подтвердите согласие на использование изображения';
   if (code === 'FILE_REQUIRED') return 'Добавьте хотя бы одно фото';
   if (code === 'UNSUPPORTED_FORMAT') return 'Поддерживаются только JPEG, PNG и WebP';
-  if (code === 'INSUFFICIENT_TOKENS') return 'Недостаточно токенов для создания персонажа';
+  if (code === 'INSUFFICIENT_TOKENS') return 'Недостаточно коинов для создания персонажа';
   if (code === 'QUEUE_UNAVAILABLE') return 'Проверка фото временно недоступна. Попробуйте ещё раз чуть позже';
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Не удалось создать персонажа';
 }
@@ -105,7 +105,7 @@ export default function NewCharacterPage() {
     if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
     if (requiresPayment && !canPay) {
       setStep(4);
-      toast({ title: 'Недостаточно токенов', variant: 'destructive' });
+      toast({ title: 'Недостаточно коинов', variant: 'destructive' });
       return;
     }
 
@@ -335,13 +335,13 @@ export default function NewCharacterPage() {
 
               <div className="rounded-md border border-slate-800 bg-slate-950 p-5">
                 <div className="text-sm text-slate-400">Создание персонажа</div>
-                <div className="mt-1 text-3xl font-bold text-white">{CHARACTER_SLOT_PRICE_TOKENS} токенов</div>
-                <div className="mt-3 text-sm text-slate-300">Ваш баланс: {balance} токенов</div>
+                <div className="mt-1 text-3xl font-bold text-white">{CHARACTER_SLOT_PRICE_TOKENS} коинов</div>
+                <div className="mt-3 text-sm text-slate-300">Ваш баланс: {balance} коинов</div>
               </div>
 
               {!canPay && (
                 <Alert variant="destructive" className="border-red-500/40 bg-red-500/10">
-                  <AlertTitle>Недостаточно токенов</AlertTitle>
+                  <AlertTitle>Недостаточно коинов</AlertTitle>
                   <AlertDescription>Пополните баланс, чтобы создать второго и следующих персонажей.</AlertDescription>
                 </Alert>
               )}
@@ -376,7 +376,7 @@ export default function NewCharacterPage() {
               canPay ? (
                 <Button type="button" onClick={submit} disabled={createState.isLoading}>
                   <CheckCircle2 className="h-4 w-4" />
-                  Создать персонажа за {CHARACTER_SLOT_PRICE_TOKENS} токенов
+                  Создать персонажа за {CHARACTER_SLOT_PRICE_TOKENS} коинов
                 </Button>
               ) : (
                 <Button asChild>

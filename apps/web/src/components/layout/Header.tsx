@@ -91,7 +91,7 @@ export function Header() {
               >
                 <Coins className="h-4 w-4" />
                 <span>{user.tokenBalance}</span>
-                <span className="text-xs font-normal text-slate-400">токенов</span>
+                <span className="text-xs font-normal text-slate-400">коинов</span>
               </Link>
               <DropdownMenu>
                 <TooltipProvider delayDuration={150}>
@@ -117,7 +117,7 @@ export function Header() {
                     <div className="flex items-center justify-between rounded-md bg-slate-800 px-3 py-2">
                       <span className="flex items-center gap-2 text-sm text-slate-200">
                         <Coins className="h-4 w-4 text-amber-400" />
-                        {user.tokenBalance} токенов
+                        {user.tokenBalance} коинов
                       </span>
                       <Button asChild size="sm" className="h-8 bg-amber-500 text-slate-950 hover:bg-amber-400">
                         <Link href="/pricing">Пополнить</Link>
@@ -132,7 +132,7 @@ export function Header() {
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/pricing" className="cursor-pointer">
-                      <Coins className="mr-2 h-4 w-4" /> Купить токены
+                      <Coins className="mr-2 h-4 w-4" /> Купить коины
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />

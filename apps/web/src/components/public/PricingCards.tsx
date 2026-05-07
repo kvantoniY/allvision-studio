@@ -73,7 +73,7 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-xl font-semibold">{pkg.title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">{getPackageTotal(pkg)} токенов на баланс</p>
+                <p className="mt-1 text-sm text-muted-foreground">{getPackageTotal(pkg)} коинов на баланс</p>
               </div>
               <div className="rounded-md bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">
                 <Coins className="h-5 w-5" />
@@ -85,7 +85,7 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
             </div>
             {pkg.bonus > 0 && (
               <Badge variant="secondary" className="w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-                +{pkg.bonus} токенов в подарок
+                +{pkg.bonus} коинов в подарок
               </Badge>
             )}
           </CardHeader>
@@ -93,7 +93,7 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
             <ul className="space-y-3 text-sm text-muted-foreground">
               <li className="flex gap-2">
                 <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
-                1 токен = 1 ₽ для автоматических услуг
+                1 коин = 1 ₽ для автоматических услуг
               </li>
               <li className="flex gap-2">
                 <Check className="mt-0.5 h-4 w-4 text-emerald-500" />

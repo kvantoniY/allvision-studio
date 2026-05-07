@@ -37,7 +37,7 @@ export function TransactionRow({ tx }: { tx: TokenTransaction }) {
         )}
       >
         {isTopup ? '+' : ''}
-        {tx.amount} ток.
+        {tx.amount} коин.
       </td>
       <td className="py-3 px-3 text-sm text-slate-400 whitespace-nowrap">{tx.balanceAfter}</td>
     </tr>

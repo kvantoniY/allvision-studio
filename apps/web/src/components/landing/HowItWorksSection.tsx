@@ -1,26 +1,18 @@
 'use client';
 
-import { BadgeCheck, CreditCard, Download, FileText, Handshake, ImageUp, MessageCircle, WandSparkles } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BadgeCheck, Download, Gift, ImageUp, WandSparkles } from 'lucide-react';
 import { Reveal } from './Reveal';
 
-const autoSteps = [
-  { icon: ImageUp, title: 'Загрузи фото', text: 'Выберите файл с телефона или компьютера. Чем лучше исходник, тем аккуратнее результат.' },
-  { icon: CreditCard, title: 'Оплати токенами', text: 'Стоимость фиксирована и видна заранее: без подписок, скрытых списаний и сложных тарифов.' },
-  { icon: Download, title: 'Скачай результат', text: 'После обработки файл появляется в кабинете и готов для отправки родным или публикации.' },
+const giftSteps = [
+  { icon: Gift, title: 'Выберите повод и формат', text: 'Ностальгия, тренд, детский сюжет или открытка к важной дате — каталог сразу показывает подходящие подарки.' },
+  { icon: ImageUp, title: 'Загрузите фото или впишите имя', text: 'Форма просит только то, что нужно для выбранного сценария: фото, имя, повод или один короткий выбор.' },
+  { icon: Download, title: 'Получите подарок за 2–5 минут', text: 'Standard подходит для тёплого семейного результата, Pro добавляет максимальный wow-эффект.' },
 ];
 
-const manualSteps = [
-  { icon: FileText, title: 'Опиши идею', text: 'Расскажите, что хотите получить: сюжет, длительность, героев, стиль и повод.' },
-  { icon: MessageCircle, title: 'Админ связывается', text: 'Мы уточняем детали, предлагаем формат и честно говорим, что можно сделать в рамках бюджета.' },
-  { icon: Handshake, title: 'Согласуете и оплачиваете', text: 'После согласования цены, сроков и объема правок заказ переходит в производство.' },
-  { icon: BadgeCheck, title: 'Получаете видео', text: 'Финальный файл передается в удобном формате, а небольшие согласованные правки закрываются до сдачи.' },
-];
-
-function StepList({ steps }: { steps: typeof autoSteps }) {
+function StepList() {
   return (
-    <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-      {steps.map((step, index) => (
+    <div className="grid gap-5 md:grid-cols-3">
+      {giftSteps.map((step, index) => (
         <div key={step.title} className="rounded-lg border bg-card/80 p-5 dark:border-slate-800">
           <div className="flex h-11 w-11 items-center justify-center rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">
             <step.icon className="h-5 w-5" />
@@ -30,6 +22,14 @@ function StepList({ steps }: { steps: typeof autoSteps }) {
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{step.text}</p>
         </div>
       ))}
+      <div className="rounded-lg border border-amber-300/40 bg-amber-500/10 p-5 md:col-span-3">
+        <div className="flex items-start gap-3">
+          <BadgeCheck className="mt-0.5 h-5 w-5 text-amber-500" />
+          <p className="text-sm leading-6 text-muted-foreground">
+            Цена в коинах видна до запуска. Если готовый pipeline падает с технической ошибкой, коины возвращаются на баланс.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -45,25 +45,12 @@ export function HowItWorksSection() {
           </div>
           <h2 className="mt-3 text-3xl font-bold md:text-5xl">Как это работает</h2>
           <p className="mt-4 text-lg leading-8 text-muted-foreground">
-            Автоматические услуги запускаются сразу, а заказные ролики проходят через короткое согласование.
+            Мы убрали сложный слой генерации из интерфейса: вы выбираете подарок, а подготовленный сценарий делает остальное.
           </p>
         </Reveal>
 
         <Reveal className="mt-10">
-          <Tabs defaultValue="auto" className="w-full">
-            <div className="flex justify-center">
-              <TabsList>
-                <TabsTrigger value="auto">Автогенерация</TabsTrigger>
-                <TabsTrigger value="manual">На заказ</TabsTrigger>
-              </TabsList>
-            </div>
-            <TabsContent value="auto" className="mt-8">
-              <StepList steps={autoSteps} />
-            </TabsContent>
-            <TabsContent value="manual" className="mt-8">
-              <StepList steps={manualSteps} />
-            </TabsContent>
-          </Tabs>
+          <StepList />
         </Reveal>
       </div>
     </section>

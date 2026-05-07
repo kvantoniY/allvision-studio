@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowDown, Sparkles } from 'lucide-react';
+import { ArrowRight, Gift, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 
@@ -21,37 +21,34 @@ export function HeroSection() {
           className="max-w-3xl text-white"
         >
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-indigo-100 backdrop-blur">
-            <Sparkles className="h-4 w-4 text-amber-300" />
-            AI-медиа для семейных историй, подарков и контента
+            <Gift className="h-4 w-4 text-amber-300" />
+            Цифровые подарки для семейных историй и важных дат
           </div>
           <h1 className="text-5xl font-black leading-none tracking-tight md:text-7xl">
-            Оживи свои воспоминания с помощью{' '}
-            <span className="bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent">ИИ</span>
+            Выберите повод, а мы соберём подарок за несколько минут
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-indigo-100 md:text-xl">
-            От реставрации старых фото до персональных мультиков для ребёнка — всё за несколько минут.
+            Оживите свадебное фото бабушки, отправьте лицо в трендовое видео или сделайте ребёнка героем доброго мультика. Никаких промптов — только формат, фото и готовый результат.
           </p>
           <div className="mt-9 grid gap-3 sm:inline-grid sm:grid-cols-[260px_260px] sm:items-start">
-            <div className="w-full">
-              <Button asChild size="lg" className="h-14 w-full bg-amber-500 text-slate-950 hover:bg-amber-400">
-                <Link href="/register">Попробовать бесплатно</Link>
-              </Button>
-              <div className="mt-2 text-center text-xs font-semibold text-amber-100">50 токенов в подарок</div>
-            </div>
+            <Button asChild size="lg" className="h-14 w-full bg-amber-500 text-slate-950 hover:bg-amber-400">
+              <Link href="/services">
+                Посмотреть подарки
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
             <Button asChild size="lg" variant="outline" className="h-14 w-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white">
-              <a href="#examples">
-                Смотреть примеры
-                <ArrowDown className="h-4 w-4" />
-              </a>
+              <Link href="/register">Создать первый бесплатно</Link>
             </Button>
           </div>
+          <div className="mt-3 text-sm font-semibold text-amber-100">25 коинов после регистрации</div>
 
           <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-indigo-100">
-            <span>100+ довольных клиентов</span>
+            <span>2–5 минут на готовое решение</span>
             <span className="text-violet-300">·</span>
-            <span>4.9/5 средний рейтинг</span>
+            <span>Standard и Pro качество</span>
             <span className="text-violet-300">·</span>
-            <span>25 стран</span>
+            <span>4 категории подарков</span>
           </div>
         </motion.div>
 
@@ -64,8 +61,8 @@ export function HeroSection() {
           <div className="rounded-xl border border-white/15 bg-white/10 p-3 shadow-2xl shadow-violet-950/50 backdrop-blur">
             <div className="overflow-hidden rounded-lg">
               <Image
-                src="https://picsum.photos/seed/hero-allvision/1200/800"
-                alt="Превью возможностей Allvision Studio"
+                src="https://picsum.photos/seed/allvision-gift-family/1200/800"
+                alt="Семейный цифровой подарок Allvision Studio"
                 width={1200}
                 height={800}
                 priority
@@ -73,9 +70,9 @@ export function HeroSection() {
               />
             </div>
             <div className="mt-3 grid grid-cols-3 gap-3 text-xs text-indigo-100">
-              <div className="rounded-md bg-slate-950/70 p-3">20 токенов за реставрацию</div>
-              <div className="rounded-md bg-slate-950/70 p-3">80 токенов за оживление</div>
-              <div className="rounded-md bg-slate-950/70 p-3">150 токенов за тренд</div>
+              <div className="rounded-md bg-slate-950/70 p-3">Ностальгия</div>
+              <div className="rounded-md bg-slate-950/70 p-3">Дети-герои</div>
+              <div className="rounded-md bg-slate-950/70 p-3">Особые поводы</div>
             </div>
           </div>
         </motion.div>

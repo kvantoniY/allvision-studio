@@ -13,16 +13,16 @@ export function CTASection() {
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm text-indigo-100">
               <Sparkles className="h-4 w-4 text-amber-300" />
-              50 токенов после регистрации
+              25 коинов после регистрации
             </div>
-            <h2 className="text-3xl font-bold md:text-5xl">Готовы оживить свои воспоминания?</h2>
+            <h2 className="text-3xl font-bold md:text-5xl">Готовы собрать подарок, который не забудут?</h2>
             <p className="mt-4 max-w-2xl text-lg leading-8 text-indigo-100">
-              Начните с одного фото: улучшите старый снимок, попробуйте анимацию или выберите трендовый ролик для соцсетей.
+              Начните с одного фото или имени: выберите категорию, формат и качество, а результат появится в кабинете.
             </p>
           </div>
           <Button asChild size="lg" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
             <Link href="/register">
-              Начать бесплатно — 50 токенов в подарок
+              Создать первый бесплатно
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>

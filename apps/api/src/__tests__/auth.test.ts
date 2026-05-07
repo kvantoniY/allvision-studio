@@ -31,7 +31,7 @@ describe('POST /api/auth/register', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.user.email).toBe(EMAIL);
-    expect(res.body.user.tokenBalance).toBe(Number(process.env.WELCOME_TOKENS_BONUS ?? 50));
+    expect(res.body.user.tokenBalance).toBe(Number(process.env.WELCOME_TOKENS_BONUS ?? 25));
     expect(res.body.user.passwordHash).toBeUndefined();
 
     const cookies = res.headers['set-cookie'] as unknown as string[] | string | undefined;

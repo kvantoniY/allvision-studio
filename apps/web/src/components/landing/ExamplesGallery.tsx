@@ -15,9 +15,9 @@ export function ExamplesGallery() {
     <section id="examples" className="container py-20">
       <Reveal className="mx-auto max-w-3xl text-center">
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Галерея</p>
-        <h2 className="mt-3 text-3xl font-bold md:text-5xl">Примеры работ</h2>
+        <h2 className="mt-3 text-3xl font-bold md:text-5xl">Как выглядит готовый подарок</h2>
         <p className="mt-4 text-lg leading-8 text-muted-foreground">
-          Сейчас это честные плейсхолдеры для MVP. На этапе 1.9 они будут заменены реальными демо-материалами.
+          Плейсхолдеры показывают настроение будущих демо: семейные архивы, детские сюжеты, тренды и поздравления.
         </p>
       </Reveal>
 

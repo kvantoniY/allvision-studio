@@ -12,10 +12,10 @@ export function TestimonialsSection() {
     <section className="border-y bg-slate-50 py-20 dark:border-slate-800 dark:bg-slate-950/60">
       <div className="container">
         <Reveal className="mx-auto max-w-3xl text-center">
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Отзывы</p>
-          <h2 className="mt-3 text-3xl font-bold md:text-5xl">Что говорят наши клиенты</h2>
+        <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Отзывы</p>
+          <h2 className="mt-3 text-3xl font-bold md:text-5xl">Когда подарок попадает в сердце</h2>
           <p className="mt-4 text-lg leading-8 text-muted-foreground">
-            Мы бережно работаем с личными историями, поэтому ценим спокойную обратную связь больше громких обещаний.
+            Главная метрика Allvision — реакция человека, которому вы отправляете результат.
           </p>
         </Reveal>
 

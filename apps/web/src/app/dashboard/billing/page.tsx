@@ -65,7 +65,7 @@ export default function BillingPage() {
 
     if (paymentResult === 'success') {
       toast({
-        title: tokens > 0 ? `Оплата прошла успешно! +${tokens} токенов на ваш баланс 🎉` : 'Оплата прошла успешно!',
+        title: tokens > 0 ? `Оплата прошла успешно! +${tokens} коинов на ваш баланс` : 'Оплата прошла успешно!',
       });
       invalidatePaymentSideEffects(dispatch);
     }
@@ -95,7 +95,7 @@ export default function BillingPage() {
       toast({
         title:
           completed.tokensAdded && completed.tokensAdded > 0
-            ? `Оплата прошла успешно! +${completed.tokensAdded} токенов на ваш баланс 🎉`
+            ? `Оплата прошла успешно! +${completed.tokensAdded} коинов на ваш баланс`
             : 'Оплата прошла успешно!',
       });
       invalidatePaymentSideEffects(dispatch);
@@ -115,7 +115,7 @@ export default function BillingPage() {
     if (!tokenPackageId) {
       toast({
         title: 'Не удалось повторить покупку',
-        description: 'У платежа нет привязки к пакету токенов.',
+        description: 'У платежа нет привязки к пакету коинов.',
         variant: 'destructive',
       });
       return;
@@ -154,7 +154,7 @@ export default function BillingPage() {
             <div>
               <div className="text-sm text-slate-300">Ваш баланс</div>
               <div className="text-3xl font-bold text-amber-400">
-                {user.tokenBalance} <span className="text-base font-normal text-slate-300">токенов</span>
+                {user.tokenBalance} <span className="text-base font-normal text-slate-300">коинов</span>
               </div>
             </div>
           </div>
@@ -174,7 +174,7 @@ export default function BillingPage() {
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle className="text-lg">Транзакции токенов</CardTitle>
+                <CardTitle className="text-lg">Транзакции коинов</CardTitle>
                 <div className="flex flex-wrap gap-2">
                   {(['all', 'topup', 'spending'] as TxFilter[]).map((f) => (
                     <Button

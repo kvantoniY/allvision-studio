@@ -43,7 +43,7 @@ export const ORDER_TYPE_LABEL: Record<OrderType, string> = {
 };
 
 export const TRANSACTION_REASON_LABEL: Record<string, string> = {
-  welcome_bonus: 'Приветственный бонус 🎁',
+  welcome_bonus: 'Приветственный бонус',
   topup: 'Пополнение баланса',
   project_created: 'Создание проекта',
   character_slot: 'Создание персонажа',

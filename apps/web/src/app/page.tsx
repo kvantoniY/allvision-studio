@@ -9,9 +9,9 @@ import { FAQSection } from '@/components/landing/FAQSection';
 import { CTASection } from '@/components/landing/CTASection';
 
 export const metadata: Metadata = {
-  title: 'AI-сервис для оживления фото и создания видео',
+  title: 'Allvision Studio — цифровые подарки за минуты',
   description:
-    'Allvision Studio: улучшение старых фото, оживление портретов, трендовые видео, персональные мультфильмы и сказки для детей.',
+    'Allvision Studio помогает выбрать повод и формат подарка: оживить старое фото, собрать трендовое видео, сделать ребёнка героем мультика или подготовить видео-открытку.',
 };
 
 export default function HomePage() {

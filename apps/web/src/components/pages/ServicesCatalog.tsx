@@ -10,46 +10,38 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListServicesQuery } from '@/store/api/services-api';
+import { GIFT_CATEGORIES, giftServicePriceFrom } from '@/lib/gift-factory';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
-const categories: Array<{
-  value: ServiceCategory;
-  label: string;
-  description: string;
-  icon: typeof Heart;
-  anchor: string;
-}> = [
-  {
-    value: 'NOSTALGIA',
-    label: 'Ностальгия',
-    description: 'Оживление архивных фотографий, восстановление деталей и мягкие видео-воспоминания.',
-    icon: Heart,
-    anchor: 'nostalgia',
-  },
-  {
-    value: 'TRENDS_MEMES',
-    label: 'Тренды и мемы',
-    description: 'Лицо в популярных видеоформатах, танцы, мемные сцены и быстрые вау-ролики.',
-    icon: Clapperboard,
-    anchor: 'trends',
-  },
-  {
-    value: 'KIDS_HEROES',
-    label: 'Дети-герои',
-    description: 'Добрые стилизованные миры, где ребёнок становится главным героем истории.',
-    icon: Baby,
-    anchor: 'kids',
-  },
-  {
-    value: 'SPECIAL_OCCASIONS',
-    label: 'Особые поводы',
-    description: 'Видео-открытки и персональные сюжеты для юбилеев, свадеб и семейных дат.',
-    icon: Gift,
-    anchor: 'occasions',
-  },
-];
+const categoryIcons: Record<ServiceCategory, typeof Heart> = {
+  NOSTALGIA: Heart,
+  TRENDS_MEMES: Clapperboard,
+  KIDS_HEROES: Baby,
+  SPECIAL_OCCASIONS: Gift,
+  PHOTO_RESTORE: Heart,
+  PHOTO_ANIMATE: Sparkles,
+  TREND: Clapperboard,
+  CARTOON_CUSTOM: Baby,
+  REALISTIC_CUSTOM: Gift,
+  FAIRY_TALE: Baby,
+};
+
+const categories = GIFT_CATEGORIES.map((category) => ({
+  ...category,
+  icon: categoryIcons[category.value],
+  anchor:
+    category.value === 'NOSTALGIA'
+      ? 'nostalgia'
+      : category.value === 'TRENDS_MEMES'
+        ? 'trends'
+        : category.value === 'KIDS_HEROES'
+          ? 'kids'
+          : 'occasions',
+}));
+
+const validCategories = new Set<ServiceCategory>(GIFT_CATEGORIES.map((category) => category.value));
 
 function mediaUrl(value?: string | null) {
   if (!value) return null;
@@ -58,7 +50,7 @@ function mediaUrl(value?: string | null) {
 }
 
 function priceFrom(service: PublicService) {
-  return service.priceCoinsStandard ?? service.priceTokens;
+  return giftServicePriceFrom(service);
 }
 
 function previewFrom(service: PublicService) {
@@ -117,10 +109,17 @@ function ServiceTile({ service, featured = false }: { service: PublicService; fe
   );
 }
 
-export function ServicesCatalog() {
-  const { data, isLoading, isError } = useListServicesQuery();
+type ServicesCatalogProps = {
+  initialCategory?: ServiceCategory;
+};
+
+export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
+  const requestedCategory = initialCategory;
+  const selectedCategory = requestedCategory && validCategories.has(requestedCategory) ? requestedCategory : undefined;
+  const { data, isLoading, isError } = useListServicesQuery(selectedCategory ? { category: selectedCategory } : undefined);
   const services = data?.services ?? [];
   const featured = services.filter((service) => service.isFeatured);
+  const activeCategory = categories.find((category) => category.value === selectedCategory);
 
   return (
     <div className="pb-16">
@@ -139,10 +138,23 @@ export function ServicesCatalog() {
           </div>
           <div className="flex flex-wrap gap-2 lg:justify-end">
             {categories.map((category) => (
-              <Button key={category.value} asChild variant="outline" className="border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800">
-                <a href={`#${category.anchor}`}>{category.label}</a>
+              <Button
+                key={category.value}
+                asChild
+                variant="outline"
+                className={cn(
+                  'border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800',
+                  selectedCategory === category.value && 'border-amber-400 bg-amber-400/10 text-amber-200',
+                )}
+              >
+                <Link href={`/services?category=${category.value}`}>{category.label}</Link>
               </Button>
             ))}
+            {selectedCategory && (
+              <Button asChild variant="ghost" className="text-slate-300 hover:bg-slate-800 hover:text-white">
+                <Link href="/services">Все</Link>
+              </Button>
+            )}
           </div>
         </div>
       </section>
@@ -169,7 +181,9 @@ export function ServicesCatalog() {
             <section className="container">
               <div className="mb-5 flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-amber-400" />
-                <h2 className="text-2xl font-bold tracking-tight">Популярные подарки</h2>
+                <h2 className="text-2xl font-bold tracking-tight">
+                  {activeCategory ? `Популярное в категории «${activeCategory.label}»` : 'Популярные подарки'}
+                </h2>
               </div>
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                 {featured.map((service) => (
@@ -180,7 +194,9 @@ export function ServicesCatalog() {
           )}
 
           <div className="container mt-14 space-y-14">
-            {categories.map((category) => {
+            {categories
+              .filter((category) => !selectedCategory || category.value === selectedCategory)
+              .map((category) => {
               const Icon = category.icon;
               const items = services.filter((service) => service.category === category.value);
               return (

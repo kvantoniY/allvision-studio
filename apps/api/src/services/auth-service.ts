@@ -30,7 +30,7 @@ export async function register(data: RegisterInput) {
     throw new HttpError(409, 'EMAIL_TAKEN', 'Пользователь с таким email уже существует');
   }
 
-  const welcomeBonus = Number(process.env.WELCOME_TOKENS_BONUS ?? 50);
+  const welcomeBonus = Number(process.env.WELCOME_TOKENS_BONUS ?? 25);
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST);
 
   const user = await prisma.$transaction(async (tx) => {

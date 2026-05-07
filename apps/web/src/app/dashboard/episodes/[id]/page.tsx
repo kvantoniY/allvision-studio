@@ -206,12 +206,12 @@ export default function EpisodeDetailPage({ params }: PageProps) {
                 {!episode.watermarkRemoved && (
                   <Button type="button" variant="outline" onClick={() => setConfirm('watermark')}>
                     <ShieldOff className="h-4 w-4" />
-                    Убрать водяной знак за 60 токенов
+                    Убрать водяной знак за 60 коинов
                   </Button>
                 )}
                 <Button type="button" variant="outline" onClick={() => setConfirm('regenerate')}>
                   <RefreshCw className="h-4 w-4" />
-                  Перегенерировать за 30 токенов
+                  Перегенерировать за 30 коинов
                 </Button>
               </div>
             </div>
@@ -225,10 +225,10 @@ export default function EpisodeDetailPage({ params }: PageProps) {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Генерация не удалась</AlertTitle>
             <AlertDescription>
-              {episode.errorMessage ?? 'Попробуйте запустить генерацию ещё раз.'} Токены {episode.tokensCost} возвращены.
+              {episode.errorMessage ?? 'Попробуйте запустить генерацию ещё раз.'} Коины {episode.tokensCost} возвращены.
               <div className="mt-4">
                 <Button type="button" onClick={() => setConfirm('regenerate')}>
-                  Перегенерировать за 30 токенов
+                  Перегенерировать за 30 коинов
                 </Button>
               </div>
             </AlertDescription>
@@ -240,7 +240,7 @@ export default function EpisodeDetailPage({ params }: PageProps) {
         open={confirm === 'watermark'}
         onOpenChange={(open) => setConfirm(open ? 'watermark' : null)}
         title="Убрать водяной знак?"
-        description="С баланса будет списано 60 токенов, а overlay исчезнет в плеере Allvision Studio."
+        description="С баланса будет списано 60 коинов, а overlay исчезнет в плеере Allvision Studio."
         confirmText="Убрать за 60"
         busy={removeState.isLoading}
         onConfirm={runWatermarkRemoval}
@@ -249,7 +249,7 @@ export default function EpisodeDetailPage({ params }: PageProps) {
         open={confirm === 'regenerate'}
         onOpenChange={(open) => setConfirm(open ? 'regenerate' : null)}
         title="Перегенерировать эпизод?"
-        description="С баланса будет списано 30 токенов. Новый рендер снова появится с водяным знаком."
+        description="С баланса будет списано 30 коинов. Новый рендер снова появится с водяным знаком."
         confirmText="Перегенерировать"
         busy={regenerateState.isLoading}
         onConfirm={runRegenerate}

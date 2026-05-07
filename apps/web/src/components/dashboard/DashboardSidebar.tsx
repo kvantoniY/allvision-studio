@@ -85,7 +85,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
       <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
         <Link href="/pricing" onClick={onNavigate}>
           <Coins className="mr-2 h-4 w-4" />
-          Купить токены
+          Купить коины
         </Link>
       </Button>
     </div>

@@ -59,7 +59,7 @@ function TemplateOption({ template, selected, onSelect }: {
       <div className="space-y-2 p-4">
         <div className="flex flex-wrap gap-2">
           <Badge variant="secondary" className="bg-slate-800 text-slate-200">{categoryLabel(template.category)}</Badge>
-          <Badge className="bg-violet-600 text-white">{template.priceTokens} токенов</Badge>
+          <Badge className="bg-violet-600 text-white">{template.priceTokens} коинов</Badge>
         </div>
         <div className="font-semibold text-white">{template.title}</div>
         <p className="line-clamp-2 text-sm leading-6 text-slate-400">{template.shortDesc}</p>
@@ -164,7 +164,7 @@ export default function NewEpisodePage() {
     if (!selectedTemplate || !requiredRolesReady) return;
     if (selectedTemplate.needsScene && !selectedSceneId) return;
     if (balance < selectedTemplate.priceTokens) {
-      toast({ title: 'Недостаточно токенов', variant: 'destructive' });
+      toast({ title: 'Недостаточно коинов', variant: 'destructive' });
       return;
     }
 
@@ -183,7 +183,7 @@ export default function NewEpisodePage() {
     } catch (error) {
       const code = (error as { data?: { error?: { code?: string } } })?.data?.error?.code;
       toast({
-        title: code === 'INSUFFICIENT_TOKENS' ? 'Недостаточно токенов' : 'Не удалось создать эпизод',
+        title: code === 'INSUFFICIENT_TOKENS' ? 'Недостаточно коинов' : 'Не удалось создать эпизод',
         variant: 'destructive',
       });
     }
@@ -461,13 +461,13 @@ export default function NewEpisodePage() {
                 <div className="text-sm text-slate-400">Цена</div>
                 <div className="mt-1 flex items-center gap-2 text-2xl font-bold text-white">
                   <Coins className="h-5 w-5 text-amber-400" />
-                  {selectedTemplate.priceTokens} токенов
+                  {selectedTemplate.priceTokens} коинов
                 </div>
-                <div className="mt-2 text-sm text-slate-400">Ваш баланс: {balance} токенов</div>
+                <div className="mt-2 text-sm text-slate-400">Ваш баланс: {balance} коинов</div>
               </div>
               {balance < selectedTemplate.priceTokens && (
                 <Alert variant="destructive" className="border-red-500/40 bg-red-500/10">
-                  <AlertTitle>Недостаточно токенов</AlertTitle>
+                  <AlertTitle>Недостаточно коинов</AlertTitle>
                   <AlertDescription>Пополните баланс, чтобы создать эпизод.</AlertDescription>
                 </Alert>
               )}
@@ -495,7 +495,7 @@ export default function NewEpisodePage() {
             ) : (
               <Button type="button" onClick={submit} disabled={createState.isLoading || !selectedTemplate}>
                 <CheckCircle2 className="h-4 w-4" />
-                Создать эпизод за {selectedTemplate?.priceTokens ?? 0} токенов
+                Создать эпизод за {selectedTemplate?.priceTokens ?? 0} коинов
               </Button>
             )}
           </div>

@@ -3,13 +3,17 @@
 import Link from 'next/link';
 import {
   ArrowRight,
+  Baby,
+  Clapperboard,
   Coins,
   FileText,
+  Gift,
+  Heart,
   Image as ImageIcon,
   Sparkles,
-  TrendingUp,
   Wallet,
 } from 'lucide-react';
+import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -19,42 +23,58 @@ import { useListCharactersQuery } from '@/store/api/characters-api';
 import { useListProjectsQuery } from '@/store/api/projects-api';
 import { useListScenesQuery } from '@/store/api/scenes-api';
 import { useListEpisodesQuery } from '@/store/api/episodes-api';
+import { useListServicesQuery } from '@/store/api/services-api';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import { OrderCard } from '@/components/dashboard/OrderCard';
 import { transactionDescription, formatDate } from '@/components/dashboard/labels';
 import { StudioMetricIcon } from '@/components/studio/v3-labels';
+import { GIFT_CATEGORIES, giftServicePriceFrom } from '@/lib/gift-factory';
 import { cn } from '@/lib/utils';
 
-const QUICK_START = [
-  {
-    title: 'Улучшить старое фото',
-    desc: 'Реставрация и колоризация',
-    href: '/services/photo-restore',
-    price: 'от 20 токенов',
-    icon: ImageIcon,
-  },
-  {
-    title: 'Оживить фотографию',
-    desc: 'Анимация лиц и сцен',
-    href: '/services/photo-animate',
-    price: 'от 50 токенов',
-    icon: Sparkles,
-  },
-  {
-    title: 'Видео в тренде',
-    desc: 'Готовые форматы из ленты',
-    href: '/services/trends',
-    price: 'от 30 токенов',
-    icon: TrendingUp,
-  },
-];
+const categoryIcons: Record<ServiceCategory, typeof Heart> = {
+  NOSTALGIA: Heart,
+  TRENDS_MEMES: Clapperboard,
+  KIDS_HEROES: Baby,
+  SPECIAL_OCCASIONS: Gift,
+  PHOTO_RESTORE: Heart,
+  PHOTO_ANIMATE: Sparkles,
+  TREND: Clapperboard,
+  CARTOON_CUSTOM: Baby,
+  REALISTIC_CUSTOM: Gift,
+  FAIRY_TALE: Baby,
+};
+
+function FeaturedGiftCard({ service }: { service: PublicService }) {
+  return (
+    <Link href={`/services/${service.slug}`} className="group">
+      <Card className="h-full border-slate-800 bg-slate-900 transition hover:-translate-y-0.5 hover:border-amber-400/70">
+        <CardContent className="flex h-full flex-col gap-4 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-md bg-amber-500/10 text-amber-300">
+              <Sparkles className="h-5 w-5" />
+            </span>
+            <ArrowRight className="h-4 w-4 text-amber-300 transition group-hover:translate-x-1" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-white">{service.title}</h3>
+            <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">{service.shortDesc}</p>
+          </div>
+          <div className="text-sm font-semibold text-amber-300">
+            от {giftServicePriceFrom(service)} коинов
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const { data, isLoading } = useGetDashboardQuery();
   const { data: projectsData, isLoading: isProjectsLoading } = useListProjectsQuery({ page: 1, limit: 3 });
+  const { data: featuredData, isLoading: isFeaturedLoading } = useListServicesQuery({ featured: true });
   const { data: charactersData } = useListCharactersQuery({ status: 'READY' });
   const { data: scenesData } = useListScenesQuery();
   const { data: episodesData } = useListEpisodesQuery({ page: 1, limit: 50 });
@@ -105,7 +125,7 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold">
-          Добро пожаловать, {user.name ?? user.email}! 👋
+          Добро пожаловать, {user.name ?? user.email}!
         </h1>
         <p className="mt-1 text-slate-400">Что создадим сегодня?</p>
       </div>
@@ -113,9 +133,9 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={<Coins className="h-5 w-5" />}
-          label="Баланс токенов"
+          label="Баланс коинов"
           value={user.tokenBalance}
-          hint="1 токен = 1 ₽"
+          hint="1 коин = 1 ₽"
           accent="amber"
           cta={{ label: 'Пополнить', href: '/pricing' }}
         />
@@ -134,7 +154,7 @@ export default function DashboardPage() {
         />
         <StatCard
           icon={<Wallet className="h-5 w-5" />}
-          label="Потрачено токенов"
+          label="Потрачено коинов"
           value={stats.totalSpent}
           hint={`≈ ${stats.totalSpent} ₽`}
           accent="emerald"
@@ -142,23 +162,23 @@ export default function DashboardPage() {
       </div>
 
       <section>
-        <h2 className="mb-4 text-xl font-semibold">Что хотите создать?</h2>
-        <div className="grid gap-4 md:grid-cols-3">
-          {QUICK_START.map((q) => {
-            const Icon = q.icon;
+        <h2 className="mb-4 text-xl font-semibold">Категории подарков</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {GIFT_CATEGORIES.map((category) => {
+            const Icon = categoryIcons[category.value];
             return (
-              <Link key={q.href} href={q.href} className="group">
+              <Link key={category.value} href={category.href} className="group">
                 <Card className="h-full bg-slate-900 border-slate-800 transition hover:border-violet-500/50 hover:-translate-y-0.5 hover:shadow-[0_0_20px_-5px_rgba(139,92,246,0.4)]">
                   <CardContent className="p-5 flex h-full flex-col gap-3">
                     <span className="grid h-10 w-10 place-items-center rounded-md bg-violet-500/10 text-violet-300">
                       <Icon className="h-5 w-5" />
                     </span>
                     <div className="flex-1">
-                      <h3 className="font-semibold">{q.title}</h3>
-                      <p className="text-sm text-slate-400">{q.desc}</p>
+                      <h3 className="font-semibold">{category.label}</h3>
+                      <p className="text-sm leading-6 text-slate-400">{category.shortDescription}</p>
                     </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-amber-400">{q.price}</span>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-violet-300">Выбрать</span>
                       <ArrowRight className="h-4 w-4 text-violet-400 transition group-hover:translate-x-1" />
                     </div>
                   </CardContent>
@@ -167,6 +187,28 @@ export default function DashboardPage() {
             );
           })}
         </div>
+      </section>
+
+      <section>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">Популярные подарки</h2>
+          <Link href="/services" className="text-sm text-violet-400 hover:underline">
+            Все услуги
+          </Link>
+        </div>
+        {isFeaturedLoading ? (
+          <div className="grid gap-4 md:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Skeleton key={index} className="h-44 rounded-lg" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
+            {(featuredData?.services ?? []).slice(0, 3).map((service) => (
+              <FeaturedGiftCard key={service.id} service={service} />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="grid gap-6 lg:grid-cols-3">
@@ -188,7 +230,7 @@ export default function DashboardPage() {
               <EmptyState
                 icon={<ImageIcon className="h-full w-full" />}
                 title="Готовы создать первое чудо?"
-                description="Загрузите старое фото или попробуйте трендовый формат"
+                description="Выберите категорию подарка и запустите готовый сценарий"
                 actions={[{ label: 'Все услуги', href: '/services' }]}
               />
             ) : (
@@ -293,7 +335,7 @@ export default function DashboardPage() {
             <div>
               <h3 className="text-lg font-semibold">Начните прямо сейчас</h3>
               <p className="mt-1 text-sm text-slate-300">
-                У вас уже есть {user.tokenBalance} токенов — этого хватит на первый проект.
+                У вас уже есть {user.tokenBalance} коинов. Выберите подарок или пополните баланс для полного запуска.
               </p>
             </div>
             <Button asChild>
