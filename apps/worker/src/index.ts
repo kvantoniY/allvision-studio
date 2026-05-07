@@ -9,14 +9,16 @@ import { processFairyTaleScript } from './processors/fairy-tale-script';
 import { processCharacterNsfw } from './processors/character-nsfw';
 import { processEpisode } from './processors/episode';
 import { processServicePipeline } from './processors/service-pipeline';
+import { initialiseWorkerProviders } from './providers';
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const CONCURRENCY = 2;
 const CHARACTER_NSFW_CONCURRENCY = 4;
 const EPISODE_CONCURRENCY = 1;
+export const SERVICE_PIPELINE_CONCURRENCY = 1;
 
 // BullMQ requires maxRetriesPerRequest: null for blocking commands.
-const connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, lazyConnect: false });
+let connection: IORedis | undefined;
 
 const time = () => new Date().toLocaleTimeString('ru-RU', { hour12: false });
 const log = (msg: string) => console.log(`\x1b[2m${time()}\x1b[0m \x1b[35mWORKER\x1b[0m ${msg}`);
@@ -32,40 +34,47 @@ const queues: Array<[QueueName, Processor]> = [
   [QUEUE_NAMES.SERVICE_PIPELINE, processServicePipeline as Processor],
 ];
 
-const workers = queues.map(([name, processor]) => {
-  const concurrency =
-    name === QUEUE_NAMES.CHARACTER_NSFW
-      ? CHARACTER_NSFW_CONCURRENCY
-      : name === QUEUE_NAMES.EPISODE
-        ? EPISODE_CONCURRENCY
-        : CONCURRENCY;
-  return new Worker(name, processor, { connection, concurrency });
-});
+export function queueConcurrencyFor(name: QueueName) {
+  if (name === QUEUE_NAMES.CHARACTER_NSFW) return CHARACTER_NSFW_CONCURRENCY;
+  if (name === QUEUE_NAMES.EPISODE) return EPISODE_CONCURRENCY;
+  if (name === QUEUE_NAMES.SERVICE_PIPELINE) return SERVICE_PIPELINE_CONCURRENCY;
+  return CONCURRENCY;
+}
+
+let workers: Worker[] = [];
 
 let readyCount = 0;
-workers.forEach((w) => {
-  w.on('ready', () => {
-    readyCount += 1;
-    const concurrency =
-      w.name === QUEUE_NAMES.CHARACTER_NSFW
-        ? CHARACTER_NSFW_CONCURRENCY
-        : w.name === QUEUE_NAMES.EPISODE
-          ? EPISODE_CONCURRENCY
-          : CONCURRENCY;
-    log(`Worker ready: ${w.name} (concurrency: ${concurrency})`);
-    if (readyCount === workers.length) {
-      log(`All workers started: ${queues.map(([n]) => n).join(', ')}`);
-    }
+export async function start() {
+  await initialiseWorkerProviders();
+  connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, lazyConnect: false });
+  workers = queues.map(([name, processor]) => {
+    const concurrency = queueConcurrencyFor(name);
+    return new Worker(name, processor, { connection: connection!, concurrency });
   });
-  w.on('active', (job) => log(`[${w.name}] job started: ${job.id}`));
-  w.on('completed', (job, _res, prev) =>
-    log(`[${w.name}] job completed: ${job.id} (was ${prev})`),
-  );
-  w.on('failed', (job, e) => err(`[${w.name}] job ${job?.id} failed: ${e.message}`));
-  w.on('error', (e) => err(`[${w.name}] ${e.message}`));
-});
 
-connection.on('error', (e) => err(`Redis: ${e.message}`));
+  workers.forEach((w) => {
+    w.on('ready', () => {
+      readyCount += 1;
+      log(`Worker ready: ${w.name} (concurrency: ${queueConcurrencyFor(w.name as QueueName)})`);
+      if (readyCount === workers.length) {
+        log(`All workers started: ${queues.map(([n]) => n).join(', ')}`);
+      }
+    });
+    w.on('active', (job) => log(`[${w.name}] job started: ${job.id}`));
+    w.on('completed', (job, _res, prev) =>
+      log(`[${w.name}] job completed: ${job.id} (was ${prev})`),
+    );
+    w.on('failed', (job, e) => err(`[${w.name}] job ${job?.id} failed: ${e.message}`));
+    w.on('error', (e) => err(`[${w.name}] ${e.message}`));
+  });
+}
+
+if (require.main === module) {
+  start().catch((e) => {
+    err(`startup failed: ${(e as Error).message}`);
+    process.exit(1);
+  });
+}
 
 let shuttingDown = false;
 async function shutdown(signal: string) {
@@ -79,7 +88,7 @@ async function shutdown(signal: string) {
   timer.unref();
   try {
     await Promise.all(workers.map((w) => w.close()));
-    await connection.quit();
+    await connection?.quit();
     log('Worker stopped');
     process.exit(0);
   } catch (e) {

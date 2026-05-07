@@ -12,7 +12,7 @@ const POLL_INTERVAL_MS = 1500;
 
 export async function processEpisode(job: Job<EpisodeJobData>) {
   const { episodeId, userId } = job.data;
-  const aiProvider = providers.getAIProvider();
+  const aiProvider = providers.getLegacyAIProvider();
   let movedToProcessing = false;
 
   try {
@@ -178,7 +178,7 @@ async function waitForResult(params: {
   minProgress: number;
   maxProgress: number;
 }) {
-  const aiProvider = providers.getAIProvider();
+  const aiProvider = providers.getLegacyAIProvider();
 
   for (let index = 0; index < MAX_ITERATIONS; index += 1) {
     const status = await aiProvider.getJobStatus(params.handle);

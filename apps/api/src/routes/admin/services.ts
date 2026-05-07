@@ -426,7 +426,7 @@ adminServicesRouter.post('/:id/test-run', async (req: Request, res: Response, ne
     });
 
     try {
-      await queues.addServicePipelineJob({ projectId: project.id, userId: req.user.id });
+      await queues.addServicePipelineJob({ projectId: project.id, userId: req.user.id, mode: 'test-run' });
     } catch (err) {
       logger.error(`Failed to enqueue service pipeline test-run ${project.id}`, err);
       await prisma.project.update({

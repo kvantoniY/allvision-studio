@@ -6,9 +6,9 @@ import {
   asObject,
   blockOutputSchema,
   estimateFromSupportedModel,
+  providerResultToOutput,
   readInputUrl,
   tierModelParamsSchema,
-  waitForAIJob,
 } from './utils';
 
 const catalog = getBlockCatalogItem('image-to-video');
@@ -30,11 +30,15 @@ export const imageToVideoBlock: BlockDefinition = {
   async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);
     await ctx.reportProgress(5);
-    const handle = await ctx.getAIProvider().animateImage({
+    const result = await ctx.getAIProvider().imageToVideo({
       imageUrl: readInputUrl(input),
-      config: asObject(parsed),
+      prompt: parsed.prompt,
+      durationSec: parsed.duration ?? 5,
+      model: typeof parsed.model === 'string' ? parsed.model : 'kling-std',
+      params: asObject(parsed),
+      context: ctx.providerContext,
     });
-    const output = await waitForAIJob({ handle, ctx, expectedType: 'video' });
+    const output = providerResultToOutput(result, 'video');
     await ctx.reportProgress(100);
     return output;
   },

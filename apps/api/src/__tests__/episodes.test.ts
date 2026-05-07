@@ -508,7 +508,7 @@ describe('/api/episodes', () => {
         resultType: handle.providerJobId === 'image-job' ? 'image' : 'video',
       })),
     };
-    jest.spyOn(workerProviders, 'getAIProvider').mockReturnValue(fakeProvider as any);
+    jest.spyOn(workerProviders, 'getLegacyAIProvider').mockReturnValue(fakeProvider as any);
 
     await processEpisode({ data: { episodeId: episode.id, userId: ownerUserId } } as any);
 

@@ -7,14 +7,17 @@
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "smoke:piapi": "tsx scripts/smoke-piapi.ts"
   },
   "dependencies": {
     "@allvision/database": "*",
     "@allvision/shared": "*",
+    "@aws-sdk/client-s3": "^3.1044.0",
     "bullmq": "^5.12.0",
     "dotenv": "^16.4.5",
     "ioredis": "^5.4.1",
+    "sharp": "^0.34.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {

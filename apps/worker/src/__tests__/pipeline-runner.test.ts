@@ -13,6 +13,8 @@ import {
   runPipeline,
   type PipelineStep,
 } from '../pipeline-runner';
+import { StubAIProvider } from '../providers/stub-ai-provider';
+import { deleteAIUsageLogsByUserIds } from '../providers/usage-limits';
 
 const RUN_ID = Date.now();
 
@@ -36,6 +38,11 @@ function fakeStorage() {
     getSignedUrl: jest.fn(),
     delete: jest.fn(),
   };
+}
+
+function stubProviderFactory() {
+  const provider = new StubAIProvider();
+  return () => provider;
 }
 
 function makeBlock(params: {
@@ -125,6 +132,7 @@ async function cleanup() {
   });
   const userIds = users.map((user) => user.id);
   if (userIds.length > 0) {
+    await deleteAIUsageLogsByUserIds(userIds);
     await prisma.tokenTransaction.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.project.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -148,7 +156,7 @@ describe('resolvePlaceholders', () => {
         photo: '{{user.photo}}',
         prevUrl: '{{step_1.url}}',
         embedded: 'Hello {{user.name}}',
-        model: { standard: 'kling-2.6', pro: 'seedance-2.0' },
+        model: { standard: 'kling-std', pro: 'kling-pro' },
       },
       {
         userInputs: { photo: 'photo.jpg', name: 'Alice' },
@@ -161,7 +169,7 @@ describe('resolvePlaceholders', () => {
       photo: 'photo.jpg',
       prevUrl: 'restored.jpg',
       embedded: 'Hello Alice',
-      model: 'seedance-2.0',
+      model: 'kling-pro',
     });
   });
 });
@@ -189,6 +197,7 @@ describe('runPipeline', () => {
       },
       {
         getBlock: (slug) => blocks[slug as keyof typeof blocks],
+        getAIProvider: stubProviderFactory(),
         storage: fakeStorage(),
         logger: noopLogger(),
       },
@@ -237,6 +246,7 @@ describe('runPipeline', () => {
       { generationId: project.id, pipelineConfig: pipeline, selectedTier: 'standard' },
       {
         getBlock: (slug) => blocks[slug as keyof typeof blocks],
+        getAIProvider: stubProviderFactory(),
         storage: fakeStorage(),
         logger: noopLogger(),
       },
@@ -257,6 +267,7 @@ describe('runPipeline', () => {
         { generationId: project.id, pipelineConfig: pipeline, selectedTier: 'standard' },
         {
           getBlock: () => makeBlock({ slug: 'bad', fail: true }),
+          getAIProvider: stubProviderFactory(),
           storage: fakeStorage(),
           logger: noopLogger(),
         },

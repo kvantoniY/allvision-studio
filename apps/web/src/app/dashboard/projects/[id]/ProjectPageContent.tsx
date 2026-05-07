@@ -95,6 +95,7 @@ function urlsFromInputs(value: unknown): string[] {
   return Object.values(value)
     .filter((item): item is string => typeof item === 'string')
     .filter((item) => item.startsWith('/static/') || item.startsWith('http://') || item.startsWith('https://'))
+    .filter((item) => !/\.(mp4|webm|mov)(\?|$)/i.test(item))
     .map((item) => mediaUrl(item) ?? item);
 }
 
@@ -107,6 +108,14 @@ function outputUrl(output: unknown): string | null {
     if (typeof value === 'string') return mediaUrl(value);
   }
   return null;
+}
+
+function outputMetadata(output: unknown): Record<string, unknown> {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return {};
+  const metadata = (output as Record<string, unknown>).metadata;
+  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
+    ? metadata as Record<string, unknown>
+    : {};
 }
 
 function isVideoUrl(url: string) {
@@ -165,6 +174,9 @@ function StepProgressList({ steps, showOutputs = false }: { steps: StepProgressI
     <div className="space-y-3">
       {steps.map((step, index) => {
         const url = outputUrl(step.output);
+        const metadata = outputMetadata(step.output);
+        const costUsd = typeof metadata.providerCostUsd === 'number' ? metadata.providerCostUsd : undefined;
+        const piapiTaskId = typeof metadata.piapiTaskId === 'string' ? metadata.piapiTaskId : undefined;
         return (
           <div key={step.stepId} className="rounded-lg border border-slate-800 bg-slate-950 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -189,6 +201,20 @@ function StepProgressList({ steps, showOutputs = false }: { steps: StepProgressI
                 ) : (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={url} alt={`Результат шага ${index + 1}`} className="max-h-56 w-full object-contain" />
+                )}
+              </div>
+            )}
+            {showOutputs && (costUsd !== undefined || piapiTaskId) && (
+              <div className="mt-3 grid gap-2 rounded-md border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400 sm:grid-cols-2">
+                {costUsd !== undefined && (
+                  <div>
+                    <span className="text-slate-500">costUsd:</span> ${costUsd.toFixed(4)}
+                  </div>
+                )}
+                {piapiTaskId && (
+                  <div className="break-all">
+                    <span className="text-slate-500">piapiTaskId:</span> {piapiTaskId}
+                  </div>
                 )}
               </div>
             )}
@@ -500,7 +526,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
             </div>
             <Progress value={progress} />
             <p className="mt-5 text-sm leading-6 text-slate-400">
-              Это занимает обычно 2–5 минут, не закрывайте страницу или придёте позже.
+              Это занимает обычно 3–15 минут, можно закрыть страницу — вернётесь позже, статус сохранится.
             </p>
           </CardContent>
         </Card>

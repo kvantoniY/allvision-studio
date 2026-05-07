@@ -163,6 +163,7 @@ model Project {
   user    User     @relation(fields: [userId], references: [id])
   service Service? @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   trend   Trend?   @relation(fields: [trendId], references: [id], onDelete: SetNull)
+  aiUsageLogs AIUsageLog[]
 }
 
 enum ProjectStatus {
@@ -515,6 +516,29 @@ model TokenTransaction {
   createdAt    DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+}
+
+// === Лог реальных и тестовых AI-вызовов ===
+model AIUsageLog {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  projectId    String?
+  userId       String?
+  blockSlug    String
+  provider     String
+  model        String
+  taskId       String?
+  status       String
+  costUsd      Float
+  durationMs   Int
+  errorCode    String?
+  errorMessage String?
+
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([projectId])
 }
 
 // === Пакеты токенов ===

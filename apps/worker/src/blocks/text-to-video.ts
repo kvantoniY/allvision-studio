@@ -6,8 +6,8 @@ import {
   asObject,
   blockOutputSchema,
   estimateFromSupportedModel,
+  providerResultToOutput,
   tierModelParamsSchema,
-  waitForAIJob,
 } from './utils';
 
 const catalog = getBlockCatalogItem('text-to-video');
@@ -29,13 +29,15 @@ export const textToVideoBlock: BlockDefinition = {
   async executor(params, _input, ctx) {
     const parsed = paramsSchema.parse(params);
     await ctx.reportProgress(5);
-    const handle = await ctx.getAIProvider().generateTrend({
+    const result = await ctx.getAIProvider().imageToVideo({
       imageUrl: 'mock://text-to-video/seed.jpg',
-      trendPrompt: parsed.prompt,
+      prompt: parsed.prompt,
+      durationSec: parsed.duration ?? 5,
       model: typeof parsed.model === 'string' ? parsed.model : 'veo-3.1',
-      config: asObject(parsed),
+      params: asObject(parsed),
+      context: ctx.providerContext,
     });
-    const output = await waitForAIJob({ handle, ctx, expectedType: 'video' });
+    const output = providerResultToOutput(result, 'video');
     await ctx.reportProgress(100);
     return output;
   },

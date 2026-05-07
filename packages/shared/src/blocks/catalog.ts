@@ -21,18 +21,16 @@ const modelTierObject: JsonSchemaObject = objectSchema(
 );
 
 const restoreModels: ModelOption[] = [
-  { slug: 'gfpgan', title: 'GFPGAN Mock', tierHint: 'standard', estimatedCostCoins: 3 },
-  { slug: 'nano-banana-restore', title: 'Nano Banana Restore Mock', tierHint: 'pro', estimatedCostCoins: 7 },
+  { slug: 'mock-restore', title: 'Mock restore placeholder', tierHint: 'both', estimatedCostCoins: 0, estimatedCostUsd: 0 },
 ];
 
 const imageToVideoModels: ModelOption[] = [
-  { slug: 'kling-2.6', title: 'Kling 2.6 Mock', tierHint: 'standard', estimatedCostCoins: 20 },
-  { slug: 'seedance-2.0', title: 'Seedance 2.0 Mock', tierHint: 'pro', estimatedCostCoins: 45 },
+  { slug: 'kling-std', title: 'Kling 2.6 Standard', tierHint: 'standard', estimatedCostCoins: 20, estimatedCostUsd: 0.20 },
+  { slug: 'kling-pro', title: 'Kling 2.6 Pro', tierHint: 'pro', estimatedCostCoins: 30, estimatedCostUsd: 0.33 },
 ];
 
 const faceSwapModels: ModelOption[] = [
-  { slug: 'faceswap-lite', title: 'FaceSwap Lite Mock', tierHint: 'standard', estimatedCostCoins: 18 },
-  { slug: 'faceswap-pro', title: 'FaceSwap Pro Mock', tierHint: 'pro', estimatedCostCoins: 35 },
+  { slug: 'qubico-video-toolkit', title: 'Qubico Video Toolkit Face Swap', tierHint: 'both', estimatedCostCoins: 40, estimatedCostUsd: 0.48 },
 ];
 
 const textToVideoModels: ModelOption[] = [
@@ -89,10 +87,12 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
     paramsSchema: objectSchema(
       {
         model: modelTierObject,
-        templateVideo: { type: 'string', title: 'Template video URL' },
+        target_video: { type: 'string', title: 'Target video URL' },
         prompt: { type: 'string', title: 'Prompt' },
+        duration: { type: 'number', title: 'Duration seconds', default: 5 },
+        estimatedFrames: { type: 'number', title: 'Estimated frames', default: 120 },
       },
-      ['templateVideo'],
+      ['target_video'],
     ),
     supportedModels: faceSwapModels,
   },

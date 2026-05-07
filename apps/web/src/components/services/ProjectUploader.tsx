@@ -29,13 +29,13 @@ function errorCode(error: unknown): string | undefined {
 export function humanProjectError(error: unknown): string {
   switch (errorCode(error)) {
     case 'INSUFFICIENT_TOKENS':
-      return 'Недостаточно токенов, пополните баланс';
+      return 'Недостаточно коинов, пополните баланс';
     case 'FILE_TOO_LARGE':
       return 'Файл слишком большой (макс. 25 MB)';
     case 'UNSUPPORTED_FORMAT':
       return 'Формат не поддерживается. JPEG, PNG или WebP';
     case 'QUEUE_UNAVAILABLE':
-      return 'Сервис временно недоступен, попробуйте через минуту. Токены возвращены';
+      return 'Сервис временно недоступен, попробуйте через минуту. Коины возвращены';
     default:
       return 'Что-то пошло не так. Попробуйте ещё раз';
   }
@@ -132,7 +132,7 @@ export function ProjectUploader({
             <Wallet className="mt-1 h-5 w-5 text-amber-300" />
             <div>
               <div className="font-semibold text-amber-100">
-                Не хватает токенов: ваш баланс {user.tokenBalance}, нужно {tokensCost}
+                Не хватает коинов: ваш баланс {user.tokenBalance}, нужно {tokensCost}
               </div>
               <p className="mt-1 text-sm text-amber-100/70">{lowBalanceDescription(serviceSlug)}</p>
             </div>

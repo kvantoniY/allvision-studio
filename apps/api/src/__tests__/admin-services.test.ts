@@ -10,6 +10,7 @@ import {
 import { app } from '../app';
 import { signAccessToken } from '../utils/jwt';
 import * as fileService from '../services/file-service';
+import * as queues from '../queues';
 
 const RUN_ID = Date.now();
 const ADMIN_EMAIL = `admin-services-${RUN_ID}@example.com`;
@@ -47,7 +48,7 @@ function validData(slug = `service-${RUN_ID}-${Math.random().toString(16).slice(
         blockSlug: 'image-restore',
         input: '{{user.photo}}',
         params: {
-          model: { standard: 'gfpgan', pro: 'nano-banana-restore' },
+          model: { standard: 'mock-restore', pro: 'mock-restore' },
           strength: 0.75,
         },
       },
@@ -56,7 +57,7 @@ function validData(slug = `service-${RUN_ID}-${Math.random().toString(16).slice(
         blockSlug: 'image-to-video',
         input: '{{step_1.output}}',
         params: {
-          model: { standard: 'kling-2.6', pro: 'seedance-2.0' },
+          model: { standard: 'kling-std', pro: 'kling-pro' },
           duration: 5,
           prompt: 'Animate {{user.photo}}',
         },
@@ -424,6 +425,27 @@ describe('/api/admin/services', () => {
     expect(res.status).toBe(200);
     expect(res.body.service.slug).toBe(`${service.slug}-copy`);
     expect(res.body.service.isActive).toBe(false);
+  });
+
+  it('marks admin test-run jobs as test-run mode so worker never uses PiAPI', async () => {
+    const service = await createService(validData(`service-${RUN_ID}-test-run`));
+    const queueSpy = jest
+      .spyOn(queues, 'addServicePipelineJob')
+      .mockResolvedValue(undefined as never);
+
+    const res = await request(app)
+      .post(`/api/admin/services/${service.id}/test-run`)
+      .set('Cookie', authCookie(adminUserId, 'ADMIN'))
+      .send({ selectedTier: 'standard' });
+
+    expect(res.status).toBe(202);
+    expect(queueSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: adminUserId,
+        mode: 'test-run',
+      }),
+    );
+    queueSpy.mockRestore();
   });
 
   it('increments duplicate slug suffix when copy already exists', async () => {

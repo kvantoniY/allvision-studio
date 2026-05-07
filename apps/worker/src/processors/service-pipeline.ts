@@ -6,7 +6,7 @@ import { runPipeline } from '../pipeline-runner';
 import { logger } from '../utils/logger';
 
 export async function processServicePipeline(job: Job<ServicePipelineJobData>) {
-  const { projectId, userId } = job.data;
+  const { projectId, userId, mode } = job.data;
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -45,5 +45,6 @@ export async function processServicePipeline(job: Job<ServicePipelineJobData>) {
         ? (project.userInputs as Record<string, unknown>)
         : {},
     selectedTier: project.selectedTier === 'pro' ? 'pro' : 'standard',
+    mode: mode === 'test-run' ? 'test-run' : 'production',
   });
 }

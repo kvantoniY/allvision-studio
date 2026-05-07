@@ -6,9 +6,9 @@ import {
   asObject,
   blockOutputSchema,
   estimateFromSupportedModel,
+  providerResultToOutput,
   readInputUrl,
   tierModelParamsSchema,
-  waitForAIJob,
 } from './utils';
 
 const catalog = getBlockCatalogItem('image-upscale');
@@ -29,11 +29,13 @@ export const imageUpscaleBlock: BlockDefinition = {
   async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);
     await ctx.reportProgress(10);
-    const handle = await ctx.getAIProvider().restorePhoto({
+    const result = await ctx.getAIProvider().imageRestore({
       imageUrl: readInputUrl(input),
-      config: { ...asObject(parsed), operation: 'upscale' },
+      model: typeof parsed.model === 'string' ? parsed.model : 'upscale-x2',
+      params: { ...asObject(parsed), operation: 'upscale' },
+      context: ctx.providerContext,
     });
-    const output = await waitForAIJob({ handle, ctx, expectedType: 'image' });
+    const output = providerResultToOutput(result, 'image');
     await ctx.reportProgress(100);
     return output;
   },

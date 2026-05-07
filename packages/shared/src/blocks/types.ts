@@ -7,6 +7,7 @@ export interface ModelOption {
   title: string;
   tierHint: ModelTierHint;
   estimatedCostCoins: number;
+  estimatedCostUsd?: number;
 }
 
 export type JsonSchemaObject = {

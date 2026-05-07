@@ -43,4 +43,5 @@ export interface EpisodeJobData {
 export interface ServicePipelineJobData {
   projectId: string;
   userId: string;
+  mode?: 'production' | 'test-run';
 }

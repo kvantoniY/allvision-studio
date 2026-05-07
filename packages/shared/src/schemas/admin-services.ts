@@ -47,7 +47,7 @@ export const userInputFieldSchema = z.object({
   avatarTypes: z.array(z.enum(['HUMAN', 'PET', 'OBJECT', 'all'])).optional(),
   options: z.array(z.object({
     label: z.string().trim().min(1).max(120),
-    value: z.string().trim().min(1).max(120),
+    value: z.string().trim().min(1).max(500),
   })).optional(),
 });
 

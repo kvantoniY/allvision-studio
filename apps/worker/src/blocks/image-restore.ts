@@ -6,9 +6,9 @@ import {
   asObject,
   blockOutputSchema,
   estimateFromSupportedModel,
+  providerResultToOutput,
   readInputUrl,
   tierModelParamsSchema,
-  waitForAIJob,
 } from './utils';
 
 const catalog = getBlockCatalogItem('image-restore');
@@ -29,11 +29,13 @@ export const imageRestoreBlock: BlockDefinition = {
   async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);
     await ctx.reportProgress(5);
-    const handle = await ctx.getAIProvider().restorePhoto({
+    const result = await ctx.getAIProvider().imageRestore({
       imageUrl: readInputUrl(input),
-      config: asObject(parsed),
+      model: typeof parsed.model === 'string' ? parsed.model : 'mock-restore',
+      params: asObject(parsed),
+      context: ctx.providerContext,
     });
-    const output = await waitForAIJob({ handle, ctx, expectedType: 'image' });
+    const output = providerResultToOutput(result, 'image');
     await ctx.reportProgress(100);
     return output;
   },

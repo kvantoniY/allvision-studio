@@ -1,13 +1,13 @@
 import type { Job } from 'bullmq';
 import { prisma } from '@allvision/database';
 import type { CharacterNsfwJobData } from '@allvision/shared';
-import { getAIProvider } from '../providers';
+import { getLegacyAIProvider } from '../providers';
 import { logger } from '../utils/logger';
 import { markCharacterReady, markCharacterRejected } from './base';
 
 export async function processCharacterNsfw(job: Job<CharacterNsfwJobData>) {
   const { characterId, userId } = job.data;
-  const aiProvider = getAIProvider();
+  const aiProvider = getLegacyAIProvider();
 
   try {
     const character = await prisma.character.findUnique({ where: { id: characterId } });

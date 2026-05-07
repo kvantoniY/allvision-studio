@@ -58,13 +58,13 @@ function serviceData(slug = `launch-service-${RUN_ID}-${Math.random().toString(1
         id: 'step_1',
         blockSlug: 'image-restore',
         input: '{{user.photo}}',
-        params: { model: { standard: 'gfpgan', pro: 'nano-banana-restore' } },
+        params: { model: { standard: 'mock-restore', pro: 'mock-restore' } },
       },
       {
         id: 'step_2',
         blockSlug: 'image-to-video',
         input: '{{step_1.output}}',
-        params: { duration: 5, model: { standard: 'kling-2.6', pro: 'seedance-2.0' } },
+        params: { duration: 5, model: { standard: 'kling-std', pro: 'kling-pro' } },
       },
     ],
     userInputForm: [

@@ -1,10 +1,10 @@
 import type { z } from 'zod';
 import type {
-  AIProvider,
   BlockCategory,
   ModelOption,
   StorageProvider,
 } from '@allvision/shared';
+import type { AIProvider, ProviderRunContext } from '../providers/ai-provider';
 
 export interface BlockLogger {
   debug?: (message: string, meta?: unknown) => void;
@@ -15,6 +15,7 @@ export interface BlockLogger {
 
 export interface BlockContext {
   generationId: string;
+  providerContext: ProviderRunContext;
   reportProgress: (percent: number) => Promise<void>;
   getAIProvider: () => AIProvider;
   storage: StorageProvider;

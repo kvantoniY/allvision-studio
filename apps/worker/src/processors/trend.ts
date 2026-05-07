@@ -1,14 +1,14 @@
 import type { Job } from 'bullmq';
 import { prisma } from '@allvision/database';
 import type { ProjectJobData } from '@allvision/shared';
-import { getAIProvider } from '../providers';
+import { getLegacyAIProvider } from '../providers';
 import { logger } from '../utils/logger';
 import { markProjectCompleted, markProjectFailed, updateProjectProgress } from './base';
 
 export async function processTrend(job: Job<ProjectJobData>) {
   const { projectId, userId, trendId } = job.data;
   const imageUrl = job.data.inputImages?.[0];
-  const aiProvider = getAIProvider();
+  const aiProvider = getLegacyAIProvider();
 
   let movedToProcessing = false;
 

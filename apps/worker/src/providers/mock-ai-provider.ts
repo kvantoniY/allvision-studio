@@ -2,13 +2,18 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type {
-  AIProvider,
+  AIProvider as LegacyAIProvider,
   AIJobHandle,
   AIJobStatus,
   FairyTaleScript,
   NSFWCheckResult,
   StorageProvider,
 } from '@allvision/shared';
+import type {
+  AIProvider as WorkerAIProvider,
+  ProviderResult,
+  ProviderRunContext,
+} from './ai-provider';
 
 type MockService = 'photo-restore' | 'photo-animate' | 'trend' | 'episode-image' | 'episode-video';
 type ResultType = 'image' | 'video';
@@ -74,8 +79,8 @@ function listAssets(dir: string, expected: ResultType): string[] {
     });
 }
 
-export class MockAIProvider implements AIProvider {
-  name = 'mock';
+export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
+  name = 'mock' as const;
 
   private storage: StorageProvider;
   private demoAssetsRoot: string;
@@ -124,6 +129,62 @@ export class MockAIProvider implements AIProvider {
       service,
     });
     return { providerJobId: jobId };
+  }
+
+  private async createImmediateResult(
+    service: MockService,
+    context?: ProviderRunContext,
+  ): Promise<ProviderResult> {
+    const startedAt = Date.now();
+    const { filePath, resultType } = this.pickAsset(service);
+    const ext = path.extname(filePath) || (resultType === 'image' ? '.jpg' : '.mp4');
+    const buffer = await fs.promises.readFile(filePath);
+    const key = context
+      ? `outputs/${context.userId ?? 'mock'}/${context.projectId}/${context.stepId}/result${ext}`
+      : `results/mock/${crypto.randomUUID()}${ext}`;
+    const contentType = inferContentType(ext, resultType);
+    const { url } = await this.storage.upload({ key, body: buffer, contentType });
+    return {
+      outputUrl: url,
+      costUsd: 0,
+      durationMs: Date.now() - startedAt,
+      meta: { provider: 'mock', resultType, service },
+    };
+  }
+
+  async imageRestore(params: {
+    imageUrl: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return {
+      outputUrl: params.imageUrl,
+      costUsd: 0,
+      durationMs: 1,
+      meta: { provider: 'mock', passthrough: true, service: 'image-restore' },
+    };
+  }
+
+  async imageToVideo(params: {
+    imageUrl: string;
+    prompt?: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return this.createImmediateResult('photo-animate', params.context);
+  }
+
+  async faceSwapVideo(params: {
+    swapImageUrl: string;
+    targetVideoUrl: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return this.createImmediateResult('trend', params.context);
   }
 
   async restorePhoto(_params: {

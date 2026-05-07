@@ -58,6 +58,52 @@ JSON-шаблоны сценариев сказок (`fairy-tales/template-*.jso
 Без демо-ассетов MockAIProvider будет кидать `DEMO_ASSETS_EMPTY` при
 попытке генерации.
 
+## PiAPI Integration
+
+P6 подключает реальные генерации только в worker для data-driven очереди
+`service-pipeline`:
+
+- `image-to-video` использует PiAPI Kling (`kling-std`, `kling-pro`).
+- `face-swap-video` использует PiAPI `Qubico/video-toolkit` с `task_type: face-swap`.
+- `image-restore`, `image-upscale` и `text-to-video` остаются mock; для настоящего
+  old-photo restoration нужен отдельный провайдер.
+
+Worker в production стартует fail-fast: без `PIAPI_API_KEY` и настроенного R2 он
+не запустится. Тесты используют stub-провайдер и не делают внешних вызовов.
+
+Нужные переменные:
+
+```bash
+PIAPI_API_KEY=
+PIAPI_BASE_URL=https://api.piapi.ai
+PIAPI_DAILY_CAP_USD=5
+PIAPI_BALANCE_MIN_USD=2
+
+R2_ENDPOINT=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_PUBLIC_BASE_URL=
+R2_TEMP_PREFIX=piapi-temp
+```
+
+R2 нужен, потому что PiAPI принимает публичные URL для входных изображений в
+Kling/video face-swap. Worker временно публикует локальные `/static/...` input-файлы
+в R2, передаёт public URL в PiAPI, а результат сразу скачивает обратно в
+LocalFileStorage (`/static/outputs/...`). Для R2 bucket стоит включить lifecycle
+cleanup для префикса `piapi-temp/` примерно на 24 часа.
+
+Лимиты расходов: перед каждым реальным вызовом worker проверяет `AIUsageLog` за
+последние 24 часа и останавливает новые вызовы при достижении
+`PIAPI_DAILY_CAP_USD`. Баланс PiAPI проверяется на старте и затем раз в час; если
+он ниже `PIAPI_BALANCE_MIN_USD`, новые PiAPI-задачи отклоняются с возвратом коинов.
+
+Ручной smoke запускается только явно:
+
+```bash
+RUN_PIAPI_SMOKE=1 npm run smoke:piapi -w @allvision/worker
+```
+
 Откроется:
 - Фронт — http://localhost:3000
 - API health — http://localhost:4000/api/health
@@ -92,4 +138,6 @@ docker/
 
 ## Фаза разработки
 
-Сейчас **Фаза 1** — локальная, всё бесплатно. AI и платежи работают через mock-провайдеры.
+Сейчас MVP-подготовка: платежи ещё mock, часть AI-блоков mock, а `image-to-video`
+и `face-swap-video` в data-driven `service-pipeline` подключены к PiAPI для
+закрытого тестирования.

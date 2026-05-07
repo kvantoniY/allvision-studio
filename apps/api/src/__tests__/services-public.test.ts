@@ -31,7 +31,7 @@ function serviceData(slug: string, category = ServiceCategory.NOSTALGIA, isActiv
         id: 'step_1',
         blockSlug: 'image-restore',
         input: '{{user.photo}}',
-        params: { model: { standard: 'gfpgan', pro: 'nano-banana-restore' } },
+        params: { model: { standard: 'mock-restore', pro: 'mock-restore' } },
       },
     ],
     userInputForm: [

@@ -1,10 +1,12 @@
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
 import type { StorageProvider } from '@allvision/shared';
 import { getAIProvider, getStorageProvider } from './providers';
+import type { ProviderMode } from './providers';
 import { markProjectFailed } from './processors/base';
 import { getBlock } from './blocks/registry';
 import type { BlockDefinition, BlockLogger, BlockOutput } from './blocks/types';
 import { logger as defaultLogger } from './utils/logger';
+import { isProviderUserSafeError, providerUnavailableMessage } from './providers/provider-errors';
 
 export type PipelineTier = 'standard' | 'pro';
 
@@ -20,6 +22,7 @@ export interface PipelineRunParams {
   pipelineConfig: unknown;
   userInputs?: Record<string, unknown>;
   selectedTier?: PipelineTier;
+  mode?: ProviderMode;
 }
 
 export interface PipelineRunnerDependencies {
@@ -59,6 +62,7 @@ export async function runPipeline(
   const storage = dependencies.storage ?? getStorageProvider();
   const providerFactory = dependencies.getAIProvider ?? getAIProvider;
   const selectedTier = params.selectedTier ?? 'standard';
+  const mode = params.mode ?? 'production';
   const userInputs = params.userInputs ?? {};
   const stepOutputs: Record<string, unknown> = {};
   const stepProgress: StepProgressEntry[] = steps.map((step) => ({
@@ -70,7 +74,7 @@ export async function runPipeline(
 
   const project = await prisma.project.findUnique({
     where: { id: params.generationId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, userId: true },
   });
   if (!project) throw new Error(`Generation project not found: ${params.generationId}`);
 
@@ -108,9 +112,30 @@ export async function runPipeline(
 
       const blockContext = {
         generationId: params.generationId,
+        providerContext: {
+          projectId: params.generationId,
+          userId: project.userId,
+          blockSlug: step.blockSlug,
+          stepId: step.id,
+          reportProgress: async (percent: number) => {
+            const safePercent = clampPercent(percent);
+            stepProgress[index] = {
+              ...stepProgress[index],
+              status: 'processing',
+              progress: safePercent,
+            };
+            await persistProgress(
+              params.generationId,
+              stepProgress,
+              index,
+              steps.length,
+              safePercent,
+            );
+          },
+        },
         storage,
         logger,
-        getAIProvider: providerFactory,
+        getAIProvider: () => providerFactory(step.blockSlug, { mode }),
         reportProgress: async (percent: number) => {
           const safePercent = clampPercent(percent);
           stepProgress[index] = {
@@ -164,10 +189,13 @@ export async function runPipeline(
   } catch (err) {
     const activeIndex = stepProgress.findIndex((step) => step.status === 'processing');
     if (activeIndex >= 0) {
+      const userSafeMessage = isProviderUserSafeError(err)
+        ? providerUnavailableMessage
+        : (err as Error).message;
       stepProgress[activeIndex] = {
         ...stepProgress[activeIndex],
         status: 'failed',
-        errorMessage: (err as Error).message,
+        errorMessage: userSafeMessage,
       };
       await prisma.project.update({
         where: { id: params.generationId },
@@ -175,7 +203,11 @@ export async function runPipeline(
       });
     }
     logger.error(`[pipeline] Project ${params.generationId} failed`, err);
-    await markProjectFailed(params.generationId, (err as Error).message, { refundTokens: true });
+    await markProjectFailed(
+      params.generationId,
+      isProviderUserSafeError(err) ? providerUnavailableMessage : (err as Error).message,
+      { refundTokens: true },
+    );
     throw err;
   }
 }
