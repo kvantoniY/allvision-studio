@@ -3,7 +3,7 @@ import type { StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
 import { PiAPIClient } from './piapi-client';
 import { ProviderError } from './provider-errors';
-import type { R2TemporaryPublisher } from './r2-temporary-publisher';
+import type { FilePublisher } from './file-publisher';
 import { assertPiAPIDailyCap, createAIUsageLog } from './usage-limits';
 
 type Logger = {
@@ -18,7 +18,7 @@ export interface PiAPIProviderOptions {
   dailyCapUsd: number;
   balanceMinUsd: number;
   storage: StorageProvider;
-  publisher: R2TemporaryPublisher;
+  publisher: FilePublisher;
   logger: Logger;
 }
 
@@ -37,7 +37,7 @@ export class PiAPIProvider implements AIProvider {
 
   private client: PiAPIClient;
   private storage: StorageProvider;
-  private publisher: R2TemporaryPublisher;
+  private publisher: FilePublisher;
   private dailyCapUsd: number;
   private balanceMinUsd: number;
   private lowBalance = false;

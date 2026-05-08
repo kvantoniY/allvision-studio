@@ -18,7 +18,7 @@ function statusColor(status: number): string {
 }
 
 // Шумные пути, которые не пишем в лог при успешном статусе.
-const SILENT_PATHS = new Set(['/api/health']);
+const SILENT_PATHS = new Set(['/api/health', '/api/ready']);
 
 export function requestLogger(req: Request, res: Response, next: NextFunction) {
   const start = process.hrtime.bigint();

@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: allvision-studio-postgres
+    restart: unless-stopped
+    env_file:
+      - ${ALLVISION_ENV_FILE:-.env}
+    volumes:
+      - /opt/allvision-studio/shared/postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: allvision-studio-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: allvision-studio-api:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile.prod
+    container_name: allvision-studio-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ${ALLVISION_ENV_FILE:-.env}
+    environment:
+      PORT: 4000
+    volumes:
+      - /opt/allvision-studio/shared/uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4000/api/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  worker:
+    image: allvision-studio-worker:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile.prod
+    container_name: allvision-studio-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ${ALLVISION_ENV_FILE:-.env}
+    volumes:
+      - /opt/allvision-studio/shared/uploads:/app/uploads
+
+  web:
+    image: allvision-studio-web:${IMAGE_TAG:-local}
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile.prod
+    container_name: allvision-studio-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    env_file:
+      - ${ALLVISION_ENV_FILE:-.env}
+    environment:
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: allvision-studio-nginx
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:80:80"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - /opt/allvision-studio/shared/uploads:/var/www/uploads:ro
+      - /opt/allvision-studio/shared/public-trends:/var/www/trends:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5

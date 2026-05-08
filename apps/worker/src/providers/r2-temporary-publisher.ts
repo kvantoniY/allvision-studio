@@ -4,6 +4,8 @@ import path from 'node:path';
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import sharp from 'sharp';
 import { ProviderError } from './provider-errors';
+import type { FilePublisher } from './file-publisher';
+import { expiresAt } from './file-publisher';
 
 export interface R2TemporaryPublisherOptions {
   endpoint: string;
@@ -15,7 +17,7 @@ export interface R2TemporaryPublisherOptions {
   prefix?: string;
 }
 
-export class R2TemporaryPublisher {
+export class R2TemporaryPublisher implements FilePublisher {
   private client: S3Client;
   private bucket: string;
   private publicBaseUrl: string;
@@ -90,10 +92,6 @@ export class R2TemporaryPublisher {
 
 function isProbablyPublicUrl(value: string) {
   return value.startsWith('https://') || value.startsWith('http://');
-}
-
-function expiresAt(ttlHours: number) {
-  return new Date(Date.now() + ttlHours * 60 * 60 * 1000);
 }
 
 function datePath() {

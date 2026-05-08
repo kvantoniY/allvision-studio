@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { healthRouter } from './health';
+import { healthRouter, readinessHandler } from './health';
 import { authRouter } from './auth';
 import { publicRouter } from './public';
 import { servicesRouter } from './services';
@@ -14,6 +14,7 @@ import { adminRouter } from './admin';
 export const router = Router();
 
 router.use('/health', healthRouter);
+router.get('/ready', readinessHandler);
 router.use('/auth', authRouter);
 router.use('/public', publicRouter);
 router.use('/services', servicesRouter);

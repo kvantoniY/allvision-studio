@@ -15,7 +15,7 @@ app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
   cors({
-    origin: process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN ?? process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000',
     credentials: true,
   }),
 );
@@ -33,6 +33,14 @@ app.use(requestLogger);
 
 // Раздача загруженных файлов (LocalFileStorage). В prod заменим на Yandex S3.
 const uploadsDir = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
+app.use(
+  '/static/uploads',
+  express.static(uploadsDir, {
+    maxAge: process.env.NODE_ENV === 'production' ? '1d' : 0,
+    cacheControl: true,
+    fallthrough: true,
+  }),
+);
 app.use(
   '/static',
   express.static(uploadsDir, {

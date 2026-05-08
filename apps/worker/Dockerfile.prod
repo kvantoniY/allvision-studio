@@ -1,0 +1,47 @@
+FROM node:22-alpine AS deps
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/worker/package.json apps/worker/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/database/package.json packages/database/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci
+
+FROM deps AS builder
+WORKDIR /app
+COPY . .
+RUN npm run build -w @allvision/database \
+  && npm run build -w @allvision/shared \
+  && npm run build -w @allvision/worker
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+RUN apk add --no-cache ffmpeg openssl \
+  && addgroup -S allvision \
+  && adduser -S allvision -G allvision
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/worker/package.json apps/worker/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY packages/database/package.json packages/database/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci --omit=dev
+
+COPY --from=builder --chown=allvision:allvision /app/apps/worker/dist apps/worker/dist
+COPY --from=builder --chown=allvision:allvision /app/packages/database/dist packages/database/dist
+COPY --from=builder --chown=allvision:allvision /app/packages/database/prisma packages/database/prisma
+COPY --from=builder --chown=allvision:allvision /app/packages/shared/dist packages/shared/dist
+COPY --from=builder --chown=allvision:allvision /app/apps/api/demo-assets apps/api/demo-assets
+
+RUN npx prisma generate --schema packages/database/prisma/schema.prisma
+RUN mkdir -p /app/uploads && chown -R allvision:allvision /app
+
+USER allvision
+CMD ["node", "apps/worker/dist/index.js"]

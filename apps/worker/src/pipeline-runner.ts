@@ -1,7 +1,7 @@
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
 import type { StorageProvider } from '@allvision/shared';
 import { getAIProvider, getStorageProvider } from './providers';
-import type { ProviderMode } from './providers';
+import type { PipelineProviderMode } from './providers';
 import { markProjectFailed } from './processors/base';
 import { getBlock } from './blocks/registry';
 import type { BlockDefinition, BlockLogger, BlockOutput } from './blocks/types';
@@ -22,7 +22,7 @@ export interface PipelineRunParams {
   pipelineConfig: unknown;
   userInputs?: Record<string, unknown>;
   selectedTier?: PipelineTier;
-  mode?: ProviderMode;
+  mode?: PipelineProviderMode;
 }
 
 export interface PipelineRunnerDependencies {

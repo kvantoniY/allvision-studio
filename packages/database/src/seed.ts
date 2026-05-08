@@ -4,17 +4,6 @@ import { prisma, ProcessingType, ServiceCategory } from './index';
 
 const BCRYPT_COST = 12;
 
-const publicSettingKeys = [
-  'fairy_tale_themes',
-  'support_telegram',
-  'support_email',
-  'company_name',
-  'fairy_tale_tier_basic_price',
-  'fairy_tale_tier_extended_price',
-  'cartoon_base_rate_per_minute',
-  'realistic_base_rate_per_minute',
-];
-
 function image(seed: string, width = 800, height = 600) {
   return `https://picsum.photos/seed/${seed}/${width}/${height}`;
 }
@@ -26,6 +15,10 @@ function verticalImage(seed: string) {
 function staticAsset(key: string) {
   const baseUrl = process.env.PUBLIC_API_URL ?? 'http://localhost:4000';
   return `${baseUrl.replace(/\/+$/, '')}/static/${key.replace(/^\/+/, '')}`;
+}
+
+function trendVideo(index: 1 | 2 | 3) {
+  return staticAsset(`trends/trend-${index}.mp4`);
 }
 
 const services = [
@@ -261,7 +254,7 @@ const giftFactoryServices = [
     coverImage: image('gift-face-in-trend'),
     galleryImages: [image('gift-face-trend-gallery-1'), image('gift-face-trend-gallery-2')],
     previewImage: image('gift-face-in-trend-preview'),
-    previewVideo: 'https://placeholder.example.com/trends-preview-collage.mp4',
+    previewVideo: trendVideo(1),
     processingType: ProcessingType.AUTO,
     aiProvider: 'mock',
     aiModel: 'mock-data-driven-pipeline',
@@ -277,10 +270,9 @@ const giftFactoryServices = [
         label: 'Какой тренд',
         required: true,
         options: [
-          { value: 'https://placeholder.example.com/trend-1.mp4', label: 'Танец TikTok 2026' },
-          { value: 'https://placeholder.example.com/trend-2.mp4', label: 'Киносцена с героем' },
-          { value: 'https://placeholder.example.com/trend-3.mp4', label: 'Вирусный мем-ролик' },
-          { value: 'https://placeholder.example.com/trend-4.mp4', label: 'Праздничный выход' },
+          { value: trendVideo(1), label: 'Тренд 1' },
+          { value: trendVideo(2), label: 'Тренд 2' },
+          { value: trendVideo(3), label: 'Тренд 3' },
         ],
       },
       { id: 'tier', type: 'tier', label: 'Качество', required: true, hint: 'В P6 Standard и Pro используют одну модель PiAPI' },
@@ -638,39 +630,102 @@ const scenarioTemplates = [
   },
 ];
 
-async function main() {
-  await prisma.trend.deleteMany({});
-  await prisma.service.deleteMany({ where: { slug: { in: services.map((service) => service.slug) } } });
-  await prisma.tokenPackage.deleteMany({});
-  await prisma.setting.deleteMany({ where: { key: { in: publicSettingKeys } } });
+export interface SeedOptions {
+  destructive?: boolean;
+  includeDevUser?: boolean;
+  includeDevCatalog?: boolean;
+}
 
-  // Очистка: удаляем транзакции и пользователей, которых сидируем.
-  await prisma.tokenTransaction.deleteMany({});
-  const adminHash = await bcrypt.hash('admin123', BCRYPT_COST);
-  const userHash = await bcrypt.hash('user123', BCRYPT_COST);
+const tokenPackages = [
+  { title: 'Старт', tokens: 100, priceRub: 99, bonus: 0, sortOrder: 10 },
+  { title: 'Базовый', tokens: 500, priceRub: 499, bonus: 50, sortOrder: 20 },
+  { title: 'Популярный', tokens: 1000, priceRub: 999, bonus: 150, isPopular: true, sortOrder: 30 },
+  { title: 'Максимум', tokens: 3000, priceRub: 2999, bonus: 600, sortOrder: 40 },
+];
 
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@allvision.studio' },
-    update: {
-      passwordHash: adminHash,
-      name: 'Admin',
-      role: 'ADMIN',
-      tokenBalance: 10000,
-      deletedAt: null,
-    },
-    create: {
-      email: 'admin@allvision.studio',
-      passwordHash: adminHash,
+const publicSettings = [
+  {
+    key: 'fairy_tale_themes',
+    value: JSON.stringify([
+      'Дружба и доброта',
+      'Смелость и уверенность',
+      'Помощь родителям',
+      'Не бояться темноты',
+      'Делиться с другими',
+    ]),
+  },
+  { key: 'support_telegram', value: '@allvision_support' },
+  { key: 'support_email', value: 'hello@allvision.studio' },
+  { key: 'company_name', value: 'Allvision Studio' },
+  { key: 'fairy_tale_tier_basic_price', value: '4990' },
+  { key: 'fairy_tale_tier_extended_price', value: '7990' },
+  { key: 'cartoon_base_rate_per_minute', value: '3000' },
+  { key: 'realistic_base_rate_per_minute', value: '6000' },
+];
+
+export async function runSeed(options: SeedOptions = {}) {
+  if (options.destructive) {
+    await truncateForDevSeed();
+  } else {
+    const serviceCount = await prisma.service.count();
+    if (serviceCount > 0) {
+      console.log(`[seed] database already contains ${serviceCount} services; skipping prod seed`);
+      return;
+    }
+  }
+
+  const admin = await seedAdminUser();
+  const pilotServices = await seedPilotServices();
+
+  let legacyServices = 0;
+  let trends = 0;
+  let scenarioTemplateCount = 0;
+  if (options.includeDevCatalog) {
+    const devCatalog = await seedDevCatalog();
+    legacyServices = devCatalog.legacyServices;
+    trends = devCatalog.trends;
+    scenarioTemplateCount = devCatalog.scenarioTemplates;
+  }
+
+  await seedTokenPackages();
+  await seedPublicSettings();
+
+  let devUserEmail: string | undefined;
+  if (options.includeDevUser) {
+    devUserEmail = (await seedDevUser()).email;
+  }
+
+  console.log(`[seed] admin ready: ${admin.email}`);
+  if (devUserEmail) console.log(`[seed] dev user ready: ${devUserEmail} / user123`);
+  console.log(
+    `[seed] catalog ready: ${pilotServices} pilot services, ${legacyServices} legacy services, ${trends} trends, ${scenarioTemplateCount} scenario templates, ${tokenPackages.length} token packages`,
+  );
+}
+
+async function seedAdminUser() {
+  const email = requireEnv('ADMIN_INITIAL_EMAIL');
+  const password = requireEnv('ADMIN_INITIAL_PASSWORD');
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) return existing;
+
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+  return prisma.user.create({
+    data: {
+      email,
+      passwordHash,
       name: 'Admin',
       role: 'ADMIN',
       tokenBalance: 10000,
     },
   });
+}
 
-  const user = await prisma.user.upsert({
+async function seedDevUser() {
+  const passwordHash = await bcrypt.hash('user123', BCRYPT_COST);
+  return prisma.user.upsert({
     where: { email: 'user@allvision.studio' },
     update: {
-      passwordHash: userHash,
+      passwordHash,
       name: 'Test User',
       role: 'USER',
       tokenBalance: 25,
@@ -678,60 +733,64 @@ async function main() {
     },
     create: {
       email: 'user@allvision.studio',
-      passwordHash: userHash,
+      passwordHash,
       name: 'Test User',
       role: 'USER',
       tokenBalance: 25,
     },
   });
+}
 
+async function seedPilotServices() {
+  let count = 0;
+  for (const service of giftFactoryServices) {
+    const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
+    if (existing) continue;
+    await prisma.service.create({ data: service });
+    count += 1;
+  }
+  return count;
+}
+
+async function seedDevCatalog() {
   const createdServices = new Map<string, string>();
   for (const service of services) {
+    const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
+    if (existing) {
+      createdServices.set(existing.slug, existing.id);
+      continue;
+    }
     const created = await prisma.service.create({ data: service });
     createdServices.set(created.slug, created.id);
-  }
-
-  for (const service of giftFactoryServices) {
-    await prisma.service.upsert({
-      where: { slug: service.slug },
-      update: service,
-      create: service,
-    });
   }
 
   const trendsServiceId = createdServices.get('trends');
   if (!trendsServiceId) throw new Error('Trends service was not created');
 
-  await prisma.trend.createMany({
-    data: trendSeed.map((trend, index) => ({
-      ...trend,
-      previewVideo: verticalImage(`trend-${index + 1}`),
-      referenceImg: verticalImage(`trend-${trend.tags[0]}`),
-      prompt: trend.prompt,
-      aiProvider: 'mock',
-      aiModel: 'mock-trend',
-      aiConfig: {},
-      priceTokens: 150,
-      sortOrder: (index + 1) * 10,
-      serviceId: trendsServiceId,
-    })),
-  });
-
-  for (const [index, template] of scenarioTemplates.entries()) {
-    await prisma.scenarioTemplate.upsert({
-      where: { slug: template.slug },
-      update: {
-        ...template,
-        previewVideo: staticAsset(`template-assets/previews/seed-${index + 1}.mp4`),
-        previewImage: staticAsset(`template-assets/images/seed-${index + 1}.jpg`),
+  const existingTrends = await prisma.trend.count();
+  if (existingTrends === 0) {
+    await prisma.trend.createMany({
+      data: trendSeed.map((trend, index) => ({
+        ...trend,
+        previewVideo: verticalImage(`trend-${index + 1}`),
+        referenceImg: verticalImage(`trend-${trend.tags[0]}`),
+        prompt: trend.prompt,
         aiProvider: 'mock',
-        aiModel: 'mock-episode-v1',
+        aiModel: 'mock-trend',
         aiConfig: {},
-        popularityScore: 0,
-        isActive: true,
+        priceTokens: 150,
         sortOrder: (index + 1) * 10,
-      },
-      create: {
+        serviceId: trendsServiceId,
+      })),
+    });
+  }
+
+  let scenarioTemplateCount = 0;
+  for (const [index, template] of scenarioTemplates.entries()) {
+    const existing = await prisma.scenarioTemplate.findUnique({ where: { slug: template.slug } });
+    if (existing) continue;
+    await prisma.scenarioTemplate.create({
+      data: {
         ...template,
         previewVideo: staticAsset(`template-assets/previews/seed-${index + 1}.mp4`),
         previewImage: staticAsset(`template-assets/images/seed-${index + 1}.jpg`),
@@ -743,46 +802,65 @@ async function main() {
         sortOrder: (index + 1) * 10,
       },
     });
+    scenarioTemplateCount += 1;
   }
 
-  await prisma.tokenPackage.createMany({
-    data: [
-      { title: 'Старт', tokens: 100, priceRub: 99, bonus: 0, sortOrder: 10 },
-      { title: 'Базовый', tokens: 500, priceRub: 499, bonus: 50, sortOrder: 20 },
-      { title: 'Популярный', tokens: 1000, priceRub: 999, bonus: 150, isPopular: true, sortOrder: 30 },
-      { title: 'Максимум', tokens: 3000, priceRub: 2999, bonus: 600, sortOrder: 40 },
-    ],
-  });
-
-  await prisma.setting.createMany({
-    data: [
-      {
-        key: 'fairy_tale_themes',
-        value: JSON.stringify([
-          'Дружба и доброта',
-          'Смелость и уверенность',
-          'Помощь родителям',
-          'Не бояться темноты',
-          'Делиться с другими',
-        ]),
-      },
-      { key: 'support_telegram', value: '@allvision_support' },
-      { key: 'support_email', value: 'hello@allvision.studio' },
-      { key: 'company_name', value: 'Allvision Studio' },
-      { key: 'fairy_tale_tier_basic_price', value: '4990' },
-      { key: 'fairy_tale_tier_extended_price', value: '7990' },
-      { key: 'cartoon_base_rate_per_minute', value: '3000' },
-      { key: 'realistic_base_rate_per_minute', value: '6000' },
-    ],
-  });
-
-  console.log('[seed] created accounts:');
-  console.log(`  admin: ${admin.email} / admin123  (balance ${admin.tokenBalance})`);
-  console.log(`  user:  ${user.email}  / user123   (balance ${user.tokenBalance})`);
-  console.log(`[seed] created public catalog: ${services.length} legacy services, ${giftFactoryServices.length} gift services, ${trendSeed.length} trends, ${scenarioTemplates.length} scenario templates, 4 token packages`);
+  return {
+    legacyServices: services.length,
+    trends: existingTrends === 0 ? trendSeed.length : 0,
+    scenarioTemplates: scenarioTemplateCount,
+  };
 }
 
-main()
+async function seedTokenPackages() {
+  const existing = await prisma.tokenPackage.count();
+  if (existing > 0) return;
+  await prisma.tokenPackage.createMany({ data: tokenPackages });
+}
+
+async function seedPublicSettings() {
+  for (const setting of publicSettings) {
+    const existing = await prisma.setting.findUnique({ where: { key: setting.key } });
+    if (existing) continue;
+    await prisma.setting.create({ data: setting });
+  }
+}
+
+async function truncateForDevSeed() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to run destructive dev seed with NODE_ENV=production');
+  }
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "AIUsageLog",
+      "EpisodeCharacter",
+      "Episode",
+      "Scene",
+      "Character",
+      "AbuseReport",
+      "Payment",
+      "Order",
+      "FairyTaleScriptRecord",
+      "TokenTransaction",
+      "Project",
+      "Trend",
+      "ScenarioTemplate",
+      "Service",
+      "TokenPackage",
+      "Setting",
+      "User"
+    RESTART IDENTITY CASCADE
+  `);
+}
+
+function requireEnv(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is required for production seed`);
+  return value;
+}
+
+if (require.main === module) {
+  runSeed()
   .catch((e) => {
     console.error(e);
     process.exit(1);
@@ -790,3 +868,4 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+}

@@ -1,0 +1,147 @@
+name: Deploy to production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+      GIT_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          set -euo pipefail
+          for name in SSH_HOST SSH_USER SSH_KEY SSH_KNOWN_HOSTS; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::$name secret is missing"
+              exit 1
+            fi
+          done
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Prepare release directory
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "mkdir -p /opt/allvision-studio/releases/$GIT_SHA /opt/allvision-studio/shared/uploads /opt/allvision-studio/shared/postgres_data /opt/allvision-studio/shared/public-trends"
+
+      - name: Upload release
+        run: |
+          set -euo pipefail
+          rsync -az --delete \
+            --exclude='.git' \
+            --exclude='node_modules' \
+            --exclude='**/node_modules' \
+            --exclude='**/.next' \
+            --exclude='**/dist' \
+            --exclude='.env' \
+            --exclude='infra/prod/.env' \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            ./ "$SSH_USER@$SSH_HOST:/opt/allvision-studio/releases/$GIT_SHA/"
+
+      - name: Build and switch release
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "GIT_SHA='$GIT_SHA' bash -s" <<'REMOTE'
+          set -Eeuo pipefail
+
+          BASE=/opt/allvision-studio
+          RELEASE_DIR="$BASE/releases/$GIT_SHA"
+          ENV_FILE="$BASE/shared/.env"
+
+          if [ ! -f "$ENV_FILE" ]; then
+            echo "Missing $ENV_FILE. Create it from infra/prod/.env.example before deploying." >&2
+            exit 1
+          fi
+
+          ln -sfn "$ENV_FILE" "$RELEASE_DIR/infra/prod/.env"
+          printf 'IMAGE_TAG=%s\n' "$GIT_SHA" > "$RELEASE_DIR/infra/prod/.deploy.env"
+          mkdir -p "$BASE/scripts"
+          cp "$RELEASE_DIR/scripts/rollback.sh" "$BASE/scripts/rollback.sh"
+          chmod +x "$BASE/scripts/rollback.sh"
+
+          compose_for_release() {
+            local release="$1"
+            shift
+            local args=(-f "$release/infra/prod/docker-compose.prod.yml" --env-file "$release/infra/prod/.env")
+            if [ -f "$release/infra/prod/.deploy.env" ]; then
+              args+=(--env-file "$release/infra/prod/.deploy.env")
+            fi
+            docker compose "${args[@]}" "$@"
+          }
+
+          cd "$RELEASE_DIR"
+          compose_for_release "$RELEASE_DIR" build
+
+          OLD_RELEASE=""
+          if [ -L "$BASE/current" ]; then
+            OLD_RELEASE="$(readlink -f "$BASE/current")"
+          fi
+
+          if [ -n "$OLD_RELEASE" ] && [ -f "$OLD_RELEASE/infra/prod/docker-compose.prod.yml" ]; then
+            compose_for_release "$OLD_RELEASE" down || true
+          fi
+
+          ln -sfn "$RELEASE_DIR" "$BASE/current"
+          cd "$BASE/current"
+          compose_for_release "$RELEASE_DIR" up -d
+
+          healthy=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:80/healthz >/dev/null \
+              && curl -fsS http://127.0.0.1:80/api/ready >/dev/null; then
+              healthy=1
+              break
+            fi
+            sleep 5
+          done
+
+          if [ "$healthy" != "1" ]; then
+            echo "New release failed healthcheck; rolling back." >&2
+            compose_for_release "$RELEASE_DIR" down || true
+            if [ -n "$OLD_RELEASE" ] && [ -f "$OLD_RELEASE/infra/prod/docker-compose.prod.yml" ]; then
+              ln -sfn "$OLD_RELEASE" "$BASE/current"
+              cd "$OLD_RELEASE"
+              compose_for_release "$OLD_RELEASE" up -d
+            fi
+            exit 1
+          fi
+
+          if [ -n "$OLD_RELEASE" ]; then
+            ln -sfn "$OLD_RELEASE" "$BASE/previous"
+          fi
+
+          keep=0
+          find "$BASE/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
+            | sort -rn \
+            | while read -r _ path; do
+                keep=$((keep + 1))
+                if [ "$keep" -gt 5 ]; then
+                  case "$path" in
+                    "$BASE/releases"/*) rm -rf "$path" ;;
+                    *) echo "Refusing to remove unexpected path: $path" >&2; exit 1 ;;
+                  esac
+                fi
+              done
+          REMOTE
+
+      - name: External healthcheck
+        run: |
+          set -euo pipefail
+          curl -fsS https://allvision-pulse.ru/api/health

@@ -14,7 +14,7 @@
 cp .env.example .env
 
 # 2. Поднять Postgres + Redis
-docker-compose -f docker/docker-compose.yml up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # 3. Установить зависимости
 npm install
@@ -23,7 +23,7 @@ npm install
 npm run db:migrate
 
 # 5. Наполнить БД демо-данными
-npm run db:seed
+npm run db:seed:dev
 
 # 6. Скачать/сгенерировать демо-ассеты для MockAIProvider (опционально)
 npm run demo:download
@@ -68,8 +68,16 @@ P6 подключает реальные генерации только в work
 - `image-restore`, `image-upscale` и `text-to-video` остаются mock; для настоящего
   old-photo restoration нужен отдельный провайдер.
 
-Worker в production стартует fail-fast: без `PIAPI_API_KEY` и настроенного R2 он
-не запустится. Тесты используют stub-провайдер и не делают внешних вызовов.
+Режим выбирается через `PROVIDER_MODE`:
+
+- `mock` - безопасный дефолт, все AI-блоки идут через MockAIProvider.
+- `piapi` - реальные PiAPI-вызовы для `image-to-video` и `face-swap-video`.
+- `stub` - только для `NODE_ENV=test`.
+
+В `PROVIDER_MODE=piapi` worker стартует fail-fast без `PIAPI_API_KEY`. Publisher
+выбирается через `STORAGE_PUBLISHER`: `local` публикует файлы через наш `/static/`,
+`r2` использует Cloudflare R2. Тесты используют stub-провайдер и не делают внешних
+вызовов.
 
 Нужные переменные:
 
@@ -78,6 +86,8 @@ PIAPI_API_KEY=
 PIAPI_BASE_URL=https://api.piapi.ai
 PIAPI_DAILY_CAP_USD=5
 PIAPI_BALANCE_MIN_USD=2
+PROVIDER_MODE=mock
+STORAGE_PUBLISHER=local
 
 R2_ENDPOINT=
 R2_ACCESS_KEY_ID=
@@ -87,11 +97,11 @@ R2_PUBLIC_BASE_URL=
 R2_TEMP_PREFIX=piapi-temp
 ```
 
-R2 нужен, потому что PiAPI принимает публичные URL для входных изображений в
-Kling/video face-swap. Worker временно публикует локальные `/static/...` input-файлы
-в R2, передаёт public URL в PiAPI, а результат сразу скачивает обратно в
-LocalFileStorage (`/static/outputs/...`). Для R2 bucket стоит включить lifecycle
-cleanup для префикса `piapi-temp/` примерно на 24 часа.
+PiAPI принимает публичные URL для входных изображений в Kling/video face-swap.
+В prod P6.5 используется `STORAGE_PUBLISHER=local`: worker передаёт PiAPI URL
+вида `https://allvision-pulse.ru/static/...`. R2-код оставлен для будущего режима
+`STORAGE_PUBLISHER=r2`; для R2 bucket стоит включить lifecycle cleanup для
+префикса `piapi-temp/` примерно на 24 часа.
 
 Лимиты расходов: перед каждым реальным вызовом worker проверяет `AIUsageLog` за
 последние 24 часа и останавливает новые вызовы при достижении
@@ -119,7 +129,8 @@ RUN_PIAPI_SMOKE=1 npm run smoke:piapi -w @allvision/worker
 | `npm run dev:worker` | Только BullMQ worker |
 | `npm run build` | Билд всех пакетов в нужном порядке |
 | `npm run db:migrate` | Prisma migrate dev |
-| `npm run db:seed` | Сидирование БД |
+| `npm run db:seed` | Prod-safe seed для пустой БД, требует `ADMIN_INITIAL_*` |
+| `npm run db:seed:dev` | Destructive dev seed с тестовым пользователем |
 | `npm run db:studio` | Prisma Studio |
 
 ## Структура

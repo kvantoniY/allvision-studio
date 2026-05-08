@@ -1,11 +1,13 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 
-const ACCESS_TTL = process.env.JWT_ACCESS_TTL ?? '15m';
-const REFRESH_TTL = process.env.JWT_REFRESH_TTL ?? '30d';
+const ACCESS_TTL = process.env.JWT_ACCESS_TTL
+  ?? (process.env.ACCESS_TTL_MIN ? `${process.env.ACCESS_TTL_MIN}m` : '15m');
+const REFRESH_TTL = process.env.JWT_REFRESH_TTL
+  ?? (process.env.REFRESH_TTL_DAYS ? `${process.env.REFRESH_TTL_DAYS}d` : '30d');
 
 function accessSecret(): string {
-  const s = process.env.JWT_SECRET;
-  if (!s) throw new Error('JWT_SECRET is not set');
+  const s = process.env.JWT_ACCESS_SECRET ?? process.env.JWT_SECRET;
+  if (!s) throw new Error('JWT_ACCESS_SECRET is not set');
   return s;
 }
 

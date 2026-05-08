@@ -5,23 +5,29 @@ import { Readable } from 'node:stream';
 import type {
   AIProvider as LegacyAIProvider,
   StorageProvider,
+  RuntimeProviderMode,
 } from '@allvision/shared';
+import { resolveRuntimeProviderMode } from '@allvision/shared';
 import { MockAIProvider } from './mock-ai-provider';
 import type { AIProvider as WorkerAIProvider } from './ai-provider';
 import { PiAPIProvider } from './piapi-provider';
 import { R2TemporaryPublisher } from './r2-temporary-publisher';
+import { LocalPublicPublisher } from './local-public-publisher';
+import { NoopPublisher } from './noop-publisher';
+import type { FilePublisher } from './file-publisher';
 import { StubAIProvider } from './stub-ai-provider';
 import { resolveWorkspacePath } from '../utils/paths';
 import { logger } from '../utils/logger';
 
-export type ProviderMode = 'production' | 'test-run';
+export type PipelineProviderMode = 'production' | 'test-run';
+export type StoragePublisherMode = 'local' | 'r2' | 'noop';
 
 let storageSingleton: StorageProvider | undefined;
 let storageRootDir: string | undefined;
 let mockSingleton: MockAIProvider | undefined;
 let stubSingleton: StubAIProvider | undefined;
 let piapiSingleton: PiAPIProvider | undefined;
-let r2PublisherSingleton: R2TemporaryPublisher | undefined;
+let publisherSingleton: FilePublisher | undefined;
 
 const MOCK_ONLY_BLOCKS = new Set(['image-restore', 'image-upscale', 'text-to-video']);
 const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video']);
@@ -92,20 +98,34 @@ export function getLegacyAIProvider(): LegacyAIProvider {
 
 export function getAIProvider(
   blockSlug?: string,
-  options: { mode?: ProviderMode } = {},
+  options: { mode?: PipelineProviderMode } = {},
 ): WorkerAIProvider {
   if (process.env.NODE_ENV === 'test') return getStubProvider();
   if (options.mode === 'test-run') return getMockProvider();
-  if (!blockSlug || MOCK_ONLY_BLOCKS.has(blockSlug)) return getMockProvider();
-  if (PIAPI_BLOCKS.has(blockSlug)) return getPiAPIProvider();
-  return getMockProvider();
+
+  const providerMode = getRuntimeProviderMode();
+  if (providerMode === 'mock') return getMockProvider();
+  if (providerMode === 'piapi') {
+    if (!blockSlug || MOCK_ONLY_BLOCKS.has(blockSlug)) return getMockProvider();
+    if (PIAPI_BLOCKS.has(blockSlug)) return getPiAPIProvider();
+    return getMockProvider();
+  }
+
+  return getStubProvider();
 }
 
 export async function initialiseWorkerProviders() {
   if (process.env.NODE_ENV === 'test') return;
   getStorageProvider();
   getMockProvider();
-  await getPiAPIProvider().initialise();
+  const providerMode = getRuntimeProviderMode();
+  if (providerMode === 'piapi') {
+    await getPiAPIProvider().initialise();
+  }
+}
+
+export function getRuntimeProviderMode(): RuntimeProviderMode {
+  return resolveRuntimeProviderMode(process.env.PROVIDER_MODE, process.env.NODE_ENV);
 }
 
 function getMockProvider(): MockAIProvider {
@@ -133,25 +153,43 @@ function getPiAPIProvider(): PiAPIProvider {
     dailyCapUsd: Number(process.env.PIAPI_DAILY_CAP_USD ?? '5'),
     balanceMinUsd: Number(process.env.PIAPI_BALANCE_MIN_USD ?? '2'),
     storage: getStorageProvider(),
-    publisher: getR2Publisher(),
+    publisher: getFilePublisher(),
     logger,
   });
   return piapiSingleton;
 }
 
-function getR2Publisher(): R2TemporaryPublisher {
-  if (r2PublisherSingleton) return r2PublisherSingleton;
+function getFilePublisher(): FilePublisher {
+  if (publisherSingleton) return publisherSingleton;
+  const mode = getStoragePublisherMode();
   const rootDir = storageRootDir ?? resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
-  r2PublisherSingleton = new R2TemporaryPublisher({
-    endpoint: requireEnv('R2_ENDPOINT'),
-    accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
-    secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
-    bucket: requireEnv('R2_BUCKET'),
-    publicBaseUrl: requireEnv('R2_PUBLIC_BASE_URL'),
-    rootDir,
-    prefix: process.env.R2_TEMP_PREFIX ?? 'piapi-temp',
-  });
-  return r2PublisherSingleton;
+  if (mode === 'local') {
+    publisherSingleton = new LocalPublicPublisher({
+      rootDir,
+      publicBaseUrl: process.env.PUBLIC_API_URL ?? 'http://localhost:4000',
+    });
+    return publisherSingleton;
+  }
+  if (mode === 'r2') {
+    publisherSingleton = new R2TemporaryPublisher({
+      endpoint: requireEnv('R2_ENDPOINT'),
+      accessKeyId: requireEnv('R2_ACCESS_KEY_ID'),
+      secretAccessKey: requireEnv('R2_SECRET_ACCESS_KEY'),
+      bucket: requireEnv('R2_BUCKET'),
+      publicBaseUrl: requireEnv('R2_PUBLIC_BASE_URL'),
+      rootDir,
+      prefix: process.env.R2_TEMP_PREFIX ?? 'piapi-temp',
+    });
+    return publisherSingleton;
+  }
+  publisherSingleton = new NoopPublisher();
+  return publisherSingleton;
+}
+
+function getStoragePublisherMode(): StoragePublisherMode {
+  const mode = process.env.STORAGE_PUBLISHER ?? 'local';
+  if (mode === 'local' || mode === 'r2' || mode === 'noop') return mode;
+  throw new Error(`Unknown STORAGE_PUBLISHER: ${mode}`);
 }
 
 function requireEnv(name: string): string {
@@ -166,7 +204,7 @@ export function _resetWorkerProvidersForTests() {
   mockSingleton = undefined;
   stubSingleton = undefined;
   piapiSingleton = undefined;
-  r2PublisherSingleton = undefined;
+  publisherSingleton = undefined;
 }
 
 export { MockAIProvider } from './mock-ai-provider';
