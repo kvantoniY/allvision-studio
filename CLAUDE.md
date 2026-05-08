@@ -522,4 +522,4 @@ Prod-инфра одним абзацем: DNS Рег.ру ведёт на ВМ,
 
 - Windows EPERM на `prisma generate` если запущен dev-сервер — останавливать dev перед БД-операциями.
 - `next build` иногда падает с `3221225477` на Windows static worker — повторный запуск проходит, `experimental.cpus=1` в next.config.mjs минимизирует.
-- Demo-assets в `apps/api/demo-assets/` не коммитятся, восстанавливаются через `npm run demo:download`.
+- Demo-assets в `apps/api/demo-assets/` не коммитятся, восстанавливаются через `npm run demo:download`. 
