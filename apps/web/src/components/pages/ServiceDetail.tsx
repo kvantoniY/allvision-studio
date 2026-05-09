@@ -57,6 +57,20 @@ function mediaUrl(value?: string | null) {
   return value;
 }
 
+function videoPreviewUrl(value?: string | null) {
+  const url = mediaUrl(value)?.trim();
+  if (!url) return null;
+  return /^https?:\/\/.+\.mp4(?:[?#].*)?$/i.test(url) ? url : null;
+}
+
+function selectedVideoPreview(fields: UserInputField[], values: FormValues) {
+  const videoSelect = fields.find(
+    (field) => field.type === 'select' && (field.options ?? []).some((option) => videoPreviewUrl(option.value)),
+  );
+  if (!videoSelect) return null;
+  return videoPreviewUrl(values[videoSelect.id]);
+}
+
 function previewImage(service: PublicService) {
   return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? 'https://picsum.photos/seed/allvision-detail/1200/800';
 }
@@ -238,6 +252,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
   const service = data?.service;
   const fields = useMemo(() => parseFields(service?.userInputForm), [service?.userInputForm]);
+  const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values), [fields, values]);
 
   if (isLoading) {
     return (
@@ -267,7 +282,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);
-  const previewVideo = mediaUrl(service.previewVideo);
+  const previewVideo = selectedPreviewVideo ?? mediaUrl(service.previewVideo);
   const loginHref = `/login?redirect=/services/${service.slug}`;
 
   const setFieldValue = (id: string, value: string) => {
@@ -343,7 +358,20 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
         <div className="space-y-8">
           <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
             {previewVideo ? (
-              <video src={previewVideo} muted loop playsInline autoPlay controls className="max-h-[620px] w-full object-cover" />
+              <div className="flex justify-center bg-slate-950">
+                <div className="aspect-[9/16] h-[70vh] min-h-[360px] max-h-[620px] max-w-full">
+                  <video
+                    key={previewVideo}
+                    src={previewVideo}
+                    muted
+                    loop
+                    playsInline
+                    autoPlay
+                    controls
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              </div>
             ) : (
               <div className="relative aspect-[16/10]">
                 <Image src={preview} alt={service.title} fill priority sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
