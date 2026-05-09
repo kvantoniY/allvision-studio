@@ -23,6 +23,18 @@ services:
       timeout: 5s
       retries: 10
 
+  uploads-permissions:
+    image: nginx:1.27-alpine
+    container_name: allvision-studio-uploads-permissions
+    restart: "no"
+    user: root
+    command: >
+      sh -c "mkdir -p /var/www/uploads
+      && chown -R 10001:10001 /var/www/uploads
+      && chmod -R u+rwX,g+rwX /var/www/uploads"
+    volumes:
+      - /opt/allvision-studio/shared/uploads:/var/www/uploads
+
   api:
     image: allvision-studio-api:${IMAGE_TAG:-local}
     build:
@@ -30,7 +42,10 @@ services:
       dockerfile: apps/api/Dockerfile.prod
     container_name: allvision-studio-api
     restart: unless-stopped
+    user: "10001:10001"
     depends_on:
+      uploads-permissions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -55,7 +70,10 @@ services:
       dockerfile: apps/worker/Dockerfile.prod
     container_name: allvision-studio-worker
     restart: unless-stopped
+    user: "10001:10001"
     depends_on:
+      uploads-permissions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -76,6 +94,7 @@ services:
         PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-https://allvision-pulse.ru}
     container_name: allvision-studio-web
     restart: unless-stopped
+    user: "10001:10001"
     depends_on:
       api:
         condition: service_healthy
