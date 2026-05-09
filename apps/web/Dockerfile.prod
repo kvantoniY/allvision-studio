@@ -14,6 +14,12 @@ RUN npm ci
 FROM deps AS builder
 WORKDIR /app
 COPY . .
+ARG NEXT_PUBLIC_API_URL=https://allvision-pulse.ru
+ARG PUBLIC_API_URL=https://allvision-pulse.ru
+ARG PUBLIC_WEB_URL=https://allvision-pulse.ru
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV PUBLIC_API_URL=$PUBLIC_API_URL
+ENV PUBLIC_WEB_URL=$PUBLIC_WEB_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build -w @allvision/database \
   && npm run build -w @allvision/shared \

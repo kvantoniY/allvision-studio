@@ -3,7 +3,7 @@ import type { Payment, PaymentStatus } from '@allvision/shared';
 import { accountApi } from './account-api';
 import { authApi } from './auth-api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type CreatePaymentResponse = {
   payment: Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;

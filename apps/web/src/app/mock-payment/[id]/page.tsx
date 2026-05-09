@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useGetPaymentQuery } from '@/store/api/payments-api';
 import { cn } from '@/lib/utils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 function metadataOf(payment: Payment | undefined) {
   if (!payment?.metadata || typeof payment.metadata !== 'object' || Array.isArray(payment.metadata)) {

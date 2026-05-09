@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { ProjectPageContent } from './ProjectPageContent';
 import type { ProjectDetails } from '@/store/api/projects-api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 type ProjectPageProps = {
   params: { id: string };

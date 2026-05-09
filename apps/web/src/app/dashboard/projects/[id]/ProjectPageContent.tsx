@@ -39,7 +39,7 @@ function getErrorCode(error: unknown): string | undefined {
   return (error as { data?: { error?: { code?: string } } })?.data?.error?.code;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 type StepProgressItem = {
   stepId: string;

@@ -13,7 +13,7 @@ import { useListServicesQuery } from '@/store/api/services-api';
 import { GIFT_CATEGORIES, giftServicePriceFrom } from '@/lib/gift-factory';
 import { cn } from '@/lib/utils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 const categoryIcons: Record<ServiceCategory, typeof Heart> = {
   NOSTALGIA: Heart,

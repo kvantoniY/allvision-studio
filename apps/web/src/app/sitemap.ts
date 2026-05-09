@@ -17,7 +17,7 @@ const staticPaths = [
 ];
 
 async function getTrendPaths() {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
   try {
     const response = await fetch(`${apiUrl}/api/public/trends`, { cache: 'no-store' });
     if (!response.ok) return [];

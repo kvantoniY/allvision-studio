@@ -2,7 +2,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 import type { Character, Episode, EpisodeStatus, ScenarioTemplate, Scene } from '@allvision/shared';
 import { accountApi } from './account-api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type EpisodeCharacterLink = {
   episodeId: string;

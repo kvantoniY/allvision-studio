@@ -70,6 +70,10 @@ services:
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://allvision-pulse.ru}
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-https://allvision-pulse.ru}
+        PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-https://allvision-pulse.ru}
     container_name: allvision-studio-web
     restart: unless-stopped
     depends_on:
