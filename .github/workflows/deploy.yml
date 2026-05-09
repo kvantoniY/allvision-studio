@@ -39,11 +39,13 @@ jobs:
       - name: Prepare release directory
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "mkdir -p /opt/allvision-studio/releases/$GIT_SHA /opt/allvision-studio/shared/uploads /opt/allvision-studio/shared/postgres_data /opt/allvision-studio/shared/public-trends"
+          ssh_opts=(-i ~/.ssh/deploy_key -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes)
+          ssh "${ssh_opts[@]}" "$SSH_USER@$SSH_HOST" "mkdir -p /opt/allvision-studio/releases/$GIT_SHA /opt/allvision-studio/shared/uploads /opt/allvision-studio/shared/postgres_data /opt/allvision-studio/shared/public-trends"
 
       - name: Upload release
         run: |
           set -euo pipefail
+          ssh_opts=(-i ~/.ssh/deploy_key -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes)
           rsync -az --delete \
             --exclude='.git' \
             --exclude='node_modules' \
@@ -52,13 +54,14 @@ jobs:
             --exclude='**/dist' \
             --exclude='.env' \
             --exclude='infra/prod/.env' \
-            -e "ssh -i ~/.ssh/deploy_key" \
+            -e "ssh ${ssh_opts[*]}" \
             ./ "$SSH_USER@$SSH_HOST:/opt/allvision-studio/releases/$GIT_SHA/"
 
       - name: Build and switch release
         run: |
           set -euo pipefail
-          ssh -i ~/.ssh/deploy_key "$SSH_USER@$SSH_HOST" "GIT_SHA='$GIT_SHA' bash -s" <<'REMOTE'
+          ssh_opts=(-i ~/.ssh/deploy_key -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -o TCPKeepAlive=yes)
+          ssh "${ssh_opts[@]}" "$SSH_USER@$SSH_HOST" "GIT_SHA='$GIT_SHA' bash -s" <<'REMOTE'
           set -Eeuo pipefail
 
           BASE=/opt/allvision-studio
@@ -87,7 +90,11 @@ jobs:
           }
 
           cd "$RELEASE_DIR"
-          compose_for_release "$RELEASE_DIR" build
+          export BUILDKIT_PROGRESS=plain
+          for service in api worker web; do
+            echo "Building $service image for $GIT_SHA"
+            compose_for_release "$RELEASE_DIR" build "$service"
+          done
 
           OLD_RELEASE=""
           if [ -L "$BASE/current" ]; then
