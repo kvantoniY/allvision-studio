@@ -13,6 +13,7 @@ const nextConfig = {
     outputFileTracingRoot: path.join(__dirname, '../..'),
   },
   images: {
+    unoptimized: true,
     remotePatterns: [
       {
         protocol: 'https',

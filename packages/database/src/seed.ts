@@ -247,9 +247,9 @@ const giftFactoryServices = [
     description:
       'Выберите тренд и загрузите фото лица. Сервис соберёт вертикальное видео: face swap, финальная сборка и watermark для демо-версии.',
     category: ServiceCategory.TRENDS_MEMES,
-    priceTokens: 40,
-    priceCoinsStandard: 40,
-    priceCoinsPro: 40,
+    priceTokens: 25,
+    priceCoinsStandard: 25,
+    priceCoinsPro: 25,
     costUsd: 0,
     coverImage: image('gift-face-in-trend'),
     galleryImages: [image('gift-face-trend-gallery-1'), image('gift-face-trend-gallery-2')],
@@ -745,11 +745,55 @@ async function seedPilotServices() {
   let count = 0;
   for (const service of giftFactoryServices) {
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
-    if (existing) continue;
+    if (existing) {
+      if (service.slug === 'face-in-trend' && needsFaceInTrendP65Patch(existing)) {
+        await prisma.service.update({
+          where: { slug: service.slug },
+          data: {
+            priceTokens: service.priceTokens,
+            priceCoinsStandard: service.priceCoinsStandard,
+            priceCoinsPro: service.priceCoinsPro,
+            previewVideo: service.previewVideo,
+            userInputForm: service.userInputForm,
+            pipelineConfig: service.pipelineConfig,
+            isFeatured: service.isFeatured,
+          },
+        });
+      }
+      continue;
+    }
     await prisma.service.create({ data: service });
     count += 1;
   }
   return count;
+}
+
+function needsFaceInTrendP65Patch(service: {
+  priceTokens: number;
+  priceCoinsStandard: number | null;
+  priceCoinsPro: number | null;
+  previewVideo: string | null;
+  userInputForm: unknown;
+  pipelineConfig: unknown;
+  isFeatured: boolean;
+}) {
+  const hasTrendVideoField =
+    Array.isArray(service.userInputForm) &&
+    service.userInputForm.some((field) => {
+      if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
+      return (field as { id?: unknown }).id === 'trendVideo';
+    });
+
+  const pipelineJson = JSON.stringify(service.pipelineConfig ?? {});
+  return (
+    service.priceTokens > 25 ||
+    (service.priceCoinsStandard ?? service.priceTokens) > 25 ||
+    (service.priceCoinsPro ?? service.priceTokens) > 25 ||
+    service.previewVideo !== trendVideo(1) ||
+    !hasTrendVideoField ||
+    !pipelineJson.includes('{{user.trendVideo}}') ||
+    !service.isFeatured
+  );
 }
 
 async function seedDevCatalog() {

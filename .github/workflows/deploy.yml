@@ -88,6 +88,7 @@ jobs:
 
           cd "$RELEASE_DIR"
           compose_for_release "$RELEASE_DIR" build
+          compose_for_release "$RELEASE_DIR" run --rm --no-deps --user root --entrypoint sh api -c 'mkdir -p /app/uploads && chown -R 10001:10001 /app/uploads && chmod -R u+rwX,g+rwX /app/uploads'
 
           OLD_RELEASE=""
           if [ -L "$BASE/current" ]; then
