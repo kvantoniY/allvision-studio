@@ -6,6 +6,7 @@ import {
   reorderAdminServiceSchema,
   validatePipelineConfig,
   validateUserInputForm,
+  formatAdminServiceValidationError,
   type CreateAdminServiceInput,
   type UpdateAdminServiceInput,
 } from '@allvision/shared';
@@ -70,8 +71,13 @@ function mapValidationError(err: unknown): HttpError {
   if (message.startsWith('UNKNOWN_USER_FIELD:')) {
     return new HttpError(400, 'UNKNOWN_USER_FIELD', message);
   }
-  if (message.startsWith('INVALID_PARAMS:') || message.startsWith('MISSING_PARAM:')) {
-    return new HttpError(400, 'INVALID_BLOCK_PARAMS', message);
+  if (
+    message.startsWith('INVALID_PARAMS:') ||
+    message.startsWith('MISSING_PARAM:') ||
+    message.startsWith('PARAM_TOO_LARGE:') ||
+    message.startsWith('PARAM_TOO_SMALL:')
+  ) {
+    return new HttpError(400, 'INVALID_BLOCK_PARAMS', formatAdminServiceValidationError(message));
   }
   if (message === 'TIER_FIELD_REQUIRED') {
     return new HttpError(400, 'TIER_FIELD_REQUIRED', 'Exactly one tier field is required');
@@ -81,6 +87,9 @@ function mapValidationError(err: unknown): HttpError {
   }
   if (message.startsWith('SELECT_OPTIONS_REQUIRED:')) {
     return new HttpError(400, 'SELECT_OPTIONS_REQUIRED', message);
+  }
+  if (message.startsWith('MEDIA_KIND_REQUIRED:')) {
+    return new HttpError(400, 'MEDIA_KIND_REQUIRED', formatAdminServiceValidationError(message));
   }
   return new HttpError(400, 'INVALID_SERVICE_DATA', message);
 }
@@ -431,7 +440,7 @@ adminServicesRouter.post('/:id/test-run', async (req: Request, res: Response, ne
       logger.error(`Failed to enqueue service pipeline test-run ${project.id}`, err);
       await prisma.project.update({
         where: { id: project.id },
-        data: { status: 'FAILED', errorMessage: 'Queue unavailable' },
+        data: { status: 'FAILED', errorMessage: 'Queue unavailable', errorCode: 'QUEUE_UNAVAILABLE' },
       });
       throw new HttpError(503, 'QUEUE_UNAVAILABLE', 'Queue unavailable');
     }

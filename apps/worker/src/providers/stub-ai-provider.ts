@@ -22,6 +22,18 @@ export class StubAIProvider implements AIProvider {
     return result(input.imageUrl, { type: 'image' });
   }
 
+  async imageEdit(_input: {
+    imageUrl: string;
+    prompt: string;
+    model: string;
+    negativePrompt?: string;
+    strength?: number;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://edited-image.jpg', { type: 'image' });
+  }
+
   async imageToVideo(_input: {
     imageUrl: string;
     prompt?: string;

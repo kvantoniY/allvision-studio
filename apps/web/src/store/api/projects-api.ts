@@ -29,6 +29,7 @@ export type ProjectStatusResponse = Pick<
   | 'resultVideo'
   | 'resultThumbnail'
   | 'errorMessage'
+  | 'errorCode'
   | 'completedAt'
 > & {
   stepProgress?: Array<{

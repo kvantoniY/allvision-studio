@@ -148,6 +148,7 @@ model Project {
 
   tokensCost   Int
   errorMessage String? @db.Text
+  errorCode    String?
 
   aiProviderJobId String?
   aiProviderLogs  Json?
@@ -542,6 +543,34 @@ model AIUsageLog {
 }
 
 // === Пакеты токенов ===
+model MediaAsset {
+  id           String   @id @default(uuid())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  kind         String
+  title        String
+  description  String?
+  tags         String[]
+
+  storageKey   String
+  publicUrl    String
+  thumbnailKey String?
+
+  durationSec  Float?
+  width        Int?
+  height       Int?
+  frameCount   Int?
+  fileSize     Int
+  mimeType     String
+
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+
+  @@index([kind])
+  @@index([isActive, sortOrder])
+}
+
 model TokenPackage {
   id        String  @id @default(cuid())
   title     String

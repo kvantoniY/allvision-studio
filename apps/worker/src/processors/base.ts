@@ -38,7 +38,7 @@ export async function markProjectCompleted(projectId: string, result: ProjectRes
 export async function markProjectFailed(
   projectId: string,
   errorMessage: string,
-  options: { refundTokens?: boolean } = {},
+  options: { refundTokens?: boolean; errorCode?: string } = {},
 ) {
   const refundTokens = options.refundTokens ?? true;
 
@@ -54,6 +54,7 @@ export async function markProjectFailed(
       data: {
         status: ProjectStatus.FAILED,
         errorMessage,
+        errorCode: options.errorCode ?? null,
       },
     });
 

@@ -1,11 +1,12 @@
 import { BLOCK_REGISTRY, getBlock, listBlocks } from '../blocks/registry';
 
 describe('blocks registry', () => {
-  it('contains six valid P1 blocks', () => {
+  it('contains valid pipeline blocks', () => {
     const blocks = listBlocks();
-    expect(blocks).toHaveLength(6);
+    expect(blocks).toHaveLength(7);
     expect(Object.keys(BLOCK_REGISTRY).sort()).toEqual([
       'face-swap-video',
+      'image-edit',
       'image-restore',
       'image-to-video',
       'image-upscale',

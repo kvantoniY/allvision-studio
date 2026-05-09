@@ -145,6 +145,23 @@ function validateSelectField(field: UserInputFieldInput, value: unknown) {
   }
 }
 
+async function validateMediaSelectField(field: UserInputFieldInput, value: unknown) {
+  if (typeof value !== 'string') {
+    throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} must be a media asset id`);
+  }
+  const asset = await prisma.mediaAsset.findFirst({
+    where: {
+      id: value,
+      kind: field.mediaKind,
+      isActive: true,
+    },
+    select: { id: true },
+  });
+  if (!asset) {
+    throw new HttpError(400, 'INVALID_MEDIA_ASSET', `${field.id} has invalid media asset`);
+  }
+}
+
 function isPrismaNotFound(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
 }
@@ -250,6 +267,9 @@ servicesRouter.post(
         if (field.type === 'select') {
           validateSelectField(field, value);
         }
+        if (field.type === 'media-select') {
+          await validateMediaSelectField(field, value);
+        }
       }
 
       const userId = req.user!.id;
@@ -262,6 +282,15 @@ servicesRouter.post(
       for (const field of photoFields) {
         const file = fileMap.get(field.id);
         if (!file) continue;
+        if (field.maxSizeMb && file.size > field.maxSizeMb * 1024 * 1024) {
+          throw new HttpError(413, 'FILE_TOO_LARGE', `${field.id} is too large`);
+        }
+        if (field.allowedFormats?.length) {
+          const ext = file.originalname.split('.').pop()?.toLowerCase();
+          if (!ext || !field.allowedFormats.map((item) => item.toLowerCase()).includes(ext)) {
+            throw new HttpError(400, 'UNSUPPORTED_FORMAT', `${field.id} has unsupported format`);
+          }
+        }
         const uploaded = await fileService.uploadUserInput(
           userId,
           projectId,
@@ -350,7 +379,7 @@ servicesRouter.post(
         await prisma.$transaction(async (tx) => {
           await tx.project.update({
             where: { id: project.id },
-            data: { status: 'FAILED', errorMessage: 'Queue unavailable' },
+            data: { status: 'FAILED', errorMessage: 'Queue unavailable', errorCode: 'QUEUE_UNAVAILABLE' },
           });
           const user = await tx.user.update({
             where: { id: userId },

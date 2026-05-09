@@ -8,6 +8,16 @@ export interface ModelOption {
   tierHint: ModelTierHint;
   estimatedCostCoins: number;
   estimatedCostUsd?: number;
+  provider: 'piapi' | 'mock' | 'local';
+  description?: string;
+  limits?: {
+    maxDurationSec?: number;
+    maxResolution?: string;
+    maxFileSize?: string;
+    [key: string]: unknown;
+  };
+  requiredParams?: string[];
+  docsUrl?: string;
 }
 
 export type JsonSchemaObject = {
@@ -18,6 +28,8 @@ export type JsonSchemaObject = {
   required?: string[];
   enum?: unknown[];
   default?: unknown;
+  minimum?: number;
+  maximum?: number;
   items?: JsonSchemaObject | Record<string, unknown>;
   additionalProperties?: boolean | JsonSchemaObject | Record<string, unknown>;
 };

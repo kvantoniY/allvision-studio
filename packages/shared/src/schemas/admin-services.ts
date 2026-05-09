@@ -36,11 +36,12 @@ export const pipelineConfigSchema = z.array(pipelineStepSchema).min(1);
 
 export const userInputFieldSchema = z.object({
   id: z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/),
-  type: z.enum(['text', 'textarea', 'photo', 'select', 'avatar', 'tier']),
+  type: z.enum(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'tier']),
   label: z.string().trim().min(1).max(120),
   required: z.boolean(),
   hint: z.string().trim().max(240).optional(),
   placeholder: z.string().trim().max(160).optional(),
+  mediaKind: z.string().trim().min(1).max(80).optional(),
   maxLength: z.number().int().min(1).max(5000).optional(),
   maxSizeMb: z.number().int().min(1).max(100).optional(),
   allowedFormats: z.array(z.string().trim().min(1)).optional(),
@@ -151,6 +152,9 @@ export function validateUserInputForm(form: unknown): UserInputFieldInput[] {
     if (field.type === 'select' && (!field.options || field.options.length === 0)) {
       throw new Error(`SELECT_OPTIONS_REQUIRED:${field.id}`);
     }
+    if (field.type === 'media-select' && !field.mediaKind) {
+      throw new Error(`MEDIA_KIND_REQUIRED:${field.id}`);
+    }
   }
 
   if (tierCount !== 1) throw new Error('TIER_FIELD_REQUIRED');
@@ -180,6 +184,7 @@ function collectPlaceholderRefs(values: unknown[]): string[] {
 
 function validateValueAgainstJsonSchema(value: unknown, schema: JsonSchemaObject, path: string) {
   if (schema.type === 'object') {
+    if (path.endsWith('.model') && typeof value === 'string' && value.trim().length > 0) return;
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new Error(`INVALID_PARAMS:${path}`);
     }
@@ -202,6 +207,31 @@ function validateValueAgainstJsonSchema(value: unknown, schema: JsonSchemaObject
   if (schema.type === 'number' && typeof value !== 'number') throw new Error(`INVALID_PARAMS:${path}`);
   if (schema.type === 'boolean' && typeof value !== 'boolean') throw new Error(`INVALID_PARAMS:${path}`);
   if (schema.enum && !schema.enum.includes(value)) throw new Error(`INVALID_PARAMS:${path}`);
+  if (schema.type === 'number' && typeof value === 'number') {
+    if (schema.minimum !== undefined && value < schema.minimum) throw new Error(`PARAM_TOO_SMALL:${path}:${schema.minimum}`);
+    if (schema.maximum !== undefined && value > schema.maximum) throw new Error(`PARAM_TOO_LARGE:${path}:${schema.maximum}`);
+  }
 }
 
 export const serviceCategoryValuesForUi = serviceCategoryValues;
+
+export function formatAdminServiceValidationError(error: string): string {
+  const [code, path, limit] = error.split(':');
+  const stepMatch = path?.match(/params\.(step_\d+)\.(.+)/);
+  const stepLabel = stepMatch ? `Step ${stepMatch[1].replace('step_', '')}` : 'Pipeline';
+  const param = stepMatch?.[2] ?? path ?? '';
+
+  if (code === 'INVALID_PARAMS') return `${stepLabel}: parameter "${param}" has an invalid value`;
+  if (code === 'MISSING_PARAM') return `${stepLabel}: parameter "${param}" is required`;
+  if (code === 'PARAM_TOO_LARGE') return `${stepLabel}: parameter "${param}" must be no more than ${limit}`;
+  if (code === 'PARAM_TOO_SMALL') return `${stepLabel}: parameter "${param}" must be at least ${limit}`;
+  if (code === 'UNKNOWN_BLOCK') return `Unknown block: ${path}`;
+  if (code === 'DUPLICATE_STEP_ID') return `Duplicate step id: ${path}`;
+  if (code === 'INVALID_STEP_REFERENCE') return `Invalid step reference: ${path}`;
+  if (code === 'UNKNOWN_USER_FIELD') return `Unknown user field: ${path}`;
+  if (code === 'DUPLICATE_FIELD_ID') return `Duplicate form field id: ${path}`;
+  if (code === 'SELECT_OPTIONS_REQUIRED') return `Select field "${path}" must have options`;
+  if (code === 'MEDIA_KIND_REQUIRED') return `Media-select field "${path}" must have mediaKind`;
+  if (error === 'TIER_FIELD_REQUIRED') return 'Exactly one tier field is required';
+  return error;
+}

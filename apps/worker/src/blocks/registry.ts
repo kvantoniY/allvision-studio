@@ -2,6 +2,7 @@ import type { BlockDefinition } from './types';
 import { imageRestoreBlock } from './image-restore';
 import { imageUpscaleBlock } from './image-upscale';
 import { imageToVideoBlock } from './image-to-video';
+import { imageEditBlock } from './image-edit';
 import { faceSwapVideoBlock } from './face-swap-video';
 import { videoComposeBlock } from './video-compose';
 import { textToVideoBlock } from './text-to-video';
@@ -9,6 +10,7 @@ import { textToVideoBlock } from './text-to-video';
 export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'image-restore': imageRestoreBlock,
   'image-upscale': imageUpscaleBlock,
+  'image-edit': imageEditBlock,
   'image-to-video': imageToVideoBlock,
   'face-swap-video': faceSwapVideoBlock,
   'video-compose': videoComposeBlock,

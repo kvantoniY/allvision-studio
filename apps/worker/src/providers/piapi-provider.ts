@@ -31,6 +31,13 @@ const FACE_SWAP_MODEL = 'qubico-video-toolkit';
 const FACE_SWAP_COST_PER_FRAME_USD = 0.004;
 const DEFAULT_FACE_SWAP_DURATION_SEC = 5;
 const DEFAULT_FACE_SWAP_FPS = 24;
+const PIAPI_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
+const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
+const NANO_BANANA_COST_USD: Record<string, number> = {
+  '1K': 0.06,
+  '2K': 0.08,
+  '4K': 0.12,
+};
 
 export class PiAPIProvider implements AIProvider {
   name = 'piapi' as const;
@@ -72,6 +79,79 @@ export class PiAPIProvider implements AIProvider {
     throw new ProviderError('IMAGE_RESTORE_NOT_REAL', 'image-restore is mock-only in P6');
   }
 
+  async imageEdit(input: {
+    imageUrl: string;
+    prompt: string;
+    model: string;
+    negativePrompt?: string;
+    strength?: number;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    if (input.model !== 'nano-banana') {
+      throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported image-edit model: ${input.model}`);
+    }
+    const resolution = readString(input.params, 'resolution') ?? '1K';
+    const estimatedCost = NANO_BANANA_COST_USD[resolution] ?? NANO_BANANA_COST_USD['1K'];
+    await this.ensureCanCall(estimatedCost);
+
+    const startedAt = Date.now();
+    let taskId: string | undefined;
+    try {
+      const published = await this.publisher.publishImageUrl(input.imageUrl, 1);
+      const aspectRatio = readString(input.params, 'aspect_ratio');
+      const payload = {
+        model: 'gemini',
+        task_type: 'nano-banana-2',
+        input: {
+          prompt: input.prompt,
+          image_urls: [published.publicUrl],
+          output_format: readString(input.params, 'output_format') ?? 'jpg',
+          resolution,
+          ...(aspectRatio && aspectRatio !== 'input' ? { aspect_ratio: aspectRatio } : {}),
+        },
+      };
+      const created = await this.client.createTask(payload);
+      taskId = created.taskId;
+      const completed = await this.client.pollUntilDone(taskId, {
+        timeoutMs: PIAPI_IMAGE_EDIT_TIMEOUT_MS,
+        expectedDurationMs: 60 * 1000,
+        onProgress: input.context.reportProgress,
+      });
+      if (!completed.outputUrl) {
+        throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI Nano Banana task completed without image URL');
+      }
+      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'jpg');
+      const costUsd = extractCostUsd(completed.raw, estimatedCost);
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      return {
+        outputUrl: local.url,
+        costUsd,
+        durationMs,
+        meta: {
+          piapiTaskId: taskId,
+          piapiUrl: completed.outputUrl,
+          model: input.model,
+          provider: 'piapi',
+          resolution,
+        },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(
+        input.context,
+        input.model,
+        taskId,
+        err instanceof ProviderError && err.code === 'PIAPI_TIMEOUT' ? 'timeout' : 'failed',
+        0,
+        durationMs,
+        err,
+      );
+      throw err;
+    }
+  }
+
   async imageToVideo(input: {
     imageUrl: string;
     prompt?: string;
@@ -103,7 +183,7 @@ export class PiAPIProvider implements AIProvider {
       const created = await this.client.createTask(payload);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
-        timeoutMs: 30 * 60 * 1000,
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 10 * 60 * 1000,
         onProgress: input.context.reportProgress,
       });
@@ -170,7 +250,7 @@ export class PiAPIProvider implements AIProvider {
       const created = await this.client.createTask(payload);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
-        timeoutMs: 30 * 60 * 1000,
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 12 * 60 * 1000,
         onProgress: input.context.reportProgress,
       });
@@ -273,6 +353,11 @@ function readNumber(source: Record<string, unknown> | undefined, key: string): n
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && Number.isFinite(Number(value))) return Number(value);
   return undefined;
+}
+
+function readString(source: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = source?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function extractCostUsd(raw: Record<string, unknown>, fallback: number) {

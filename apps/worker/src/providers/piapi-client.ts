@@ -164,6 +164,11 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
     ['video_url'],
     ['image_url'],
     ['result_url'],
+  ]) ?? findFirstArrayString(data, [
+    ['output', 'image_urls'],
+    ['output', 'video_urls'],
+    ['image_urls'],
+    ['video_urls'],
   ]) ?? readKlingWorkUrl(data);
   const progress = readNumber(data, ['progress']) ?? readNumber(data, ['meta', 'progress']);
   const errorMessage = readString(data, ['error', 'message'])
@@ -225,6 +230,17 @@ function findFirstString(source: Record<string, unknown>, paths: string[][]): st
   for (const path of paths) {
     const value = readString(source, path);
     if (value) return value;
+  }
+  return undefined;
+}
+
+function findFirstArrayString(source: Record<string, unknown>, paths: string[][]): string | undefined {
+  for (const path of paths) {
+    const value = readPath(source, path);
+    if (Array.isArray(value)) {
+      const found = value.find((item): item is string => typeof item === 'string' && item.length > 0);
+      if (found) return found;
+    }
   }
   return undefined;
 }

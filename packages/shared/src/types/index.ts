@@ -28,6 +28,7 @@ export type {
   Payment,
   TokenTransaction,
   TokenPackage,
+  MediaAsset,
   Setting,
   Character,
   Scene,

@@ -82,6 +82,22 @@ export type PublicSettings = {
   realisticBaseRatePerMinute: string;
 };
 
+export type PublicMediaAsset = {
+  id: string;
+  kind: string;
+  title: string;
+  description: string | null;
+  tags: string[];
+  publicUrl: string;
+  thumbnailUrl: string | null;
+  durationSec: number | null;
+  width: number | null;
+  height: number | null;
+  fileSize: number;
+  mimeType: string;
+  sortOrder: number;
+};
+
 export type PublicServicesResponse = { services: PublicService[] };
 export type PublicServiceResponse = { service: PublicService };
 export type PublicTrendsResponse = { trends: PublicTrend[] };
@@ -90,4 +106,5 @@ export type PublicScenarioTemplatesResponse = { templates: PublicScenarioTemplat
 export type PublicScenarioTemplateResponse = { template: PublicScenarioTemplate };
 export type PublicTokenPackagesResponse = { packages: PublicTokenPackage[] };
 export type PublicSettingsResponse = { settings: PublicSettings };
+export type PublicMediaAssetsResponse = { assets: PublicMediaAsset[] };
 export type ContactResponse = { ok: true };

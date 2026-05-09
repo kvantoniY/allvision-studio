@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Coins, ImagePlus, Loader2, Lock, Sparkles, Star } from 'lucide-react';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
@@ -32,17 +32,19 @@ type UserInputOption = {
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'select' | 'avatar' | 'tier';
+  type: 'text' | 'textarea' | 'photo' | 'select' | 'media-select' | 'avatar' | 'tier';
   label?: string;
   required?: boolean;
   hint?: string;
   placeholder?: string;
   maxLength?: number;
   options?: UserInputOption[];
+  mediaKind?: string;
 };
 
 type FormValues = Record<string, string>;
 type FileValues = Record<string, File | undefined>;
+type MediaAssetOption = { id: string; title: string; publicUrl: string; thumbnailUrl?: string | null };
 
 const categoryLabels: Record<string, string> = {
   NOSTALGIA: 'Ностальгия',
@@ -63,7 +65,12 @@ function videoPreviewUrl(value?: string | null) {
   return /^https?:\/\/.+\.mp4(?:[?#].*)?$/i.test(url) ? url : null;
 }
 
-function selectedVideoPreview(fields: UserInputField[], values: FormValues) {
+function selectedVideoPreview(fields: UserInputField[], values: FormValues, mediaByKind: Record<string, MediaAssetOption[]>) {
+  const mediaSelect = fields.find((field) => field.type === 'media-select' && field.mediaKind);
+  if (mediaSelect?.mediaKind) {
+    const asset = mediaByKind[mediaSelect.mediaKind]?.find((item) => item.id === values[mediaSelect.id]);
+    return videoPreviewUrl(asset?.publicUrl);
+  }
   const videoSelect = fields.find(
     (field) => field.type === 'select' && (field.options ?? []).some((option) => videoPreviewUrl(option.value)),
   );
@@ -87,6 +94,7 @@ function parseFields(value: unknown): UserInputField[] {
       hint: typeof item.hint === 'string' ? item.hint : undefined,
       placeholder: typeof item.placeholder === 'string' ? item.placeholder : undefined,
       maxLength: typeof item.maxLength === 'number' ? item.maxLength : undefined,
+      mediaKind: typeof item.mediaKind === 'string' ? item.mediaKind : undefined,
       options: Array.isArray(item.options)
         ? item.options
             .filter((option): option is Record<string, unknown> => !!option && typeof option === 'object' && !Array.isArray(option))
@@ -96,7 +104,7 @@ function parseFields(value: unknown): UserInputField[] {
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'select', 'avatar', 'tier'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'tier'].includes(item.type));
 }
 
 function priceFor(service: PublicService, tier: 'standard' | 'pro') {
@@ -134,12 +142,14 @@ function FieldControl({
   field,
   value,
   file,
+  mediaOptions,
   onValueChange,
   onFileChange,
 }: {
   field: UserInputField;
   value?: string;
   file?: File;
+  mediaOptions: Record<string, MediaAssetOption[]>;
   onValueChange: (id: string, value: string) => void;
   onFileChange: (id: string, file?: File) => void;
 }) {
@@ -211,6 +221,29 @@ function FieldControl({
     );
   }
 
+  if (field.type === 'media-select') {
+    const options = field.mediaKind ? mediaOptions[field.mediaKind] ?? [] : [];
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={field.id}>{label} {required}</Label>
+        <select
+          id={field.id}
+          value={value ?? ''}
+          onChange={(event) => onValueChange(field.id, event.target.value)}
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <option value="">Р’С‹Р±РµСЂРёС‚Рµ РІР°СЂРёР°РЅС‚</option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.title}
+            </option>
+          ))}
+        </select>
+        {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+      </div>
+    );
+  }
+
   if (field.type === 'avatar') {
     return (
       <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
@@ -249,10 +282,29 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [tier, setTier] = useState<'standard' | 'pro'>('standard');
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
+  const [mediaByKind, setMediaByKind] = useState<Record<string, MediaAssetOption[]>>({});
 
   const service = data?.service;
   const fields = useMemo(() => parseFields(service?.userInputForm), [service?.userInputForm]);
-  const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values), [fields, values]);
+  const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
+
+  useEffect(() => {
+    const kinds = Array.from(new Set(fields.filter((field) => field.type === 'media-select' && field.mediaKind).map((field) => field.mediaKind!)));
+    if (kinds.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      kinds.map(async (item) => {
+        const res = await fetch(`${API_URL}/api/public/media-assets?kind=${encodeURIComponent(item)}&active=true`, { credentials: 'include' });
+        const json = await res.json() as { assets?: MediaAssetOption[] };
+        return [item, json.assets ?? []] as const;
+      }),
+    ).then((entries) => {
+      if (!cancelled) setMediaByKind(Object.fromEntries(entries));
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [fields]);
 
   if (isLoading) {
     return (
@@ -461,6 +513,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                         field={field}
                         value={values[field.id]}
                         file={files[field.id]}
+                        mediaOptions={mediaByKind}
                         onValueChange={setFieldValue}
                         onFileChange={setFieldFile}
                       />

@@ -25,13 +25,14 @@ export type PipelineStep = {
 
 export type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'select' | 'avatar' | 'tier';
+  type: 'text' | 'textarea' | 'photo' | 'select' | 'media-select' | 'avatar' | 'tier';
   label: string;
   required: boolean;
   hint?: string;
   placeholder?: string;
   maxLength?: number;
   maxSizeMb?: number;
+  mediaKind?: string;
   allowedFormats?: string[];
   avatarTypes?: string[];
   options?: Array<{ label: string; value: string }>;

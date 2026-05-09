@@ -6,7 +6,7 @@ import { markProjectFailed } from './processors/base';
 import { getBlock } from './blocks/registry';
 import type { BlockDefinition, BlockLogger, BlockOutput } from './blocks/types';
 import { logger as defaultLogger } from './utils/logger';
-import { isProviderUserSafeError, providerUnavailableMessage } from './providers/provider-errors';
+import { isProviderUserSafeError, ProviderError, providerUnavailableMessage } from './providers/provider-errors';
 
 export type PipelineTier = 'standard' | 'pro';
 
@@ -63,7 +63,7 @@ export async function runPipeline(
   const providerFactory = dependencies.getAIProvider ?? getAIProvider;
   const selectedTier = params.selectedTier ?? 'standard';
   const mode = params.mode ?? 'production';
-  const userInputs = params.userInputs ?? {};
+  const userInputs = await hydrateMediaAssetInputs(params.userInputs ?? {});
   const stepOutputs: Record<string, unknown> = {};
   const stepProgress: StepProgressEntry[] = steps.map((step) => ({
     stepId: step.id,
@@ -84,6 +84,7 @@ export async function runPipeline(
       status: ProjectStatus.PROCESSING,
       progress: 0,
       errorMessage: null,
+      errorCode: null,
       stepProgress: toJson(stepProgress),
     },
   });
@@ -174,6 +175,7 @@ export async function runPipeline(
         progress: 100,
         completedAt: new Date(),
         errorMessage: null,
+        errorCode: null,
         resultImage: finalOutput.resultImage ?? null,
         resultVideo: finalOutput.resultVideo ?? null,
         resultThumbnail: finalOutput.resultThumbnail ?? null,
@@ -187,6 +189,7 @@ export async function runPipeline(
       stepProgress,
     };
   } catch (err) {
+    const errorCode = err instanceof ProviderError ? err.code : undefined;
     const activeIndex = stepProgress.findIndex((step) => step.status === 'processing');
     if (activeIndex >= 0) {
       const userSafeMessage = isProviderUserSafeError(err)
@@ -206,7 +209,7 @@ export async function runPipeline(
     await markProjectFailed(
       params.generationId,
       isProviderUserSafeError(err) ? providerUnavailableMessage : (err as Error).message,
-      { refundTokens: true },
+      { refundTokens: true, errorCode },
     );
     throw err;
   }
@@ -264,6 +267,23 @@ export function resolvePlaceholders(value: unknown, context: PlaceholderContext)
     if (typeof resolved === 'string') return resolved;
     return JSON.stringify(resolved);
   });
+}
+
+async function hydrateMediaAssetInputs(inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const ids = Object.values(inputs).filter((value): value is string => typeof value === 'string' && value.length > 0);
+  if (ids.length === 0) return inputs;
+  const assets = await prisma.mediaAsset.findMany({
+    where: { id: { in: ids }, isActive: true },
+    select: { id: true, publicUrl: true },
+  });
+  if (assets.length === 0) return inputs;
+  const urls = new Map(assets.map((asset) => [asset.id, asset.publicUrl]));
+  return Object.fromEntries(
+    Object.entries(inputs).map(([key, value]) => [
+      key,
+      typeof value === 'string' && urls.has(value) ? urls.get(value) : value,
+    ]),
+  );
 }
 
 function resolveToken(token: string, context: PlaceholderContext): unknown {

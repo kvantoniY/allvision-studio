@@ -1,0 +1,1 @@
+ALTER TABLE "MediaAsset" ALTER COLUMN "tags" SET NOT NULL;

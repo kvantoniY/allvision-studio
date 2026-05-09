@@ -11,6 +11,7 @@
     "migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "seed": "tsx src/seed.ts",
     "seed:dev": "tsx src/seed-dev.ts",
+    "migrate:media-assets": "tsx src/migrate-media-assets.ts",
     "studio": "prisma studio --schema prisma/schema.prisma"
   },
   "dependencies": {

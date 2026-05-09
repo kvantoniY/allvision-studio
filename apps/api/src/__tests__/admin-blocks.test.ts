@@ -63,11 +63,16 @@ describe('GET /api/admin/blocks', () => {
       .set('Cookie', authCookie(adminUserId, 'ADMIN'));
 
     expect(res.status).toBe(200);
-    expect(res.body.blocks).toHaveLength(6);
+    expect(res.body.blocks).toHaveLength(7);
     expect(res.body.blocks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           slug: 'image-restore',
+          paramsSchema: expect.any(Object),
+          supportedModels: expect.any(Array),
+        }),
+        expect.objectContaining({
+          slug: 'image-edit',
           paramsSchema: expect.any(Object),
           supportedModels: expect.any(Array),
         }),

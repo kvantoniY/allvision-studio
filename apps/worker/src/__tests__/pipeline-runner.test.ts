@@ -59,7 +59,7 @@ function makeBlock(params: {
     inputSchema: z.unknown(),
     outputSchema,
     paramsSchema: z.unknown(),
-    supportedModels: [{ slug: 'mock', title: 'Mock', tierHint: 'both', estimatedCostCoins: 1 }],
+    supportedModels: [{ slug: 'mock', title: 'Mock', tierHint: 'both', estimatedCostCoins: 1, provider: 'mock' }],
     estimatedCostCoins: () => 1,
     async executor(_blockParams, _input, ctx) {
       await ctx.reportProgress(50);

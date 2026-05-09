@@ -45,6 +45,7 @@ const projectListSelect = {
   resultThumbnail: true,
   tokensCost: true,
   errorMessage: true,
+  errorCode: true,
   pipelineSnapshot: true,
   selectedTier: true,
   userInputs: true,
@@ -199,7 +200,7 @@ projectsRouter.post(
         try {
           await prisma.project.update({
             where: { id: project.id },
-            data: { status: 'FAILED', errorMessage: 'Queue unavailable' },
+            data: { status: 'FAILED', errorMessage: 'Queue unavailable', errorCode: 'QUEUE_UNAVAILABLE' },
           });
           await prisma.$transaction(async (tx) => {
             const user = await tx.user.update({
@@ -276,6 +277,7 @@ projectsRouter.get('/:id/status', requireAuth, async (req: Request, res: Respons
         resultVideo: true,
         resultThumbnail: true,
         errorMessage: true,
+        errorCode: true,
         completedAt: true,
         stepProgress: true,
       },

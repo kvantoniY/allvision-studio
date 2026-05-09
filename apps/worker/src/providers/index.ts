@@ -30,7 +30,7 @@ let piapiSingleton: PiAPIProvider | undefined;
 let publisherSingleton: FilePublisher | undefined;
 
 const MOCK_ONLY_BLOCKS = new Set(['image-restore', 'image-upscale', 'text-to-video']);
-const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video']);
+const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit']);
 
 /**
  * Worker использует тот же LocalFileStorage что и API — но мы не импортируем класс

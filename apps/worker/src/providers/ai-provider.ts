@@ -25,6 +25,16 @@ export interface AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
 
+  imageEdit(input: {
+    imageUrl: string;
+    prompt: string;
+    model: string;
+    negativePrompt?: string;
+    strength?: number;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
+
   imageToVideo(input: {
     imageUrl: string;
     prompt?: string;

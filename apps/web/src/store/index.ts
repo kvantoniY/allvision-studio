@@ -10,6 +10,8 @@ import { scenesApi } from './api/scenes-api';
 import { episodesApi } from './api/episodes-api';
 import { adminScenarioTemplatesApi } from './api/admin-scenario-templates-api';
 import { adminServicesApi } from './api/admin-services-api';
+import { adminMediaAssetsApi } from './api/admin-media-assets-api';
+import { adminUsageApi } from './api/admin-usage-api';
 import { servicesApi } from './api/services-api';
 import { authReducer } from './slices/auth-slice';
 
@@ -27,6 +29,8 @@ export const store = configureStore({
     [episodesApi.reducerPath]: episodesApi.reducer,
     [adminScenarioTemplatesApi.reducerPath]: adminScenarioTemplatesApi.reducer,
     [adminServicesApi.reducerPath]: adminServicesApi.reducer,
+    [adminMediaAssetsApi.reducerPath]: adminMediaAssetsApi.reducer,
+    [adminUsageApi.reducerPath]: adminUsageApi.reducer,
     [servicesApi.reducerPath]: servicesApi.reducer,
   },
   middleware: (getDefault) =>
@@ -42,6 +46,8 @@ export const store = configureStore({
       episodesApi.middleware,
       adminScenarioTemplatesApi.middleware,
       adminServicesApi.middleware,
+      adminMediaAssetsApi.middleware,
+      adminUsageApi.middleware,
       servicesApi.middleware,
     ),
 });

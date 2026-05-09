@@ -46,7 +46,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { BlockCatalogItem, JsonSchemaObject, ModelOption } from '@allvision/shared';
-import { validatePipelineConfig, validateUserInputForm } from '@allvision/shared';
+import { formatAdminServiceValidationError, validatePipelineConfig, validateUserInputForm } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,6 +92,7 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
   textarea: 'Большой текст',
   photo: 'Фото',
   select: 'Select',
+  'media-select': 'Media select',
   avatar: 'Avatar',
   tier: 'Quality tier',
 };
@@ -224,6 +225,16 @@ function preferredModel(models: ModelOption[], tier: 'standard' | 'pro') {
   );
 }
 
+function modelBySlug(models: ModelOption[], slug: unknown) {
+  return typeof slug === 'string' ? models.find((model) => model.slug === slug) : undefined;
+}
+
+function providerLabel(provider: ModelOption['provider']) {
+  if (provider === 'piapi') return 'PiAPI';
+  if (provider === 'local') return 'Local';
+  return 'Mock';
+}
+
 function defaultValueForSchema(schema: JsonSchemaObject, block: BlockCatalogItem, key?: string): unknown {
   if (key === 'model' || isTierModelSchema(schema)) {
     return {
@@ -296,12 +307,12 @@ function validationErrors(steps: PipelineStep[], fields: UserInputField[]) {
   try {
     validateUserInputForm(fields);
   } catch (err) {
-    errors.push((err as Error).message);
+    errors.push(formatAdminServiceValidationError((err as Error).message));
   }
   try {
     validatePipelineConfig(steps, fields);
   } catch (err) {
-    errors.push((err as Error).message);
+    errors.push(formatAdminServiceValidationError((err as Error).message));
   }
   return [...new Set(errors)];
 }
@@ -380,9 +391,49 @@ function BlockParamsForm({
   onChange: (value: Record<string, unknown>) => void;
 }) {
   const update = (key: string, next: unknown) => onChange({ ...value, [key]: next });
+  const modelValue = value.model;
+  const standardModel = modelBySlug(
+    block.supportedModels,
+    isRecord(modelValue) ? modelValue.standard : modelValue,
+  ) ?? block.supportedModels[0];
+  const proModel = modelBySlug(
+    block.supportedModels,
+    isRecord(modelValue) ? modelValue.pro : modelValue,
+  ) ?? standardModel;
+  const selectedModels = [standardModel, proModel]
+    .filter((model): model is ModelOption => Boolean(model))
+    .filter((model, index, list) => list.findIndex((item) => item.slug === model.slug) === index);
+  const duration = typeof value.duration === 'number' ? value.duration : undefined;
+  const limitWarnings = selectedModels
+    .flatMap((model) => {
+      const maxDuration = model.limits?.maxDurationSec;
+      if (duration && maxDuration && duration > maxDuration) {
+        return [`Duration exceeds ${model.title} limit (${maxDuration}s). PiAPI may return an error.`];
+      }
+      return [];
+    });
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="space-y-4">
+      {selectedModels.length > 0 && (
+        <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-xs text-slate-300">
+          <div className="font-semibold text-white">Model info</div>
+          {selectedModels.map((model) => (
+              <div key={model.slug} className="mt-2">
+                <div className="font-medium text-slate-100">{model.title} · {providerLabel(model.provider)} · ~{model.estimatedCostCoins} coins{model.estimatedCostUsd ? ` · $${model.estimatedCostUsd}` : ''}</div>
+                {model.description && <p className="mt-1 text-slate-400">{model.description}</p>}
+                {model.limits && (
+                  <div className="mt-1 text-slate-500">
+                    {Object.entries(model.limits).map(([key, item]) => `${key}: ${String(item)}`).join(' · ')}
+                  </div>
+                )}
+                {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-1 inline-block text-rose-300 hover:text-rose-200">Docs</a>}
+              </div>
+            ))}
+          {limitWarnings.map((warning) => <div key={warning} className="mt-2 text-amber-300">{warning}</div>)}
+        </div>
+      )}
+      <div className="grid gap-4 md:grid-cols-2">
       {Object.entries(block.paramsSchema.properties ?? {}).map(([key, rawSchema]) => {
         const schema = schemaObject(rawSchema);
         const label = schema.title ?? key;
@@ -430,6 +481,7 @@ function BlockParamsForm({
                   </option>
                 ))}
               </select>
+              {schema.description && <p className="text-xs text-slate-500">{schema.description}</p>}
             </div>
           );
         }
@@ -444,6 +496,7 @@ function BlockParamsForm({
                 className="h-4 w-4"
               />
               {label}
+              {schema.description && <span className="text-xs text-slate-500">{schema.description}</span>}
             </label>
           );
         }
@@ -457,6 +510,7 @@ function BlockParamsForm({
                 value={selectValue(value[key])}
                 onChange={(event) => update(key, event.target.value === '' ? undefined : Number(event.target.value))}
               />
+              {schema.description && <p className="text-xs text-slate-500">{schema.description}</p>}
             </div>
           );
         }
@@ -470,9 +524,11 @@ function BlockParamsForm({
             ) : (
               <Input value={selectValue(value[key])} onChange={(event) => update(key, event.target.value)} />
             )}
+            {schema.description && <p className="text-xs text-slate-500">{schema.description}</p>}
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -679,6 +735,7 @@ function UserInputFormBuilder({
       type,
       label: fieldTypeLabels[type],
       required: type === 'tier' || type === 'photo',
+      ...(type === 'media-select' ? { mediaKind: 'trend-video' } : {}),
       ...(type === 'select' ? { options: [{ label: 'Вариант 1', value: 'option_1' }] } : {}),
       ...(type === 'photo' ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'] } : {}),
     };
@@ -797,6 +854,16 @@ function UserInputFormBuilder({
                                 />
                               </label>
                             )}
+                            {field.type === 'media-select' && (
+                              <label className="flex items-center gap-2">
+                                mediaKind
+                                <Input
+                                  value={field.mediaKind ?? ''}
+                                  onChange={(event) => updateField(index, { mediaKind: event.target.value || undefined })}
+                                  className="h-8 w-40"
+                                />
+                              </label>
+                            )}
                           </div>
                           {field.type === 'select' && (
                             <div className="space-y-2">
@@ -830,7 +897,7 @@ function UserInputFormBuilder({
         </DndContext>
 
         <div className="flex flex-wrap gap-2">
-          {(['text', 'textarea', 'photo', 'select', 'avatar'] as const).map((type) => (
+          {(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar'] as const).map((type) => (
             <Button key={type} type="button" variant="outline" size="sm" onClick={() => addField(type)}>
               <Plus className="h-4 w-4" />
               {fieldTypeLabels[type]}
@@ -857,6 +924,11 @@ function UserInputFormBuilder({
                   {(field.options ?? []).map((option) => (
                     <option key={option.value}>{option.label}</option>
                   ))}
+                </select>
+              )}
+              {field.type === 'media-select' && (
+                <select disabled className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-400">
+                  <option>{field.mediaKind ?? 'media-kind'}</option>
                 </select>
               )}
               {field.type === 'avatar' && <Input disabled placeholder="Выбор avatar" />}

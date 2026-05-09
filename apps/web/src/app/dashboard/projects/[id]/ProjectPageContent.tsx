@@ -14,7 +14,7 @@ import {
   RotateCcw,
   Share2,
 } from 'lucide-react';
-import type { ProjectStatus } from '@allvision/shared';
+import { getUserFriendlyError, type ProjectStatus } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +29,7 @@ import {
   useGetProjectStatusQuery,
 } from '@/store/api/projects-api';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/use-auth';
 
 type ProjectPageContentProps = {
   id: string;
@@ -259,6 +260,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const [lastStatus, setLastStatus] = useState<ProjectStatus | undefined>(initialProject?.status);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const { user } = useAuth();
   const projectQuery = useGetProjectQuery(id);
   const project = projectQuery.data ?? initialProject;
   const statusForPolling = lastStatus ?? project?.status;
@@ -306,6 +308,9 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const resultVideo = live?.resultVideo ?? project.resultVideo;
   const resultThumbnail = live?.resultThumbnail ?? project.resultThumbnail;
   const errorMessage = live?.errorMessage ?? project.errorMessage;
+  const errorCode = live?.errorCode ?? project.errorCode;
+  const isAdmin = user?.role === 'ADMIN';
+  const friendlyError = isAdmin ? (errorMessage ?? getUserFriendlyError(errorCode)) : getUserFriendlyError(errorCode);
   const completedAt = live?.completedAt ?? project.completedAt;
   const inputImage = project.inputImages?.[0];
   const resultUrl = resultImage ?? resultVideo ?? resultThumbnail;
@@ -355,8 +360,14 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Не удалось создать подарок</AlertTitle>
                 <AlertDescription>
-                  <p>{errorMessage ?? 'Произошла ошибка при генерации проекта.'}</p>
+                  <p>{friendlyError}</p>
                   <p className="mt-2">Коины возвращены на баланс.</p>
+                  {!isAdmin && errorMessage && (
+                    <details className="mt-3">
+                      <summary className="cursor-pointer">Детали для поддержки</summary>
+                      <p className="mt-2 break-words text-xs">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
+                    </details>
+                  )}
                 </AlertDescription>
               </Alert>
               <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
@@ -649,8 +660,14 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Обработка не удалась</AlertTitle>
                   <AlertDescription>
-                    <p>{errorMessage ?? 'Произошла ошибка при обработке проекта.'}</p>
+                    <p>{friendlyError}</p>
                     <p className="mt-2">Коины возвращены на баланс.</p>
+                    {!isAdmin && errorMessage && (
+                      <details className="mt-3">
+                        <summary className="cursor-pointer">Детали для поддержки</summary>
+                        <p className="mt-2 break-words text-xs">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
+                      </details>
+                    )}
                   </AlertDescription>
                 </Alert>
                 <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">

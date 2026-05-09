@@ -196,9 +196,9 @@ const giftFactoryServices = [
     description:
       'Загрузите старое фото из семейного архива. Мы аккуратно восстановим детали, улучшим качество и превратим снимок в короткое тёплое видео с мягким движением.',
     category: ServiceCategory.NOSTALGIA,
-    priceTokens: 200,
-    priceCoinsStandard: 200,
-    priceCoinsPro: 450,
+    priceTokens: 20,
+    priceCoinsStandard: 20,
+    priceCoinsPro: 30,
     costUsd: 0,
     coverImage: image('gift-revive-old-photo'),
     galleryImages: [image('gift-revive-gallery-1'), image('gift-revive-gallery-2')],
@@ -208,19 +208,33 @@ const giftFactoryServices = [
     aiProvider: 'mock',
     aiModel: 'mock-data-driven-pipeline',
     aiConfig: {},
-    isActive: false,
-    isFeatured: false,
+    isActive: true,
+    isFeatured: true,
     sortOrder: 1,
     userInputForm: [
-      { id: 'photo', type: 'photo', label: 'Фотография', required: true, hint: 'JPG/PNG, до 25MB' },
+      {
+        id: 'photo',
+        type: 'photo',
+        label: 'Фотография',
+        required: true,
+        hint: 'JPG/PNG/WebP, до 10MB',
+        maxSizeMb: 10,
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+      },
       { id: 'tier', type: 'tier', label: 'Качество', required: true },
     ],
     pipelineConfig: [
       {
         id: 'step_1',
-        blockSlug: 'image-restore',
+        blockSlug: 'image-edit',
         input: '{{user.photo}}',
-        params: { model: { standard: 'mock-restore', pro: 'mock-restore' }, strength: 0.75 },
+        params: {
+          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          prompt: 'PLACEHOLDER: восстановить старое фото, убрать царапины, выцветание и шум, восстановить цвета и детали лица. Сохранить идентичность людей и композицию. Фото должно выглядеть как качественный современный снимок того же момента.',
+          output_format: 'jpg',
+          aspect_ratio: 'input',
+          resolution: '1K',
+        },
       },
       {
         id: 'step_2',
@@ -229,14 +243,14 @@ const giftFactoryServices = [
         params: {
           duration: 5,
           model: { standard: 'kling-std', pro: 'kling-pro' },
-          prompt: 'subtle gentle animation, soft smile, slight head movement',
+          prompt: 'Subject moves naturally, slight head turn, gentle smile, slow camera movement',
         },
       },
       {
         id: 'step_3',
         blockSlug: 'video-compose',
         input: '{{step_2.output}}',
-        params: { watermark: true, title: 'Allvision memory' },
+        params: { watermark: true, title: 'Allvision' },
       },
     ],
   },
@@ -266,14 +280,10 @@ const giftFactoryServices = [
       { id: 'face', type: 'photo', label: 'Ваше фото лица', required: true, hint: 'Лучше всего работает портрет анфас' },
       {
         id: 'trendVideo',
-        type: 'select',
+        type: 'media-select',
+        mediaKind: 'trend-video',
         label: 'Какой тренд',
         required: true,
-        options: [
-          { value: trendVideo(1), label: 'Тренд 1' },
-          { value: trendVideo(2), label: 'Тренд 2' },
-          { value: trendVideo(3), label: 'Тренд 3' },
-        ],
       },
       { id: 'tier', type: 'tier', label: 'Качество', required: true, hint: 'В P6 Standard и Pro используют одну модель PiAPI' },
     ],
@@ -669,8 +679,7 @@ export async function runSeed(options: SeedOptions = {}) {
   } else {
     const serviceCount = await prisma.service.count();
     if (serviceCount > 0) {
-      console.log(`[seed] database already contains ${serviceCount} services; skipping prod seed`);
-      return;
+      console.log(`[seed] database already contains ${serviceCount} services; applying idempotent prod updates`);
     }
   }
 
@@ -746,7 +755,8 @@ async function seedPilotServices() {
   for (const service of giftFactoryServices) {
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
     if (existing) {
-      if (service.slug === 'face-in-trend' && needsFaceInTrendP65Patch(existing)) {
+      if ((service.slug === 'face-in-trend' && needsFaceInTrendP7aPatch(existing))
+        || (service.slug === 'revive-old-photo' && needsReviveOldPhotoP7aPatch(existing))) {
         await prisma.service.update({
           where: { slug: service.slug },
           data: {
@@ -757,6 +767,7 @@ async function seedPilotServices() {
             userInputForm: service.userInputForm,
             pipelineConfig: service.pipelineConfig,
             isFeatured: service.isFeatured,
+            isActive: service.isActive,
           },
         });
       }
@@ -768,7 +779,7 @@ async function seedPilotServices() {
   return count;
 }
 
-function needsFaceInTrendP65Patch(service: {
+function needsFaceInTrendP7aPatch(service: {
   priceTokens: number;
   priceCoinsStandard: number | null;
   priceCoinsPro: number | null;
@@ -781,7 +792,8 @@ function needsFaceInTrendP65Patch(service: {
     Array.isArray(service.userInputForm) &&
     service.userInputForm.some((field) => {
       if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
-      return (field as { id?: unknown }).id === 'trendVideo';
+      const raw = field as { id?: unknown; type?: unknown; mediaKind?: unknown };
+      return raw.id === 'trendVideo' && raw.type === 'media-select' && raw.mediaKind === 'trend-video';
     });
 
   const pipelineJson = JSON.stringify(service.pipelineConfig ?? {});
@@ -789,10 +801,43 @@ function needsFaceInTrendP65Patch(service: {
     service.priceTokens > 25 ||
     (service.priceCoinsStandard ?? service.priceTokens) > 25 ||
     (service.priceCoinsPro ?? service.priceTokens) > 25 ||
-    service.previewVideo !== trendVideo(1) ||
     !hasTrendVideoField ||
     !pipelineJson.includes('{{user.trendVideo}}') ||
     !service.isFeatured
+  );
+}
+
+function needsReviveOldPhotoP7aPatch(service: {
+  priceTokens: number;
+  priceCoinsStandard: number | null;
+  priceCoinsPro: number | null;
+  userInputForm: unknown;
+  pipelineConfig: unknown;
+  isActive: boolean;
+  isFeatured: boolean;
+}) {
+  const pipelineJson = JSON.stringify(service.pipelineConfig ?? {});
+  const hasPhotoLimits =
+    Array.isArray(service.userInputForm) &&
+    service.userInputForm.some((field) => {
+      if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
+      const raw = field as { id?: unknown; type?: unknown; maxSizeMb?: unknown; allowedFormats?: unknown };
+      return raw.id === 'photo'
+        && raw.type === 'photo'
+        && raw.maxSizeMb === 10
+        && Array.isArray(raw.allowedFormats)
+        && raw.allowedFormats.includes('webp');
+    });
+  return (
+    service.priceTokens !== 20 ||
+    (service.priceCoinsStandard ?? service.priceTokens) !== 20 ||
+    (service.priceCoinsPro ?? service.priceTokens) !== 30 ||
+    !service.isActive ||
+    !service.isFeatured ||
+    !hasPhotoLimits ||
+    !pipelineJson.includes('"blockSlug":"image-edit"') ||
+    !pipelineJson.includes('nano-banana') ||
+    !pipelineJson.includes('PLACEHOLDER:')
   );
 }
 
@@ -877,6 +922,7 @@ async function truncateForDevSeed() {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "AIUsageLog",
+      "MediaAsset",
       "EpisodeCharacter",
       "Episode",
       "Scene",

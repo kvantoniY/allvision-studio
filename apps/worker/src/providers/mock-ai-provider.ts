@@ -219,6 +219,23 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     };
   }
 
+  async imageEdit(params: {
+    imageUrl: string;
+    prompt: string;
+    model: string;
+    negativePrompt?: string;
+    strength?: number;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return {
+      outputUrl: params.imageUrl,
+      costUsd: 0,
+      durationMs: 1,
+      meta: { provider: 'mock', passthrough: true, service: 'image-edit', model: params.model },
+    };
+  }
+
   async imageToVideo(params: {
     imageUrl: string;
     prompt?: string;

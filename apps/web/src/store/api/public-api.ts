@@ -5,6 +5,7 @@ import type {
   PublicServiceResponse,
   PublicServicesResponse,
   PublicSettingsResponse,
+  PublicMediaAssetsResponse,
   PublicTokenPackagesResponse,
   PublicTrendResponse,
   PublicTrendsResponse,
@@ -18,7 +19,7 @@ export const publicApi = createApi({
     baseUrl: `${API_URL}/api/public`,
     credentials: 'include',
   }),
-  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings'],
+  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets'],
   endpoints: (build) => ({
     getServices: build.query<PublicServicesResponse, void>({
       query: () => ({ url: '/services' }),
@@ -47,6 +48,16 @@ export const publicApi = createApi({
       query: () => ({ url: '/settings/public' }),
       providesTags: ['PublicSettings'],
     }),
+    getPublicMediaAssets: build.query<PublicMediaAssetsResponse, { kind?: string; active?: boolean } | void>({
+      query: (q) => {
+        const params = new URLSearchParams();
+        if (q?.kind) params.set('kind', q.kind);
+        if (q?.active !== undefined) params.set('active', String(q.active));
+        const query = params.toString();
+        return { url: `/media-assets${query ? `?${query}` : ''}` };
+      },
+      providesTags: ['MediaAssets'],
+    }),
     sendContact: build.mutation<ContactResponse, ContactInput>({
       query: (body) => ({ url: '/contact', method: 'POST', body }),
     }),
@@ -60,5 +71,6 @@ export const {
   useGetTrendQuery,
   useGetTokenPackagesQuery,
   useGetPublicSettingsQuery,
+  useGetPublicMediaAssetsQuery,
   useSendContactMutation,
 } = publicApi;

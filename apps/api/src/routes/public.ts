@@ -13,6 +13,7 @@ import type {
   PublicTrendsResponse,
   ContactResponse,
   PublicSettings,
+  PublicMediaAssetsResponse,
 } from '@allvision/shared';
 import { prisma } from '@allvision/database';
 import { HttpError } from '../utils/http-error';
@@ -75,6 +76,12 @@ const publicScenarioTemplateSelect = {
   isFeatured: true,
   sortOrder: true,
 };
+
+function staticUrlForKey(key: string | null | undefined) {
+  if (!key) return null;
+  const baseUrl = process.env.PUBLIC_API_URL ?? 'http://localhost:4000';
+  return `${baseUrl.replace(/\/+$/, '')}/static/${key.replace(/^\/+/, '')}`;
+}
 
 type PublicTrendRow = Omit<PublicTrend, 'priceTokens'> & {
   priceTokens: number | null;
@@ -172,6 +179,43 @@ publicRouter.get('/trends/:id', async (req: Request, res: Response<PublicTrendRe
     });
     if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Тренд не найден');
     res.json({ trend: toPublicTrend(trend) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+publicRouter.get('/media-assets', async (req: Request, res: Response<PublicMediaAssetsResponse>, next: NextFunction) => {
+  try {
+    const kind = typeof req.query.kind === 'string' ? req.query.kind.trim() : undefined;
+    const active = req.query.active === undefined ? true : req.query.active === 'true';
+    const assets = await prisma.mediaAsset.findMany({
+      where: {
+        ...(kind ? { kind } : {}),
+        ...(active ? { isActive: true } : {}),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        description: true,
+        tags: true,
+        publicUrl: true,
+        thumbnailKey: true,
+        durationSec: true,
+        width: true,
+        height: true,
+        fileSize: true,
+        mimeType: true,
+        sortOrder: true,
+      },
+    });
+    res.json({
+      assets: assets.map((asset) => ({
+        ...asset,
+        thumbnailUrl: staticUrlForKey(asset.thumbnailKey),
+      })),
+    });
   } catch (e) {
     next(e);
   }
