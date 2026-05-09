@@ -1,7 +1,10 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Router, type Request, type Response } from 'express';
 import IORedis from 'ioredis';
 import { prisma } from '@allvision/database';
 import { resolveRuntimeProviderMode } from '@allvision/shared';
+import { resolveWorkspacePath } from '../utils/paths';
 
 export const healthRouter = Router();
 
@@ -18,6 +21,7 @@ export async function readinessHandler(_req: Request, res: Response) {
   const checks: Record<string, 'ok' | 'error'> = {
     database: 'ok',
     redis: 'ok',
+    uploads: 'ok',
   };
 
   await prisma.$queryRaw`SELECT 1`.catch(() => {
@@ -39,6 +43,12 @@ export async function readinessHandler(_req: Request, res: Response) {
       redis.disconnect();
     });
 
+  if ((process.env.STORAGE_PROVIDER ?? 'local') === 'local') {
+    await checkUploadsWritable().catch(() => {
+      checks.uploads = 'error';
+    });
+  }
+
   const ready = Object.values(checks).every((status) => status === 'ok');
   res.status(ready ? 200 : 503).json({
     status: ready ? 'ok' : 'unavailable',
@@ -47,3 +57,12 @@ export async function readinessHandler(_req: Request, res: Response) {
 }
 
 healthRouter.get('/ready', readinessHandler);
+
+async function checkUploadsWritable() {
+  const rootDir = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
+  const healthDir = path.join(rootDir, '.healthcheck');
+  const probe = path.join(healthDir, `ready-${process.pid}-${Date.now()}`);
+  await fs.mkdir(healthDir, { recursive: true });
+  await fs.writeFile(probe, 'ok');
+  await fs.unlink(probe);
+}
