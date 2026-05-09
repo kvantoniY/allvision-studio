@@ -19,6 +19,17 @@ Workflow создаёт релиз в `/opt/allvision-studio/releases/{sha}`, л
 
 ## Env
 
+## Shared volume ownership
+
+Prod app-контейнеры `api`, `worker` и `web` запускаются под пользователем `allvision` с UID/GID `1000`, чтобы совпадать с пользователем `andromeda` на ВМ. Shared volumes должны принадлежать UID 1000; иначе API не сможет писать загруженные пользователем файлы в `/app/uploads`.
+
+Для миграции существующей ВМ после ранних P6.5-деплоев:
+
+```bash
+sudo chown -R 1000:1000 /opt/allvision-studio/shared/{uploads,postgres_data,public-trends}
+sudo chmod -R 755 /opt/allvision-studio/shared/{uploads,public-trends}
+```
+
 `PROVIDER_MODE=mock` - безопасный прод-режим P6.5: все AI-блоки идут через `MockAIProvider`, PiAPI и publisher не вызываются.
 
 `PROVIDER_MODE=piapi` - реальные PiAPI-вызовы для `image-to-video` и `face-swap-video`; mock-only блоки остаются на mock. Требует `PIAPI_API_KEY`.

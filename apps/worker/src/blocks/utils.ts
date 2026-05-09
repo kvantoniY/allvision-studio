@@ -24,6 +24,7 @@ export const tierModelParamsSchema = z.object({
 });
 
 export function readInputUrl(input: unknown, fallback = 'mock://input.jpg'): string {
+  if (typeof input === 'string') return input;
   if (!input || typeof input !== 'object') return fallback;
   const value = input as Record<string, unknown>;
   if (typeof value.url === 'string') return value.url;

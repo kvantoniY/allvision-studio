@@ -23,8 +23,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 RUN apk add --no-cache curl openssl \
-  && addgroup -S -g 10001 allvision \
-  && adduser -S -D -H -u 10001 -G allvision allvision
+  && (deluser node 2>/dev/null || true) \
+  && (delgroup node 2>/dev/null || true) \
+  && addgroup -S -g 1000 allvision \
+  && adduser -S -D -H -u 1000 -G allvision allvision
 
 COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/package.json

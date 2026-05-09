@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import * as childProcess from 'node:child_process';
 import type {
   AIProvider as LegacyAIProvider,
   AIJobHandle,
@@ -17,6 +18,7 @@ import type {
 
 type MockService = 'photo-restore' | 'photo-animate' | 'trend' | 'episode-image' | 'episode-video';
 type ResultType = 'image' | 'video';
+type FallbackVideoFactory = (filePath: string) => void;
 
 interface MockJobState {
   startedAt: number;
@@ -35,6 +37,7 @@ export interface MockAIProviderOptions {
   minDurationMs?: number;
   /** Максимальная задержка задачи (мс). Дефолт 15000. */
   maxDurationMs?: number;
+  fallbackVideoFactory?: FallbackVideoFactory;
 }
 
 const SERVICE_DIRS: Record<MockService, string> = {
@@ -55,6 +58,7 @@ const SERVICE_RESULT_TYPE: Record<MockService, ResultType> = {
 
 const VIDEO_EXTS = new Set(['.mp4', '.webm', '.mov']);
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+const FALLBACK_VIDEO_NAME = 'fallback-black.mp4';
 
 function inferContentType(ext: string, fallback: ResultType): string {
   const e = ext.toLowerCase();
@@ -79,6 +83,50 @@ function listAssets(dir: string, expected: ResultType): string[] {
     });
 }
 
+function ensureFallbackVideo(dir: string, factory?: FallbackVideoFactory): string {
+  fs.mkdirSync(dir, { recursive: true });
+  const filePath = path.join(dir, FALLBACK_VIDEO_NAME);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) return filePath;
+
+  if (factory) {
+    factory(filePath);
+  } else {
+    const result = childProcess.spawnSync(
+      'ffmpeg',
+      [
+        '-y',
+        '-f',
+        'lavfi',
+        '-i',
+        'color=c=black:s=320x180:d=1',
+        '-r',
+        '24',
+        '-c:v',
+        'libx264',
+        '-pix_fmt',
+        'yuv420p',
+        '-movflags',
+        '+faststart',
+        filePath,
+      ],
+      { stdio: 'ignore' },
+    );
+
+    if (result.status !== 0) {
+      throw new Error(
+        `DEMO_ASSETS_FALLBACK_FAILED: ffmpeg РЅРµ СЃРјРѕРі СЃРѕР·РґР°С‚СЊ ${filePath}`,
+      );
+    }
+  }
+
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).size === 0) {
+    throw new Error(
+      `DEMO_ASSETS_FALLBACK_FAILED: ffmpeg не смог создать ${filePath}`,
+    );
+  }
+  return filePath;
+}
+
 export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
   name = 'mock' as const;
 
@@ -86,6 +134,7 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
   private demoAssetsRoot: string;
   private minDurationMs: number;
   private maxDurationMs: number;
+  private fallbackVideoFactory?: FallbackVideoFactory;
   private jobs = new Map<string, MockJobState>();
 
   constructor(options: MockAIProviderOptions) {
@@ -95,6 +144,7 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     );
     this.minDurationMs = options.minDurationMs ?? 5000;
     this.maxDurationMs = options.maxDurationMs ?? 15000;
+    this.fallbackVideoFactory = options.fallbackVideoFactory;
   }
 
   private pickAsset(service: MockService): { filePath: string; resultType: ResultType } {
@@ -106,6 +156,9 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     }
     if (files.length === 0 && service === 'episode-video') {
       files = listAssets(path.join(this.demoAssetsRoot, SERVICE_DIRS['photo-animate']), resultType);
+    }
+    if (files.length === 0 && resultType === 'video') {
+      return { filePath: ensureFallbackVideo(dir, this.fallbackVideoFactory), resultType };
     }
     if (files.length === 0) {
       throw new Error(
