@@ -15,6 +15,7 @@ const MAX_VIDEO_DURATION_SEC = 10;
 const MAX_VIDEO_FILE_SIZE = 15 * 1024 * 1024;
 const MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_AUDIO_FILE_SIZE = 20 * 1024 * 1024;
+export const VIDEO_TRANSCODE_FILTER = 'scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2';
 
 export type ProcessedMediaAsset = {
   storageKey: string;
@@ -125,7 +126,7 @@ async function processVideo(kind: string, file: Express.Multer.File): Promise<Pr
       '-t',
       String(MAX_VIDEO_DURATION_SEC),
       '-vf',
-      'scale=w=1280:h=720:force_original_aspect_ratio=decrease',
+      VIDEO_TRANSCODE_FILTER,
       '-c:v',
       'libx264',
       '-preset',
