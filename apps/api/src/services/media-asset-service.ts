@@ -15,7 +15,7 @@ const MAX_VIDEO_DURATION_SEC = 10;
 const MAX_VIDEO_FILE_SIZE = 15 * 1024 * 1024;
 const MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_AUDIO_FILE_SIZE = 20 * 1024 * 1024;
-export const VIDEO_TRANSCODE_FILTER = 'scale=w=1280:h=720:force_original_aspect_ratio=decrease:force_divisible_by=2';
+export const VIDEO_TRANSCODE_FILTER = "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2";
 
 export type ProcessedMediaAsset = {
   storageKey: string;
@@ -143,6 +143,7 @@ async function processVideo(kind: string, file: Express.Multer.File): Promise<Pr
     ]);
 
     const output = await fs.readFile(outputPath);
+    const outputProbe = await ffprobe(outputPath);
     if (output.length > MAX_VIDEO_FILE_SIZE) {
       throw new HttpError(413, 'FILE_TOO_LARGE', 'Видео после обработки должно быть не тяжелее 15 МБ');
     }
@@ -175,10 +176,10 @@ async function processVideo(kind: string, file: Express.Multer.File): Promise<Pr
       storageKey: videoUpload.key,
       publicUrl: videoUpload.url,
       thumbnailKey: thumbUpload.key,
-      durationSec: probe.durationSec,
-      width: probe.width,
-      height: probe.height,
-      frameCount: probe.frameCount,
+      durationSec: outputProbe.durationSec ?? probe.durationSec,
+      width: outputProbe.width ?? probe.width,
+      height: outputProbe.height ?? probe.height,
+      frameCount: outputProbe.frameCount ?? probe.frameCount,
       fileSize: output.length,
       mimeType: 'video/mp4',
     };

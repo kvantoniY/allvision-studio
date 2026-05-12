@@ -16,9 +16,14 @@ function baseCookieOpts(): CookieOptions {
   };
 }
 
-export function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+export function setAuthCookies(
+  res: Response,
+  accessToken: string,
+  refreshToken: string,
+  options: { accessMaxAgeMs?: number } = {},
+) {
   const base = baseCookieOpts();
-  res.cookie('accessToken', accessToken, { ...base, maxAge: ACCESS_MAX_AGE_MS });
+  res.cookie('accessToken', accessToken, { ...base, maxAge: options.accessMaxAgeMs ?? ACCESS_MAX_AGE_MS });
   res.cookie('refreshToken', refreshToken, { ...base, maxAge: REFRESH_MAX_AGE_MS });
 }
 

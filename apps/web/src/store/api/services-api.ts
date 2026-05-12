@@ -1,10 +1,9 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { accountApi } from './account-api';
 import { authApi } from './auth-api';
 import { projectsApi, invalidateProjectSideEffects } from './projects-api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type ServicesQuery = {
   category?: ServiceCategory;
@@ -30,10 +29,7 @@ export type LaunchServiceResponse = {
 
 export const servicesApi = createApi({
   reducerPath: 'servicesApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/services`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/services'),
   tagTypes: ['Services'],
   endpoints: (build) => ({
     listServices: build.query<{ services: PublicService[] }, ServicesQuery | void>({

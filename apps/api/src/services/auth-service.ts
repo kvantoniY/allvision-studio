@@ -24,6 +24,17 @@ function makeTokens(userId: string, role: Role) {
   };
 }
 
+function tokenFingerprint(token: string) {
+  return `${token.slice(0, 8)}:${crypto.createHash('sha256').update(token).digest('hex').slice(0, 12)}`;
+}
+
+function logIssuedTokens(flow: string, user: Pick<User, 'id' | 'email' | 'role'>, tokens: { accessToken: string; refreshToken: string }) {
+  logger.info(
+    `[auth] issued flow=${flow} userId=${user.id} email=${user.email} role=${user.role} `
+    + `access=${tokenFingerprint(tokens.accessToken)} refresh=${tokenFingerprint(tokens.refreshToken)}`,
+  );
+}
+
 export async function register(data: RegisterInput) {
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) {
@@ -58,6 +69,7 @@ export async function register(data: RegisterInput) {
   });
 
   const tokens = makeTokens(user.id, user.role);
+  logIssuedTokens('register', user, tokens);
   return { user: toSafe(user), ...tokens };
 }
 
@@ -74,6 +86,7 @@ export async function login(input: LoginInput) {
     throw new HttpError(401, 'INVALID_CREDENTIALS', 'Неверный email или пароль');
   }
   const tokens = makeTokens(user.id, user.role);
+  logIssuedTokens('login', user, tokens);
   return { user: toSafe(user), ...tokens };
 }
 
@@ -81,14 +94,18 @@ export async function refreshTokens(refreshToken: string) {
   let payload;
   try {
     payload = verifyRefreshToken(refreshToken);
-  } catch {
+  } catch (err) {
+    logger.warn(`[auth] refresh rejected reason=INVALID_REFRESH refresh=${tokenFingerprint(refreshToken)} error=${(err as Error).message}`);
     throw new HttpError(401, 'INVALID_REFRESH', 'Refresh токен невалиден');
   }
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
   if (!user) {
+    logger.warn(`[auth] refresh rejected reason=USER_NOT_FOUND userId=${payload.sub} refresh=${tokenFingerprint(refreshToken)}`);
     throw new HttpError(401, 'USER_NOT_FOUND', 'Пользователь не найден');
   }
-  return makeTokens(user.id, user.role);
+  const tokens = makeTokens(user.id, user.role);
+  logIssuedTokens('refresh', user, tokens);
+  return { user: toSafe(user), ...tokens };
 }
 
 /** На MVP blacklist-а нет — сами cookies очищаются на уровне контроллера. */

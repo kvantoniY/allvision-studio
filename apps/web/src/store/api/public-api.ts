@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type {
   ContactInput,
   ContactResponse,
@@ -11,14 +12,9 @@ import type {
   PublicTrendsResponse,
 } from '@allvision/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
-
 export const publicApi = createApi({
   reducerPath: 'publicApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/public`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/public'),
   tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets'],
   endpoints: (build) => ({
     getServices: build.query<PublicServicesResponse, void>({

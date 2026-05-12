@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type {
   DashboardResponse,
   PaymentsResponse,
@@ -8,8 +9,6 @@ import type {
   ChangeAccountPasswordInput,
   DeleteAccountInput,
 } from '@allvision/shared';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type TransactionsQuery = {
   page?: number;
@@ -24,10 +23,7 @@ export type PaymentsQuery = {
 
 export const accountApi = createApi({
   reducerPath: 'accountApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/account`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/account'),
   tagTypes: ['User', 'Dashboard', 'Transactions', 'Payments'],
   endpoints: (build) => ({
     getDashboard: build.query<DashboardResponse, void>({

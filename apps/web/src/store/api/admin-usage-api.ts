@@ -1,6 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 
 export type AdminUsageQuery = {
   page?: number;
@@ -63,10 +62,7 @@ export type PiAPIAccountResponse = {
 
 export const adminUsageApi = createApi({
   reducerPath: 'adminUsageApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/admin`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/admin'),
   tagTypes: ['AdminUsage', 'PiAPIAccount'],
   endpoints: (build) => ({
     getAdminUsage: build.query<AdminUsageResponse, AdminUsageQuery | void>({

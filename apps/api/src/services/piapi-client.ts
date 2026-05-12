@@ -28,6 +28,20 @@ export class PiAPIAccountClient {
       raw: raw as Record<string, unknown>,
     };
   }
+
+  async getTask(taskId: string): Promise<Record<string, unknown>> {
+    const res = await fetch(`${this.baseUrl}/api/v1/task/${encodeURIComponent(taskId)}`, {
+      headers: { 'X-API-Key': this.apiKey },
+    });
+    const raw = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new HttpError(res.status, `PIAPI_HTTP_${res.status}`, readMessage(raw) ?? res.statusText);
+    }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      throw new HttpError(502, 'PIAPI_BAD_RESPONSE', 'PiAPI task response is invalid');
+    }
+    return raw as Record<string, unknown>;
+  }
 }
 
 function readMessage(raw: unknown) {

@@ -18,6 +18,7 @@ const paramsSchema = z.object({
   model: z.union([z.string(), tierModelParamsSchema]).optional(),
   duration: z.number().min(1).max(30).optional(),
   prompt: z.string().optional(),
+  aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1']).default('auto').optional(),
 });
 
 export const imageToVideoBlock: BlockDefinition = {

@@ -21,6 +21,7 @@ const paramsSchema = z.object({
   prompt: z.string().optional(),
   duration: z.number().min(1).max(60).optional(),
   estimatedFrames: z.number().int().min(1).optional(),
+  aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1']).default('auto').optional(),
 });
 
 export const faceSwapVideoBlock: BlockDefinition = {

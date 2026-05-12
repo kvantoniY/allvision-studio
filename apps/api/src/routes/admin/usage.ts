@@ -98,7 +98,7 @@ adminUsageRouter.get('/usage', async (req: Request, res: Response, next: NextFun
 
     const successCount = allRows.filter((row) => row.status === 'success').length;
     const failedCount = allRows.filter((row) => row.status === 'failed').length;
-    const timeoutCount = allRows.filter((row) => row.status === 'timeout').length;
+    const timeoutCount = allRows.filter((row) => row.status === 'timeout' || row.status.startsWith('timeout_')).length;
 
     res.json({
       logs,

@@ -9,11 +9,12 @@ export interface AIUsageLogInput {
   provider: string;
   model: string;
   taskId?: string;
-  status: 'success' | 'failed' | 'timeout';
+  status: 'success' | 'failed' | 'timeout' | 'timeout_charged' | 'timeout_pending';
   costUsd: number;
   durationMs: number;
   errorCode?: string;
   errorMessage?: string;
+  recoverableOutputUrl?: string;
 }
 
 export async function getPiAPISpendLast24h(): Promise<number> {
@@ -37,13 +38,13 @@ export async function createAIUsageLog(data: AIUsageLogInput) {
   await prisma.$executeRaw`
     INSERT INTO "AIUsageLog" (
       "id", "projectId", "userId", "blockSlug", "provider", "model", "taskId",
-      "status", "costUsd", "durationMs", "errorCode", "errorMessage"
+      "status", "costUsd", "durationMs", "errorCode", "errorMessage", "recoverableOutputUrl"
     )
     VALUES (
       ${crypto.randomUUID()}, ${data.projectId ?? null}, ${data.userId ?? null},
       ${data.blockSlug}, ${data.provider}, ${data.model}, ${data.taskId ?? null},
       ${data.status}, ${data.costUsd}, ${data.durationMs},
-      ${data.errorCode ?? null}, ${data.errorMessage ?? null}
+      ${data.errorCode ?? null}, ${data.errorMessage ?? null}, ${data.recoverableOutputUrl ?? null}
     )
   `;
 }

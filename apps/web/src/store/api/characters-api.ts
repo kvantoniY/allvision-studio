@@ -1,9 +1,8 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type { Character, CharacterStatus, CharacterType } from '@allvision/shared';
 import { accountApi } from './account-api';
 import { authApi } from './auth-api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type CharactersQuery = {
   status?: CharacterStatus;
@@ -26,10 +25,7 @@ export type ReplaceCharacterReferenceImagesArg = {
 
 export const charactersApi = createApi({
   reducerPath: 'charactersApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/characters`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/characters'),
   tagTypes: ['Character'],
   endpoints: (build) => ({
     listCharacters: build.query<CharactersResponse, CharactersQuery | void>({

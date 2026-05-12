@@ -2,6 +2,7 @@ import { prisma } from '@allvision/database';
 import { QUEUE_NAMES } from '@allvision/shared';
 import { queueConcurrencyFor } from '../index';
 import { PiAPIProvider } from '../providers/piapi-provider';
+import { ProviderError } from '../providers/provider-errors';
 import {
   assertPiAPIDailyCap,
   createAIUsageLog,
@@ -67,5 +68,55 @@ describe('PiAPI provider safety', () => {
 
   it('keeps service-pipeline worker concurrency at 1', () => {
     expect(queueConcurrencyFor(QUEUE_NAMES.SERVICE_PIPELINE)).toBe(1);
+  });
+
+  it('records timeout_charged when final PiAPI status completed after polling timeout', async () => {
+    process.env.ALLOW_REAL_PIAPI_IN_TEST = 'true';
+    const storage = fakeStorage();
+    const publisher = {
+      publishImageUrl: jest.fn().mockResolvedValue({ publicUrl: 'https://cdn.test/swap.jpg' }),
+    };
+    const provider = new PiAPIProvider({
+      apiKey: 'test-key',
+      dailyCapUsd: 999,
+      balanceMinUsd: 0,
+      storage,
+      publisher: publisher as never,
+      logger,
+    });
+    const client = {
+      createTask: jest.fn().mockResolvedValue({ taskId: `timeout-charged-${RUN_ID}`, raw: {} }),
+      pollUntilDone: jest.fn().mockRejectedValue(new Error('placeholder')),
+      getTask: jest.fn(),
+    };
+    client.pollUntilDone.mockRejectedValue(new ProviderError('PIAPI_TIMEOUT', 'PiAPI timed out'));
+    client.getTask.mockResolvedValue({
+      taskId: `timeout-charged-${RUN_ID}`,
+      status: 'completed',
+      outputUrl: 'https://piapi.test/output.mp4',
+      actualCostUsd: 0.42,
+      raw: {},
+    });
+    (provider as unknown as { client: typeof client }).client = client;
+
+    await expect(provider.faceSwapVideo({
+      swapImageUrl: 'https://input.test/swap.jpg',
+      targetVideoUrl: 'https://input.test/target.mp4',
+      model: 'qubico-video-toolkit',
+      params: { duration: 1, estimatedFrames: 1 },
+      context: {
+        projectId: `worker-piapi-${RUN_ID}-timeout-project`,
+        userId: `worker-piapi-${RUN_ID}-timeout-user`,
+        blockSlug: 'face-swap-video',
+        stepId: 'step_face',
+      },
+    })).rejects.toMatchObject({ code: 'PIAPI_TIMEOUT' });
+
+    const log = await prisma.aIUsageLog.findFirst({
+      where: { taskId: `timeout-charged-${RUN_ID}` },
+    });
+    expect(log?.status).toBe('timeout_charged');
+    expect(log?.costUsd).toBeCloseTo(0.42);
+    expect(log?.recoverableOutputUrl).toBe('https://piapi.test/output.mp4');
   });
 });

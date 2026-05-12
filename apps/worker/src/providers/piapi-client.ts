@@ -5,6 +5,7 @@ export interface PiAPITaskStatus {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress?: number;
   outputUrl?: string;
+  actualCostUsd: number | null;
   raw: Record<string, unknown>;
   errorCode?: string;
   errorMessage?: string;
@@ -23,6 +24,7 @@ export interface PiAPIClientOptions {
 }
 
 const TRANSIENT_RETRIES = 3;
+const PIAPI_COST_UNITS_PER_USD = 10_000_000;
 
 export class PiAPIClient {
   private baseUrl: string;
@@ -175,7 +177,32 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
     ?? readString(data, ['error_message'])
     ?? readString(data, ['message']);
   const errorCode = readString(data, ['error', 'code']) ?? readString(data, ['error_code']);
-  return { taskId, status, progress, outputUrl, raw, errorCode, errorMessage };
+  return {
+    taskId,
+    status,
+    progress,
+    outputUrl,
+    actualCostUsd: extractPiAPIActualCostUsd(raw),
+    raw,
+    errorCode,
+    errorMessage,
+  };
+}
+
+export function extractPiAPIActualCostUsd(raw: Record<string, unknown>): number | null {
+  const consume = readNumber(raw, ['data', 'meta', 'usage', 'consume'])
+    ?? readNumber(raw, ['meta', 'usage', 'consume']);
+  if (consume !== undefined) {
+    return consume / PIAPI_COST_UNITS_PER_USD;
+  }
+
+  const directUsd = readNumber(raw, ['data', 'meta', 'usage', 'cost_usd'])
+    ?? readNumber(raw, ['data', 'meta', 'cost_usd'])
+    ?? readNumber(raw, ['data', 'cost_usd'])
+    ?? readNumber(raw, ['meta', 'usage', 'cost_usd'])
+    ?? readNumber(raw, ['meta', 'cost_usd'])
+    ?? readNumber(raw, ['cost_usd']);
+  return directUsd ?? null;
 }
 
 function readKlingWorkUrl(source: Record<string, unknown>): string | undefined {

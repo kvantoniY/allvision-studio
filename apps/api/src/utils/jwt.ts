@@ -1,9 +1,10 @@
 import jwt, { type SignOptions } from 'jsonwebtoken';
 
-const ACCESS_TTL = process.env.JWT_ACCESS_TTL
+const ACCESS_TTL_DEFAULT = process.env.JWT_ACCESS_TTL
   ?? (process.env.ACCESS_TTL_MIN ? `${process.env.ACCESS_TTL_MIN}m` : '15m');
 const REFRESH_TTL = process.env.JWT_REFRESH_TTL
   ?? (process.env.REFRESH_TTL_DAYS ? `${process.env.REFRESH_TTL_DAYS}d` : '30d');
+export type JwtRole = 'USER' | 'ADMIN' | 'READONLY_ADMIN';
 
 function accessSecret(): string {
   const s = process.env.JWT_ACCESS_SECRET ?? process.env.JWT_SECRET;
@@ -19,15 +20,22 @@ function refreshSecret(): string {
 
 export interface AccessTokenPayload {
   sub: string; // userId
-  role: 'USER' | 'ADMIN';
+  role: JwtRole;
 }
 
 export interface RefreshTokenPayload {
   sub: string;
 }
 
-export function signAccessToken(userId: string, role: 'USER' | 'ADMIN'): string {
-  const opts: SignOptions = { algorithm: 'HS256', expiresIn: ACCESS_TTL as SignOptions['expiresIn'] };
+export function accessTtlForRole(role: JwtRole): string {
+  if (role === 'READONLY_ADMIN') {
+    return `${Number(process.env.READONLY_ADMIN_ACCESS_TTL_MIN ?? '1440')}m`;
+  }
+  return ACCESS_TTL_DEFAULT;
+}
+
+export function signAccessToken(userId: string, role: JwtRole): string {
+  const opts: SignOptions = { algorithm: 'HS256', expiresIn: accessTtlForRole(role) as SignOptions['expiresIn'] };
   return jwt.sign({ sub: userId, role }, accessSecret(), opts);
 }
 

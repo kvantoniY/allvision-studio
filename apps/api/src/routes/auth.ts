@@ -13,11 +13,20 @@ import { HttpError } from '../utils/http-error';
 
 export const authRouter = Router();
 
+function accessMaxAgeMsForRole(role: string) {
+  if (role !== 'READONLY_ADMIN') return undefined;
+  return Number(process.env.READONLY_ADMIN_ACCESS_TTL_MIN ?? '1440') * 60 * 1000;
+}
+
+function loginBody(user: { role: string }, accessToken: string) {
+  return user.role === 'READONLY_ADMIN' ? { user, accessToken } : { user };
+}
+
 authRouter.post('/register', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = registerSchema.parse(req.body);
     const { user, accessToken, refreshToken } = await authService.register(data);
-    setAuthCookies(res, accessToken, refreshToken);
+    setAuthCookies(res, accessToken, refreshToken, { accessMaxAgeMs: accessMaxAgeMsForRole(user.role) });
     res.status(201).json({ user });
   } catch (e) {
     next(e);
@@ -28,8 +37,8 @@ authRouter.post('/login', authLimiter, async (req: Request, res: Response, next:
   try {
     const data = loginSchema.parse(req.body);
     const { user, accessToken, refreshToken } = await authService.login(data);
-    setAuthCookies(res, accessToken, refreshToken);
-    res.json({ user });
+    setAuthCookies(res, accessToken, refreshToken, { accessMaxAgeMs: accessMaxAgeMsForRole(user.role) });
+    res.json(loginBody(user, accessToken));
   } catch (e) {
     next(e);
   }
@@ -54,8 +63,8 @@ authRouter.post('/refresh', async (req: Request, res: Response, next: NextFuncti
     const refreshToken = req.cookies?.refreshToken as string | undefined;
     if (!refreshToken) throw new HttpError(401, 'NO_REFRESH_TOKEN', 'Refresh токен отсутствует');
     const tokens = await authService.refreshTokens(refreshToken);
-    setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
-    res.json({ ok: true });
+    setAuthCookies(res, tokens.accessToken, tokens.refreshToken, { accessMaxAgeMs: accessMaxAgeMsForRole(tokens.user.role) });
+    res.json(tokens.user.role === 'READONLY_ADMIN' ? { ok: true, accessToken: tokens.accessToken } : { ok: true });
   } catch (e) {
     next(e);
   }

@@ -1,7 +1,6 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import { publicApi } from './public-api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type AdminMediaAsset = {
   id: string;
@@ -41,10 +40,7 @@ export type AdminMediaAssetsResponse = {
 
 export const adminMediaAssetsApi = createApi({
   reducerPath: 'adminMediaAssetsApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/admin`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/admin'),
   tagTypes: ['AdminMediaAsset'],
   endpoints: (build) => ({
     listAdminMediaAssets: build.query<AdminMediaAssetsResponse, AdminMediaAssetsQuery | void>({

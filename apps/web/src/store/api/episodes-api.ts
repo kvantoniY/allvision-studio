@@ -1,8 +1,7 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type { Character, Episode, EpisodeStatus, ScenarioTemplate, Scene } from '@allvision/shared';
 import { accountApi } from './account-api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type EpisodeCharacterLink = {
   episodeId: string;
@@ -58,10 +57,7 @@ export type CreateEpisodeInput = {
 
 export const episodesApi = createApi({
   reducerPath: 'episodesApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/episodes`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/episodes'),
   tagTypes: ['Episode'],
   endpoints: (build) => ({
     listEpisodes: build.query<EpisodesResponse, EpisodesQuery | void>({

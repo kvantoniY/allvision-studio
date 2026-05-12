@@ -1,4 +1,5 @@
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { prisma } from '@allvision/database';
 import { app } from '../app';
 
@@ -80,6 +81,38 @@ describe('GET /api/auth/me', () => {
     const loginRes = await agent.post('/api/auth/login').send({ email: EMAIL, password: PASSWORD });
     expect(loginRes.status).toBe(200);
     const meRes = await agent.get('/api/auth/me');
+    expect(meRes.status).toBe(200);
+    expect(meRes.body.user.email).toBe(EMAIL);
+  });
+
+  it('renews the session with refresh after access token expiry', async () => {
+    const loginRes = await request(app).post('/api/auth/login').send({ email: EMAIL, password: PASSWORD });
+    expect(loginRes.status).toBe(200);
+    const cookies = loginRes.headers['set-cookie'] as unknown as string[] | string | undefined;
+    const cookieArr = Array.isArray(cookies) ? cookies : cookies ? [cookies] : [];
+    const refreshCookie = cookieArr.find((cookie) => cookie.startsWith('refreshToken='));
+    expect(refreshCookie).toBeTruthy();
+
+    const expiredAccess = jwt.sign(
+      { sub: loginRes.body.user.id, role: 'USER', exp: Math.floor(Date.now() / 1000) - 60 },
+      process.env.JWT_ACCESS_SECRET ?? process.env.JWT_SECRET ?? 'dev_jwt_secret_change_in_prod_32_chars_min',
+      { algorithm: 'HS256' },
+    );
+
+    const expiredMe = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', [`accessToken=${expiredAccess}`, refreshCookie!]);
+    expect(expiredMe.status).toBe(401);
+
+    const refreshRes = await request(app)
+      .post('/api/auth/refresh')
+      .set('Cookie', [refreshCookie!]);
+    expect(refreshRes.status).toBe(200);
+    const refreshedCookies = refreshRes.headers['set-cookie'] as unknown as string[];
+
+    const meRes = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', refreshedCookies);
     expect(meRes.status).toBe(200);
     expect(meRes.body.user.email).toBe(EMAIL);
   });

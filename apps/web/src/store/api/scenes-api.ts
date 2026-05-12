@@ -1,7 +1,6 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type { Scene } from '@allvision/shared';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type ScenesResponse = {
   items: Scene[];
@@ -14,10 +13,7 @@ export type UpdateSceneArg = {
 
 export const scenesApi = createApi({
   reducerPath: 'scenesApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/scenes`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/scenes'),
   tagTypes: ['Scene'],
   endpoints: (build) => ({
     listScenes: build.query<ScenesResponse, void>({

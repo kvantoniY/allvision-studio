@@ -232,7 +232,7 @@ const giftFactoryServices = [
           model: { standard: 'nano-banana', pro: 'nano-banana' },
           prompt: 'PLACEHOLDER: восстановить старое фото, убрать царапины, выцветание и шум, восстановить цвета и детали лица. Сохранить идентичность людей и композицию. Фото должно выглядеть как качественный современный снимок того же момента.',
           output_format: 'jpg',
-          aspect_ratio: 'input',
+          aspect_ratio: 'auto',
           resolution: '1K',
         },
       },
@@ -684,6 +684,7 @@ export async function runSeed(options: SeedOptions = {}) {
   }
 
   const admin = await seedAdminUser();
+  const readonlyAdmin = await seedReadonlyAdminUser();
   const pilotServices = await seedPilotServices();
 
   let legacyServices = 0;
@@ -705,6 +706,7 @@ export async function runSeed(options: SeedOptions = {}) {
   }
 
   console.log(`[seed] admin ready: ${admin.email}`);
+  if (readonlyAdmin) console.log(`[seed] readonly admin ready: ${readonlyAdmin.email}`);
   if (devUserEmail) console.log(`[seed] dev user ready: ${devUserEmail} / user123`);
   console.log(
     `[seed] catalog ready: ${pilotServices} pilot services, ${legacyServices} legacy services, ${trends} trends, ${scenarioTemplateCount} scenario templates, ${tokenPackages.length} token packages`,
@@ -725,6 +727,34 @@ async function seedAdminUser() {
       name: 'Admin',
       role: 'ADMIN',
       tokenBalance: 10000,
+    },
+  });
+}
+
+async function seedReadonlyAdminUser() {
+  const email = process.env.READONLY_ADMIN_EMAIL ?? 'claude-readonly@allvision-pulse.ru';
+  const password = process.env.READONLY_ADMIN_PASSWORD;
+  if (!password || password === 'CHANGE_ME_AT_FIRST_DEPLOY') {
+    console.warn('[seed] READONLY_ADMIN_PASSWORD is not set; readonly admin was not created');
+    return null;
+  }
+
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+  return prisma.user.upsert({
+    where: { email },
+    update: {
+      passwordHash,
+      name: 'AI Readonly Admin',
+      role: 'READONLY_ADMIN',
+      tokenBalance: 0,
+      deletedAt: null,
+    },
+    create: {
+      email,
+      passwordHash,
+      name: 'AI Readonly Admin',
+      role: 'READONLY_ADMIN',
+      tokenBalance: 0,
     },
   });
 }

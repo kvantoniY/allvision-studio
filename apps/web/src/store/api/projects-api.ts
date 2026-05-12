@@ -1,9 +1,8 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type { Project, ProjectStatus, ServiceCategory } from '@allvision/shared';
 import { accountApi } from './account-api';
 import { authApi } from './auth-api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type ProjectSummary = Pick<
   Project,
@@ -58,10 +57,7 @@ export type ProjectsResponse = {
 
 export const projectsApi = createApi({
   reducerPath: 'projectsApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/projects`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/projects'),
   tagTypes: ['Project', 'ProjectStatus'],
   endpoints: (build) => ({
     createProject: build.mutation<{ project: ProjectSummary }, FormData>({

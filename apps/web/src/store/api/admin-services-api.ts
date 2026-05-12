@@ -1,8 +1,7 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type { BlockCatalogItem } from '@allvision/shared';
 import { publicApi } from './public-api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 export type ServiceCategory =
   | 'NOSTALGIA'
@@ -78,10 +77,7 @@ export type AdminServicesResponse = {
 
 export const adminServicesApi = createApi({
   reducerPath: 'adminServicesApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/admin`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/admin'),
   tagTypes: ['AdminService', 'AdminBlock'],
   endpoints: (build) => ({
     listAdminServices: build.query<AdminServicesResponse, AdminServicesQuery | void>({

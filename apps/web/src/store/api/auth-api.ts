@@ -1,4 +1,5 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi } from '@reduxjs/toolkit/query/react';
+import { createBaseQueryWithReauth } from './base-query';
 import type { User } from '@allvision/shared';
 import type {
   LoginInput,
@@ -7,16 +8,11 @@ import type {
   ResetPasswordInput,
 } from '@allvision/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
-
 export type SafeUser = Omit<User, 'passwordHash' | 'passwordResetToken' | 'passwordResetExpiresAt'>;
 
 export const authApi = createApi({
   reducerPath: 'authApi',
-  baseQuery: fetchBaseQuery({
-    baseUrl: `${API_URL}/api/auth`,
-    credentials: 'include',
-  }),
+  baseQuery: createBaseQueryWithReauth('/api/auth'),
   tagTypes: ['Me', 'User'],
   endpoints: (build) => ({
     register: build.mutation<{ user: SafeUser }, RegisterInput>({

@@ -10,6 +10,7 @@ import { charactersRouter } from './characters';
 import { scenesRouter } from './scenes';
 import { episodesRouter } from './episodes';
 import { adminRouter } from './admin';
+import { adminReadonlyRouter } from './admin-readonly';
 
 export const router = Router();
 
@@ -25,3 +26,4 @@ router.use('/characters', charactersRouter);
 router.use('/scenes', scenesRouter);
 router.use('/episodes', episodesRouter);
 router.use('/admin', adminRouter);
+router.use('/admin-readonly', adminReadonlyRouter);

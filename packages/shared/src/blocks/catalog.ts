@@ -20,6 +20,14 @@ const modelTierObject: JsonSchemaObject = objectSchema(
   ['standard', 'pro'],
 );
 
+const aspectRatioSchema = {
+  type: 'string',
+  title: 'Aspect ratio',
+  enum: ['auto', '9:16', '16:9', '1:1'],
+  default: 'auto',
+  description: 'auto keeps/probes the input media ratio where the provider supports it.',
+};
+
 const restoreModels: ModelOption[] = [
   {
     slug: 'mock-restore',
@@ -146,7 +154,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         negative_prompt: { type: 'string', title: 'Negative prompt', description: 'Compatibility field. Nano Banana 2 docs do not expose this parameter, so PiAPI payload does not send it.' },
         strength: { type: 'number', title: 'Strength', minimum: 0, maximum: 1, description: 'Compatibility field. Nano Banana 2 docs do not expose this parameter, so PiAPI payload does not send it.' },
         output_format: { type: 'string', title: 'Output format', enum: ['jpg', 'png', 'webp'], default: 'jpg', description: 'Nano Banana 2 output image format.' },
-        aspect_ratio: { type: 'string', title: 'Aspect ratio', enum: ['input', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '3:2', '2:3', '5:4', '4:5'], default: 'input', description: 'For image-to-image, input keeps the source aspect ratio.' },
+        aspect_ratio: aspectRatioSchema,
         resolution: { type: 'string', title: 'Resolution', enum: ['1K', '2K', '4K'], default: '1K', description: 'Nano Banana 2 output resolution. Pricing grows with resolution.' },
       },
       ['prompt'],
@@ -163,6 +171,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         model: modelTierObject,
         duration: { type: 'number', title: 'Duration seconds', default: 5, minimum: 1, maximum: 10, description: 'Video duration in seconds. Kling through PiAPI is capped at 10 seconds in this product.' },
         prompt: { type: 'string', title: 'Prompt', description: 'Motion guidance sent to the model, for example: subject smiles and waves.' },
+        aspect_ratio: aspectRatioSchema,
       },
       ['duration'],
     ),
@@ -180,6 +189,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         prompt: { type: 'string', title: 'Prompt', description: 'Internal note for the step. Qubico face-swap currently does not use prompt text.' },
         duration: { type: 'number', title: 'Duration seconds', default: 5, minimum: 1, maximum: 10, description: 'Expected target video duration, used for cost estimation.' },
         estimatedFrames: { type: 'number', title: 'Estimated frames', default: 120, minimum: 1, description: 'Cost estimation hint. PiAPI Qubico is billed roughly per processed frame.' },
+        aspect_ratio: aspectRatioSchema,
       },
       ['target_video'],
     ),
@@ -209,6 +219,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         model: modelTierObject,
         prompt: { type: 'string', title: 'Prompt', description: 'Text prompt for future text-to-video provider integration. P7a keeps this mock-only.' },
         duration: { type: 'number', title: 'Duration seconds', default: 5, minimum: 1, maximum: 10, description: 'Desired duration in seconds.' },
+        aspect_ratio: aspectRatioSchema,
       },
       ['prompt', 'duration'],
     ),

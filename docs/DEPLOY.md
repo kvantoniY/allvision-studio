@@ -93,3 +93,40 @@ docker logs -f allvision-studio-web
 ## Технические долги
 
 SSL сейчас на платном сертификате Рег.ру; миграция на Let's Encrypt запланирована в P7. Нет автоматических бекапов PostgreSQL, полноценного monitoring/alerting и multi-VM отказоустойчивости. Прод работает как single-VM инсталляция.
+## Observability for AI assistant
+
+P7.1 adds a read-only admin role for AI-assisted production diagnostics.
+
+1. Set a strong password in `/opt/allvision-studio/shared/.env`:
+
+```env
+READONLY_ADMIN_EMAIL=claude-readonly@allvision-pulse.ru
+READONLY_ADMIN_PASSWORD=replace-with-a-long-random-password
+READONLY_ADMIN_ACCESS_TTL_MIN=1440
+```
+
+2. Restart the prod compose stack so the idempotent seed creates/updates the readonly user.
+
+3. Get a Bearer token:
+
+```bash
+curl -s https://allvision-pulse.ru/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"claude-readonly@allvision-pulse.ru","password":"replace-with-a-long-random-password"}'
+```
+
+For `READONLY_ADMIN`, the response includes `accessToken`. Use it as:
+
+```bash
+curl -H "Authorization: Bearer $READONLY_TOKEN" \
+  https://allvision-pulse.ru/api/admin-readonly/diagnostics
+```
+
+Available read-only endpoints:
+
+- `GET /api/admin-readonly/diagnostics`
+- `GET /api/admin-readonly/project/:id/full`
+- `GET /api/admin-readonly/piapi/task/:taskId`
+- `GET /api/admin-readonly/logs/worker?lines=200` returns 501 until `WORKER_STDOUT_LOG_PATH` or docker logs access is configured.
+
+`READONLY_ADMIN` can only use read-only diagnostics. Mutating authenticated requests are rejected, and responses avoid user emails/password hashes/token secrets.
