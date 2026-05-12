@@ -1,10 +1,13 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import type { Request } from 'express';
 
+const skipInTest = () => process.env.NODE_ENV === 'test';
+
 /** 5 попыток логина/регистрации с одного IP за 15 минут. */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
+  skip: skipInTest,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { error: { code: 'RATE_LIMITED', message: 'Слишком много попыток. Попробуйте позже.' } },

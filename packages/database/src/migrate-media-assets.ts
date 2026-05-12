@@ -79,6 +79,7 @@ export async function migrateMediaAssets() {
     if (await migrateTrend(index)) migrated += 1;
   }
   console.log(`[media-assets] done, migrated/updated ${migrated} trend videos`);
+  return migrated;
 }
 
 if (require.main === module) {

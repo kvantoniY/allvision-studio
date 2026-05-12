@@ -1,8 +1,10 @@
 import 'dotenv/config';
 import bcrypt from 'bcrypt';
 import { prisma, ProcessingType, ServiceCategory } from './index';
+import { migrateMediaAssets } from './migrate-media-assets';
 
 const BCRYPT_COST = 12;
+const SYSTEM_PASSWORD_PLACEHOLDER = 'CHANGE_ME_AT_FIRST_DEPLOY';
 
 function image(seed: string, width = 800, height = 600) {
   return `https://picsum.photos/seed/${seed}/${width}/${height}`;
@@ -646,6 +648,18 @@ export interface SeedOptions {
   includeDevCatalog?: boolean;
 }
 
+type SystemUserRole = 'ADMIN' | 'READONLY_ADMIN';
+
+type EnsureUserOptions = {
+  emailEnv: string;
+  emailDefault: string;
+  passwordEnv: string;
+  role: SystemUserRole;
+  name: string;
+  legacyEmailEnv?: string;
+  legacyPasswordEnv?: string;
+};
+
 const tokenPackages = [
   { title: 'Старт', tokens: 100, priceRub: 99, bonus: 0, sortOrder: 10 },
   { title: 'Базовый', tokens: 500, priceRub: 499, bonus: 50, sortOrder: 20 },
@@ -676,15 +690,89 @@ const publicSettings = [
 export async function runSeed(options: SeedOptions = {}) {
   if (options.destructive) {
     await truncateForDevSeed();
-  } else {
-    const serviceCount = await prisma.service.count();
-    if (serviceCount > 0) {
-      console.log(`[seed] database already contains ${serviceCount} services; applying idempotent prod updates`);
-    }
   }
 
-  const admin = await seedAdminUser();
-  const readonlyAdmin = await seedReadonlyAdminUser();
+  console.log('[seed] step 1/4: system users');
+  await ensureSystemUsers();
+
+  console.log('[seed] step 2/4: catalog (services, trends, scenarios)');
+  await ensureCatalog(options);
+
+  console.log('[seed] step 3/4: token packages');
+  await ensureTokenPackages();
+
+  console.log('[seed] step 4/4: media assets migration');
+  await ensureMediaAssetsMigration();
+
+  let devUserEmail: string | undefined;
+  if (options.includeDevUser) {
+    devUserEmail = (await seedDevUser()).email;
+    console.log(`[seed] dev user ready: ${devUserEmail} / user123`);
+  }
+
+  console.log('[seed] all seed steps complete');
+}
+
+export async function ensureSystemUsers() {
+  await ensureUser({
+    emailEnv: 'ADMIN_EMAIL',
+    emailDefault: 'admin@allvision-pulse.ru',
+    passwordEnv: 'ADMIN_PASSWORD',
+    legacyEmailEnv: 'ADMIN_INITIAL_EMAIL',
+    legacyPasswordEnv: 'ADMIN_INITIAL_PASSWORD',
+    role: 'ADMIN',
+    name: 'Admin',
+  });
+  await ensureUser({
+    emailEnv: 'READONLY_ADMIN_EMAIL',
+    emailDefault: 'claude-readonly@allvision-pulse.ru',
+    passwordEnv: 'READONLY_ADMIN_PASSWORD',
+    role: 'READONLY_ADMIN',
+    name: 'AI Readonly Admin',
+  });
+}
+
+async function ensureUser(options: EnsureUserOptions) {
+  const email = readEnv(options.emailEnv, options.legacyEmailEnv) ?? options.emailDefault;
+  const password = readEnv(options.passwordEnv, options.legacyPasswordEnv);
+  if (!password || password === SYSTEM_PASSWORD_PLACEHOLDER) {
+    console.warn(`[seed] system user skipped: ${email} (role: ${options.role}; password not set)`);
+    return null;
+  }
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    if (existing.role !== options.role || existing.deletedAt) {
+      await prisma.user.update({
+        where: { email },
+        data: {
+          role: options.role,
+          deletedAt: null,
+        },
+      });
+      console.log(`[seed] system user ensured: ${email} (role: ${options.role})`);
+    } else {
+      console.log(`[seed] system user already exists: ${email} (role: ${options.role})`);
+    }
+    return existing;
+  }
+
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
+  const created = await prisma.user.create({
+    data: {
+      email,
+      passwordHash,
+      name: options.name,
+      role: options.role,
+      tokenBalance: 0,
+    },
+  });
+  console.log(`[seed] system user ensured: ${email} (role: ${options.role})`);
+  return created;
+}
+
+async function ensureCatalog(options: SeedOptions) {
+  const serviceCountBefore = await prisma.service.count();
   const pilotServices = await seedPilotServices();
 
   let legacyServices = 0;
@@ -697,66 +785,35 @@ export async function runSeed(options: SeedOptions = {}) {
     scenarioTemplateCount = devCatalog.scenarioTemplates;
   }
 
-  await seedTokenPackages();
-  await seedPublicSettings();
-
-  let devUserEmail: string | undefined;
-  if (options.includeDevUser) {
-    devUserEmail = (await seedDevUser()).email;
+  if (
+    serviceCountBefore > 0
+    && pilotServices.created === 0
+    && pilotServices.patched === 0
+    && legacyServices === 0
+    && trends === 0
+    && scenarioTemplateCount === 0
+  ) {
+    console.log(`[seed] catalog already populated, skipped (${serviceCountBefore} services)`);
+    return;
   }
 
-  console.log(`[seed] admin ready: ${admin.email}`);
-  if (readonlyAdmin) console.log(`[seed] readonly admin ready: ${readonlyAdmin.email}`);
-  if (devUserEmail) console.log(`[seed] dev user ready: ${devUserEmail} / user123`);
   console.log(
-    `[seed] catalog ready: ${pilotServices} pilot services, ${legacyServices} legacy services, ${trends} trends, ${scenarioTemplateCount} scenario templates, ${tokenPackages.length} token packages`,
+    `[seed] catalog ensured: ${pilotServices.created} pilot services created, ${pilotServices.patched} patched, ${legacyServices} legacy services, ${trends} trends, ${scenarioTemplateCount} scenario templates`,
   );
 }
 
-async function seedAdminUser() {
-  const email = requireEnv('ADMIN_INITIAL_EMAIL');
-  const password = requireEnv('ADMIN_INITIAL_PASSWORD');
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) return existing;
-
-  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
-  return prisma.user.create({
-    data: {
-      email,
-      passwordHash,
-      name: 'Admin',
-      role: 'ADMIN',
-      tokenBalance: 10000,
-    },
-  });
+async function ensureTokenPackages() {
+  const ensuredPackages = await seedTokenPackages();
+  const createdSettings = await seedPublicSettings();
+  console.log(`[seed] token packages: ${ensuredPackages} ensured`);
+  if (createdSettings > 0) {
+    console.log(`[seed] public settings: ${createdSettings} created`);
+  }
 }
 
-async function seedReadonlyAdminUser() {
-  const email = process.env.READONLY_ADMIN_EMAIL ?? 'claude-readonly@allvision-pulse.ru';
-  const password = process.env.READONLY_ADMIN_PASSWORD;
-  if (!password || password === 'CHANGE_ME_AT_FIRST_DEPLOY') {
-    console.warn('[seed] READONLY_ADMIN_PASSWORD is not set; readonly admin was not created');
-    return null;
-  }
-
-  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
-  return prisma.user.upsert({
-    where: { email },
-    update: {
-      passwordHash,
-      name: 'AI Readonly Admin',
-      role: 'READONLY_ADMIN',
-      tokenBalance: 0,
-      deletedAt: null,
-    },
-    create: {
-      email,
-      passwordHash,
-      name: 'AI Readonly Admin',
-      role: 'READONLY_ADMIN',
-      tokenBalance: 0,
-    },
-  });
+async function ensureMediaAssetsMigration() {
+  const migrated = await migrateMediaAssets();
+  console.log(`[seed] media assets migration: ${migrated} trends migrated`);
 }
 
 async function seedDevUser() {
@@ -781,7 +838,8 @@ async function seedDevUser() {
 }
 
 async function seedPilotServices() {
-  let count = 0;
+  let created = 0;
+  let patched = 0;
   for (const service of giftFactoryServices) {
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
     if (existing) {
@@ -800,13 +858,14 @@ async function seedPilotServices() {
             isActive: service.isActive,
           },
         });
+        patched += 1;
       }
       continue;
     }
     await prisma.service.create({ data: service });
-    count += 1;
+    created += 1;
   }
-  return count;
+  return { created, patched };
 }
 
 function needsFaceInTrendP7aPatch(service: {
@@ -873,6 +932,7 @@ function needsReviveOldPhotoP7aPatch(service: {
 
 async function seedDevCatalog() {
   const createdServices = new Map<string, string>();
+  let legacyServices = 0;
   for (const service of services) {
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
     if (existing) {
@@ -881,6 +941,7 @@ async function seedDevCatalog() {
     }
     const created = await prisma.service.create({ data: service });
     createdServices.set(created.slug, created.id);
+    legacyServices += 1;
   }
 
   const trendsServiceId = createdServices.get('trends');
@@ -925,7 +986,7 @@ async function seedDevCatalog() {
   }
 
   return {
-    legacyServices: services.length,
+    legacyServices,
     trends: existingTrends === 0 ? trendSeed.length : 0,
     scenarioTemplates: scenarioTemplateCount,
   };
@@ -933,16 +994,20 @@ async function seedDevCatalog() {
 
 async function seedTokenPackages() {
   const existing = await prisma.tokenPackage.count();
-  if (existing > 0) return;
+  if (existing > 0) return existing;
   await prisma.tokenPackage.createMany({ data: tokenPackages });
+  return tokenPackages.length;
 }
 
 async function seedPublicSettings() {
+  let created = 0;
   for (const setting of publicSettings) {
     const existing = await prisma.setting.findUnique({ where: { key: setting.key } });
     if (existing) continue;
     await prisma.setting.create({ data: setting });
+    created += 1;
   }
+  return created;
 }
 
 async function truncateForDevSeed() {
@@ -973,10 +1038,8 @@ async function truncateForDevSeed() {
   `);
 }
 
-function requireEnv(name: string) {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required for production seed`);
-  return value;
+function readEnv(primary: string, fallback?: string) {
+  return process.env[primary] ?? (fallback ? process.env[fallback] : undefined);
 }
 
 if (require.main === module) {

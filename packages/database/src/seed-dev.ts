@@ -2,8 +2,8 @@ import 'dotenv/config';
 import { prisma } from './index';
 import { runSeed } from './seed';
 
-process.env.ADMIN_INITIAL_EMAIL ||= 'admin@allvision.studio';
-process.env.ADMIN_INITIAL_PASSWORD ||= 'admin123';
+process.env.ADMIN_EMAIL ||= process.env.ADMIN_INITIAL_EMAIL ?? 'admin@allvision.studio';
+process.env.ADMIN_PASSWORD ||= process.env.ADMIN_INITIAL_PASSWORD ?? 'admin123';
 
 runSeed({ destructive: true, includeDevUser: true, includeDevCatalog: true })
   .catch((e) => {

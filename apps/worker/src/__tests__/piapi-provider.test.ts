@@ -1,4 +1,4 @@
-import { prisma } from '@allvision/database';
+import { prisma, ProcessingType, ProjectStatus, ServiceCategory } from '@allvision/database';
 import { QUEUE_NAMES } from '@allvision/shared';
 import { queueConcurrencyFor } from '../index';
 import { PiAPIProvider } from '../providers/piapi-provider';
@@ -34,6 +34,9 @@ const logger = {
 afterEach(async () => {
   delete process.env.ALLOW_REAL_PIAPI_IN_TEST;
   await deleteAIUsageLogsByUserIdPrefix(`worker-piapi-${RUN_ID}`);
+  await prisma.project.deleteMany({ where: { id: { startsWith: `worker-piapi-${RUN_ID}` } } });
+  await prisma.service.deleteMany({ where: { slug: { startsWith: `worker-piapi-${RUN_ID}` } } });
+  await prisma.user.deleteMany({ where: { id: { startsWith: `worker-piapi-${RUN_ID}` } } });
 });
 
 afterAll(async () => {
@@ -72,6 +75,40 @@ describe('PiAPI provider safety', () => {
 
   it('records timeout_charged when final PiAPI status completed after polling timeout', async () => {
     process.env.ALLOW_REAL_PIAPI_IN_TEST = 'true';
+    const userId = `worker-piapi-${RUN_ID}-timeout-user`;
+    const projectId = `worker-piapi-${RUN_ID}-timeout-project`;
+    const service = await prisma.service.create({
+      data: {
+        slug: `worker-piapi-${RUN_ID}-timeout-service`,
+        title: 'PiAPI timeout test service',
+        shortDesc: 'PiAPI timeout test',
+        description: 'PiAPI timeout test',
+        category: ServiceCategory.NOSTALGIA,
+        priceTokens: 0,
+        costUsd: 0,
+        galleryImages: [],
+        processingType: ProcessingType.AUTO,
+      },
+    });
+    await prisma.user.create({
+      data: {
+        id: userId,
+        email: `worker-piapi-${RUN_ID}-timeout@example.com`,
+        passwordHash: 'hash',
+        tokenBalance: 0,
+      },
+    });
+    await prisma.project.create({
+      data: {
+        id: projectId,
+        userId,
+        serviceId: service.id,
+        title: 'PiAPI timeout test project',
+        status: ProjectStatus.PROCESSING,
+        inputImages: [],
+        tokensCost: 0,
+      },
+    });
     const storage = fakeStorage();
     const publisher = {
       publishImageUrl: jest.fn().mockResolvedValue({ publicUrl: 'https://cdn.test/swap.jpg' }),
@@ -105,8 +142,8 @@ describe('PiAPI provider safety', () => {
       model: 'qubico-video-toolkit',
       params: { duration: 1, estimatedFrames: 1 },
       context: {
-        projectId: `worker-piapi-${RUN_ID}-timeout-project`,
-        userId: `worker-piapi-${RUN_ID}-timeout-user`,
+        projectId,
+        userId,
         blockSlug: 'face-swap-video',
         stepId: 'step_face',
       },

@@ -12,7 +12,8 @@
     "seed": "tsx src/seed.ts",
     "seed:dev": "tsx src/seed-dev.ts",
     "migrate:media-assets": "tsx src/migrate-media-assets.ts",
-    "studio": "prisma studio --schema prisma/schema.prisma"
+    "studio": "prisma studio --schema prisma/schema.prisma",
+    "test": "jest --runInBand"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
