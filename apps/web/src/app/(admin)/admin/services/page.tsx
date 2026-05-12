@@ -20,6 +20,8 @@ import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { serviceMargin, summarizePipelinePricing } from '@allvision/shared';
 import {
   buildMockUserInputs,
   PipelineTestPanel,
@@ -29,6 +31,7 @@ import {
   type ServiceCategory,
   useDeleteAdminServiceMutation,
   useDuplicateAdminServiceMutation,
+  useGetAdminBlocksQuery,
   useListAdminServicesQuery,
   useReorderAdminServiceMutation,
   useTestRunAdminServiceMutation,
@@ -85,6 +88,17 @@ function patchData(value: Record<string, unknown>) {
   return body;
 }
 
+function marginRowClass(marginPercent: number | null) {
+  if (marginPercent === null) return '';
+  if (marginPercent < 0) return 'bg-red-950/30';
+  if (marginPercent < 50) return 'bg-amber-950/20';
+  return 'bg-emerald-950/20';
+}
+
+function formatMargin(value: number | null) {
+  return value === null ? 'n/a' : `${value.toFixed(0)}%`;
+}
+
 export default function AdminServicesPage() {
   const [status, setStatus] = useState<StatusFilter>('all');
   const [featured, setFeatured] = useState<FeaturedFilter>('all');
@@ -92,6 +106,7 @@ export default function AdminServicesPage() {
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<AdminService | null>(null);
   const [testGenerationId, setTestGenerationId] = useState<string | null>(null);
+  const { data: blocksData } = useGetAdminBlocksQuery();
   const { data, isLoading } = useListAdminServicesQuery({
     page: 1,
     limit: 200,
@@ -107,6 +122,7 @@ export default function AdminServicesPage() {
   const [testRun] = useTestRunAdminServiceMutation();
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
+  const blocks = blocksData?.blocks;
 
   const toggleActive = async (service: AdminService) => {
     try {
@@ -227,7 +243,7 @@ export default function AdminServicesPage() {
               <th className="px-4 py-3">Preview</th>
               <th className="px-4 py-3">Title</th>
               <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Prices</th>
+              <th className="px-4 py-3">Cost / Price / Margin</th>
               <th className="px-4 py-3">Featured</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Order</th>
@@ -252,8 +268,13 @@ export default function AdminServicesPage() {
                 </td>
               </tr>
             )}
-            {items.map((service) => (
-              <tr key={service.id} className="align-middle">
+            {items.map((service) => {
+              const pricing = summarizePipelinePricing(service.pipelineConfig, blocks);
+              const standardMargin = serviceMargin(service.priceCoinsStandard ?? service.priceTokens, pricing.standard.costUsd);
+              const proMargin = serviceMargin(service.priceCoinsPro ?? service.priceTokens, pricing.pro.costUsd);
+              const minMargin = Math.min(standardMargin.marginPercent ?? 0, proMargin.marginPercent ?? 0);
+              return (
+              <tr key={service.id} className={cn('align-middle', marginRowClass(minMargin))}>
                 <td className="px-4 py-3">
                   {previewUrl(service) ? (
                     <img src={previewUrl(service)!} alt="" className="h-[60px] w-[60px] rounded-md object-cover" />
@@ -269,8 +290,10 @@ export default function AdminServicesPage() {
                   <Badge className="bg-zinc-800 text-slate-200">{categoryLabels[service.category] ?? service.category}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  <div>Std: {service.priceCoinsStandard ?? service.priceTokens}</div>
-                  <div className="text-xs text-slate-500">Pro: {service.priceCoinsPro ?? '—'}</div>
+                  <div>Std: ${pricing.standard.costUsd.toFixed(2)} / {service.priceCoinsStandard ?? service.priceTokens} / {formatMargin(standardMargin.marginPercent)}</div>
+                  <div className="text-xs text-slate-500">
+                    Pro: ${pricing.pro.costUsd.toFixed(2)} / {service.priceCoinsPro ?? '—'} / {formatMargin(proMargin.marginPercent)}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
                   <button type="button" onClick={() => toggleFeatured(service)} aria-label="Featured">
@@ -310,7 +333,7 @@ export default function AdminServicesPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+            );})}
           </tbody>
         </table>
       </div>

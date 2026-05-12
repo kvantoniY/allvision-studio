@@ -45,6 +45,16 @@ export class StubAIProvider implements AIProvider {
     return result('stub://result.mp4', { type: 'video' });
   }
 
+  async textToVideo(_input: {
+    prompt: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://text-to-video.mp4', { type: 'video' });
+  }
+
   async faceSwapVideo(_input: {
     swapImageUrl: string;
     targetVideoUrl: string;
@@ -53,5 +63,17 @@ export class StubAIProvider implements AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
     return result('stub://face-swap.mp4', { type: 'video' });
+  }
+
+  async motionTransfer(_input: {
+    inputImageUrl: string;
+    drivingVideoUrl: string;
+    prompt?: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://motion-transfer.mp4', { type: 'video' });
   }
 }

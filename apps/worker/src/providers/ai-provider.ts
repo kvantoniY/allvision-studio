@@ -44,9 +44,27 @@ export interface AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
 
+  textToVideo(input: {
+    prompt: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
+
   faceSwapVideo(input: {
     swapImageUrl: string;
     targetVideoUrl: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
+
+  motionTransfer(input: {
+    inputImageUrl: string;
+    drivingVideoUrl: string;
+    prompt?: string;
+    durationSec: number;
     model: string;
     params?: Record<string, unknown>;
     context: ProviderRunContext;

@@ -9,12 +9,12 @@ import { Label } from '@/components/ui/label';
 import { useGetAdminUsageQuery, useGetPiAPIAccountQuery } from '@/store/api/admin-usage-api';
 
 function usd(value: number) {
-  return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(2)}`;
 }
 
 function statusClass(status: string) {
   if (status === 'success') return 'bg-emerald-600';
-  if (status === 'timeout') return 'bg-amber-600';
+  if (status === 'timeout' || status.startsWith('timeout_')) return 'bg-amber-600';
   return 'bg-red-700';
 }
 
@@ -28,6 +28,9 @@ export default function AdminUsagePage() {
   });
   const account = useGetPiAPIAccountQuery();
   const maxSpend = Math.max(0.01, ...(usage.data?.byDay.map((day) => day.totalCostUsd) ?? [0.01]));
+  const sevenDaySpend = usage.data?.summary.totalCostUsd ?? 0;
+  const dailySpend = sevenDaySpend / 7;
+  const balanceDays = account.data && dailySpend > 0 ? Math.floor(account.data.balanceUsd / dailySpend) : null;
 
   return (
     <div className="space-y-8">
@@ -58,12 +61,30 @@ export default function AdminUsagePage() {
         )}
       </div>
 
+      <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
+        <div className="text-sm text-slate-400">Forecast</div>
+        <div className="mt-2 text-xl font-semibold text-white">
+          {balanceDays === null
+            ? 'Not enough spend data yet'
+            : balanceDays <= 3
+              ? `At current pace the balance ends in ~${balanceDays} days`
+              : `Enough for ~${balanceDays} days at current pace`}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">Based on last 7 days: {usd(sevenDaySpend)} total, {usd(dailySpend)} per day.</p>
+      </div>
+
       <div className="grid gap-4 md:grid-cols-5">
         <Metric label="Total calls" value={String(usage.data?.summary.totalRequests ?? 0)} />
         <Metric label="Success" value={String(usage.data?.summary.successCount ?? 0)} />
         <Metric label="Failed" value={String(usage.data?.summary.failedCount ?? 0)} />
         <Metric label="Timeouts" value={String(usage.data?.summary.timeoutCount ?? 0)} />
         <Metric label="Spend" value={usd(usage.data?.summary.totalCostUsd ?? 0)} />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-5">
+        {(['success', 'failed', 'timeout', 'timeout_charged', 'timeout_pending'] as const).map((statusKey) => (
+          <Metric key={statusKey} label={statusKey} value={String(usage.data?.summary.statusCounts?.[statusKey] ?? 0)} />
+        ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -99,6 +120,24 @@ export default function AdminUsagePage() {
           </div>
         </section>
       </div>
+
+      {(usage.data?.timeoutPending.length ?? 0) > 0 && (
+        <section className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-5">
+          <h2 className="font-semibold text-amber-100">timeout_pending tasks</h2>
+          <p className="mt-1 text-sm text-amber-200/70">These tasks may be recoverable through async-fetch in P7.3.</p>
+          <div className="mt-4 space-y-2">
+            {usage.data?.timeoutPending.map((item) => (
+              <div key={item.id} className="rounded-md border border-amber-900/50 bg-zinc-950 p-3 text-sm">
+                <div className="flex flex-wrap justify-between gap-3">
+                  <span className="font-medium text-white">{item.taskId ?? 'no taskId'}</span>
+                  <span className="text-slate-500">{new Date(item.createdAt).toLocaleString()}</span>
+                </div>
+                <div className="mt-1 text-xs text-slate-400">{item.blockSlug} · {item.model} · {item.projectId ?? 'no project'}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <div className="grid gap-4 md:grid-cols-4">
@@ -136,7 +175,9 @@ export default function AdminUsagePage() {
                   <div className="text-xs text-slate-500">{log.model}</div>
                 </td>
                 <td className="p-3"><Badge className={statusClass(log.status)}>{log.status}</Badge></td>
-                <td className="p-3 text-slate-300">{usd(log.costUsd)} · {Math.round(log.durationMs / 1000)}s</td>
+                <td className="p-3 text-slate-300" title={`Exact cost: $${log.costUsd}`}>
+                  {usd(log.costUsd)} · {Math.round(log.durationMs / 1000)}s
+                </td>
                 <td className="p-3">
                   {log.errorCode ? (
                     <details>

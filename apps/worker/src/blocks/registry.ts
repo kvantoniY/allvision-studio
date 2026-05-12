@@ -4,6 +4,7 @@ import { imageUpscaleBlock } from './image-upscale';
 import { imageToVideoBlock } from './image-to-video';
 import { imageEditBlock } from './image-edit';
 import { faceSwapVideoBlock } from './face-swap-video';
+import { motionTransferBlock } from './motion-transfer';
 import { videoComposeBlock } from './video-compose';
 import { textToVideoBlock } from './text-to-video';
 
@@ -12,6 +13,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'image-upscale': imageUpscaleBlock,
   'image-edit': imageEditBlock,
   'image-to-video': imageToVideoBlock,
+  'motion-transfer': motionTransferBlock,
   'face-swap-video': faceSwapVideoBlock,
   'video-compose': videoComposeBlock,
   'text-to-video': textToVideoBlock,

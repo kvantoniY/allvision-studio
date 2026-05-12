@@ -127,6 +127,33 @@ Available read-only endpoints:
 - `GET /api/admin-readonly/diagnostics`
 - `GET /api/admin-readonly/project/:id/full`
 - `GET /api/admin-readonly/piapi/task/:taskId`
+- `GET /api/admin-readonly/services`
+- `GET /api/admin-readonly/media-assets?kind=trend-video`
+- `GET /api/admin-readonly/block-catalog`
 - `GET /api/admin-readonly/logs/worker?lines=200` returns 501 until `WORKER_STDOUT_LOG_PATH` or docker logs access is configured.
 
 `READONLY_ADMIN` can only use read-only diagnostics. Mutating authenticated requests are rejected, and responses avoid user emails/password hashes/token secrets.
+
+## P7.2 admin operations
+
+Recompute service prices after deploy:
+
+```bash
+docker exec allvision-studio-api npm run prices:recompute
+docker exec allvision-studio-api npm run prices:recompute -- --apply --margin 0.8
+```
+
+The command is dry-run without `--apply`. It reads `Service.pipelineConfig`, sums current `BLOCK_CATALOG` model costs, applies `PRICING_MARGIN_DEFAULT` (default `0.8`), converts with `PRICING_USD_TO_RUB` (default `80`), rounds up to 10 coins, and logs `old -> new` diffs.
+
+Diagnostics page:
+
+- `/admin/diagnostics` shows build version, API uptime, BullMQ queue counts, recent projects, recent errors, MediaAsset file existence, masked env values, and PiAPI balance.
+- `POST /api/admin/diagnostics/refresh-balance` forces a PiAPI balance refresh.
+- `POST /api/admin/diagnostics/reload-services-catalog` invalidates/reports catalog state; the current catalog is static in-process.
+
+New env variables:
+
+```env
+PRICING_MARGIN_DEFAULT=0.8
+PRICING_USD_TO_RUB=80
+```

@@ -1,4 +1,4 @@
-export type BlockCategory = 'image' | 'video' | 'audio' | 'text' | 'compose';
+export type BlockCategory = 'image' | 'video' | 'motion' | 'audio' | 'text' | 'compose';
 
 export type ModelTierHint = 'standard' | 'pro' | 'both';
 
@@ -9,14 +9,20 @@ export interface ModelOption {
   estimatedCostCoins: number;
   estimatedCostUsd?: number;
   provider: 'piapi' | 'mock' | 'local';
+  providerModel?: string;
+  taskType?: string;
   description?: string;
   limits?: {
     maxDurationSec?: number;
+    minDurationSec?: number;
     maxResolution?: string;
+    resolutions?: string[];
+    aspectRatios?: string[];
     maxFileSize?: string;
     [key: string]: unknown;
   };
   requiredParams?: string[];
+  optionalParams?: string[];
   docsUrl?: string;
 }
 
@@ -41,4 +47,7 @@ export interface BlockCatalogItem {
   category: BlockCategory;
   paramsSchema: JsonSchemaObject;
   supportedModels: ModelOption[];
+  useWhen?: string;
+  compatibleInputs?: string[];
+  examples?: string[];
 }

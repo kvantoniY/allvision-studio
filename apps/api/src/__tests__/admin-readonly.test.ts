@@ -23,6 +23,7 @@ const RUN_ID = Date.now();
 const READONLY_EMAIL = `readonly-${RUN_ID}@example.com`;
 const USER_EMAIL = `readonly-user-${RUN_ID}@example.com`;
 const SERVICE_SLUG = `readonly-service-${RUN_ID}`;
+const MEDIA_TITLE = `Readonly ${RUN_ID} Trend Video`;
 
 let readonlyUserId: string;
 let regularUserId: string;
@@ -35,6 +36,7 @@ function bearer(userId: string, role: 'USER' | 'ADMIN' | 'READONLY_ADMIN') {
 async function cleanup() {
   await prisma.aIUsageLog.deleteMany({ where: { model: { contains: `readonly-model-${RUN_ID}` } } });
   await prisma.project.deleteMany({ where: { title: { contains: `Readonly ${RUN_ID}` } } });
+  await prisma.mediaAsset.deleteMany({ where: { title: MEDIA_TITLE } });
   await prisma.service.deleteMany({ where: { slug: SERVICE_SLUG } });
   await prisma.user.deleteMany({ where: { email: { in: [READONLY_EMAIL, USER_EMAIL] } } });
 }
@@ -67,6 +69,8 @@ beforeAll(async () => {
       priceCoinsStandard: 10,
       priceCoinsPro: 20,
       previewImage: 'http://test.local/preview.png',
+      pipelineConfig: [{ id: 'step_1', blockSlug: 'image-edit', params: { model: 'nano-banana', prompt: 'restore' } }],
+      userInputForm: [{ id: 'tier', type: 'tier', label: 'Tier', required: true }],
     },
   });
 
@@ -101,6 +105,21 @@ beforeAll(async () => {
       costUsd: 0.12,
       durationMs: 1000,
       recoverableOutputUrl: null,
+    },
+  });
+
+  await prisma.mediaAsset.create({
+    data: {
+      kind: 'trend-video',
+      title: MEDIA_TITLE,
+      description: 'Readonly media asset',
+      tags: ['readonly-test'],
+      storageKey: `readonly/${RUN_ID}.mp4`,
+      publicUrl: `https://cdn.test/readonly-${RUN_ID}.mp4`,
+      fileSize: 1234,
+      mimeType: 'video/mp4',
+      isActive: true,
+      sortOrder: 1,
     },
   });
 });
@@ -170,5 +189,41 @@ describe('/api/admin-readonly', () => {
       .post('/api/projects')
       .set('Authorization', bearer(readonlyUserId, 'READONLY_ADMIN'))
       .expect(403);
+  });
+
+  it('returns services with margin snapshots', async () => {
+    const res = await request(app)
+      .get('/api/admin-readonly/services')
+      .set('Authorization', bearer(readonlyUserId, 'READONLY_ADMIN'));
+
+    expect(res.status).toBe(200);
+    expect(res.body.services).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: SERVICE_SLUG,
+          pipelineSnapshot: expect.anything(),
+          margin: expect.objectContaining({ standard: expect.any(Object) }),
+        }),
+      ]),
+    );
+    expect(JSON.stringify(res.body)).not.toContain(USER_EMAIL);
+  });
+
+  it('returns media assets and block catalog', async () => {
+    const media = await request(app)
+      .get('/api/admin-readonly/media-assets?kind=trend-video')
+      .set('Authorization', bearer(readonlyUserId, 'READONLY_ADMIN'));
+    expect(media.status).toBe(200);
+    expect(media.body.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: MEDIA_TITLE, publicUrl: expect.stringContaining('readonly') })]),
+    );
+
+    const catalog = await request(app)
+      .get('/api/admin-readonly/block-catalog')
+      .set('Authorization', bearer(readonlyUserId, 'READONLY_ADMIN'));
+    expect(catalog.status).toBe(200);
+    expect(catalog.body.blocks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ slug: 'motion-transfer' })]),
+    );
   });
 });

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import sharp from 'sharp';
-import type { StorageProvider } from '@allvision/shared';
+import { estimateModelCostUsd, type StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
 import { PiAPIClient, type PiAPITaskStatus } from './piapi-client';
 import { ProviderError } from './provider-errors';
@@ -24,9 +24,11 @@ export interface PiAPIProviderOptions {
   logger: Logger;
 }
 
-const KLING_PRICE_5S: Record<string, { mode: 'std' | 'pro'; costUsd: number }> = {
+const KLING_PRICE_5S: Record<string, { mode: 'std' | 'pro'; costUsd: number; version?: string }> = {
   'kling-std': { mode: 'std', costUsd: 0.20 },
   'kling-pro': { mode: 'pro', costUsd: 0.33 },
+  'kling-3-std': { mode: 'std', costUsd: 0.50, version: '3.0' },
+  'kling-3-pro': { mode: 'pro', costUsd: 1.30, version: '3.0' },
 };
 
 const FACE_SWAP_MODEL = 'qubico-video-toolkit';
@@ -41,6 +43,21 @@ const NANO_BANANA_COST_USD: Record<string, number> = {
   '4K': 0.12,
 };
 const SUPPORTED_ASPECT_RATIOS = new Set(['9:16', '16:9', '1:1']);
+const HAILUO_MODELS = new Set(['hailuo-2.3', 'hailuo-2.3-fast']);
+const TEXT_TO_VIDEO_MODELS = new Set([
+  'seedance-2',
+  'seedance-2-fast',
+  'veo-3.1',
+  'veo-3.1-fast',
+  'sora-2',
+  'sora-2-pro',
+]);
+const MOTION_TRANSFER_MODELS = new Set([
+  'kling-motion-2.6-std',
+  'kling-motion-2.6-pro',
+  'kling-motion-3.0-std',
+  'kling-motion-3.0-pro',
+]);
 
 export class PiAPIProvider implements AIProvider {
   name = 'piapi' as const;
@@ -158,9 +175,14 @@ export class PiAPIProvider implements AIProvider {
     params?: Record<string, unknown>;
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
-    const model = KLING_PRICE_5S[input.model];
-    if (!model) throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported Kling model: ${input.model}`);
-    const estimatedCost = model.costUsd * Math.max(1, Math.ceil(input.durationSec / 5));
+    const klingModel = KLING_PRICE_5S[input.model];
+    if (!klingModel && !HAILUO_MODELS.has(input.model)) {
+      throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported image-to-video model: ${input.model}`);
+    }
+    const estimatedCost = estimatedCostForModel(input.model, {
+      ...(input.params ?? {}),
+      duration: input.durationSec,
+    }, klingModel ? klingModel.costUsd * Math.max(1, Math.ceil(input.durationSec / 5)) : 0);
     await this.ensureCanCall(estimatedCost);
 
     const startedAt = Date.now();
@@ -169,18 +191,34 @@ export class PiAPIProvider implements AIProvider {
     try {
       const published = await this.publisher.publishImageUrl(input.imageUrl, 1);
       const aspectRatio = await this.resolveImageAspectRatio(input.imageUrl, input.params);
-      const payload = {
-        model: 'kling',
-        task_type: 'video_generation',
-        input: {
-          mode: model.mode,
-          duration: input.durationSec,
-          image_url: published.publicUrl,
-          prompt: input.prompt ?? '',
-          negative_prompt: '',
-          ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-        },
-      };
+      const payload = klingModel
+        ? {
+            model: 'kling',
+            task_type: 'video_generation',
+            input: {
+              mode: klingModel.mode,
+              duration: input.durationSec,
+              image_url: published.publicUrl,
+              prompt: input.prompt ?? '',
+              negative_prompt: '',
+              ...(klingModel.version ? { version: klingModel.version } : {}),
+              ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
+              ...(readBoolean(input.params, 'enable_audio') !== undefined ? { enable_audio: readBoolean(input.params, 'enable_audio') } : {}),
+              ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+            },
+          }
+        : {
+            model: 'hailuo',
+            task_type: 'video_generation',
+            input: {
+              prompt: input.prompt ?? '',
+              image_url: published.publicUrl,
+              model: input.model === 'hailuo-2.3-fast' ? 'v2.3-fast' : 'v2.3',
+              duration: input.durationSec <= 6 ? 6 : 10,
+              resolution: normalizeHailuoResolution(readString(input.params, 'resolution')),
+              expand_prompt: readBoolean(input.params, 'expand_prompt') ?? true,
+            },
+          };
       const created = await this.client.createTask(payload);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
@@ -191,6 +229,68 @@ export class PiAPIProvider implements AIProvider {
       completedTask = completed;
       if (!completed.outputUrl) {
         throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI Kling task completed without video_url');
+      }
+      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
+      const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      return {
+        outputUrl: local.url,
+        costUsd,
+        durationMs,
+        meta: {
+          piapiTaskId: taskId,
+          piapiUrl: completed.outputUrl,
+          model: input.model,
+          provider: 'piapi',
+          aspectRatio: aspectRatio ?? 'auto',
+        },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      throw err;
+    }
+  }
+
+  async textToVideo(input: {
+    prompt: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    if (!TEXT_TO_VIDEO_MODELS.has(input.model)) {
+      throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported text-to-video model: ${input.model}`);
+    }
+    const estimatedCost = estimatedCostForModel(input.model, {
+      ...(input.params ?? {}),
+      duration: input.durationSec,
+    }, 0);
+    await this.ensureCanCall(estimatedCost);
+
+    const startedAt = Date.now();
+    let taskId: string | undefined;
+    let completedTask: PiAPITaskStatus | undefined;
+    try {
+      const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
+      const payload = buildTextToVideoPayload(input.model, {
+        prompt: input.prompt,
+        durationSec: input.durationSec,
+        aspectRatio,
+        resolution: readString(input.params, 'resolution'),
+        generateAudio: readBoolean(input.params, 'generate_audio') ?? false,
+      });
+      const created = await this.client.createTask(payload);
+      taskId = created.taskId;
+      const completed = await this.client.pollUntilDone(taskId, {
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
+        expectedDurationMs: 10 * 60 * 1000,
+        onProgress: input.context.reportProgress,
+      });
+      completedTask = completed;
+      if (!completed.outputUrl) {
+        throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI text-to-video task completed without video URL');
       }
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
@@ -269,6 +369,80 @@ export class PiAPIProvider implements AIProvider {
           model: input.model,
           provider: 'piapi',
           estimatedFrames: frames,
+          aspectRatio: aspectRatio ?? 'auto',
+        },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      throw err;
+    }
+  }
+
+  async motionTransfer(input: {
+    inputImageUrl: string;
+    drivingVideoUrl: string;
+    prompt?: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    if (!MOTION_TRANSFER_MODELS.has(input.model)) {
+      throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported motion-transfer model: ${input.model}`);
+    }
+    const estimatedCost = estimatedCostForModel(input.model, {
+      ...(input.params ?? {}),
+      duration: input.durationSec,
+    }, 0);
+    await this.ensureCanCall(estimatedCost);
+
+    const startedAt = Date.now();
+    let taskId: string | undefined;
+    let completedTask: PiAPITaskStatus | undefined;
+    try {
+      const publishedImage = await this.publisher.publishImageUrl(input.inputImageUrl, 1);
+      const aspectRatio = await this.resolveImageAspectRatio(input.inputImageUrl, input.params);
+      const isV3 = input.model.includes('3.0');
+      const isPro = input.model.endsWith('-pro');
+      const payload = {
+        model: 'kling',
+        task_type: 'motion_control',
+        input: {
+          image_url: publishedImage.publicUrl,
+          video_url: input.drivingVideoUrl,
+          prompt: input.prompt ?? '',
+          duration: input.durationSec,
+          mode: isPro ? 'pro' : 'std',
+          ...(isV3 ? { version: '3.0' } : {}),
+          ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
+          ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
+        },
+      };
+      const created = await this.client.createTask(payload);
+      taskId = created.taskId;
+      const completed = await this.client.pollUntilDone(taskId, {
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
+        expectedDurationMs: 12 * 60 * 1000,
+        onProgress: input.context.reportProgress,
+      });
+      completedTask = completed;
+      if (!completed.outputUrl) {
+        throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI motion-transfer task completed without video URL');
+      }
+      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
+      const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      return {
+        outputUrl: local.url,
+        costUsd,
+        durationMs,
+        meta: {
+          piapiTaskId: taskId,
+          piapiUrl: completed.outputUrl,
+          model: input.model,
+          provider: 'piapi',
           aspectRatio: aspectRatio ?? 'auto',
         },
       };
@@ -450,10 +624,82 @@ function readString(source: Record<string, unknown> | undefined, key: string): s
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function readBoolean(source: Record<string, unknown> | undefined, key: string): boolean | undefined {
+  const value = source?.[key];
+  if (typeof value === 'boolean') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return undefined;
+}
+
 function normalizeAspectRatio(value: string | undefined): 'auto' | '9:16' | '16:9' | '1:1' | undefined {
   if (!value) return undefined;
   if (value === 'auto' || value === 'input') return 'auto';
   return SUPPORTED_ASPECT_RATIOS.has(value) ? value as '9:16' | '16:9' | '1:1' : undefined;
+}
+
+function normalizeHailuoResolution(value: string | undefined): '768P' | '1080P' {
+  if (value === '1080P' || value === '1080p') return '1080P';
+  return '768P';
+}
+
+function estimatedCostForModel(slug: string, params: Record<string, unknown>, fallback: number) {
+  const estimated = estimateModelCostUsd({
+    slug,
+    title: slug,
+    tierHint: 'both',
+    estimatedCostCoins: 0,
+    estimatedCostUsd: fallback,
+    provider: 'piapi',
+  }, params);
+  return estimated > 0 ? estimated : fallback;
+}
+
+function buildTextToVideoPayload(
+  model: string,
+  input: {
+    prompt: string;
+    durationSec: number;
+    aspectRatio?: 'auto' | '9:16' | '16:9' | '1:1';
+    resolution?: string;
+    generateAudio: boolean;
+  },
+) {
+  if (model === 'seedance-2' || model === 'seedance-2-fast') {
+    return {
+      model: 'seedance',
+      task_type: model,
+      input: {
+        prompt: input.prompt,
+        mode: 'text_to_video',
+        duration: input.durationSec,
+        aspect_ratio: input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : '16:9',
+        resolution: input.resolution ?? '720p',
+      },
+    };
+  }
+
+  if (model === 'veo-3.1' || model === 'veo-3.1-fast') {
+    return {
+      model: 'veo',
+      task_type: model === 'veo-3.1-fast' ? 'veo3.1-fast-generate-preview' : 'veo3.1-generate-preview',
+      input: {
+        prompt: input.prompt,
+        aspect_ratio: input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : '16:9',
+        generate_audio: input.generateAudio,
+      },
+    };
+  }
+
+  return {
+    model: model === 'sora-2-pro' ? 'sora2-pro' : 'sora2',
+    task_type: model === 'sora-2-pro' ? 'sora2-pro-video' : 'sora2-video',
+    input: {
+      prompt: input.prompt,
+      duration: input.durationSec,
+      aspect_ratio: input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : '16:9',
+    },
+  };
 }
 
 function aspectRatioFromDimensions(width: number, height: number): '9:16' | '16:9' | '1:1' {

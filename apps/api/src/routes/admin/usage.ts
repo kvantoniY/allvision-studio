@@ -59,7 +59,7 @@ adminUsageRouter.get('/usage', async (req: Request, res: Response, next: NextFun
   try {
     const query = usageQuerySchema.parse(req.query);
     const where = usageWhere(query);
-    const [logs, total, aggregate, allRows] = await prisma.$transaction([
+    const [logs, total, aggregate, allRows, timeoutPending] = await prisma.$transaction([
       prisma.aIUsageLog.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -94,11 +94,27 @@ adminUsageRouter.get('/usage', async (req: Request, res: Response, next: NextFun
           durationMs: true,
         },
       }),
+      prisma.aIUsageLog.findMany({
+        where: { ...where, status: 'timeout_pending' },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        select: {
+          id: true,
+          createdAt: true,
+          projectId: true,
+          blockSlug: true,
+          model: true,
+          taskId: true,
+          errorCode: true,
+          errorMessage: true,
+        },
+      }),
     ]);
 
     const successCount = allRows.filter((row) => row.status === 'success').length;
     const failedCount = allRows.filter((row) => row.status === 'failed').length;
     const timeoutCount = allRows.filter((row) => row.status === 'timeout' || row.status.startsWith('timeout_')).length;
+    const statusCounts = groupByStatus(allRows);
 
     res.json({
       logs,
@@ -112,10 +128,12 @@ adminUsageRouter.get('/usage', async (req: Request, res: Response, next: NextFun
         timeoutCount,
         totalCostUsd: aggregate._sum.costUsd ?? 0,
         avgDurationMs: Math.round(aggregate._avg.durationMs ?? 0),
+        statusCounts,
       },
       byDay: groupByDay(allRows),
       byModel: groupByModel(allRows),
       byBlock: groupByBlock(allRows),
+      timeoutPending,
     });
   } catch (err) {
     next(err);
@@ -162,6 +180,20 @@ function groupByDay(rows: Array<{ createdAt: Date; costUsd: number }>) {
     map.set(date, current);
   }
   return Array.from(map.values());
+}
+
+function groupByStatus(rows: Array<{ status: string }>) {
+  const defaults: Record<string, number> = {
+    success: 0,
+    failed: 0,
+    timeout: 0,
+    timeout_charged: 0,
+    timeout_pending: 0,
+  };
+  for (const row of rows) {
+    defaults[row.status] = (defaults[row.status] ?? 0) + 1;
+  }
+  return defaults;
 }
 
 function groupByModel(rows: Array<{ model: string; costUsd: number; durationMs: number }>) {

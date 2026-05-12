@@ -20,6 +20,7 @@ import {
   ChevronUp,
   GripVertical,
   ImageIcon,
+  Info,
   Play,
   Plus,
   Save,
@@ -46,7 +47,13 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { BlockCatalogItem, JsonSchemaObject, ModelOption } from '@allvision/shared';
-import { formatAdminServiceValidationError, validatePipelineConfig, validateUserInputForm } from '@allvision/shared';
+import {
+  formatAdminServiceValidationError,
+  serviceMargin,
+  summarizePipelinePricing,
+  validatePipelineConfig,
+  validateUserInputForm,
+} from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -235,6 +242,74 @@ function providerLabel(provider: ModelOption['provider']) {
   return 'Mock';
 }
 
+function usd(value: number) {
+  return `$${value.toFixed(2)}`;
+}
+
+function HelpTip({ text }: { text?: string }) {
+  if (!text) return null;
+  return (
+    <details className="relative inline-block">
+      <summary className="inline-flex cursor-pointer list-none items-center text-slate-500 hover:text-rose-200">
+        <Info className="h-3.5 w-3.5" />
+      </summary>
+      <div className="absolute right-0 z-30 mt-2 w-72 rounded-md border border-zinc-700 bg-zinc-950 p-3 text-xs leading-relaxed text-slate-300 shadow-xl">
+        {text}
+      </div>
+    </details>
+  );
+}
+
+function FieldLabel({ children, help }: { children: ReactNode; help?: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <Label>{children}</Label>
+      <HelpTip text={help} />
+    </div>
+  );
+}
+
+function fieldHelp(key: string, schema: JsonSchemaObject) {
+  const lines = [
+    schema.description ? `Что делает: ${schema.description}` : undefined,
+    schema.enum?.length ? `Допустимые значения: ${schema.enum.map(String).join(', ')}` : undefined,
+    schema.minimum !== undefined || schema.maximum !== undefined
+      ? `Диапазон: ${schema.minimum ?? 'без минимума'}-${schema.maximum ?? 'без максимума'}`
+      : undefined,
+    schema.default !== undefined ? `По умолчанию: ${String(schema.default)}` : 'Если оставить пустым, будет применён дефолт блока или провайдера.',
+    `Пример: ${exampleParamValue(key, schema)}`,
+  ].filter(Boolean);
+  return lines.join('\n');
+}
+
+function exampleParamValue(key: string, schema: JsonSchemaObject) {
+  if (schema.enum?.length) return String(schema.enum[0]);
+  if (key.toLowerCase().includes('prompt')) return 'A warm cinematic portrait, natural motion, soft light';
+  if (key.toLowerCase().includes('image')) return '{{user_photo}}';
+  if (key.toLowerCase().includes('video')) return '{{trend_video}}';
+  if (schema.type === 'number') return String(schema.default ?? schema.minimum ?? 5);
+  if (schema.type === 'boolean') return String(schema.default ?? false);
+  return schema.default !== undefined ? String(schema.default) : 'auto';
+}
+
+function formatModelLimit(key: string, value: unknown) {
+  const labels: Record<string, string> = {
+    maxDurationSec: 'Макс. длительность',
+    minDurationSec: 'Мин. длительность',
+    maxResolution: 'Макс. разрешение',
+    resolutions: 'Разрешения',
+    aspectRatios: 'Aspect ratio',
+    maxFileSize: 'Макс. размер файла',
+  };
+  const formatted = Array.isArray(value) ? value.join(', ') : String(value);
+  return `${labels[key] ?? key}: ${formatted}`;
+}
+
+function blockCategoryLabel(block: BlockCatalogItem) {
+  if (block.category === 'motion') return 'motion-transfer';
+  return block.category;
+}
+
 function defaultValueForSchema(schema: JsonSchemaObject, block: BlockCatalogItem, key?: string): unknown {
   if (key === 'model' || isTierModelSchema(schema)) {
     return {
@@ -300,6 +375,20 @@ function stepCost(step: PipelineStep, block: BlockCatalogItem | undefined, tier:
 
 function calculateCost(steps: PipelineStep[], blocks: BlockCatalogItem[] | undefined, tier: 'standard' | 'pro') {
   return steps.reduce((sum, step) => sum + stepCost(step, blockBySlug(blocks, step.blockSlug), tier), 0);
+}
+
+function pipelineSentence(steps: PipelineStep[], blocks: BlockCatalogItem[] | undefined) {
+  if (steps.length === 0) return 'Pipeline is empty.';
+  return steps
+    .map((step) => blockBySlug(blocks, step.blockSlug)?.title ?? step.blockSlug)
+    .join(' → ');
+}
+
+function marginTone(marginPercent: number | null) {
+  if (marginPercent === null) return 'border-zinc-800 bg-zinc-950 text-slate-300';
+  if (marginPercent < 0) return 'border-red-800 bg-red-950/40 text-red-100';
+  if (marginPercent < 50) return 'border-amber-800 bg-amber-950/30 text-amber-100';
+  return 'border-emerald-800 bg-emerald-950/30 text-emerald-100';
 }
 
 function validationErrors(steps: PipelineStep[], fields: UserInputField[]) {
@@ -415,23 +504,60 @@ function BlockParamsForm({
 
   return (
     <div className="space-y-4">
+      <details className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-sm">
+        <summary className="cursor-pointer font-semibold text-white">Описание блока</summary>
+        <div className="mt-3 space-y-2 text-sm text-slate-300">
+          <p>{block.description}</p>
+          {block.useWhen && <p><span className="text-slate-500">Когда использовать:</span> {block.useWhen}</p>}
+          <p><span className="text-slate-500">Категория:</span> {blockCategoryLabel(block)}</p>
+          {block.compatibleInputs?.length ? <p><span className="text-slate-500">Совместимые входы:</span> {block.compatibleInputs.join(', ')}</p> : null}
+          {block.examples?.length ? (
+            <ul className="list-disc space-y-1 pl-5 text-slate-400">
+              {block.examples.map((example) => <li key={example}>{example}</li>)}
+            </ul>
+          ) : null}
+        </div>
+      </details>
       {selectedModels.length > 0 && (
-        <div className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-xs text-slate-300">
-          <div className="font-semibold text-white">Model info</div>
+        <details className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-xs text-slate-300" open>
+          <summary className="cursor-pointer font-semibold text-white">Что делает эта модель</summary>
           {selectedModels.map((model) => (
-              <div key={model.slug} className="mt-2">
-                <div className="font-medium text-slate-100">{model.title} · {providerLabel(model.provider)} · ~{model.estimatedCostCoins} coins{model.estimatedCostUsd ? ` · $${model.estimatedCostUsd}` : ''}</div>
-                {model.description && <p className="mt-1 text-slate-400">{model.description}</p>}
+            <div key={model.slug} className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
+              <div className="font-medium text-slate-100">
+                {model.title} · {providerLabel(model.provider)} · ~{model.estimatedCostCoins} coins
+                {model.estimatedCostUsd ? ` · ${usd(model.estimatedCostUsd)}` : ''}
+              </div>
+              {model.description && <p className="mt-2 text-slate-400">{model.description}</p>}
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {model.limits && (
-                  <div className="mt-1 text-slate-500">
-                    {Object.entries(model.limits).map(([key, item]) => `${key}: ${String(item)}`).join(' · ')}
+                  <div>
+                    <div className="font-medium text-slate-200">Ограничения</div>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 text-slate-500">
+                      {Object.entries(model.limits).map(([key, item]) => (
+                        <li key={key}>{formatModelLimit(key, item)}</li>
+                      ))}
+                    </ul>
                   </div>
                 )}
-                {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-1 inline-block text-rose-300 hover:text-rose-200">Docs</a>}
+                <div>
+                  <div className="font-medium text-slate-200">Параметры</div>
+                  {model.requiredParams?.length ? (
+                    <div className="mt-1 text-slate-500">Required: {model.requiredParams.join(', ')}</div>
+                  ) : (
+                    <div className="mt-1 text-slate-500">Required: нет сверх схемы блока</div>
+                  )}
+                  {model.optionalParams?.length ? (
+                    <div className="text-slate-500">Optional: {model.optionalParams.join(', ')}</div>
+                  ) : null}
+                  {model.providerModel && <div className="mt-1 text-slate-500">Model: {model.providerModel}</div>}
+                  {model.taskType && <div className="text-slate-500">Task type: {model.taskType}</div>}
+                </div>
               </div>
-            ))}
+              {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-rose-300 hover:text-rose-200">Docs</a>}
+            </div>
+          ))}
           {limitWarnings.map((warning) => <div key={warning} className="mt-2 text-amber-300">{warning}</div>)}
-        </div>
+        </details>
       )}
       <div className="grid gap-4 md:grid-cols-2">
       {Object.entries(block.paramsSchema.properties ?? {}).map(([key, rawSchema]) => {
@@ -443,7 +569,7 @@ function BlockParamsForm({
           const record = isRecord(current) ? current : {};
           return (
             <div key={key} className="md:col-span-2">
-              <Label>{label}</Label>
+              <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
               <div className="mt-2 grid gap-3 md:grid-cols-2">
                 {(['standard', 'pro'] as const).map((tier) => (
                   <div key={tier} className="space-y-1">
@@ -469,7 +595,7 @@ function BlockParamsForm({
         if (schema.enum?.length) {
           return (
             <div key={key} className="space-y-2">
-              <Label>{label}</Label>
+              <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
               <select
                 value={selectValue(value[key])}
                 onChange={(event) => update(key, coerceBySchema(event.target.value, schema))}
@@ -496,6 +622,7 @@ function BlockParamsForm({
                 className="h-4 w-4"
               />
               {label}
+              <HelpTip text={fieldHelp(key, schema)} />
               {schema.description && <span className="text-xs text-slate-500">{schema.description}</span>}
             </label>
           );
@@ -504,7 +631,7 @@ function BlockParamsForm({
         if (schema.type === 'number') {
           return (
             <div key={key} className="space-y-2">
-              <Label>{label}</Label>
+              <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
               <Input
                 type="number"
                 value={selectValue(value[key])}
@@ -518,7 +645,7 @@ function BlockParamsForm({
         const isPrompt = key.toLowerCase().includes('prompt') || key.toLowerCase().includes('music');
         return (
           <div key={key} className={cn('space-y-2', isPrompt && 'md:col-span-2')}>
-            <Label>{label}</Label>
+            <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
             {isPrompt ? (
               <Textarea value={selectValue(value[key])} rows={3} onChange={(event) => update(key, event.target.value)} />
             ) : (
@@ -1025,6 +1152,15 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const errors = useMemo(() => validationErrors(draft.pipelineConfig, draft.userInputForm), [draft.pipelineConfig, draft.userInputForm]);
   const costStandard = useMemo(() => calculateCost(draft.pipelineConfig, blocks, 'standard'), [draft.pipelineConfig, blocks]);
   const costPro = useMemo(() => calculateCost(draft.pipelineConfig, blocks, 'pro'), [draft.pipelineConfig, blocks]);
+  const pricingSummary = useMemo(() => summarizePipelinePricing(draft.pipelineConfig, blocks), [draft.pipelineConfig, blocks]);
+  const standardMargin = useMemo(
+    () => serviceMargin(draft.priceCoinsStandard, pricingSummary.standard.costUsd),
+    [draft.priceCoinsStandard, pricingSummary.standard.costUsd],
+  );
+  const proMargin = useMemo(
+    () => serviceMargin(draft.priceCoinsPro, pricingSummary.pro.costUsd),
+    [draft.priceCoinsPro, pricingSummary.pro.costUsd],
+  );
   const imagePreviewUrl = useMemo(() => (previewImage ? URL.createObjectURL(previewImage) : null), [previewImage]);
 
   useEffect(() => {
@@ -1184,6 +1320,32 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           </label>
         </div>
       </Section>
+
+      <details className={cn('rounded-lg border p-5', marginTone(Math.min(standardMargin.marginPercent ?? 0, proMargin.marginPercent ?? 0)))}>
+        <summary className="cursor-pointer font-semibold text-white">Как работает эта услуга</summary>
+        <div className="mt-4 space-y-3 text-sm">
+          <p className="text-slate-200">{pipelineSentence(draft.pipelineConfig, blocks)}</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <div className="text-slate-400">Standard</div>
+              <div>Cost {usd(pricingSummary.standard.costUsd)} / ~{pricingSummary.standard.costCoins} coins</div>
+              <div>Price {draft.priceCoinsStandard} coins</div>
+              <div>Margin {standardMargin.marginPercent === null ? 'n/a' : `${standardMargin.marginPercent.toFixed(1)}%`} / {usd(standardMargin.profitUsd)}</div>
+            </div>
+            <div>
+              <div className="text-slate-400">Pro</div>
+              <div>Cost {usd(pricingSummary.pro.costUsd)} / ~{pricingSummary.pro.costCoins} coins</div>
+              <div>Price {draft.priceCoinsPro} coins</div>
+              <div>Margin {proMargin.marginPercent === null ? 'n/a' : `${proMargin.marginPercent.toFixed(1)}%`} / {usd(proMargin.profitUsd)}</div>
+            </div>
+          </div>
+          {(standardMargin.profitCoins < 0 || proMargin.profitCoins < 0) && (
+            <div className="rounded-md border border-red-700 bg-red-950/60 p-3 font-medium text-red-100">
+              Услуга работает в убыток. Поднимите цену.
+            </div>
+          )}
+        </div>
+      </details>
 
       <Section title="Превью" description="Изображение для каталога и видео для страницы услуги.">
         <div className="grid gap-5 lg:grid-cols-2">

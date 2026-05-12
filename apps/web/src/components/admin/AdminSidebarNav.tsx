@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, Clapperboard, FolderKanban, Images, LineChart, Sparkles, Users } from 'lucide-react';
+import { Activity, BarChart3, Clapperboard, FolderKanban, Images, LineChart, Sparkles, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { href: '/admin/services', label: 'Services', icon: Sparkles, disabled: false },
   { href: '/admin/media-assets', label: 'Media assets', icon: Images, disabled: false },
   { href: '/admin/usage', label: 'Usage', icon: LineChart, disabled: false },
+  { href: '/admin/diagnostics', label: 'Diagnostics', icon: Activity, disabled: false },
   { href: '/admin/trends', label: 'Trends', icon: BarChart3, disabled: false },
   { href: '/admin/scenario-templates', label: 'Scenario templates', icon: Clapperboard, disabled: false },
   { href: '#', label: 'Users', icon: Users, disabled: true },

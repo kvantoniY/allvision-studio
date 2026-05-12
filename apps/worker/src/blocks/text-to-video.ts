@@ -30,11 +30,10 @@ export const textToVideoBlock: BlockDefinition = {
   async executor(params, _input, ctx) {
     const parsed = paramsSchema.parse(params);
     await ctx.reportProgress(5);
-    const result = await ctx.getAIProvider().imageToVideo({
-      imageUrl: 'mock://text-to-video/seed.jpg',
+    const result = await ctx.getAIProvider().textToVideo({
       prompt: parsed.prompt,
       durationSec: parsed.duration ?? 5,
-      model: typeof parsed.model === 'string' ? parsed.model : 'veo-3.1',
+      model: typeof parsed.model === 'string' ? parsed.model : 'seedance-2-fast',
       params: asObject(parsed),
       context: ctx.providerContext,
     });

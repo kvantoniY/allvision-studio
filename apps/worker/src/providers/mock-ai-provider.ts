@@ -247,9 +247,31 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     return this.createImmediateResult('photo-animate', params.context);
   }
 
+  async textToVideo(params: {
+    prompt: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return this.createImmediateResult('photo-animate', params.context);
+  }
+
   async faceSwapVideo(params: {
     swapImageUrl: string;
     targetVideoUrl: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return this.createImmediateResult('trend', params.context);
+  }
+
+  async motionTransfer(params: {
+    inputImageUrl: string;
+    drivingVideoUrl: string;
+    prompt?: string;
+    durationSec: number;
     model: string;
     params?: Record<string, unknown>;
     context: ProviderRunContext;

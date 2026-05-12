@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { prisma } from '@allvision/database';
+import { BLOCK_CATALOG, serviceMargin, summarizePipelinePricing } from '@allvision/shared';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { PiAPIAccountClient } from '../services/piapi-client';
@@ -84,6 +85,96 @@ adminReadonlyRouter.get('/diagnostics', async (_req: Request, res: Response, nex
   } catch (err) {
     next(err);
   }
+});
+
+adminReadonlyRouter.get('/services', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const services = await prisma.service.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        category: true,
+        isActive: true,
+        isFeatured: true,
+        priceCoinsStandard: true,
+        priceCoinsPro: true,
+        priceTokens: true,
+        pipelineConfig: true,
+        userInputForm: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    res.json({
+      services: services.map((service) => {
+        const pricing = summarizePipelinePricing(service.pipelineConfig);
+        return {
+          id: service.id,
+          slug: service.slug,
+          title: service.title,
+          category: service.category,
+          isActive: service.isActive,
+          isFeatured: service.isFeatured,
+          priceCoinsStandard: service.priceCoinsStandard,
+          priceCoinsPro: service.priceCoinsPro,
+          priceTokens: service.priceTokens,
+          pipelineSnapshot: redactDataUrls(service.pipelineConfig),
+          userInputForm: service.userInputForm,
+          pricing,
+          margin: {
+            standard: serviceMargin(service.priceCoinsStandard ?? service.priceTokens, pricing.standard.costUsd),
+            pro: serviceMargin(service.priceCoinsPro ?? service.priceTokens, pricing.pro.costUsd),
+          },
+          createdAt: service.createdAt,
+          updatedAt: service.updatedAt,
+        };
+      }),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminReadonlyRouter.get('/media-assets', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const query = z.object({
+      kind: z.string().trim().min(1).max(80).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }).parse(req.query);
+    const items = await prisma.mediaAsset.findMany({
+      where: query.kind ? { kind: query.kind } : {},
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      take: query.limit,
+      select: {
+        id: true,
+        kind: true,
+        title: true,
+        description: true,
+        tags: true,
+        publicUrl: true,
+        thumbnailKey: true,
+        durationSec: true,
+        width: true,
+        height: true,
+        frameCount: true,
+        fileSize: true,
+        mimeType: true,
+        isActive: true,
+        sortOrder: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    res.json({ items });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminReadonlyRouter.get('/block-catalog', async (_req: Request, res: Response) => {
+  res.json({ blocks: BLOCK_CATALOG });
 });
 
 adminReadonlyRouter.get('/project/:id/full', async (req: Request, res: Response, next: NextFunction) => {

@@ -63,7 +63,7 @@ describe('GET /api/admin/blocks', () => {
       .set('Cookie', authCookie(adminUserId, 'ADMIN'));
 
     expect(res.status).toBe(200);
-    expect(res.body.blocks).toHaveLength(7);
+    expect(res.body.blocks).toHaveLength(8);
     expect(res.body.blocks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -73,6 +73,11 @@ describe('GET /api/admin/blocks', () => {
         }),
         expect.objectContaining({
           slug: 'image-edit',
+          paramsSchema: expect.any(Object),
+          supportedModels: expect.any(Array),
+        }),
+        expect.objectContaining({
+          slug: 'motion-transfer',
           paramsSchema: expect.any(Object),
           supportedModels: expect.any(Array),
         }),

@@ -47,10 +47,21 @@ export type AdminUsageResponse = {
     timeoutCount: number;
     totalCostUsd: number;
     avgDurationMs: number;
+    statusCounts: Record<string, number>;
   };
   byDay: Array<{ date: string; totalCostUsd: number; requestCount: number }>;
   byModel: Array<{ model: string; requestCount: number; totalCostUsd: number; avgDurationMs: number }>;
   byBlock: Array<{ blockSlug: string; requestCount: number; totalCostUsd: number; successRate: number }>;
+  timeoutPending: Array<{
+    id: string;
+    createdAt: string;
+    projectId: string | null;
+    blockSlug: string;
+    model: string;
+    taskId: string | null;
+    errorCode: string | null;
+    errorMessage: string | null;
+  }>;
 };
 
 export type PiAPIAccountResponse = {
