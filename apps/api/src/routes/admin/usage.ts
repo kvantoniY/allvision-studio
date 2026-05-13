@@ -150,7 +150,7 @@ adminUsageRouter.get('/piapi/account', async (req: Request, res: Response, next:
     }
 
     const apiKey = process.env.PIAPI_API_KEY;
-    if (!apiKey) throw new HttpError(503, 'PIAPI_API_KEY_MISSING', 'PIAPI_API_KEY is not configured');
+    if (!apiKey) throw new HttpError(503, 'PIAPI_API_KEY_MISSING', 'PIAPI_API_KEY не настроен');
     const client = new PiAPIAccountClient({
       apiKey,
       baseUrl: process.env.PIAPI_BASE_URL ?? 'https://api.piapi.ai',

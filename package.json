@@ -19,7 +19,7 @@
     "db:studio": "npx prisma studio --schema packages/database/prisma/schema.prisma",
     "prices:recompute": "tsx packages/database/src/prices-recompute.ts",
     "demo:download": "tsx apps/api/scripts/download-demo-assets.ts",
-    "test": "npm test -w @allvision/database && npm test -w @allvision/api && npm test -w @allvision/worker"
+    "test": "npm test -w @allvision/shared && npm test -w @allvision/database && npm test -w @allvision/api && npm test -w @allvision/worker"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

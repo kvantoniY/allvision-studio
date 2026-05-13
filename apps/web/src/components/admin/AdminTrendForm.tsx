@@ -150,7 +150,7 @@ export function AdminTrendForm({ mode, trend }: AdminTrendFormProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="prompt">Prompt</Label>
+              <Label htmlFor="prompt">Промпт</Label>
               <Textarea
                 id="prompt"
                 value={prompt}
@@ -163,7 +163,7 @@ export function AdminTrendForm({ mode, trend }: AdminTrendFormProps) {
             </div>
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="aiModel">AI model</Label>
+                <Label htmlFor="aiModel">AI-модель</Label>
                 <Input id="aiModel" value={aiModel} onChange={(e) => setAiModel(e.target.value)} required />
               </div>
               <div className="space-y-2">
@@ -179,7 +179,7 @@ export function AdminTrendForm({ mode, trend }: AdminTrendFormProps) {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="aiConfig">aiConfig</Label>
+              <Label htmlFor="aiConfig">AI-конфиг</Label>
               <Textarea
                 id="aiConfig"
                 value={aiConfig}
@@ -201,7 +201,7 @@ export function AdminTrendForm({ mode, trend }: AdminTrendFormProps) {
 
           <div className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="previewVideo">Preview video</Label>
+              <Label htmlFor="previewVideo">Превью-видео</Label>
               <Input
                 id="previewVideo"
                 type="file"
@@ -219,7 +219,7 @@ export function AdminTrendForm({ mode, trend }: AdminTrendFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="thumbnail">Thumbnail</Label>
+              <Label htmlFor="thumbnail">Обложка</Label>
               <Input
                 id="thumbnail"
                 type="file"

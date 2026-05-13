@@ -39,11 +39,11 @@ function parseAiConfig(value: string | undefined): Prisma.InputJsonValue | undef
   try {
     const parsed = JSON.parse(value || '{}') as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('aiConfig must be an object');
+      throw new Error('aiConfig должен быть объектом');
     }
     return parsed as Prisma.InputJsonValue;
   } catch {
-    throw new HttpError(400, 'INVALID_AI_CONFIG', 'aiConfig must be a JSON object');
+    throw new HttpError(400, 'INVALID_AI_CONFIG', 'aiConfig должен быть JSON-объектом');
   }
 }
 
@@ -53,7 +53,7 @@ function parseCharacterRoles(value: string | undefined): Prisma.InputJsonValue |
     const parsed = JSON.parse(value) as unknown;
     return characterRolesSchema.parse(parsed) as Prisma.InputJsonValue;
   } catch {
-    throw new HttpError(400, 'INVALID_CHARACTER_ROLES', 'characterRoles must be a valid JSON array');
+    throw new HttpError(400, 'INVALID_CHARACTER_ROLES', 'characterRoles должен быть валидным JSON-массивом');
   }
 }
 
@@ -66,11 +66,11 @@ function parseTags(value: string | undefined): string[] | undefined {
     try {
       const parsed = JSON.parse(trimmed) as unknown;
       if (!Array.isArray(parsed) || !parsed.every((tag) => typeof tag === 'string')) {
-        throw new Error('tags must be an array of strings');
+        throw new Error('tags должен быть массивом строк');
       }
       return parsed.map((tag) => tag.trim()).filter(Boolean);
     } catch {
-      throw new HttpError(400, 'INVALID_TAGS', 'tags must be JSON array or comma-separated list');
+      throw new HttpError(400, 'INVALID_TAGS', 'tags должен быть JSON-массивом или списком через запятую');
     }
   }
 
@@ -137,7 +137,7 @@ adminScenarioTemplatesRouter.get('/', async (req: Request, res: Response, next: 
 adminScenarioTemplatesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const template = await prisma.scenarioTemplate.findUnique({ where: { id: req.params.id } });
-    if (!template) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Scenario template not found');
+    if (!template) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон сценария не найден');
     res.json({ template });
   } catch (err) {
     next(err);
@@ -151,7 +151,7 @@ adminScenarioTemplatesRouter.post('/', uploadTemplateAssets, async (req: Request
     const previewVideo = firstFile(req, 'previewVideo');
     const previewImage = firstFile(req, 'previewImage');
     if (!previewVideo || !previewImage) {
-      throw new HttpError(400, 'FILE_REQUIRED', 'previewVideo and previewImage are required');
+      throw new HttpError(400, 'FILE_REQUIRED', 'Нужны превью-видео и превью-изображение');
     }
 
     const aiConfig = parseAiConfig(body.aiConfig) ?? {};
@@ -197,7 +197,7 @@ adminScenarioTemplatesRouter.post('/', uploadTemplateAssets, async (req: Request
     } catch (err) {
       await cleanupUploaded(uploaded);
       if (isUniqueConflict(err)) {
-        throw new HttpError(409, 'SLUG_ALREADY_EXISTS', 'Scenario template slug already exists');
+        throw new HttpError(409, 'SLUG_ALREADY_EXISTS', 'Слаг шаблона уже занят');
       }
       throw err;
     }
@@ -213,7 +213,7 @@ adminScenarioTemplatesRouter.patch('/:id', uploadTemplateAssets, async (req: Req
   const uploaded: Array<{ key: string }> = [];
   try {
     const template = await prisma.scenarioTemplate.findUnique({ where: { id: req.params.id } });
-    if (!template) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Scenario template not found');
+    if (!template) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон сценария не найден');
 
     const body = updateAdminScenarioTemplateSchema.parse(req.body);
     const previewVideo = firstFile(req, 'previewVideo');
@@ -268,7 +268,7 @@ adminScenarioTemplatesRouter.patch('/:id', uploadTemplateAssets, async (req: Req
     } catch (err) {
       await cleanupUploaded(uploaded);
       if (isUniqueConflict(err)) {
-        throw new HttpError(409, 'SLUG_ALREADY_EXISTS', 'Scenario template slug already exists');
+        throw new HttpError(409, 'SLUG_ALREADY_EXISTS', 'Слаг шаблона уже занят');
       }
       throw err;
     }
@@ -283,7 +283,7 @@ adminScenarioTemplatesRouter.patch('/:id', uploadTemplateAssets, async (req: Req
 adminScenarioTemplatesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const template = await prisma.scenarioTemplate.findUnique({ where: { id: req.params.id } });
-    if (!template) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Scenario template not found');
+    if (!template) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон сценария не найден');
 
     const activeEpisodes = await prisma.episode.count({
       where: {
@@ -292,7 +292,7 @@ adminScenarioTemplatesRouter.delete('/:id', async (req: Request, res: Response, 
       },
     });
     if (activeEpisodes > 0) {
-      throw new HttpError(409, 'TEMPLATE_IN_USE', 'Scenario template is used by an active episode');
+      throw new HttpError(409, 'TEMPLATE_IN_USE', 'Шаблон используется в активном эпизоде');
     }
 
     await prisma.scenarioTemplate.delete({ where: { id: template.id } });
@@ -310,7 +310,7 @@ adminScenarioTemplatesRouter.post('/:id/reorder', async (req: Request, res: Resp
   try {
     const { direction } = reorderAdminScenarioTemplateSchema.parse(req.body);
     const current = await prisma.scenarioTemplate.findUnique({ where: { id: req.params.id } });
-    if (!current) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Scenario template not found');
+    if (!current) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон сценария не найден');
 
     const neighbor = await prisma.scenarioTemplate.findFirst({
       where: {

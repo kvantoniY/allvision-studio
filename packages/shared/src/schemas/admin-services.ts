@@ -60,8 +60,8 @@ export const createAdminServiceSchema = z.object({
   shortDesc: z.string().trim().min(1).max(280),
   description: z.string().trim().min(1).max(6000),
   category: adminServiceCategorySchema,
-  pipelineConfig: pipelineConfigSchema,
-  userInputForm: userInputFormSchema,
+  pipelineConfig: z.unknown(),
+  userInputForm: z.unknown(),
   priceCoinsStandard: z.coerce.number().int().min(1),
   priceCoinsPro: z.coerce.number().int().min(1),
   isActive: booleanFromForm.optional().default(true),
@@ -103,13 +103,14 @@ export function validatePipelineConfig(
   config: unknown,
   userInputForm: unknown,
 ): PipelineStepInput[] {
-  const steps = pipelineConfigSchema.parse(config);
-  const fields = userInputFormSchema.parse(userInputForm);
+  const steps = parsePipelineSteps(config);
+  const fields = validateUserInputForm(userInputForm);
   const fieldIds = new Set(fields.map((field) => field.id));
   const seen = new Set<string>();
 
   for (let index = 0; index < steps.length; index += 1) {
     const step = steps[index];
+    const stepNumber = index + 1;
     if (seen.has(step.id)) {
       throw new Error(`DUPLICATE_STEP_ID:${step.id}`);
     }
@@ -117,7 +118,7 @@ export function validatePipelineConfig(
 
     const block = getBlockCatalogItem(step.blockSlug);
     if (!block) {
-      throw new Error(`UNKNOWN_BLOCK:${step.blockSlug}`);
+      throw new Error(`UNKNOWN_BLOCK:${stepNumber}:${step.blockSlug}`);
     }
     validateValueAgainstJsonSchema(step.params ?? {}, block.paramsSchema, `params.${step.id}`);
 
@@ -131,7 +132,7 @@ export function validatePipelineConfig(
       if (ref.startsWith('step_')) {
         const stepId = ref.split('.')[0];
         if (!allowedStepIds.has(stepId)) {
-          throw new Error(`INVALID_STEP_REFERENCE:${stepId}`);
+          throw new Error(`INVALID_STEP_REFERENCE:${stepNumber}:${stepId}:${Array.from(allowedStepIds).join(',')}`);
         }
       }
     }
@@ -141,7 +142,7 @@ export function validatePipelineConfig(
 }
 
 export function validateUserInputForm(form: unknown): UserInputFieldInput[] {
-  const fields = userInputFormSchema.parse(form);
+  const fields = parseUserInputFields(form);
   const seen = new Set<string>();
   let tierCount = 0;
 
@@ -159,6 +160,31 @@ export function validateUserInputForm(form: unknown): UserInputFieldInput[] {
 
   if (tierCount !== 1) throw new Error('TIER_FIELD_REQUIRED');
   return fields;
+}
+
+function parsePipelineSteps(config: unknown): PipelineStepInput[] {
+  if (!Array.isArray(config) || config.length === 0) {
+    throw new Error('PIPELINE_EMPTY');
+  }
+  return config.map((rawStep, index) => {
+    const stepNumber = index + 1;
+    const parsed = pipelineStepSchema.safeParse(rawStep);
+    if (parsed.success) return parsed.data;
+    const hasBlockSlugIssue = parsed.error.issues.some((issue) => issue.path[0] === 'blockSlug');
+    if (hasBlockSlugIssue) throw new Error(`STEP_BLOCK_MISSING:${stepNumber}`);
+    throw new Error(`STEP_INVALID:${stepNumber}`);
+  });
+}
+
+function parseUserInputFields(form: unknown): UserInputFieldInput[] {
+  if (!Array.isArray(form) || form.length === 0) {
+    throw new Error('USER_INPUT_FORM_EMPTY');
+  }
+  return form.map((rawField, index) => {
+    const parsed = userInputFieldSchema.safeParse(rawField);
+    if (parsed.success) return parsed.data;
+    throw new Error(`USER_INPUT_FIELD_INVALID:${index + 1}`);
+  });
 }
 
 function collectPlaceholderRefs(values: unknown[]): string[] {
@@ -218,20 +244,30 @@ export const serviceCategoryValuesForUi = serviceCategoryValues;
 export function formatAdminServiceValidationError(error: string): string {
   const [code, path, limit] = error.split(':');
   const stepMatch = path?.match(/params\.(step_\d+)\.(.+)/);
-  const stepLabel = stepMatch ? `Step ${stepMatch[1].replace('step_', '')}` : 'Pipeline';
+  const stepLabel = stepMatch ? `Шаг ${stepMatch[1].replace('step_', '')}` : 'Пайплайн';
   const param = stepMatch?.[2] ?? path ?? '';
 
-  if (code === 'INVALID_PARAMS') return `${stepLabel}: parameter "${param}" has an invalid value`;
-  if (code === 'MISSING_PARAM') return `${stepLabel}: parameter "${param}" is required`;
-  if (code === 'PARAM_TOO_LARGE') return `${stepLabel}: parameter "${param}" must be no more than ${limit}`;
-  if (code === 'PARAM_TOO_SMALL') return `${stepLabel}: parameter "${param}" must be at least ${limit}`;
-  if (code === 'UNKNOWN_BLOCK') return `Unknown block: ${path}`;
-  if (code === 'DUPLICATE_STEP_ID') return `Duplicate step id: ${path}`;
-  if (code === 'INVALID_STEP_REFERENCE') return `Invalid step reference: ${path}`;
-  if (code === 'UNKNOWN_USER_FIELD') return `Unknown user field: ${path}`;
-  if (code === 'DUPLICATE_FIELD_ID') return `Duplicate form field id: ${path}`;
-  if (code === 'SELECT_OPTIONS_REQUIRED') return `Select field "${path}" must have options`;
-  if (code === 'MEDIA_KIND_REQUIRED') return `Media-select field "${path}" must have mediaKind`;
-  if (error === 'TIER_FIELD_REQUIRED') return 'Exactly one tier field is required';
-  return error;
+  if (code === 'PIPELINE_EMPTY') return 'Пайплайн пустой. Добавьте хотя бы один шаг.';
+  if (code === 'STEP_BLOCK_MISSING') return `Шаг ${path}: не выбран блок.`;
+  if (code === 'STEP_INVALID') return `Шаг ${path}: ошибка в настройках шага. Откройте шаг для подробностей.`;
+  if (code === 'INVALID_PARAMS') return `${stepLabel}, параметр "${param}": значение не подходит для этого поля.`;
+  if (code === 'MISSING_PARAM') return `${stepLabel}, параметр "${param}": заполните обязательное поле.`;
+  if (code === 'PARAM_TOO_LARGE') return `${stepLabel}, параметр "${param}": значение должно быть не больше ${limit}.`;
+  if (code === 'PARAM_TOO_SMALL') return `${stepLabel}, параметр "${param}": значение должно быть не меньше ${limit}.`;
+  if (code === 'UNKNOWN_BLOCK') return `Шаг ${path}: блок "${limit}" не найден в каталоге.`;
+  if (code === 'DUPLICATE_STEP_ID') return `Дублируется id шага: ${path}.`;
+  if (code === 'INVALID_STEP_REFERENCE') {
+    const [, stepNumber, source, availableRaw] = error.split(':');
+    const available = availableRaw ? availableRaw.split(',').filter(Boolean).map((item) => `${item}.output`).join(', ') : 'пока нет предыдущих шагов';
+    return `Шаг ${stepNumber}: источник "${source}.output" не существует. Доступные источники: ${available}.`;
+  }
+  if (code === 'UNKNOWN_USER_FIELD') return `Пайплайн ссылается на поле пользователя "${path}", но такого поля нет в форме.`;
+  if (code === 'USER_INPUT_FORM_EMPTY') return 'Форма пользователя пустая. Добавьте хотя бы поле качества tier.';
+  if (code === 'USER_INPUT_FIELD_INVALID') return `Поле формы ${path}: ошибка в настройках.`;
+  if (code === 'DUPLICATE_FIELD_ID') return `Дублируется id поля формы: ${path}.`;
+  if (code === 'SELECT_OPTIONS_REQUIRED') return `Поле выбора "${path}" должно содержать варианты.`;
+  if (code === 'MEDIA_KIND_REQUIRED') return `Media-select поле "${path}" должно содержать mediaKind.`;
+  if (error === 'TIER_FIELD_REQUIRED') return 'В форме должно быть ровно одно поле выбора тарифа.';
+  if (error.trim().startsWith('[') || error.includes('"code"')) return 'Пайплайн содержит ошибку в данных. Откройте шаг для подробностей.';
+  return error || 'Пайплайн содержит ошибку в данных. Откройте шаг для подробностей.';
 }

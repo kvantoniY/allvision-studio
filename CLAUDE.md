@@ -621,3 +621,37 @@ Technical debt:
 - Sora2 task naming should be smoke-tested before paid Sora services are enabled broadly.
 - Worker uptime is `null` in diagnostics until a worker heartbeat is persisted.
 - Async-fetch recovery for `timeout_pending` remains P7.3.
+
+## Этап P7.3.1 ✅
+
+Финальная русификация админки:
+
+- Переведены оставшиеся видимые строки в `/admin/diagnostics`, `/admin/usage`, `/admin/services`, `/admin/services/new`, `/admin/services/:id`, `/admin/media-assets`, `/admin/trends`, `/admin/scenario-templates`.
+- Валидация пайплайна больше не показывает сырой Zod JSON: пустой pipeline, шаг без блока, битые ссылки на `step_N.output`, невалидные параметры и ошибки `userInputForm` мапятся в человекочитаемые сообщения.
+- Сообщения admin API, которые могут попадать в toast, переведены на русский для services, media-assets, trends, scenario-templates, diagnostics/usage balance.
+
+Users/Projects:
+
+- Добавлены полноценные страницы `/admin/users`, `/admin/users/:id`, `/admin/projects`, `/admin/projects/:id`.
+- Добавлены admin API: `GET /api/admin/users`, `GET /api/admin/users/:id`, `PATCH /api/admin/users/:id`, `GET /api/admin/projects`, `GET /api/admin/projects/:id`.
+- `AdminSidebarNav` теперь ведет на пользователей и проекты без disabled-состояния.
+- User endpoints не возвращают `passwordHash`; баланс можно менять только через `tokenBalance`.
+
+Тройная валюта:
+
+- Добавлен общий formatter `formatMoney()` в `packages/shared/src/utils/format-currency.ts`.
+- Используется `Setting` с ключом `USD_TO_RUB`; default 80, управление через `GET/PATCH /api/admin/settings`.
+- В админке деньги показываются как USD + рубли для себестоимости, коины + рубли для цены, процент + USD + рубли для маржи.
+- Курс USD/RUB можно менять в `/admin/diagnostics` в блоке настроек валюты.
+
+Тесты/проверки:
+
+- Добавлены unit-тесты shared для `formatMoney()` и human-readable `validatePipelineConfig`.
+- Добавлены API-тесты для `/api/admin/settings`, `/api/admin/users`, `/api/admin/projects`.
+- Локально `npm run build`, `npm test -w @allvision/shared`, `npm test -w @allvision/database` проходят.
+
+Technical debt:
+
+- В текущем checkout не было секции `P7.3` и готовых `/admin/users`/`/admin/projects`, поэтому P7.3.1 добавил их заново поверх P7.2.
+- DB-backed API/worker тесты локально блокируются, если не поднят Postgres `localhost:5433`/Docker daemon.
+- Статусы и технические идентификаторы моделей/блоков остаются raw там, где это осознанные машинные значения для фильтров и диагностики.

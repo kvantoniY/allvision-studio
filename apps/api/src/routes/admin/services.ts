@@ -57,41 +57,47 @@ async function deleteStorageKey(key: string | null) {
 function mapValidationError(err: unknown): HttpError {
   const message = (err as Error).message;
   if (message === 'INVALID_JSON_DATA') {
-    return new HttpError(400, 'INVALID_JSON_DATA', 'Invalid JSON in data field');
+    return new HttpError(400, 'INVALID_JSON_DATA', 'Некорректный JSON в поле data');
   }
   if (message.startsWith('UNKNOWN_BLOCK:')) {
-    return new HttpError(400, 'UNKNOWN_BLOCK', message);
+    return new HttpError(400, 'UNKNOWN_BLOCK', formatAdminServiceValidationError(message));
   }
   if (message.startsWith('DUPLICATE_STEP_ID:')) {
-    return new HttpError(400, 'DUPLICATE_STEP_ID', message);
+    return new HttpError(400, 'DUPLICATE_STEP_ID', formatAdminServiceValidationError(message));
   }
   if (message.startsWith('INVALID_STEP_REFERENCE:')) {
-    return new HttpError(400, 'INVALID_STEP_REFERENCE', message);
+    return new HttpError(400, 'INVALID_STEP_REFERENCE', formatAdminServiceValidationError(message));
   }
   if (message.startsWith('UNKNOWN_USER_FIELD:')) {
-    return new HttpError(400, 'UNKNOWN_USER_FIELD', message);
+    return new HttpError(400, 'UNKNOWN_USER_FIELD', formatAdminServiceValidationError(message));
   }
   if (
     message.startsWith('INVALID_PARAMS:') ||
     message.startsWith('MISSING_PARAM:') ||
     message.startsWith('PARAM_TOO_LARGE:') ||
-    message.startsWith('PARAM_TOO_SMALL:')
+    message.startsWith('PARAM_TOO_SMALL:') ||
+    message.startsWith('PIPELINE_EMPTY') ||
+    message.startsWith('STEP_BLOCK_MISSING:') ||
+    message.startsWith('STEP_INVALID:')
   ) {
     return new HttpError(400, 'INVALID_BLOCK_PARAMS', formatAdminServiceValidationError(message));
   }
   if (message === 'TIER_FIELD_REQUIRED') {
-    return new HttpError(400, 'TIER_FIELD_REQUIRED', 'Exactly one tier field is required');
+    return new HttpError(400, 'TIER_FIELD_REQUIRED', formatAdminServiceValidationError(message));
   }
   if (message.startsWith('DUPLICATE_FIELD_ID:')) {
-    return new HttpError(400, 'DUPLICATE_FIELD_ID', message);
+    return new HttpError(400, 'DUPLICATE_FIELD_ID', formatAdminServiceValidationError(message));
   }
   if (message.startsWith('SELECT_OPTIONS_REQUIRED:')) {
-    return new HttpError(400, 'SELECT_OPTIONS_REQUIRED', message);
+    return new HttpError(400, 'SELECT_OPTIONS_REQUIRED', formatAdminServiceValidationError(message));
   }
   if (message.startsWith('MEDIA_KIND_REQUIRED:')) {
     return new HttpError(400, 'MEDIA_KIND_REQUIRED', formatAdminServiceValidationError(message));
   }
-  return new HttpError(400, 'INVALID_SERVICE_DATA', message);
+  if (message.startsWith('USER_INPUT_FORM_EMPTY') || message.startsWith('USER_INPUT_FIELD_INVALID:')) {
+    return new HttpError(400, 'INVALID_USER_INPUT_FORM', formatAdminServiceValidationError(message));
+  }
+  return new HttpError(400, 'INVALID_SERVICE_DATA', formatAdminServiceValidationError(message));
 }
 
 function validateServiceShape(input: { pipelineConfig?: unknown; userInputForm?: unknown }) {
@@ -143,7 +149,7 @@ adminServicesRouter.get('/', async (req: Request, res: Response, next: NextFunct
 adminServicesRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const service = await prisma.service.findUnique({ where: { id: req.params.id } });
-    if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+    if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Услуга не найдена');
     res.json({ service });
   } catch (err) {
     next(err);
@@ -157,7 +163,7 @@ adminServicesRouter.post('/', uploadServiceAssets, async (req: Request, res: Res
     validateServiceShape(body);
 
     const existing = await prisma.service.findUnique({ where: { slug: body.slug }, select: { id: true } });
-    if (existing) throw new HttpError(404, 'SERVICE_SLUG_TAKEN', 'Service slug is already taken');
+    if (existing) throw new HttpError(404, 'SERVICE_SLUG_TAKEN', 'Слаг услуги уже занят');
 
     const previewImage = firstFile(req, 'previewImage');
     const previewVideo = firstFile(req, 'previewVideo');
@@ -217,7 +223,7 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
   const uploaded: Array<{ key: string }> = [];
   try {
     const current = await prisma.service.findUnique({ where: { id: req.params.id } });
-    if (!current) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+    if (!current) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Услуга не найдена');
 
     const body = parseAdminServiceData(req.body.data ?? req.body, 'update') as UpdateAdminServiceInput;
     const nextPipeline = body.pipelineConfig ?? current.pipelineConfig;
@@ -282,7 +288,7 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
 adminServicesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const service = await prisma.service.findUnique({ where: { id: req.params.id } });
-    if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+    if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Услуга не найдена');
 
     const [activeProjects, trendCount] = await prisma.$transaction([
       prisma.project.count({
@@ -294,7 +300,7 @@ adminServicesRouter.delete('/:id', async (req: Request, res: Response, next: Nex
       prisma.trend.count({ where: { serviceId: service.id } }),
     ]);
     if (activeProjects > 0 || trendCount > 0) {
-      throw new HttpError(409, 'SERVICE_IN_USE', 'Service is in use');
+      throw new HttpError(409, 'SERVICE_IN_USE', 'Нельзя удалить услугу: по ней есть активные проекты');
     }
 
     await prisma.service.delete({ where: { id: service.id } });
@@ -312,7 +318,7 @@ adminServicesRouter.post('/:id/reorder', async (req: Request, res: Response, nex
   try {
     const { direction } = reorderAdminServiceSchema.parse(req.body);
     const current = await prisma.service.findUnique({ where: { id: req.params.id } });
-    if (!current) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+    if (!current) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Услуга не найдена');
 
     const neighbor = await prisma.service.findFirst({
       where: {
@@ -341,7 +347,7 @@ adminServicesRouter.post('/:id/reorder', async (req: Request, res: Response, nex
 adminServicesRouter.post('/:id/duplicate', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const current = await prisma.service.findUnique({ where: { id: req.params.id } });
-    if (!current) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+    if (!current) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Услуга не найдена');
 
     const baseSlug = `${current.slug}-copy`;
     let slug = baseSlug;
@@ -391,7 +397,7 @@ adminServicesRouter.post('/:id/duplicate', async (req: Request, res: Response, n
 
 adminServicesRouter.post('/:id/test-run', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    if (!req.user) throw new HttpError(401, 'UNAUTHORIZED', 'Unauthorized');
+    if (!req.user) throw new HttpError(401, 'UNAUTHORIZED', 'Нужна авторизация');
 
     const selectedTier = req.body?.selectedTier === 'pro' ? 'pro' : 'standard';
     const userInputs =
@@ -411,9 +417,9 @@ adminServicesRouter.post('/:id/test-run', async (req: Request, res: Response, ne
         pipelineConfig: true,
       },
     });
-    if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+    if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Услуга не найдена');
     if (!Array.isArray(service.pipelineConfig)) {
-      throw new HttpError(400, 'PIPELINE_CONFIG_MISSING', 'Service pipelineConfig is empty');
+      throw new HttpError(400, 'PIPELINE_CONFIG_MISSING', 'Пайплайн услуги пустой');
     }
 
     const project = await prisma.project.create({
@@ -442,7 +448,7 @@ adminServicesRouter.post('/:id/test-run', async (req: Request, res: Response, ne
         where: { id: project.id },
         data: { status: 'FAILED', errorMessage: 'Queue unavailable', errorCode: 'QUEUE_UNAVAILABLE' },
       });
-      throw new HttpError(503, 'QUEUE_UNAVAILABLE', 'Queue unavailable');
+      throw new HttpError(503, 'QUEUE_UNAVAILABLE', 'Очередь задач недоступна');
     }
 
     res.status(202).json({ generationId: project.id, status: 'started' });

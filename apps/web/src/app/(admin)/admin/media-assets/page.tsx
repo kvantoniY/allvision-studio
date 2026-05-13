@@ -61,10 +61,10 @@ export default function AdminMediaAssetsPage() {
       await createAsset(form).unwrap();
       setDraft({ kind: 'trend-video', title: '', description: '', tags: '' });
       setFile(null);
-      toast({ title: 'Media asset uploaded' });
+      toast({ title: 'Медиа-файл загружен' });
     } catch (error) {
       toast({
-        title: (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Upload failed',
+        title: (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Загрузка не удалась',
         variant: 'destructive',
       });
     }
@@ -118,19 +118,19 @@ export default function AdminMediaAssetsPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Media assets</h1>
-          <p className="mt-2 text-sm text-slate-400">Upload and manage trend videos, preview images, and future media sources.</p>
+          <h1 className="text-3xl font-bold text-white">Медиа-файлы</h1>
+          <p className="mt-2 text-sm text-slate-400">Загрузка и управление трендовыми видео, превью и будущими медиа-источниками.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => refetch()}>
           <RefreshCw className="h-4 w-4" />
-          Refresh
+          Обновить
         </Button>
       </div>
 
       <form onSubmit={submit} className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <div className="grid gap-4 lg:grid-cols-4">
           <div className="space-y-2">
-            <Label>Kind</Label>
+            <Label>Тип</Label>
             <select
               value={draft.kind}
               onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))}
@@ -140,31 +140,31 @@ export default function AdminMediaAssetsPage() {
             </select>
           </div>
           <div className="space-y-2">
-            <Label>Title</Label>
+            <Label>Название</Label>
             <Input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} required />
           </div>
           <div className="space-y-2">
-            <Label>Tags</Label>
+            <Label>Теги</Label>
             <Input value={draft.tags} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))} placeholder="dance, meme" />
           </div>
           <div className="space-y-2">
-            <Label>File</Label>
+            <Label>Файл</Label>
             <Input type="file" accept="image/*,video/*,audio/*" onChange={changeFile} required />
           </div>
           <div className="space-y-2 lg:col-span-4">
-            <Label>Description</Label>
+            <Label>Описание</Label>
             <Textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} rows={2} />
           </div>
         </div>
         <Button type="submit" disabled={createState.isLoading} className="mt-4 bg-rose-500 hover:bg-rose-400">
           <Upload className="h-4 w-4" />
-          Upload new asset
+          Загрузить медиа-файл
         </Button>
       </form>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-2">
-          <Label>Kind filter</Label>
+          <Label>Фильтр по типу</Label>
           <select value={kind} onChange={(event) => setKind(event.target.value)} className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100">
             <option value="">all</option>
             {kinds.map((item) => <option key={item} value={item}>{item}</option>)}
@@ -174,13 +174,13 @@ export default function AdminMediaAssetsPage() {
           <Label>Activity</Label>
           <select value={isActive} onChange={(event) => setIsActive(event.target.value)} className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100">
             <option value="all">all</option>
-            <option value="true">active</option>
-            <option value="false">inactive</option>
+            <option value="true">активные</option>
+            <option value="false">скрытые</option>
           </select>
         </div>
         <div className="space-y-2">
-          <Label>Search</Label>
-          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="title or tag" />
+          <Label>Поиск</Label>
+          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="название или тег" />
         </div>
       </div>
 
@@ -190,7 +190,7 @@ export default function AdminMediaAssetsPage() {
             <tr>
               <th className="p-3">Asset</th>
               <th className="p-3">Meta</th>
-              <th className="p-3">Status</th>
+              <th className="p-3">Статус</th>
               <th className="p-3 text-right">Actions</th>
             </tr>
           </thead>
@@ -235,8 +235,8 @@ export default function AdminMediaAssetsPage() {
                     </div>
                   </td>
                   <td className="p-3">
-                    <Badge className={asset.isActive ? 'bg-emerald-600' : 'bg-zinc-700'}>{asset.isActive ? 'active' : 'inactive'}</Badge>
-                    <div className="mt-2 text-xs text-slate-500">sort {asset.sortOrder}</div>
+                    <Badge className={asset.isActive ? 'bg-emerald-600' : 'bg-zinc-700'}>{asset.isActive ? 'активен' : 'скрыт'}</Badge>
+                    <div className="mt-2 text-xs text-slate-500">порядок {asset.sortOrder}</div>
                   </td>
                   <td className="p-3">
                     <div className="flex justify-end gap-2">
@@ -247,7 +247,7 @@ export default function AdminMediaAssetsPage() {
                         <ArrowDown className="h-4 w-4" />
                       </Button>
                       <Button type="button" variant="outline" onClick={() => toggle(asset)}>
-                        {asset.isActive ? 'Disable' : 'Enable'}
+                        {asset.isActive ? 'Скрыть' : 'Включить'}
                       </Button>
                       <Button type="button" variant="destructive" size="icon" onClick={() => remove(asset)} aria-label="Delete">
                         <Trash2 className="h-4 w-4" />
@@ -258,7 +258,7 @@ export default function AdminMediaAssetsPage() {
               );
             })}
             {!isFetching && (data?.items.length ?? 0) === 0 && (
-              <tr><td colSpan={4} className="p-8 text-center text-slate-500">No assets yet</td></tr>
+              <tr><td colSpan={4} className="p-8 text-center text-slate-500">Медиа-файлов пока нет</td></tr>
             )}
           </tbody>
         </table>

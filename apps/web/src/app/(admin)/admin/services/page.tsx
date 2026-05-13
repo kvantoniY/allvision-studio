@@ -21,7 +21,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { serviceMargin, summarizePipelinePricing } from '@allvision/shared';
+import { formatMoney, serviceMargin, summarizePipelinePricing } from '@allvision/shared';
 import {
   buildMockUserInputs,
   PipelineTestPanel,
@@ -37,6 +37,7 @@ import {
   useTestRunAdminServiceMutation,
   useUpdateAdminServiceMutation,
 } from '@/store/api/admin-services-api';
+import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 
 type StatusFilter = 'all' | 'active' | 'hidden';
 type FeaturedFilter = 'all' | 'featured';
@@ -96,7 +97,7 @@ function marginRowClass(marginPercent: number | null) {
 }
 
 function formatMargin(value: number | null) {
-  return value === null ? 'n/a' : `${value.toFixed(0)}%`;
+  return value === null ? 'н/д' : `${value.toFixed(0)}%`;
 }
 
 export default function AdminServicesPage() {
@@ -107,6 +108,8 @@ export default function AdminServicesPage() {
   const [deleteTarget, setDeleteTarget] = useState<AdminService | null>(null);
   const [testGenerationId, setTestGenerationId] = useState<string | null>(null);
   const { data: blocksData } = useGetAdminBlocksQuery();
+  const settings = useGetAdminSettingsQuery();
+  const usdToRub = settings.data?.settings.usdToRub ?? 80;
   const { data, isLoading } = useListAdminServicesQuery({
     page: 1,
     limit: 200,
@@ -185,7 +188,7 @@ export default function AdminServicesPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Услуги (готовые решения)</h1>
-          <p className="mt-2 text-sm text-slate-400">Data-driven pipeline услуги для витрины AI-подарков.</p>
+          <p className="mt-2 text-sm text-slate-400">Настраиваемые пайплайны для витрины AI-подарков.</p>
         </div>
         <Button asChild className="bg-rose-500 hover:bg-rose-400">
           <Link href="/admin/services/new">
@@ -222,11 +225,11 @@ export default function AdminServicesPage() {
           className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
         >
           <option value="all">Все</option>
-          <option value="featured">Featured</option>
+          <option value="featured">Рекомендуемые</option>
         </select>
         <div className="relative min-w-[240px] flex-1 max-w-md">
           <Search className="absolute left-3 top-3 h-4 w-4 text-slate-500" />
-          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по title" className="pl-9" />
+          <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Поиск по названию" className="pl-9" />
         </div>
       </div>
 
@@ -240,13 +243,13 @@ export default function AdminServicesPage() {
         <table className="min-w-full divide-y divide-zinc-800 text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th className="px-4 py-3">Preview</th>
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Cost / Price / Margin</th>
-              <th className="px-4 py-3">Featured</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Order</th>
+              <th className="px-4 py-3">Превью</th>
+              <th className="px-4 py-3">Название</th>
+              <th className="px-4 py-3">Категория</th>
+              <th className="px-4 py-3">Себестоимость / цена / маржа</th>
+              <th className="px-4 py-3">Рекомендуемая</th>
+              <th className="px-4 py-3">Статус</th>
+              <th className="px-4 py-3">Порядок</th>
               <th className="px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>
@@ -269,9 +272,9 @@ export default function AdminServicesPage() {
               </tr>
             )}
             {items.map((service) => {
-              const pricing = summarizePipelinePricing(service.pipelineConfig, blocks);
-              const standardMargin = serviceMargin(service.priceCoinsStandard ?? service.priceTokens, pricing.standard.costUsd);
-              const proMargin = serviceMargin(service.priceCoinsPro ?? service.priceTokens, pricing.pro.costUsd);
+              const pricing = summarizePipelinePricing(service.pipelineConfig, blocks, usdToRub);
+              const standardMargin = serviceMargin(service.priceCoinsStandard ?? service.priceTokens, pricing.standard.costUsd, usdToRub);
+              const proMargin = serviceMargin(service.priceCoinsPro ?? service.priceTokens, pricing.pro.costUsd, usdToRub);
               const minMargin = Math.min(standardMargin.marginPercent ?? 0, proMargin.marginPercent ?? 0);
               return (
               <tr key={service.id} className={cn('align-middle', marginRowClass(minMargin))}>
@@ -290,13 +293,13 @@ export default function AdminServicesPage() {
                   <Badge className="bg-zinc-800 text-slate-200">{categoryLabels[service.category] ?? service.category}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  <div>Std: ${pricing.standard.costUsd.toFixed(2)} / {service.priceCoinsStandard ?? service.priceTokens} / {formatMargin(standardMargin.marginPercent)}</div>
+                  <div>Стандарт: {formatMoney({ usd: pricing.standard.costUsd }, { primary: 'usd', showAll: true, usdToRub })} / {formatMoney({ coins: service.priceCoinsStandard ?? service.priceTokens }, { primary: 'coins', showAll: true, usdToRub })} / {formatMargin(standardMargin.marginPercent)} · {formatMoney({ usd: standardMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
                   <div className="text-xs text-slate-500">
-                    Pro: ${pricing.pro.costUsd.toFixed(2)} / {service.priceCoinsPro ?? '—'} / {formatMargin(proMargin.marginPercent)}
+                    Pro: {formatMoney({ usd: pricing.pro.costUsd }, { primary: 'usd', showAll: true, usdToRub })} / {service.priceCoinsPro ? formatMoney({ coins: service.priceCoinsPro }, { primary: 'coins', showAll: true, usdToRub }) : '—'} / {formatMargin(proMargin.marginPercent)} · {formatMoney({ usd: proMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <button type="button" onClick={() => toggleFeatured(service)} aria-label="Featured">
+                  <button type="button" onClick={() => toggleFeatured(service)} aria-label="Рекомендуемая">
                     <Star className={service.isFeatured ? 'h-5 w-5 fill-amber-400 text-amber-400' : 'h-5 w-5 text-slate-600'} />
                   </button>
                 </td>

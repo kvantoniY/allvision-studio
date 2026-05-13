@@ -2,21 +2,33 @@
 
 import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
+import { formatMoney } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useGetAdminUsageQuery, useGetPiAPIAccountQuery } from '@/store/api/admin-usage-api';
-
-function usd(value: number) {
-  return `$${value.toFixed(2)}`;
-}
+import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 
 function statusClass(status: string) {
   if (status === 'success') return 'bg-emerald-600';
   if (status === 'timeout' || status.startsWith('timeout_')) return 'bg-amber-600';
   return 'bg-red-700';
 }
+
+const usageStatusLabels: Record<string, string> = {
+  success: 'Успешно',
+  failed: 'Ошибки',
+  timeout: 'Таймауты',
+  timeout_charged: 'Таймаут списан',
+  timeout_pending: 'Таймаут ожидает',
+};
+
+const usageFilterFields = [
+  { key: 'provider', label: 'Провайдер', placeholder: 'piapi' },
+  { key: 'blockSlug', label: 'Блок', placeholder: 'image-to-video' },
+  { key: 'model', label: 'Модель', placeholder: 'kling-3-pro' },
+] as const satisfies ReadonlyArray<{ key: 'provider' | 'blockSlug' | 'model'; label: string; placeholder: string }>;
 
 export default function AdminUsagePage() {
   const [filters, setFilters] = useState({ provider: '', blockSlug: '', model: '', status: '' });
@@ -27,6 +39,8 @@ export default function AdminUsagePage() {
     status: filters.status || undefined,
   });
   const account = useGetPiAPIAccountQuery();
+  const settings = useGetAdminSettingsQuery();
+  const usdToRub = settings.data?.settings.usdToRub ?? 80;
   const maxSpend = Math.max(0.01, ...(usage.data?.byDay.map((day) => day.totalCostUsd) ?? [0.01]));
   const sevenDaySpend = usage.data?.summary.totalCostUsd ?? 0;
   const dailySpend = sevenDaySpend / 7;
@@ -36,12 +50,12 @@ export default function AdminUsagePage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Usage analytics</h1>
-          <p className="mt-2 text-sm text-slate-400">PiAPI spend, request health, recent provider failures, and model-level trends.</p>
+          <h1 className="text-3xl font-bold text-white">Аналитика расходов</h1>
+          <p className="mt-2 text-sm text-slate-400">Расход PiAPI, здоровье запросов, последние ошибки провайдера и статистика по моделям.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => { usage.refetch(); account.refetch(); }}>
           <RefreshCw className="h-4 w-4" />
-          Refresh
+          Обновить
         </Button>
       </div>
 
@@ -49,72 +63,72 @@ export default function AdminUsagePage() {
         {account.data ? (
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="text-sm text-slate-400">PiAPI balance</div>
+              <div className="text-sm text-slate-400">Баланс PiAPI</div>
               <div className={account.data.lowBalance ? 'text-2xl font-bold text-red-300' : 'text-2xl font-bold text-emerald-300'}>
-                ${account.data.balanceUsd.toFixed(2)}
+                {formatMoney({ usd: account.data.balanceUsd }, { primary: 'usd', showAll: true, usdToRub })}
               </div>
             </div>
-            <div className="text-sm text-slate-500">Last checked {new Date(account.data.lastChecked).toLocaleString()}</div>
+            <div className="text-sm text-slate-500">Проверено {new Date(account.data.lastChecked).toLocaleString()}</div>
           </div>
         ) : (
-          <div className="text-sm text-amber-200">PiAPI balance unavailable: {account.error ? 'check API env or provider access' : 'loading...'}</div>
+          <div className="text-sm text-amber-200">Баланс PiAPI недоступен: {account.error ? 'проверьте env API или доступ провайдера' : 'загрузка...'}</div>
         )}
       </div>
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
-        <div className="text-sm text-slate-400">Forecast</div>
+        <div className="text-sm text-slate-400">Прогноз</div>
         <div className="mt-2 text-xl font-semibold text-white">
           {balanceDays === null
-            ? 'Not enough spend data yet'
+            ? 'Пока недостаточно данных о расходах'
             : balanceDays <= 3
-              ? `At current pace the balance ends in ~${balanceDays} days`
-              : `Enough for ~${balanceDays} days at current pace`}
+              ? `При текущем темпе баланс закончится через ~${balanceDays} дня`
+              : `Хватит на ~${balanceDays} дней при текущем темпе`}
         </div>
-        <p className="mt-1 text-xs text-slate-500">Based on last 7 days: {usd(sevenDaySpend)} total, {usd(dailySpend)} per day.</p>
+        <p className="mt-1 text-xs text-slate-500">По последним 7 дням: {formatMoney({ usd: sevenDaySpend }, { primary: 'usd', showAll: true, usdToRub })} всего, {formatMoney({ usd: dailySpend }, { primary: 'usd', showAll: true, usdToRub })} в день.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-5">
-        <Metric label="Total calls" value={String(usage.data?.summary.totalRequests ?? 0)} />
-        <Metric label="Success" value={String(usage.data?.summary.successCount ?? 0)} />
-        <Metric label="Failed" value={String(usage.data?.summary.failedCount ?? 0)} />
-        <Metric label="Timeouts" value={String(usage.data?.summary.timeoutCount ?? 0)} />
-        <Metric label="Spend" value={usd(usage.data?.summary.totalCostUsd ?? 0)} />
+        <Metric label="Всего вызовов" value={String(usage.data?.summary.totalRequests ?? 0)} />
+        <Metric label="Успешно" value={String(usage.data?.summary.successCount ?? 0)} />
+        <Metric label="Ошибки" value={String(usage.data?.summary.failedCount ?? 0)} />
+        <Metric label="Таймауты" value={String(usage.data?.summary.timeoutCount ?? 0)} />
+        <Metric label="Расход" value={formatMoney({ usd: usage.data?.summary.totalCostUsd ?? 0 }, { primary: 'usd', showAll: true, usdToRub })} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-5">
         {(['success', 'failed', 'timeout', 'timeout_charged', 'timeout_pending'] as const).map((statusKey) => (
-          <Metric key={statusKey} label={statusKey} value={String(usage.data?.summary.statusCounts?.[statusKey] ?? 0)} />
+          <Metric key={statusKey} label={usageStatusLabels[statusKey]} value={String(usage.data?.summary.statusCounts?.[statusKey] ?? 0)} />
         ))}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
-          <h2 className="font-semibold text-white">Spend by day</h2>
+          <h2 className="font-semibold text-white">Расход по дням</h2>
           <div className="mt-5 flex h-48 items-end gap-3">
             {(usage.data?.byDay ?? []).map((day) => (
               <div key={day.date} className="flex flex-1 flex-col items-center gap-2">
                 <div
                   className="w-full rounded-t bg-rose-500"
                   style={{ height: `${Math.max(4, (day.totalCostUsd / maxSpend) * 160)}px` }}
-                  title={`${day.date}: ${usd(day.totalCostUsd)}`}
+                  title={`${day.date}: ${formatMoney({ usd: day.totalCostUsd }, { primary: 'usd', showAll: true, usdToRub })}`}
                 />
                 <div className="text-[10px] text-slate-500">{day.date.slice(5)}</div>
               </div>
             ))}
-            {(usage.data?.byDay.length ?? 0) === 0 && <div className="text-sm text-slate-500">No usage in this period</div>}
+            {(usage.data?.byDay.length ?? 0) === 0 && <div className="text-sm text-slate-500">За период нет вызовов</div>}
           </div>
         </section>
 
         <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
-          <h2 className="font-semibold text-white">By model</h2>
+          <h2 className="font-semibold text-white">По моделям</h2>
           <div className="mt-4 space-y-3">
             {(usage.data?.byModel ?? []).map((item) => (
               <div key={item.model} className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-sm">
                 <div className="flex justify-between gap-3">
                   <span className="font-medium text-white">{item.model}</span>
-                  <span className="text-slate-400">{usd(item.totalCostUsd)}</span>
+                  <span className="text-slate-400">{formatMoney({ usd: item.totalCostUsd }, { primary: 'usd', showAll: true, usdToRub })}</span>
                 </div>
-                <div className="mt-1 text-xs text-slate-500">{item.requestCount} calls · avg {Math.round(item.avgDurationMs / 1000)}s</div>
+                <div className="mt-1 text-xs text-slate-500">{item.requestCount} вызовов · среднее {Math.round(item.avgDurationMs / 1000)} с</div>
               </div>
             ))}
           </div>
@@ -123,16 +137,16 @@ export default function AdminUsagePage() {
 
       {(usage.data?.timeoutPending.length ?? 0) > 0 && (
         <section className="rounded-lg border border-amber-900/60 bg-amber-950/20 p-5">
-          <h2 className="font-semibold text-amber-100">timeout_pending tasks</h2>
-          <p className="mt-1 text-sm text-amber-200/70">These tasks may be recoverable through async-fetch in P7.3.</p>
+          <h2 className="font-semibold text-amber-100">Задачи timeout_pending</h2>
+          <p className="mt-1 text-sm text-amber-200/70">Эти задачи можно будет восстановить через async-fetch в следующем этапе.</p>
           <div className="mt-4 space-y-2">
             {usage.data?.timeoutPending.map((item) => (
               <div key={item.id} className="rounded-md border border-amber-900/50 bg-zinc-950 p-3 text-sm">
                 <div className="flex flex-wrap justify-between gap-3">
-                  <span className="font-medium text-white">{item.taskId ?? 'no taskId'}</span>
+                  <span className="font-medium text-white">{item.taskId ?? 'нет taskId'}</span>
                   <span className="text-slate-500">{new Date(item.createdAt).toLocaleString()}</span>
                 </div>
-                <div className="mt-1 text-xs text-slate-400">{item.blockSlug} · {item.model} · {item.projectId ?? 'no project'}</div>
+                <div className="mt-1 text-xs text-slate-400">{item.blockSlug} · {item.model} · {item.projectId ?? 'нет проекта'}</div>
               </div>
             ))}
           </div>
@@ -141,12 +155,27 @@ export default function AdminUsagePage() {
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <div className="grid gap-4 md:grid-cols-4">
-          {(['provider', 'blockSlug', 'model', 'status'] as const).map((key) => (
-            <div key={key} className="space-y-2">
-              <Label>{key}</Label>
-              <Input value={filters[key]} onChange={(event) => setFilters((current) => ({ ...current, [key]: event.target.value }))} />
+          {usageFilterFields.map((field) => (
+            <div key={field.key} className="space-y-2">
+              <Label>{field.label}</Label>
+              <Input value={filters[field.key]} placeholder={field.placeholder} onChange={(event) => setFilters((current) => ({ ...current, [field.key]: event.target.value }))} />
             </div>
           ))}
+          <div className="space-y-2">
+            <Label>Статус</Label>
+            <select
+              value={filters.status}
+              onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value }))}
+              className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+            >
+              <option value="">Все статусы</option>
+              <option value="success">Успешно</option>
+              <option value="failed">Ошибки</option>
+              <option value="timeout">Таймауты</option>
+              <option value="timeout_charged">Таймаут списан</option>
+              <option value="timeout_pending">Таймаут ожидает</option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -154,12 +183,12 @@ export default function AdminUsagePage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-zinc-950 text-slate-400">
             <tr>
-              <th className="p-3">Date</th>
-              <th className="p-3">Service</th>
-              <th className="p-3">Block/model</th>
-              <th className="p-3">Status</th>
-              <th className="p-3">Cost</th>
-              <th className="p-3">Error</th>
+              <th className="p-3">Дата</th>
+              <th className="p-3">Услуга</th>
+              <th className="p-3">Блок/модель</th>
+              <th className="p-3">Статус</th>
+              <th className="p-3">Стоимость</th>
+              <th className="p-3">Ошибка</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
@@ -167,16 +196,16 @@ export default function AdminUsagePage() {
               <tr key={log.id} className="bg-zinc-900/60">
                 <td className="p-3 text-slate-300">{new Date(log.createdAt).toLocaleString()}</td>
                 <td className="p-3">
-                  <div className="text-white">{log.project?.service?.title ?? log.project?.title ?? 'n/a'}</div>
-                  <div className="text-xs text-slate-500">{log.userId ?? 'no user'}</div>
+                  <div className="text-white">{log.project?.service?.title ?? log.project?.title ?? 'н/д'}</div>
+                  <div className="text-xs text-slate-500">{log.userId ?? 'нет пользователя'}</div>
                 </td>
                 <td className="p-3 text-slate-300">
                   <div>{log.blockSlug}</div>
                   <div className="text-xs text-slate-500">{log.model}</div>
                 </td>
-                <td className="p-3"><Badge className={statusClass(log.status)}>{log.status}</Badge></td>
-                <td className="p-3 text-slate-300" title={`Exact cost: $${log.costUsd}`}>
-                  {usd(log.costUsd)} · {Math.round(log.durationMs / 1000)}s
+                <td className="p-3"><Badge className={statusClass(log.status)}>{usageStatusLabels[log.status] ?? log.status}</Badge></td>
+                <td className="p-3 text-slate-300" title={`Точная стоимость: $${log.costUsd}`}>
+                  {formatMoney({ usd: log.costUsd }, { primary: 'usd', showAll: true, usdToRub })} · {Math.round(log.durationMs / 1000)} с
                 </td>
                 <td className="p-3">
                   {log.errorCode ? (
@@ -185,7 +214,7 @@ export default function AdminUsagePage() {
                       <p className="mt-2 max-w-md text-xs text-slate-400">{log.errorMessage}</p>
                     </details>
                   ) : (
-                    <span className="text-slate-600">none</span>
+                    <span className="text-slate-600">нет</span>
                   )}
                 </td>
               </tr>

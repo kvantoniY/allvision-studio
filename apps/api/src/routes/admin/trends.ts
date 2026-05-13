@@ -45,11 +45,11 @@ function parseAiConfig(value: string | undefined): Prisma.InputJsonValue | undef
   try {
     const parsed = JSON.parse(value || '{}') as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('aiConfig must be an object');
+      throw new Error('aiConfig должен быть объектом');
     }
     return parsed as Prisma.InputJsonValue;
   } catch {
-    throw new HttpError(400, 'INVALID_AI_CONFIG', 'aiConfig РЅРµ РІР°Р»РёРґРЅС‹Р№ JSON');
+    throw new HttpError(400, 'INVALID_AI_CONFIG', 'aiConfig должен быть JSON-объектом');
   }
 }
 
@@ -73,7 +73,7 @@ async function deleteStorageKey(key: string | null) {
 
 async function findTrendsService() {
   const service = await prisma.service.findUnique({ where: { slug: 'trends' } });
-  if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
+  if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Услуга трендов не найдена');
   return service;
 }
 
@@ -111,7 +111,7 @@ adminTrendsRouter.get('/:id', async (req: Request, res: Response, next: NextFunc
       where: { id: req.params.id },
       include: trendInclude,
     });
-    if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Trend not found');
+    if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Тренд не найден');
     res.json({ trend });
   } catch (err) {
     next(err);
@@ -125,7 +125,7 @@ adminTrendsRouter.post('/', uploadTrendAssets, async (req: Request, res: Respons
     const previewVideo = firstFile(req, 'previewVideo');
     const thumbnail = firstFile(req, 'thumbnail');
     if (!previewVideo || !thumbnail) {
-      throw new HttpError(400, 'FILE_REQUIRED', 'previewVideo Рё thumbnail РѕР±СЏР·Р°С‚РµР»СЊРЅС‹');
+      throw new HttpError(400, 'FILE_REQUIRED', 'Нужны превью-видео и обложка');
     }
 
     const service = await findTrendsService();
@@ -176,7 +176,7 @@ adminTrendsRouter.patch('/:id', uploadTrendAssets, async (req: Request, res: Res
   const uploaded: Array<{ key: string }> = [];
   try {
     const trend = await prisma.trend.findUnique({ where: { id: req.params.id } });
-    if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Trend not found');
+    if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Тренд не найден');
 
     const body = updateAdminTrendSchema.parse(req.body);
     const aiConfig = parseAiConfig(body.aiConfig);
@@ -236,7 +236,7 @@ adminTrendsRouter.patch('/:id', uploadTrendAssets, async (req: Request, res: Res
 adminTrendsRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const trend = await prisma.trend.findUnique({ where: { id: req.params.id } });
-    if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Trend not found');
+    if (!trend) throw new HttpError(404, 'TREND_NOT_FOUND', 'Тренд не найден');
 
     const activeProjects = await prisma.project.count({
       where: {
@@ -263,7 +263,7 @@ adminTrendsRouter.post('/:id/reorder', async (req: Request, res: Response, next:
   try {
     const { direction } = reorderAdminTrendSchema.parse(req.body);
     const current = await prisma.trend.findUnique({ where: { id: req.params.id } });
-    if (!current) throw new HttpError(404, 'TREND_NOT_FOUND', 'Trend not found');
+    if (!current) throw new HttpError(404, 'TREND_NOT_FOUND', 'Тренд не найден');
 
     const neighbor = await prisma.trend.findFirst({
       where: {

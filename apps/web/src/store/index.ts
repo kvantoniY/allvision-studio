@@ -13,6 +13,9 @@ import { adminServicesApi } from './api/admin-services-api';
 import { adminMediaAssetsApi } from './api/admin-media-assets-api';
 import { adminUsageApi } from './api/admin-usage-api';
 import { adminDiagnosticsApi } from './api/admin-diagnostics-api';
+import { adminSettingsApi } from './api/admin-settings-api';
+import { adminUsersApi } from './api/admin-users-api';
+import { adminProjectsApi } from './api/admin-projects-api';
 import { servicesApi } from './api/services-api';
 import { authReducer } from './slices/auth-slice';
 
@@ -33,6 +36,9 @@ export const store = configureStore({
     [adminMediaAssetsApi.reducerPath]: adminMediaAssetsApi.reducer,
     [adminUsageApi.reducerPath]: adminUsageApi.reducer,
     [adminDiagnosticsApi.reducerPath]: adminDiagnosticsApi.reducer,
+    [adminSettingsApi.reducerPath]: adminSettingsApi.reducer,
+    [adminUsersApi.reducerPath]: adminUsersApi.reducer,
+    [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
     [servicesApi.reducerPath]: servicesApi.reducer,
   },
   middleware: (getDefault) =>
@@ -51,6 +57,9 @@ export const store = configureStore({
       adminMediaAssetsApi.middleware,
       adminUsageApi.middleware,
       adminDiagnosticsApi.middleware,
+      adminSettingsApi.middleware,
+      adminUsersApi.middleware,
+      adminProjectsApi.middleware,
       servicesApi.middleware,
     ),
 });

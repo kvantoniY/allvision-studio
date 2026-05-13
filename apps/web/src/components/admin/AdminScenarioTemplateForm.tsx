@@ -178,7 +178,7 @@ export function AdminScenarioTemplateForm({ mode, template }: AdminScenarioTempl
           <div className="space-y-5">
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="slug">Slug</Label>
+                <Label htmlFor="slug">Слаг</Label>
                 <Input id="slug" value={slug} onChange={(e) => setSlug(e.target.value)} required pattern="[a-z0-9]+(-[a-z0-9]+)*" />
               </div>
               <div className="space-y-2">
@@ -211,7 +211,7 @@ export function AdminScenarioTemplateForm({ mode, template }: AdminScenarioTempl
               <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} rows={4} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="promptTemplate">Prompt template</Label>
+              <Label htmlFor="promptTemplate">Шаблон промпта</Label>
               <Textarea
                 id="promptTemplate"
                 value={promptTemplate}
@@ -238,11 +238,11 @@ export function AdminScenarioTemplateForm({ mode, template }: AdminScenarioTempl
               <div className="space-y-3">
                 {roles.map((role, index) => (
                   <div key={index} className="grid gap-3 rounded-md border border-zinc-800 bg-zinc-900 p-3 md:grid-cols-[1fr_1fr_auto_auto]">
-                    <Input value={role.role} onChange={(e) => updateRole(index, { role: e.target.value })} placeholder="role" required />
-                    <Input value={role.label} onChange={(e) => updateRole(index, { label: e.target.value })} placeholder="label" required />
+                    <Input value={role.role} onChange={(e) => updateRole(index, { role: e.target.value })} placeholder="роль" required />
+                    <Input value={role.label} onChange={(e) => updateRole(index, { label: e.target.value })} placeholder="подпись" required />
                     <label className="flex items-center gap-2 text-sm text-slate-300">
                       <input type="checkbox" checked={role.required} onChange={(e) => updateRole(index, { required: e.target.checked })} />
-                      required
+                      обязательная
                     </label>
                     <Button type="button" variant="destructive" size="icon" onClick={() => removeRole(index)} disabled={roles.length === 1}>
                       <Trash2 className="h-4 w-4" />
@@ -269,21 +269,21 @@ export function AdminScenarioTemplateForm({ mode, template }: AdminScenarioTempl
 
             <div className="grid gap-5 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="aiProvider">AI provider</Label>
+                <Label htmlFor="aiProvider">AI-провайдер</Label>
                 <Input id="aiProvider" value={aiProvider} onChange={(e) => setAiProvider(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="aiModel">AI model</Label>
+                <Label htmlFor="aiModel">AI-модель</Label>
                 <Input id="aiModel" value={aiModel} onChange={(e) => setAiModel(e.target.value)} required />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="aiConfig">aiConfig</Label>
+              <Label htmlFor="aiConfig">AI-конфиг</Label>
               <Textarea id="aiConfig" value={aiConfig} onChange={(e) => setAiConfig(e.target.value)} rows={6} className="font-mono" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="tags">Tags</Label>
+              <Label htmlFor="tags">Теги</Label>
               <Input id="tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="birthday, family, portrait" />
             </div>
 
@@ -298,14 +298,14 @@ export function AdminScenarioTemplateForm({ mode, template }: AdminScenarioTempl
               </label>
               <label className="flex items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm">
                 <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} />
-                Featured
+                Рекомендуемый
               </label>
             </div>
           </div>
 
           <div className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="previewVideo">Preview video</Label>
+              <Label htmlFor="previewVideo">Превью-видео</Label>
               <Input
                 id="previewVideo"
                 type="file"
@@ -322,7 +322,7 @@ export function AdminScenarioTemplateForm({ mode, template }: AdminScenarioTempl
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="previewImage">Preview image</Label>
+              <Label htmlFor="previewImage">Превью-изображение</Label>
               <Input
                 id="previewImage"
                 type="file"

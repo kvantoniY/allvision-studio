@@ -48,6 +48,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { BlockCatalogItem, JsonSchemaObject, ModelOption } from '@allvision/shared';
 import {
+  formatMoney,
   formatAdminServiceValidationError,
   serviceMargin,
   summarizePipelinePricing,
@@ -72,6 +73,7 @@ import {
   useTestRunAdminServiceMutation,
   useUpdateAdminServiceMutation,
 } from '@/store/api/admin-services-api';
+import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 
 const editableCategories: ServiceCategory[] = [
@@ -144,7 +146,7 @@ function defaultUserInputForm(): UserInputField[] {
       type: 'tier',
       label: 'Качество',
       required: true,
-      hint: 'Standard или Pro',
+      hint: 'Стандарт или Pro',
     },
   ];
 }
@@ -188,10 +190,10 @@ function initialDraft(service?: AdminService): FormDraft {
 
 function apiErrorMessage(error: unknown) {
   const code = (error as ApiError)?.data?.error?.code;
-  if (code === 'SERVICE_SLUG_TAKEN') return 'Slug уже занят';
+  if (code === 'SERVICE_SLUG_TAKEN') return 'Слаг уже занят';
   if (code === 'SERVICE_IN_USE') return 'Услуга используется активным проектом';
   if (code === 'INVALID_BLOCK_PARAMS') return 'Параметры одного из блоков невалидны';
-  if (code === 'INVALID_STEP_REFERENCE') return 'Pipeline содержит ссылку на будущий или несуществующий шаг';
+  if (code === 'INVALID_STEP_REFERENCE') return (error as ApiError)?.data?.error?.message ?? 'Пайплайн содержит ссылку на будущий или несуществующий шаг';
   if (code === 'TIER_FIELD_REQUIRED') return 'В форме должен быть ровно один tier-field';
   if (code === 'FILE_TOO_LARGE') return 'Файл слишком большой';
   if (code === 'UNSUPPORTED_FORMAT') return 'Формат файла не поддерживается';
@@ -240,10 +242,6 @@ function providerLabel(provider: ModelOption['provider']) {
   if (provider === 'piapi') return 'PiAPI';
   if (provider === 'local') return 'Local';
   return 'Mock';
-}
-
-function usd(value: number) {
-  return `$${value.toFixed(2)}`;
 }
 
 function HelpTip({ text }: { text?: string }) {
@@ -378,7 +376,7 @@ function calculateCost(steps: PipelineStep[], blocks: BlockCatalogItem[] | undef
 }
 
 function pipelineSentence(steps: PipelineStep[], blocks: BlockCatalogItem[] | undefined) {
-  if (steps.length === 0) return 'Pipeline is empty.';
+  if (steps.length === 0) return 'Пайплайн пустой';
   return steps
     .map((step) => blockBySlug(blocks, step.blockSlug)?.title ?? step.blockSlug)
     .join(' → ');
@@ -474,10 +472,12 @@ function BlockParamsForm({
   block,
   value,
   onChange,
+  usdToRub,
 }: {
   block: BlockCatalogItem;
   value: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
+  usdToRub: number;
 }) {
   const update = (key: string, next: unknown) => onChange({ ...value, [key]: next });
   const modelValue = value.model;
@@ -497,7 +497,7 @@ function BlockParamsForm({
     .flatMap((model) => {
       const maxDuration = model.limits?.maxDurationSec;
       if (duration && maxDuration && duration > maxDuration) {
-        return [`Duration exceeds ${model.title} limit (${maxDuration}s). PiAPI may return an error.`];
+        return [`Длительность превышает лимит ${model.title} (${maxDuration} с). PiAPI может вернуть ошибку.`];
       }
       return [];
     });
@@ -524,8 +524,8 @@ function BlockParamsForm({
           {selectedModels.map((model) => (
             <div key={model.slug} className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
               <div className="font-medium text-slate-100">
-                {model.title} · {providerLabel(model.provider)} · ~{model.estimatedCostCoins} coins
-                {model.estimatedCostUsd ? ` · ${usd(model.estimatedCostUsd)}` : ''}
+                {model.title} · {providerLabel(model.provider)} · {formatMoney({ coins: model.estimatedCostCoins }, { primary: 'coins', showAll: true, usdToRub })}
+                {model.estimatedCostUsd ? ` · ${formatMoney({ usd: model.estimatedCostUsd }, { primary: 'usd', showAll: true, usdToRub })}` : ''}
               </div>
               {model.description && <p className="mt-2 text-slate-400">{model.description}</p>}
               <div className="mt-3 grid gap-3 md:grid-cols-2">
@@ -542,18 +542,18 @@ function BlockParamsForm({
                 <div>
                   <div className="font-medium text-slate-200">Параметры</div>
                   {model.requiredParams?.length ? (
-                    <div className="mt-1 text-slate-500">Required: {model.requiredParams.join(', ')}</div>
+                    <div className="mt-1 text-slate-500">Обязательные: {model.requiredParams.join(', ')}</div>
                   ) : (
-                    <div className="mt-1 text-slate-500">Required: нет сверх схемы блока</div>
+                    <div className="mt-1 text-slate-500">Обязательные: нет сверх схемы блока</div>
                   )}
                   {model.optionalParams?.length ? (
-                    <div className="text-slate-500">Optional: {model.optionalParams.join(', ')}</div>
+                    <div className="text-slate-500">Опциональные: {model.optionalParams.join(', ')}</div>
                   ) : null}
-                  {model.providerModel && <div className="mt-1 text-slate-500">Model: {model.providerModel}</div>}
-                  {model.taskType && <div className="text-slate-500">Task type: {model.taskType}</div>}
+                  {model.providerModel && <div className="mt-1 text-slate-500">Модель провайдера: {model.providerModel}</div>}
+                  {model.taskType && <div className="text-slate-500">Тип задачи: {model.taskType}</div>}
                 </div>
               </div>
-              {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-rose-300 hover:text-rose-200">Docs</a>}
+              {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-rose-300 hover:text-rose-200">Документация</a>}
             </div>
           ))}
           {limitWarnings.map((warning) => <div key={warning} className="mt-2 text-amber-300">{warning}</div>)}
@@ -573,7 +573,7 @@ function BlockParamsForm({
               <div className="mt-2 grid gap-3 md:grid-cols-2">
                 {(['standard', 'pro'] as const).map((tier) => (
                   <div key={tier} className="space-y-1">
-                    <span className="text-xs uppercase text-slate-500">{tier}</span>
+                    <span className="text-xs uppercase text-slate-500">{tier === 'standard' ? 'Стандарт' : 'Pro'}</span>
                     <select
                       value={selectValue(record[tier]) || preferredModel(block.supportedModels, tier)}
                       onChange={(event) => update(key, { ...record, [tier]: event.target.value })}
@@ -581,7 +581,7 @@ function BlockParamsForm({
                     >
                       {block.supportedModels.map((model) => (
                         <option key={model.slug} value={model.slug}>
-                          {model.title} · ~{model.estimatedCostCoins}
+                          {model.title} · ~{model.estimatedCostCoins} коинов
                         </option>
                       ))}
                     </select>
@@ -665,11 +665,13 @@ function PipelineBuilder({
   fields,
   blocks,
   onChange,
+  usdToRub,
 }: {
   steps: PipelineStep[];
   fields: UserInputField[];
   blocks: BlockCatalogItem[] | undefined;
   onChange: (steps: PipelineStep[]) => void;
+  usdToRub: number;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const sensors = useSensors(
@@ -752,7 +754,7 @@ function PipelineBuilder({
                             <div className="mt-4 space-y-4">
                               <div className="grid gap-4 md:grid-cols-[200px_1fr]">
                                 <div className="space-y-2">
-                                  <Label>Block</Label>
+                                  <Label>Блок</Label>
                                   <select
                                     value={step.blockSlug}
                                     onChange={(event) => {
@@ -772,7 +774,7 @@ function PipelineBuilder({
                                   </select>
                                 </div>
                                 <div className="space-y-2">
-                                  <Label>Input</Label>
+                                  <Label>Вход</Label>
                                   <Input
                                     value={selectValue(step.input)}
                                     onChange={(event) => updateStep(index, { input: event.target.value })}
@@ -786,10 +788,11 @@ function PipelineBuilder({
                                   block={block}
                                   value={params}
                                   onChange={(value) => updateStep(index, { params: value })}
+                                  usdToRub={usdToRub}
                                 />
                               ) : (
                                 <div className="rounded-md border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-200">
-                                  Неизвестный blockSlug
+                                  Неизвестный блок
                                 </div>
                               )}
                             </div>
@@ -817,7 +820,7 @@ function PipelineBuilder({
       <div className={cn('rounded-md border p-3 text-sm', errors.length ? 'border-red-900/60 bg-red-950/30 text-red-200' : 'border-emerald-900/50 bg-emerald-950/20 text-emerald-200')}>
         <div className="flex items-center gap-2 font-medium">
           {errors.length ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
-          {errors.length ? 'Pipeline содержит ошибки' : 'Pipeline валиден'}
+          {errors.length ? 'Пайплайн содержит ошибки' : 'Пайплайн валиден'}
         </div>
         {errors.length > 0 && (
           <ul className="mt-2 list-disc space-y-1 pl-5">
@@ -1058,10 +1061,10 @@ function UserInputFormBuilder({
                   <option>{field.mediaKind ?? 'media-kind'}</option>
                 </select>
               )}
-              {field.type === 'avatar' && <Input disabled placeholder="Выбор avatar" />}
+              {field.type === 'avatar' && <Input disabled placeholder="Выбор аватара" />}
               {field.type === 'tier' && (
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-md border border-rose-500 bg-rose-500/10 p-3">Standard</div>
+                  <div className="rounded-md border border-rose-500 bg-rose-500/10 p-3">Стандарт</div>
                   <div className="rounded-md border border-zinc-700 p-3">Pro</div>
                 </div>
               )}
@@ -1146,20 +1149,22 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const [createService, createState] = useCreateAdminServiceMutation();
   const [updateService, updateState] = useUpdateAdminServiceMutation();
   const [testRun, testRunState] = useTestRunAdminServiceMutation();
+  const settings = useGetAdminSettingsQuery();
   const blocks = blocksData?.blocks;
+  const usdToRub = settings.data?.settings.usdToRub ?? 80;
   const isCreate = mode === 'create';
   const isBusy = createState.isLoading || updateState.isLoading;
   const errors = useMemo(() => validationErrors(draft.pipelineConfig, draft.userInputForm), [draft.pipelineConfig, draft.userInputForm]);
   const costStandard = useMemo(() => calculateCost(draft.pipelineConfig, blocks, 'standard'), [draft.pipelineConfig, blocks]);
   const costPro = useMemo(() => calculateCost(draft.pipelineConfig, blocks, 'pro'), [draft.pipelineConfig, blocks]);
-  const pricingSummary = useMemo(() => summarizePipelinePricing(draft.pipelineConfig, blocks), [draft.pipelineConfig, blocks]);
+  const pricingSummary = useMemo(() => summarizePipelinePricing(draft.pipelineConfig, blocks, usdToRub), [draft.pipelineConfig, blocks, usdToRub]);
   const standardMargin = useMemo(
-    () => serviceMargin(draft.priceCoinsStandard, pricingSummary.standard.costUsd),
-    [draft.priceCoinsStandard, pricingSummary.standard.costUsd],
+    () => serviceMargin(draft.priceCoinsStandard, pricingSummary.standard.costUsd, usdToRub),
+    [draft.priceCoinsStandard, pricingSummary.standard.costUsd, usdToRub],
   );
   const proMargin = useMemo(
-    () => serviceMargin(draft.priceCoinsPro, pricingSummary.pro.costUsd),
-    [draft.priceCoinsPro, pricingSummary.pro.costUsd],
+    () => serviceMargin(draft.priceCoinsPro, pricingSummary.pro.costUsd, usdToRub),
+    [draft.priceCoinsPro, pricingSummary.pro.costUsd, usdToRub],
   );
   const imagePreviewUrl = useMemo(() => (previewImage ? URL.createObjectURL(previewImage) : null), [previewImage]);
 
@@ -1253,7 +1258,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
       return;
     }
     if (errors.length > 0) {
-      toast({ title: 'Pipeline невалиден', variant: 'destructive' });
+      toast({ title: 'Пайплайн невалиден', variant: 'destructive' });
       return;
     }
     try {
@@ -1273,7 +1278,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
       <Section title="Основное" description="Публичные тексты, категория и статус публикации.">
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="slug">Slug</Label>
+            <Label htmlFor="slug">Слаг</Label>
             <Input
               id="slug"
               value={draft.slug}
@@ -1316,7 +1321,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           </label>
           <label className="flex items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm">
             <input type="checkbox" checked={draft.isFeatured} onChange={(event) => updateDraft({ isFeatured: event.target.checked })} />
-            Featured
+            Рекомендуемая
           </label>
         </div>
       </Section>
@@ -1327,21 +1332,21 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           <p className="text-slate-200">{pipelineSentence(draft.pipelineConfig, blocks)}</p>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <div className="text-slate-400">Standard</div>
-              <div>Cost {usd(pricingSummary.standard.costUsd)} / ~{pricingSummary.standard.costCoins} coins</div>
-              <div>Price {draft.priceCoinsStandard} coins</div>
-              <div>Margin {standardMargin.marginPercent === null ? 'n/a' : `${standardMargin.marginPercent.toFixed(1)}%`} / {usd(standardMargin.profitUsd)}</div>
+              <div className="text-slate-400">Стандарт</div>
+              <div>Себестоимость {formatMoney({ usd: pricingSummary.standard.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
+              <div>Цена {formatMoney({ coins: draft.priceCoinsStandard }, { primary: 'coins', showAll: true, usdToRub })}</div>
+              <div>Маржа {standardMargin.marginPercent === null ? 'н/д' : `${standardMargin.marginPercent.toFixed(1)}%`} · {formatMoney({ usd: standardMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
             </div>
             <div>
               <div className="text-slate-400">Pro</div>
-              <div>Cost {usd(pricingSummary.pro.costUsd)} / ~{pricingSummary.pro.costCoins} coins</div>
-              <div>Price {draft.priceCoinsPro} coins</div>
-              <div>Margin {proMargin.marginPercent === null ? 'n/a' : `${proMargin.marginPercent.toFixed(1)}%`} / {usd(proMargin.profitUsd)}</div>
+              <div>Себестоимость {formatMoney({ usd: pricingSummary.pro.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
+              <div>Цена {formatMoney({ coins: draft.priceCoinsPro }, { primary: 'coins', showAll: true, usdToRub })}</div>
+              <div>Маржа {proMargin.marginPercent === null ? 'н/д' : `${proMargin.marginPercent.toFixed(1)}%`} · {formatMoney({ usd: proMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
             </div>
           </div>
           {(standardMargin.profitCoins < 0 || proMargin.profitCoins < 0) && (
             <div className="rounded-md border border-red-700 bg-red-950/60 p-3 font-medium text-red-100">
-              Услуга работает в убыток. Поднимите цену.
+              Услуга убыточна на {formatMoney({ rub: Math.abs(Math.min(standardMargin.profitCoins, proMargin.profitCoins)) }, { primary: 'rub' })} за каждую генерацию. Поднимите цену.
             </div>
           )}
         </div>
@@ -1350,7 +1355,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
       <Section title="Превью" description="Изображение для каталога и видео для страницы услуги.">
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="previewImage">Preview image</Label>
+              <Label htmlFor="previewImage">Превью-изображение</Label>
             <Input id="previewImage" type="file" accept="image/*" onChange={changeImage} />
             {fileName(previewImage) && <p className="text-xs text-slate-400">{fileName(previewImage)}</p>}
             {imagePreviewUrl ? (
@@ -1365,13 +1370,13 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="previewVideo">Preview video</Label>
+              <Label htmlFor="previewVideo">Превью-видео</Label>
             <Input id="previewVideo" type="file" accept="video/*" onChange={changeVideo} />
             {fileName(previewVideo) && <p className="text-xs text-slate-400">{fileName(previewVideo)}</p>}
             {service?.previewVideo ? (
               <Link href={service.previewVideo} target="_blank" className="inline-flex items-center gap-2 text-sm text-rose-300 hover:text-rose-200">
                 <Video className="h-4 w-4" />
-                Текущее preview video
+                Текущее превью-видео
               </Link>
             ) : (
               <div className="flex h-20 items-center justify-center rounded-md border border-dashed border-zinc-700 text-slate-500">
@@ -1387,7 +1392,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="priceStandard">Цена Standard, коины</Label>
+              <Label htmlFor="priceStandard">Цена Стандарт, коины</Label>
               <Input
                 id="priceStandard"
                 type="number"
@@ -1409,22 +1414,23 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
             <div className="text-sm text-slate-400">Себестоимость</div>
-            <div className="mt-2 text-lg font-semibold text-white">Standard: ~{costStandard} · Pro: ~{costPro}</div>
+            <div className="mt-2 text-lg font-semibold text-white">Стандарт: ~{costStandard} коинов · Pro: ~{costPro} коинов</div>
             <p className="mt-2 text-xs text-slate-500">Рекомендуем минимум 3-4× себестоимости.</p>
           </div>
         </div>
       </Section>
 
-      <Section title="Pipeline" description="Шаги выполняются сверху вниз. Плейсхолдеры: {{user.photo}}, {{step_1.output}}.">
+      <Section title="Пайплайн" description="Шаги выполняются сверху вниз. Плейсхолдеры: {{user.photo}}, {{step_1.output}}.">
         <PipelineBuilder
           steps={draft.pipelineConfig}
           fields={draft.userInputForm}
           blocks={blocks}
           onChange={(pipelineConfig) => updateDraft({ pipelineConfig })}
+          usdToRub={usdToRub}
         />
       </Section>
 
-      <Section title="Форма для юзера" description="Поля, которые появятся на странице услуги в P3. Tier-field всегда один и обязательный.">
+      <Section title="Форма для юзера" description="Поля, которые появятся на странице услуги в P3. Поле тарифа всегда одно и обязательное.">
         <UserInputFormBuilder fields={draft.userInputForm} onChange={(userInputForm) => updateDraft({ userInputForm })} />
       </Section>
 

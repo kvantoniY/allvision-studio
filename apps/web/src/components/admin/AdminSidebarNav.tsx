@@ -6,14 +6,14 @@ import { Activity, BarChart3, Clapperboard, FolderKanban, Images, LineChart, Spa
 import { cn } from '@/lib/utils';
 
 const navItems = [
-  { href: '/admin/services', label: 'Services', icon: Sparkles, disabled: false },
-  { href: '/admin/media-assets', label: 'Media assets', icon: Images, disabled: false },
-  { href: '/admin/usage', label: 'Usage', icon: LineChart, disabled: false },
-  { href: '/admin/diagnostics', label: 'Diagnostics', icon: Activity, disabled: false },
-  { href: '/admin/trends', label: 'Trends', icon: BarChart3, disabled: false },
-  { href: '/admin/scenario-templates', label: 'Scenario templates', icon: Clapperboard, disabled: false },
-  { href: '#', label: 'Users', icon: Users, disabled: true },
-  { href: '#', label: 'Projects', icon: FolderKanban, disabled: true },
+  { href: '/admin/services', label: 'Услуги', icon: Sparkles, disabled: false },
+  { href: '/admin/media-assets', label: 'Медиа', icon: Images, disabled: false },
+  { href: '/admin/usage', label: 'Расходы', icon: LineChart, disabled: false },
+  { href: '/admin/diagnostics', label: 'Диагностика', icon: Activity, disabled: false },
+  { href: '/admin/trends', label: 'Тренды', icon: BarChart3, disabled: false },
+  { href: '/admin/scenario-templates', label: 'Сценарии', icon: Clapperboard, disabled: false },
+  { href: '/admin/users', label: 'Пользователи', icon: Users, disabled: false },
+  { href: '/admin/projects', label: 'Проекты', icon: FolderKanban, disabled: false },
 ];
 
 export function AdminSidebarNav() {

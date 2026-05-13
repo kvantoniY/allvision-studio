@@ -114,21 +114,21 @@ export default function AdminScenarioTemplatesPage() {
             </option>
           ))}
         </select>
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по title" className="max-w-sm" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по названию" className="max-w-sm" />
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-800">
         <table className="min-w-full divide-y divide-zinc-800 text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th className="px-4 py-3">Preview</th>
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Slug</th>
-              <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Превью</th>
+              <th className="px-4 py-3">Название</th>
+              <th className="px-4 py-3">Слаг</th>
+              <th className="px-4 py-3">Категория</th>
               <th className="px-4 py-3">Цена</th>
-              <th className="px-4 py-3">Active</th>
-              <th className="px-4 py-3">Featured</th>
-              <th className="px-4 py-3">Order</th>
+              <th className="px-4 py-3">Активен</th>
+              <th className="px-4 py-3">Рекомендуемый</th>
+              <th className="px-4 py-3">Порядок</th>
               <th className="px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>

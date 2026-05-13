@@ -52,7 +52,7 @@ function parseJsonOrBody(req: Request) {
   try {
     return JSON.parse(raw);
   } catch {
-    throw new HttpError(400, 'INVALID_JSON_DATA', 'Invalid JSON in data field');
+    throw new HttpError(400, 'INVALID_JSON_DATA', 'Некорректный JSON в поле data');
   }
 }
 
@@ -123,7 +123,7 @@ adminMediaAssetsRouter.get('/', async (req: Request, res: Response, next: NextFu
 adminMediaAssetsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const asset = await prisma.mediaAsset.findUnique({ where: { id: req.params.id }, select: selectAsset() });
-    if (!asset) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Media asset not found');
+    if (!asset) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Медиа-файл не найден');
     res.json({ asset });
   } catch (err) {
     next(err);
@@ -133,7 +133,7 @@ adminMediaAssetsRouter.get('/:id', async (req: Request, res: Response, next: Nex
 adminMediaAssetsRouter.post('/', uploadMediaAsset, async (req: Request, res: Response, next: NextFunction) => {
   let uploaded: { storageKey?: string; thumbnailKey?: string } | undefined;
   try {
-    if (!req.file) throw new HttpError(400, 'FILE_REQUIRED', 'Media file is required');
+    if (!req.file) throw new HttpError(400, 'FILE_REQUIRED', 'Загрузите медиа-файл');
     const body = createSchema.parse(parseJsonOrBody(req));
     const processed = await processAndUploadMediaAsset({ kind: body.kind, file: req.file });
     uploaded = processed;
@@ -173,7 +173,7 @@ adminMediaAssetsRouter.patch('/:id', async (req: Request, res: Response, next: N
   try {
     const body = updateSchema.parse(parseJsonOrBody(req));
     const current = await prisma.mediaAsset.findUnique({ where: { id: req.params.id } });
-    if (!current) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Media asset not found');
+    if (!current) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Медиа-файл не найден');
     const asset = await prisma.mediaAsset.update({
       where: { id: current.id },
       data: {
@@ -195,7 +195,7 @@ adminMediaAssetsRouter.patch('/:id', async (req: Request, res: Response, next: N
 adminMediaAssetsRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const asset = await prisma.mediaAsset.findUnique({ where: { id: req.params.id } });
-    if (!asset) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Media asset not found');
+    if (!asset) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Медиа-файл не найден');
     const inUse = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT COUNT(*)::bigint AS count
       FROM "Project"
@@ -203,7 +203,7 @@ adminMediaAssetsRouter.delete('/:id', async (req: Request, res: Response, next: 
         AND "userInputs"::text LIKE ${`%${asset.id}%`}
     `;
     if (Number(inUse[0]?.count ?? 0) > 0) {
-      throw new HttpError(409, 'MEDIA_ASSET_IN_USE', 'Media asset is used by active projects');
+      throw new HttpError(409, 'MEDIA_ASSET_IN_USE', 'Медиа-файл используется в активных проектах');
     }
     await prisma.mediaAsset.delete({ where: { id: asset.id } });
     await Promise.all([
@@ -220,7 +220,7 @@ adminMediaAssetsRouter.post('/:id/reorder', async (req: Request, res: Response, 
   try {
     const body = reorderSchema.parse(req.body);
     const current = await prisma.mediaAsset.findUnique({ where: { id: req.params.id } });
-    if (!current) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Media asset not found');
+    if (!current) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Медиа-файл не найден');
     if (body.sortOrder !== undefined) {
       const asset = await prisma.mediaAsset.update({
         where: { id: current.id },

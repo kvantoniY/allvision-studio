@@ -111,7 +111,7 @@ export default function AdminTrendsPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Поиск по title"
+          placeholder="Поиск по названию"
           className="max-w-sm"
         />
       </div>
@@ -120,13 +120,13 @@ export default function AdminTrendsPage() {
         <table className="min-w-full divide-y divide-zinc-800 text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th className="px-4 py-3">Thumb</th>
-              <th className="px-4 py-3">Title</th>
-              <th className="px-4 py-3">Prompt</th>
+              <th className="px-4 py-3">Обложка</th>
+              <th className="px-4 py-3">Название</th>
+              <th className="px-4 py-3">Промпт</th>
               <th className="px-4 py-3">Цена</th>
-              <th className="px-4 py-3">Used</th>
+              <th className="px-4 py-3">Использований</th>
               <th className="px-4 py-3">Статус</th>
-              <th className="px-4 py-3">Order</th>
+              <th className="px-4 py-3">Порядок</th>
               <th className="px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>
