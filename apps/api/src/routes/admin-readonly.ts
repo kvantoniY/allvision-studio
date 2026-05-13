@@ -144,7 +144,7 @@ adminReadonlyRouter.get('/media-assets', async (req: Request, res: Response, nex
       limit: z.coerce.number().int().min(1).max(200).default(100),
     }).parse(req.query);
     const items = await prisma.mediaAsset.findMany({
-      where: query.kind ? { kind: query.kind } : {},
+      where: { ...(query.kind ? { kind: query.kind } : {}), ownerUserId: null },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       take: query.limit,
       select: {

@@ -9,6 +9,7 @@ import { projectsRouter } from './projects';
 import { charactersRouter } from './characters';
 import { scenesRouter } from './scenes';
 import { episodesRouter } from './episodes';
+import { userMediaAssetsRouter } from './user-media-assets';
 import { adminRouter } from './admin';
 import { adminReadonlyRouter } from './admin-readonly';
 
@@ -25,5 +26,6 @@ router.use('/projects', projectsRouter);
 router.use('/characters', charactersRouter);
 router.use('/scenes', scenesRouter);
 router.use('/episodes', episodesRouter);
+router.use('/user/media-assets', userMediaAssetsRouter);
 router.use('/admin', adminRouter);
 router.use('/admin-readonly', adminReadonlyRouter);

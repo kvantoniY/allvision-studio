@@ -1,5 +1,9 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
 import type { StorageProvider } from '@allvision/shared';
+import sharp from 'sharp';
 import { getAIProvider, getStorageProvider } from './providers';
 import type { PipelineProviderMode } from './providers';
 import { markProjectFailed } from './processors/base';
@@ -7,6 +11,7 @@ import { getBlock } from './blocks/registry';
 import type { BlockDefinition, BlockLogger, BlockOutput } from './blocks/types';
 import { logger as defaultLogger } from './utils/logger';
 import { isProviderUserSafeError, ProviderError, providerUnavailableMessage } from './providers/provider-errors';
+import { resolveWorkspacePath } from './utils/paths';
 
 export type PipelineTier = 'standard' | 'pro';
 
@@ -52,7 +57,13 @@ export async function runPipeline(
   params: PipelineRunParams,
   dependencies: PipelineRunnerDependencies = {},
 ) {
-  const pipelineConfig = await hydrateAssetReferences(params.pipelineConfig);
+  const project = await prisma.project.findUnique({
+    where: { id: params.generationId },
+    select: { id: true, status: true, userId: true, mode: true, userInputs: true },
+  });
+  if (!project) throw new Error(`Generation project not found: ${params.generationId}`);
+
+  const pipelineConfig = await hydrateAssetReferences(params.pipelineConfig, project.userId);
   const steps = parsePipelineConfig(pipelineConfig);
   if (steps.length === 0) {
     throw new Error('Pipeline config must contain at least one step');
@@ -64,7 +75,7 @@ export async function runPipeline(
   const providerFactory = dependencies.getAIProvider ?? getAIProvider;
   const selectedTier = params.selectedTier ?? 'standard';
   const mode = params.mode ?? 'production';
-  const userInputs = await hydrateMediaAssetInputs(params.userInputs ?? {});
+  const userInputs = await hydrateMediaAssetInputs(params.userInputs ?? {}, project.userId);
   const stepOutputs: Record<string, unknown> = {};
   const stepProgress: StepProgressEntry[] = steps.map((step) => ({
     stepId: step.id,
@@ -72,12 +83,6 @@ export async function runPipeline(
     status: 'pending',
     progress: 0,
   }));
-
-  const project = await prisma.project.findUnique({
-    where: { id: params.generationId },
-    select: { id: true, status: true, userId: true },
-  });
-  if (!project) throw new Error(`Generation project not found: ${params.generationId}`);
 
   await prisma.project.update({
     where: { id: params.generationId },
@@ -169,6 +174,15 @@ export async function runPipeline(
     }
 
     const finalOutput = normaliseFinalOutput(previousOutput);
+    if (project.mode === 'library-generation') {
+      await createLibraryMediaAssetFromProject({
+        projectId: params.generationId,
+        userId: project.userId,
+        projectUserInputs: project.userInputs,
+        finalOutput,
+        storage,
+      });
+    }
     await prisma.project.update({
       where: { id: params.generationId },
       data: {
@@ -305,25 +319,37 @@ function collectAssetReferenceIds(value: unknown, ids = new Set<string>()): Set<
   return ids;
 }
 
-async function hydrateAssetReferences(value: unknown): Promise<unknown> {
+async function hydrateAssetReferences(value: unknown, userId: string): Promise<unknown> {
   const ids = Array.from(collectAssetReferenceIds(value));
   if (ids.length === 0) return value;
   const assets = await prisma.mediaAsset.findMany({
     where: { id: { in: ids }, isActive: true },
-    select: { id: true, publicUrl: true },
+    select: { id: true, publicUrl: true, ownerUserId: true },
   });
-  if (assets.length === 0) return value;
+  const found = new Set(assets.map((asset) => asset.id));
+  const missing = ids.filter((id) => !found.has(id));
+  if (missing.length > 0) {
+    throw new Error(`INVALID_ASSET_REFERENCE: ${missing.join(',')}`);
+  }
+  const forbidden = assets.find((asset) => asset.ownerUserId && asset.ownerUserId !== userId);
+  if (forbidden) {
+    throw new Error(`INVALID_ASSET_ACCESS: ${forbidden.id}`);
+  }
   return replaceAssetReferences(value, new Map(assets.map((asset) => [asset.id, asset.publicUrl])));
 }
 
-async function hydrateMediaAssetInputs(inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function hydrateMediaAssetInputs(inputs: Record<string, unknown>, userId: string): Promise<Record<string, unknown>> {
   const ids = Object.values(inputs).filter((value): value is string => typeof value === 'string' && value.length > 0);
   if (ids.length === 0) return inputs;
   const assets = await prisma.mediaAsset.findMany({
     where: { id: { in: ids }, isActive: true },
-    select: { id: true, publicUrl: true },
+    select: { id: true, publicUrl: true, ownerUserId: true },
   });
   if (assets.length === 0) return inputs;
+  const forbidden = assets.find((asset) => asset.ownerUserId && asset.ownerUserId !== userId);
+  if (forbidden) {
+    throw new Error(`INVALID_ASSET_ACCESS: ${forbidden.id}`);
+  }
   const urls = new Map(assets.map((asset) => [asset.id, asset.publicUrl]));
   return Object.fromEntries(
     Object.entries(inputs).map(([key, value]) => [
@@ -364,6 +390,142 @@ function isTierChoice(value: unknown): value is { standard: unknown; pro: unknow
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   return 'standard' in record && 'pro' in record && Object.keys(record).every((key) => key === 'standard' || key === 'pro');
+}
+
+type LibraryMediaKind = 'user-avatar' | 'user-location';
+
+type LibraryGenerationMeta = {
+  kind: LibraryMediaKind;
+  title: string;
+  prompt: string;
+};
+
+export function parseLibraryGenerationMeta(value: unknown): LibraryGenerationMeta | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const root = value as Record<string, unknown>;
+  const raw = root.libraryGeneration;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const meta = raw as Record<string, unknown>;
+  const kind = meta.kind;
+  const title = meta.title;
+  const prompt = meta.prompt;
+  if ((kind !== 'user-avatar' && kind !== 'user-location') || typeof title !== 'string' || typeof prompt !== 'string') {
+    return null;
+  }
+  return { kind, title, prompt };
+}
+
+export async function createLibraryMediaAssetFromProject(params: {
+  projectId: string;
+  userId: string;
+  projectUserInputs: unknown;
+  finalOutput: { resultImage?: string; resultVideo?: string; resultThumbnail?: string };
+  storage: StorageProvider;
+}) {
+  const meta = parseLibraryGenerationMeta(params.projectUserInputs);
+  if (!meta) throw new Error('LIBRARY_GENERATION_META_MISSING');
+  if (!params.finalOutput.resultImage) throw new Error('LIBRARY_GENERATION_OUTPUT_MISSING');
+
+  const media = await materialiseLibraryImage(params.finalOutput.resultImage, meta.kind, params.storage);
+  const aggregate = await prisma.mediaAsset.aggregate({
+    where: { ownerUserId: params.userId, kind: meta.kind },
+    _max: { sortOrder: true },
+  });
+  return prisma.mediaAsset.create({
+    data: {
+      ownerUserId: params.userId,
+      kind: meta.kind,
+      title: meta.title,
+      description: meta.prompt,
+      tags: ['generated'],
+      storageKey: media.storageKey,
+      publicUrl: media.publicUrl,
+      thumbnailKey: null,
+      width: media.width ?? null,
+      height: media.height ?? null,
+      frameCount: null,
+      durationSec: null,
+      fileSize: media.fileSize,
+      mimeType: media.mimeType,
+      isActive: true,
+      sortOrder: (aggregate._max.sortOrder ?? 0) + 10,
+    },
+  });
+}
+
+async function materialiseLibraryImage(outputUrl: string, kind: LibraryMediaKind, storage: StorageProvider) {
+  const existingKey = storageKeyFromPublicUrl(outputUrl);
+  if (existingKey) {
+    const local = await readLocalStorageImage(existingKey).catch(() => null);
+    if (local) {
+      return {
+        storageKey: existingKey,
+        publicUrl: outputUrl,
+        ...local,
+      };
+    }
+  }
+
+  const downloaded = await fetch(outputUrl);
+  if (!downloaded.ok) {
+    throw new Error(`LIBRARY_GENERATION_DOWNLOAD_FAILED: ${downloaded.status}`);
+  }
+  const contentType = downloaded.headers.get('content-type') ?? 'image/jpeg';
+  const buffer = Buffer.from(await downloaded.arrayBuffer());
+  const ext = extensionForImage(contentType, outputUrl);
+  const storageKey = existingKey ?? `media-assets/${kind}/${crypto.randomUUID()}.${ext}`;
+  const uploaded = await storage.upload({ key: storageKey, body: buffer, contentType });
+  const metadata = await sharp(buffer).metadata().catch(() => undefined);
+  return {
+    storageKey: uploaded.key,
+    publicUrl: uploaded.url,
+    fileSize: buffer.length,
+    mimeType: contentType,
+    width: metadata?.width,
+    height: metadata?.height,
+  };
+}
+
+function storageKeyFromPublicUrl(url: string) {
+  const marker = '/static/';
+  const index = url.indexOf(marker);
+  if (index === -1) return null;
+  return decodeURIComponent(url.slice(index + marker.length).replace(/^\/+/, ''));
+}
+
+async function readLocalStorageImage(key: string) {
+  const rootDir = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
+  const target = path.resolve(rootDir, key.replace(/^\/+/, ''));
+  if (!target.startsWith(rootDir + path.sep) && target !== rootDir) {
+    throw new Error(`INVALID_STORAGE_KEY: ${key}`);
+  }
+  const buffer = await fs.readFile(target);
+  const [stat, metadata] = await Promise.all([
+    fs.stat(target),
+    sharp(buffer).metadata().catch(() => undefined),
+  ]);
+  return {
+    fileSize: stat.size,
+    mimeType: mimeTypeForPath(target),
+    width: metadata?.width,
+    height: metadata?.height,
+  };
+}
+
+function extensionForImage(contentType: string, url: string) {
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  if (contentType.includes('jpeg') || contentType.includes('jpg')) return 'jpg';
+  const ext = url.split('?')[0]?.split('.').pop()?.toLowerCase();
+  if (ext === 'png' || ext === 'webp' || ext === 'jpg' || ext === 'jpeg') return ext === 'jpeg' ? 'jpg' : ext;
+  return 'jpg';
+}
+
+function mimeTypeForPath(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  return 'image/jpeg';
 }
 
 function normaliseFinalOutput(output: unknown): {

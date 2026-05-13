@@ -100,7 +100,7 @@ export class PiAPIProvider implements AIProvider {
   }
 
   async imageEdit(input: {
-    imageUrl: string;
+    imageUrl?: string;
     prompt: string;
     model: string;
     negativePrompt?: string;
@@ -119,16 +119,16 @@ export class PiAPIProvider implements AIProvider {
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
     try {
-      const published = await this.publisher.publishImageUrl(input.imageUrl, 1);
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
+      const published = input.imageUrl ? await this.publisher.publishImageUrl(input.imageUrl, 1) : undefined;
       const payload = {
         model: 'gemini',
         task_type: 'nano-banana-2',
         input: {
           prompt: input.prompt,
-          image_urls: [published.publicUrl],
           output_format: readString(input.params, 'output_format') ?? 'jpg',
           resolution,
+          ...(published ? { image_urls: [published.publicUrl] } : {}),
           ...(aspectRatio && aspectRatio !== 'auto' ? { aspect_ratio: aspectRatio } : {}),
         },
       };

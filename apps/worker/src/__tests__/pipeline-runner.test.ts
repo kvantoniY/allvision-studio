@@ -1,4 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { z } from 'zod';
+import sharp from 'sharp';
 import {
   prisma,
   ProcessingType,
@@ -17,6 +21,8 @@ import { StubAIProvider } from '../providers/stub-ai-provider';
 import { deleteAIUsageLogsByUserIds } from '../providers/usage-limits';
 
 const RUN_ID = Date.now();
+let tmpDir: string;
+let originalUploadsDir: string | undefined;
 
 const outputSchema = z.object({
   type: z.enum(['image', 'video']),
@@ -108,17 +114,20 @@ async function createProject(params: {
   service: Service;
   pipeline: PipelineStep[];
   tokensCost?: number;
+  mode?: string;
+  userInputs?: Record<string, unknown>;
 }) {
   return prisma.project.create({
     data: {
       userId: params.user.id,
       serviceId: params.service.id,
+      mode: params.mode ?? 'service',
       title: `Pipeline Project ${RUN_ID}`,
       status: ProjectStatus.PENDING,
       inputImages: [],
       tokensCost: params.tokensCost ?? 0,
       pipelineSnapshot: params.pipeline,
-      userInputs: { photo: 'mock://photo.jpg', name: 'Alice' },
+      userInputs: params.userInputs ?? { photo: 'mock://photo.jpg', name: 'Alice' },
       selectedTier: 'standard',
       stepProgress: [],
     },
@@ -135,10 +144,17 @@ async function cleanup() {
     await deleteAIUsageLogsByUserIds(userIds);
     await prisma.tokenTransaction.deleteMany({ where: { userId: { in: userIds } } });
     await prisma.project.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.mediaAsset.deleteMany({ where: { ownerUserId: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   }
   await prisma.service.deleteMany({ where: { slug: { contains: `worker-pipeline-${RUN_ID}` } } });
 }
+
+beforeAll(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'worker-pipeline-test-'));
+  originalUploadsDir = process.env.UPLOADS_DIR;
+  process.env.UPLOADS_DIR = tmpDir;
+});
 
 beforeEach(async () => {
   await cleanup();
@@ -146,6 +162,8 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await cleanup();
+  process.env.UPLOADS_DIR = originalUploadsDir;
+  fs.rmSync(tmpDir, { recursive: true, force: true });
   await prisma.$disconnect();
 });
 
@@ -293,5 +311,50 @@ describe('runPipeline', () => {
     await expect(
       runPipeline({ generationId: project.id, pipelineConfig: pipeline, selectedTier: 'standard' }),
     ).rejects.toThrow('Unknown block: missing-block');
+  });
+
+  it('creates a user MediaAsset after library-generation completion', async () => {
+    const user = await createUser();
+    const service = await createService();
+    const pipeline = [{ id: 'step_1', blockSlug: 'image-edit' }];
+    const key = `outputs/${user.id}/library-project/step_1/result.jpg`;
+    const filePath = path.join(tmpDir, key);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await sharp({
+      create: { width: 32, height: 32, channels: 3, background: '#ffaa33' },
+    }).jpeg().toFile(filePath);
+    const outputUrl = `http://test.local:4000/static/${key}`;
+    const project = await createProject({
+      user,
+      service,
+      pipeline,
+      mode: 'library-generation',
+      userInputs: {
+        libraryGeneration: {
+          kind: 'user-avatar',
+          title: 'Generated avatar',
+          prompt: 'A friendly generated avatar',
+        },
+      },
+    });
+    const block = makeBlock({ slug: 'image-edit', output: { type: 'image', url: outputUrl } });
+
+    await runPipeline(
+      { generationId: project.id, pipelineConfig: pipeline, selectedTier: 'standard' },
+      {
+        getBlock: () => block,
+        getAIProvider: stubProviderFactory(),
+        storage: fakeStorage(),
+        logger: noopLogger(),
+      },
+    );
+
+    const asset = await prisma.mediaAsset.findFirstOrThrow({
+      where: { ownerUserId: user.id, kind: 'user-avatar', title: 'Generated avatar' },
+    });
+    expect(asset.publicUrl).toBe(outputUrl);
+    expect(asset.storageKey).toBe(key);
+    expect(asset.fileSize).toBeGreaterThan(0);
+    expect(asset.tags).toContain('generated');
   });
 });

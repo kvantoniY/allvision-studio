@@ -1,4 +1,4 @@
-import { BookOpen, FileText, Film, Home, ImageIcon, Map, User, Users, Wallet } from 'lucide-react';
+import { BookOpen, FileText, Film, Home, ImageIcon, Map, Palette, User, Users, Wallet } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -19,6 +19,7 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     label: 'Моя студия',
     items: [
+      { href: '/studio', label: 'Студия', icon: Palette },
       { href: '/dashboard/characters', label: 'Персонажи', icon: Users },
       { href: '/dashboard/scenes', label: 'Сцены', icon: Map },
       { href: '/dashboard/episodes', label: 'Эпизоды', icon: Film },

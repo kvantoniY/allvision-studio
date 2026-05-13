@@ -34,8 +34,9 @@ export const imageEditBlock: BlockDefinition = {
   async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);
     await ctx.reportProgress(5);
+    const imageUrl = input === undefined || input === null ? undefined : readInputUrl(input, '');
     const result = await ctx.getAIProvider().imageEdit({
-      imageUrl: readInputUrl(input),
+      imageUrl: imageUrl || undefined,
       prompt: parsed.prompt,
       negativePrompt: parsed.negative_prompt,
       strength: parsed.strength,

@@ -13,6 +13,8 @@ export type AdminMediaAsset = {
   storageKey: string;
   publicUrl: string;
   thumbnailKey: string | null;
+  ownerUserId: string | null;
+  owner?: { id: string; email: string } | null;
   durationSec: number | null;
   width: number | null;
   height: number | null;

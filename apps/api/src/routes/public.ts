@@ -192,6 +192,7 @@ publicRouter.get('/media-assets', async (req: Request, res: Response<PublicMedia
       where: {
         ...(kind ? { kind } : {}),
         ...(active ? { isActive: true } : {}),
+        ownerUserId: null,
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
       select: {

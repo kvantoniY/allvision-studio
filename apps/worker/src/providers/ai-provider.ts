@@ -26,7 +26,7 @@ export interface AIProvider {
   }): Promise<ProviderResult>;
 
   imageEdit(input: {
-    imageUrl: string;
+    imageUrl?: string;
     prompt: string;
     model: string;
     negativePrompt?: string;

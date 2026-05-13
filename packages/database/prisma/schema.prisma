@@ -32,6 +32,7 @@ model User {
   characters Character[]
   scenes     Scene[]
   episodes   Episode[]
+  mediaAssets MediaAsset[]
 }
 
 enum Role {
@@ -136,6 +137,7 @@ model Project {
   userId    String
   serviceId String?
   trendId   String?
+  mode      String        @default("service")
   title     String
   status    ProjectStatus @default(PENDING)
   progress  Int           @default(0)
@@ -166,6 +168,8 @@ model Project {
   service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   trend       Trend?       @relation(fields: [trendId], references: [id], onDelete: SetNull)
   aiUsageLogs AIUsageLog[]
+
+  @@index([userId, mode])
 }
 
 enum ProjectStatus {
@@ -554,6 +558,7 @@ model MediaAsset {
   title       String
   description String?
   tags        String[]
+  ownerUserId String?
 
   storageKey   String
   publicUrl    String
@@ -569,7 +574,10 @@ model MediaAsset {
   isActive  Boolean @default(true)
   sortOrder Int     @default(0)
 
+  owner User? @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+
   @@index([kind])
+  @@index([ownerUserId, kind])
   @@index([isActive, sortOrder])
 }
 

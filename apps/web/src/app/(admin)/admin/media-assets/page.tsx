@@ -17,7 +17,7 @@ import {
   useUpdateAdminMediaAssetMutation,
 } from '@/store/api/admin-media-assets-api';
 
-const kinds = ['trend-video', 'preview-image', 'music-track'];
+const kinds = ['trend-video', 'preview-image', 'music-track', 'user-avatar', 'user-location'];
 
 function formatBytes(value: number) {
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
@@ -190,6 +190,7 @@ export default function AdminMediaAssetsPage() {
             <tr>
               <th className="p-3">Asset</th>
               <th className="p-3">Meta</th>
+              <th className="p-3">Владелец</th>
               <th className="p-3">Статус</th>
               <th className="p-3 text-right">Actions</th>
             </tr>
@@ -234,6 +235,16 @@ export default function AdminMediaAssetsPage() {
                       {asset.width && asset.height ? `${asset.width}x${asset.height}` : 'no dimensions'}
                     </div>
                   </td>
+                  <td className="p-3 text-sm text-slate-300">
+                    {asset.owner ? (
+                      <div>
+                        <div>{asset.owner.email}</div>
+                        <div className="mt-1 text-xs text-slate-500">{asset.ownerUserId}</div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500">Общий ассет</span>
+                    )}
+                  </td>
                   <td className="p-3">
                     <Badge className={asset.isActive ? 'bg-emerald-600' : 'bg-zinc-700'}>{asset.isActive ? 'активен' : 'скрыт'}</Badge>
                     <div className="mt-2 text-xs text-slate-500">порядок {asset.sortOrder}</div>
@@ -258,7 +269,7 @@ export default function AdminMediaAssetsPage() {
               );
             })}
             {!isFetching && (data?.items.length ?? 0) === 0 && (
-              <tr><td colSpan={4} className="p-8 text-center text-slate-500">Медиа-файлов пока нет</td></tr>
+              <tr><td colSpan={5} className="p-8 text-center text-slate-500">Медиа-файлов пока нет</td></tr>
             )}
           </tbody>
         </table>

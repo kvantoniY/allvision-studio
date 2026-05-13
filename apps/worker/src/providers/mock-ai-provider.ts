@@ -220,7 +220,7 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
   }
 
   async imageEdit(params: {
-    imageUrl: string;
+    imageUrl?: string;
     prompt: string;
     model: string;
     negativePrompt?: string;
@@ -228,6 +228,9 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     params?: Record<string, unknown>;
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
+    if (!params.imageUrl) {
+      return this.createImmediateResult('photo-restore', params.context);
+    }
     return {
       outputUrl: params.imageUrl,
       costUsd: 0,

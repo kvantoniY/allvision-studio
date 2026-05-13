@@ -426,6 +426,7 @@ adminServicesRouter.post('/:id/test-run', async (req: Request, res: Response, ne
       data: {
         userId: req.user.id,
         serviceId: service.id,
+        mode: 'test-run',
         title: `Test run: ${service.title}`,
         status: 'PENDING',
         progress: 0,

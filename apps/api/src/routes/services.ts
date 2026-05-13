@@ -115,7 +115,7 @@ async function resolveAssetReferencesForSnapshot(value: unknown): Promise<unknow
   const ids = Array.from(collectAssetReferenceIds(value));
   if (ids.length === 0) return value;
   const assets = await prisma.mediaAsset.findMany({
-    where: { id: { in: ids }, isActive: true },
+    where: { id: { in: ids }, isActive: true, ownerUserId: null },
     select: { id: true, publicUrl: true },
   });
   if (assets.length === 0) return value;

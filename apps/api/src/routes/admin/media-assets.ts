@@ -78,6 +78,7 @@ function selectAsset() {
     storageKey: true,
     publicUrl: true,
     thumbnailKey: true,
+    ownerUserId: true,
     durationSec: true,
     width: true,
     height: true,
@@ -86,6 +87,12 @@ function selectAsset() {
     mimeType: true,
     isActive: true,
     sortOrder: true,
+    owner: {
+      select: {
+        id: true,
+        email: true,
+      },
+    },
   } as const;
 }
 

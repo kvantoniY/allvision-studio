@@ -1,0 +1,409 @@
+'use client';
+
+import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ImageIcon, Loader2, MapPin, Palette, Plus, Trash2, Upload, Wand2 } from 'lucide-react';
+import { getBlockCatalogItem } from '@allvision/shared';
+import { AuthGuard } from '@/components/auth/auth-guard';
+import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { useGetMeQuery } from '@/store/api/auth-api';
+import { useListProjectsQuery } from '@/store/api/projects-api';
+import {
+  type UserMediaAsset,
+  type UserMediaKind,
+  useCreateUserMediaAssetMutation,
+  useDeleteUserMediaAssetMutation,
+  useGenerateUserMediaAssetMutation,
+  useListUserMediaAssetsQuery,
+  useUpdateUserMediaAssetMutation,
+} from '@/store/api/user-media-assets-api';
+
+type Tab = 'avatars' | 'locations' | 'history';
+type ModalKind = null | { action: 'upload' | 'generate'; kind: UserMediaKind };
+
+const kindLabels: Record<UserMediaKind, { title: string; empty: string; icon: typeof ImageIcon }> = {
+  'user-avatar': {
+    title: 'Аватары',
+    empty: 'Сохраните фото лица, персонажа или будущего героя.',
+    icon: ImageIcon,
+  },
+  'user-location': {
+    title: 'Локации',
+    empty: 'Сохраните места, комнаты, фоны и другие визуальные референсы.',
+    icon: MapPin,
+  },
+};
+
+const generationCost =
+  getBlockCatalogItem('image-edit')?.supportedModels.find((model) => model.slug === 'nano-banana')?.estimatedCostCoins ?? 10;
+
+function apiErrorMessage(error: unknown) {
+  return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Операция не выполнена';
+}
+
+function formatDate(value: string | Date) {
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value));
+}
+
+function originLabel(asset: UserMediaAsset) {
+  return asset.tags.includes('generated') ? 'Сгенерировано' : 'Загружено';
+}
+
+export default function StudioPage() {
+  return (
+    <AuthGuard>
+      <div className="flex min-h-[calc(100vh-64px)]">
+        <DashboardSidebar />
+        <main className="min-w-0 flex-1 bg-slate-950">
+          <div className="container py-8">
+            <StudioContent />
+          </div>
+        </main>
+      </div>
+    </AuthGuard>
+  );
+}
+
+function StudioContent() {
+  const [tab, setTab] = useState<Tab>('avatars');
+  const [modal, setModal] = useState<ModalKind>(null);
+  const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 });
+  const locations = useListUserMediaAssetsQuery({ kind: 'user-location', limit: 100 });
+  const projects = useListProjectsQuery({ page: 1, limit: 30 });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-sm text-violet-300">
+            <Palette className="h-4 w-4" />
+            Личная библиотека
+          </div>
+          <h1 className="mt-2 text-3xl font-bold text-white">Студия</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-400">
+            Сохраняйте аватары и локации, чтобы потом использовать их как референсы в чате и услугах.
+          </p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {[
+          { id: 'avatars' as const, label: 'Аватары' },
+          { id: 'locations' as const, label: 'Локации' },
+          { id: 'history' as const, label: 'История генераций' },
+        ].map((item) => (
+          <Button
+            key={item.id}
+            type="button"
+            variant={tab === item.id ? 'default' : 'outline'}
+            onClick={() => setTab(item.id)}
+            className={cn(tab === item.id && 'bg-violet-600 hover:bg-violet-500')}
+          >
+            {item.label}
+          </Button>
+        ))}
+      </div>
+
+      {tab === 'avatars' && (
+        <AssetSection
+          kind="user-avatar"
+          items={avatars.data?.items ?? []}
+          isLoading={avatars.isLoading}
+          onUpload={() => setModal({ action: 'upload', kind: 'user-avatar' })}
+          onGenerate={() => setModal({ action: 'generate', kind: 'user-avatar' })}
+        />
+      )}
+      {tab === 'locations' && (
+        <AssetSection
+          kind="user-location"
+          items={locations.data?.items ?? []}
+          isLoading={locations.isLoading}
+          onUpload={() => setModal({ action: 'upload', kind: 'user-location' })}
+          onGenerate={() => setModal({ action: 'generate', kind: 'user-location' })}
+        />
+      )}
+      {tab === 'history' && (
+        <Card className="border-slate-800 bg-slate-900">
+          <CardContent className="p-0">
+            <div className="divide-y divide-slate-800">
+              {(projects.data?.items ?? []).map((project) => (
+                <Link
+                  key={project.id}
+                  href={`/dashboard/projects/${project.id}`}
+                  className="flex flex-wrap items-center justify-between gap-3 p-4 transition hover:bg-slate-800/70"
+                >
+                  <div>
+                    <div className="font-medium text-white">{project.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">{formatDate(project.createdAt)} · {project.mode === 'library-generation' ? 'Генерация для библиотеки' : 'Услуга'}</div>
+                  </div>
+                  <Badge className="bg-slate-700 text-slate-100">{project.status}</Badge>
+                </Link>
+              ))}
+              {!projects.isLoading && (projects.data?.items.length ?? 0) === 0 && (
+                <div className="p-6 text-sm text-slate-500">История пока пустая.</div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {modal?.action === 'upload' && <UploadAssetModal kind={modal.kind} onClose={() => setModal(null)} />}
+      {modal?.action === 'generate' && <GenerateAssetModal kind={modal.kind} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+function AssetSection({
+  kind,
+  items,
+  isLoading,
+  onUpload,
+  onGenerate,
+}: {
+  kind: UserMediaKind;
+  items: UserMediaAsset[];
+  isLoading: boolean;
+  onUpload: () => void;
+  onGenerate: () => void;
+}) {
+  const meta = kindLabels[kind];
+  const Icon = meta.icon;
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-semibold text-white">{meta.title}</h2>
+          <p className="mt-1 text-sm text-slate-400">{meta.empty}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={onUpload}>
+            <Upload className="h-4 w-4" />
+            Загрузить фото
+          </Button>
+          <Button type="button" onClick={onGenerate} className="bg-violet-600 hover:bg-violet-500">
+            <Wand2 className="h-4 w-4" />
+            Создать образ
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <Card key={index} className="h-64 border-slate-800 bg-slate-900" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <Card className="border-dashed border-slate-800 bg-slate-900">
+          <CardContent className="flex min-h-56 flex-col items-center justify-center p-8 text-center">
+            <Icon className="h-10 w-10 text-slate-500" />
+            <div className="mt-3 font-medium text-white">Здесь пока пусто</div>
+            <p className="mt-1 max-w-sm text-sm text-slate-500">{meta.empty}</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {items.map((asset) => <AssetCard key={asset.id} asset={asset} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AssetCard({ asset }: { asset: UserMediaAsset }) {
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(asset.title);
+  const [updateAsset] = useUpdateUserMediaAssetMutation();
+  const [deleteAsset] = useDeleteUserMediaAssetMutation();
+
+  const save = async () => {
+    try {
+      await updateAsset({ id: asset.id, body: { title } }).unwrap();
+      setEditing(false);
+      toast({ title: 'Ассет переименован' });
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm(`Удалить "${asset.title}"?`)) return;
+    try {
+      await deleteAsset(asset.id).unwrap();
+      toast({ title: 'Ассет удален' });
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <Card className="group overflow-hidden border-slate-800 bg-slate-900">
+      <div className="relative aspect-square bg-slate-950">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+        <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/80 via-black/10 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
+          <div className="flex w-full gap-2">
+            <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => setEditing(true)}>
+              Переименовать
+            </Button>
+            <Button type="button" size="sm" variant="destructive" onClick={remove}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+      <CardContent className="space-y-3 p-4">
+        {editing ? (
+          <div className="flex gap-2">
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+            <Button type="button" size="sm" onClick={save}>OK</Button>
+          </div>
+        ) : (
+          <div>
+            <div className="font-semibold text-white">{asset.title}</div>
+            <div className="mt-1 text-xs text-slate-500">{formatDate(asset.createdAt)} · {originLabel(asset)}</div>
+          </div>
+        )}
+        <Button type="button" variant="outline" size="sm" className="w-full" disabled>
+          Использовать в услуге
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function UploadAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: () => void }) {
+  const [title, setTitle] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [createAsset, state] = useCreateUserMediaAssetMutation();
+
+  const changeFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const next = event.target.files?.[0] ?? null;
+    setFile(next);
+    if (next && !title) setTitle(next.name.replace(/\.[^.]+$/, ''));
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!file) {
+      toast({ title: 'Выберите файл', variant: 'destructive' });
+      return;
+    }
+    const form = new FormData();
+    form.append('file', file);
+    form.append('data', JSON.stringify({ kind, title: title.trim() || file.name }));
+    try {
+      await createAsset(form).unwrap();
+      toast({ title: 'Фото сохранено в Студии' });
+      onClose();
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <Modal title={`Загрузить ${kind === 'user-avatar' ? 'аватар' : 'локацию'}`} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="space-y-2">
+          <Label>Файл</Label>
+          <Input type="file" accept="image/*" onChange={changeFile} required />
+        </div>
+        <div className="space-y-2">
+          <Label>Название</Label>
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} required />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Отмена</Button>
+          <Button type="submit" disabled={state.isLoading} className="bg-violet-600 hover:bg-violet-500">
+            {state.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Сохранить
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: () => void }) {
+  const router = useRouter();
+  const me = useGetMeQuery();
+  const [prompt, setPrompt] = useState('');
+  const [title, setTitle] = useState('');
+  const [aspectRatio, setAspectRatio] = useState<'1:1' | '9:16' | '16:9' | 'auto'>(kind === 'user-avatar' ? '1:1' : '16:9');
+  const [generate, state] = useGenerateUserMediaAssetMutation();
+  const balance = me.data?.user.tokenBalance ?? 0;
+  const canPay = balance >= generationCost;
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      const result = await generate({ kind, prompt, title, aspectRatio }).unwrap();
+      toast({ title: 'Генерация запущена' });
+      onClose();
+      router.push(`/dashboard/projects/${result.project.id}`);
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <Modal title="Создать образ" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
+          Стоимость: {generationCost} коинов · ~{generationCost} ₽. Баланс: {balance} коинов · {canPay ? 'хватит' : 'не хватает'}.
+        </div>
+        <div className="space-y-2">
+          <Label>Название</Label>
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} required />
+        </div>
+        <div className="space-y-2">
+          <Label>Промпт</Label>
+          <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} required />
+        </div>
+        <div className="space-y-2">
+          <Label>Соотношение сторон</Label>
+          <select
+            value={aspectRatio}
+            onChange={(event) => setAspectRatio(event.target.value as typeof aspectRatio)}
+            className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100"
+          >
+            <option value="1:1">1:1</option>
+            <option value="9:16">9:16</option>
+            <option value="16:9">16:9</option>
+            <option value="auto">auto</option>
+          </select>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Отмена</Button>
+          <Button type="submit" disabled={state.isLoading || !canPay} className="bg-violet-600 hover:bg-violet-500">
+            {state.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+            Создать
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg rounded-lg border border-slate-800 bg-slate-900 p-5 shadow-2xl">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-white">{title}</h3>
+          <Button type="button" variant="ghost" size="icon" onClick={onClose}>x</Button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}

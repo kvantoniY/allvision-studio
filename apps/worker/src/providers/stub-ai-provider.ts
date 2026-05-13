@@ -23,7 +23,7 @@ export class StubAIProvider implements AIProvider {
   }
 
   async imageEdit(_input: {
-    imageUrl: string;
+    imageUrl?: string;
     prompt: string;
     model: string;
     negativePrompt?: string;

@@ -35,6 +35,7 @@ const projectListSelect = {
   userId: true,
   serviceId: true,
   trendId: true,
+  mode: true,
   title: true,
   status: true,
   progress: true,
