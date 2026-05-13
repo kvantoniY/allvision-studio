@@ -120,7 +120,7 @@ export function validatePipelineConfig(
     if (!block) {
       throw new Error(`UNKNOWN_BLOCK:${stepNumber}:${step.blockSlug}`);
     }
-    validateValueAgainstJsonSchema(step.params ?? {}, block.paramsSchema, `params.${step.id}`);
+    validateValueAgainstJsonSchema(normaliseParamsForValidation(step.blockSlug, step.params), block.paramsSchema, `params.${step.id}`);
 
     const allowedStepIds = new Set(steps.slice(0, index).map((item) => item.id));
     const refs = collectPlaceholderRefs([step.params, step.input]);
@@ -139,6 +139,20 @@ export function validatePipelineConfig(
   }
 
   return steps;
+}
+
+function normaliseParamsForValidation(blockSlug: string, params: unknown): unknown {
+  if (blockSlug !== 'motion-transfer' || !params || typeof params !== 'object' || Array.isArray(params)) {
+    return params;
+  }
+  const record = params as Record<string, unknown>;
+  if (record.driving_video !== undefined) {
+    const next = { ...record };
+    if (next.video_url === undefined) next.video_url = record.driving_video;
+    delete next.driving_video;
+    return next;
+  }
+  return params;
 }
 
 export function validateUserInputForm(form: unknown): UserInputFieldInput[] {

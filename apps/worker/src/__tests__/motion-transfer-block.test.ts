@@ -33,7 +33,7 @@ describe('motion-transfer block', () => {
     const output = await motionTransferBlock.executor(
       {
         model: 'kling-motion-2.6-std',
-        driving_video: 'https://cdn.test/dance.mp4',
+        video_url: 'https://cdn.test/dance.mp4',
         prompt: 'copy the dance',
         duration: 5,
       },
@@ -57,7 +57,7 @@ describe('motion-transfer block', () => {
       {
         model: 'kling-motion-3.0-pro',
         input_image: 'https://cdn.test/edited.jpg',
-        driving_video: 'https://cdn.test/ref.mp4',
+        video_url: 'https://cdn.test/ref.mp4',
       },
       'https://cdn.test/original.jpg',
       ctx(provider),
@@ -68,7 +68,28 @@ describe('motion-transfer block', () => {
     }));
   });
 
-  it('validates required driving_video', async () => {
+  it('accepts deprecated driving_video for old pipeline snapshots', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'motionTransfer');
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await motionTransferBlock.executor(
+      {
+        model: 'kling-motion-2.6-std',
+        driving_video: 'https://cdn.test/legacy.mp4',
+      },
+      'https://cdn.test/photo.jpg',
+      ctx(provider),
+    );
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      drivingVideoUrl: 'https://cdn.test/legacy.mp4',
+    }));
+    expect(warn).toHaveBeenCalledWith('motion-transfer: driving_video is deprecated, use video_url');
+    warn.mockRestore();
+  });
+
+  it('validates required video_url', async () => {
     await expect(
       motionTransferBlock.executor({ model: 'kling-motion-2.6-std' }, 'mock://photo.jpg', ctx()),
     ).rejects.toThrow();

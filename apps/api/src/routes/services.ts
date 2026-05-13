@@ -80,6 +80,48 @@ function parseDataField(value: unknown): Record<string, unknown> {
   }
 }
 
+function collectAssetReferenceIds(value: unknown, ids = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectAssetReferenceIds(item, ids));
+    return ids;
+  }
+
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach((item) => collectAssetReferenceIds(item, ids));
+    return ids;
+  }
+
+  if (typeof value === 'string') {
+    const match = value.match(/^asset:([a-zA-Z0-9_-]+)$/);
+    if (match) ids.add(match[1]);
+  }
+  return ids;
+}
+
+function replaceAssetReferences(value: unknown, urls: Map<string, string>): unknown {
+  if (Array.isArray(value)) return value.map((item) => replaceAssetReferences(item, urls));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, replaceAssetReferences(item, urls)]),
+    );
+  }
+  if (typeof value !== 'string') return value;
+  const match = value.match(/^asset:([a-zA-Z0-9_-]+)$/);
+  if (!match) return value;
+  return urls.get(match[1]) ?? value;
+}
+
+async function resolveAssetReferencesForSnapshot(value: unknown): Promise<unknown> {
+  const ids = Array.from(collectAssetReferenceIds(value));
+  if (ids.length === 0) return value;
+  const assets = await prisma.mediaAsset.findMany({
+    where: { id: { in: ids }, isActive: true },
+    select: { id: true, publicUrl: true },
+  });
+  if (assets.length === 0) return value;
+  return replaceAssetReferences(value, new Map(assets.map((asset) => [asset.id, asset.publicUrl])));
+}
+
 function requestFiles(req: Request): Express.Multer.File[] {
   return Array.isArray(req.files) ? req.files : [];
 }
@@ -315,6 +357,7 @@ servicesRouter.post(
         status: 'pending',
         progress: 0,
       }));
+      const pipelineSnapshot = await resolveAssetReferencesForSnapshot(service.pipelineConfig);
 
       let project;
       try {
@@ -336,7 +379,7 @@ servicesRouter.post(
               inputImages,
               inputText: `${service.title} (${tierValue})`,
               tokensCost,
-              pipelineSnapshot: service.pipelineConfig as Prisma.InputJsonValue,
+              pipelineSnapshot: pipelineSnapshot as Prisma.InputJsonValue,
               selectedTier: tierValue,
               userInputs: userInputs as Prisma.InputJsonValue,
               stepProgress: stepProgress as Prisma.InputJsonValue,

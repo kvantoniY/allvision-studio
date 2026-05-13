@@ -33,4 +33,29 @@ describe('admin service validation messages', () => {
     expect(formatAdminServiceValidationError('USER_INPUT_FORM_EMPTY')).toBe('Форма пользователя пустая. Добавьте хотя бы поле качества tier.');
     expect(formatAdminServiceValidationError('[{"code":"too_small"}]')).not.toContain('"code"');
   });
+
+  it('accepts legacy motion-transfer driving_video params during validation', () => {
+    expect(() =>
+      validatePipelineConfig(
+        [
+          {
+            id: 'step_1',
+            blockSlug: 'motion-transfer',
+            input: '{{user.photo}}',
+            params: {
+              model: { standard: 'kling-motion-2.6-std', pro: 'kling-motion-2.6-pro' },
+              driving_video: '{{user.trendVideo}}',
+              duration: 5,
+              aspect_ratio: 'auto',
+            },
+          },
+        ],
+        [
+          { id: 'tier', type: 'tier', label: 'tier', required: true },
+          { id: 'photo', type: 'photo', label: 'photo', required: true },
+          { id: 'trendVideo', type: 'media-select', label: 'trend', required: true, mediaKind: 'trend-video' },
+        ],
+      ),
+    ).not.toThrow();
+  });
 });

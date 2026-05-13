@@ -52,7 +52,8 @@ export async function runPipeline(
   params: PipelineRunParams,
   dependencies: PipelineRunnerDependencies = {},
 ) {
-  const steps = parsePipelineConfig(params.pipelineConfig);
+  const pipelineConfig = await hydrateAssetReferences(params.pipelineConfig);
+  const steps = parsePipelineConfig(pipelineConfig);
   if (steps.length === 0) {
     throw new Error('Pipeline config must contain at least one step');
   }
@@ -267,6 +268,52 @@ export function resolvePlaceholders(value: unknown, context: PlaceholderContext)
     if (typeof resolved === 'string') return resolved;
     return JSON.stringify(resolved);
   });
+}
+
+export function replaceAssetReferences(value: unknown, urls: Map<string, string>): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => replaceAssetReferences(item, urls));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, replaceAssetReferences(item, urls)]),
+    );
+  }
+
+  if (typeof value !== 'string') return value;
+  const match = value.match(/^asset:([a-zA-Z0-9_-]+)$/);
+  if (!match) return value;
+  return urls.get(match[1]) ?? value;
+}
+
+function collectAssetReferenceIds(value: unknown, ids = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectAssetReferenceIds(item, ids));
+    return ids;
+  }
+
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach((item) => collectAssetReferenceIds(item, ids));
+    return ids;
+  }
+
+  if (typeof value === 'string') {
+    const match = value.match(/^asset:([a-zA-Z0-9_-]+)$/);
+    if (match) ids.add(match[1]);
+  }
+  return ids;
+}
+
+async function hydrateAssetReferences(value: unknown): Promise<unknown> {
+  const ids = Array.from(collectAssetReferenceIds(value));
+  if (ids.length === 0) return value;
+  const assets = await prisma.mediaAsset.findMany({
+    where: { id: { in: ids }, isActive: true },
+    select: { id: true, publicUrl: true },
+  });
+  if (assets.length === 0) return value;
+  return replaceAssetReferences(value, new Map(assets.map((asset) => [asset.id, asset.publicUrl])));
 }
 
 async function hydrateMediaAssetInputs(inputs: Record<string, unknown>): Promise<Record<string, unknown>> {

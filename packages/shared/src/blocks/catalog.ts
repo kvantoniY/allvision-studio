@@ -21,12 +21,12 @@ const modelTierObject: JsonSchemaObject = objectSchema(
   {
     standard: {
       type: 'string',
-      title: 'Standard model',
+      title: 'Модель Стандарт',
       description: 'Модель для базового качества услуги. Обычно быстрее или дешевле Pro.',
     },
     pro: {
       type: 'string',
-      title: 'Pro model',
+      title: 'Модель Pro',
       description: 'Модель для максимального качества услуги. Обычно дороже и медленнее Standard.',
     },
   },
@@ -35,7 +35,7 @@ const modelTierObject: JsonSchemaObject = objectSchema(
 
 const aspectRatioSchema = {
   type: 'string',
-  title: 'Aspect ratio',
+  title: 'Формат кадра',
   enum: ['auto', '9:16', '16:9', '1:1'],
   default: 'auto',
   description: 'Формат кадра. auto пытается сохранить пропорции входного фото или видео; 9:16 подходит для Reels/TikTok, 16:9 для горизонтальных роликов, 1:1 для квадратных превью.',
@@ -43,7 +43,7 @@ const aspectRatioSchema = {
 
 const durationSchema = {
   type: 'number',
-  title: 'Duration seconds',
+  title: 'Длительность, секунды',
   default: 5,
   minimum: 1,
   maximum: 10,
@@ -52,9 +52,13 @@ const durationSchema = {
 
 const promptSchema = {
   type: 'string',
-  title: 'Prompt',
+  title: 'Промпт',
   description: 'Текстовая инструкция для модели. Хороший prompt коротко описывает действие, камеру, стиль и ограничения, например: subject smiles softly, slow camera push-in, natural light.',
 };
+
+function sourceSelect(kind: 'image' | 'video', label: string, description: string) {
+  return `source-select:${kind}|${label}|${description}`;
+}
 
 const restoreModels: ModelOption[] = [
   {
@@ -324,7 +328,7 @@ const motionTransferModels: ModelOption[] = [
     provider: 'piapi',
     providerModel: 'kling',
     taskType: 'motion_control',
-    description: 'Переносит движение из референс-видео на исходное фото в режиме Kling Motion Control. Используйте для сценариев "ты танцуешь как..." и похожих роликов, где нужно оживить фото, а не менять лицо в готовом видео. Результат - новый клип, который берет позы и движение из driving video.',
+    description: 'Переносит движение из референс-видео на исходное фото в режиме Kling Motion Control. Используйте для сценариев "ты танцуешь как..." и похожих роликов, где нужно оживить фото, а не менять лицо в готовом видео. Результат - новый клип, который берет позы и движение из видео-референса.',
     limits: { maxDurationSec: 10, maxResolution: '720p', aspectRatios: ['auto', '9:16', '16:9', '1:1'] },
     requiredParams: ['input_image', 'video_url'],
     optionalParams: ['prompt', 'aspect_ratio', 'duration', 'mode=std'],
@@ -402,11 +406,11 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
     examples: ['Фото -> mock upscale -> image-to-video.', 'Проверка цены и порядка шагов перед подключением реального upscale.'],
     paramsSchema: objectSchema({
       model: modelTierObject,
-      scale: { type: 'number', title: 'Scale', enum: [2, 4], default: 2, description: 'Во сколько раз увеличить изображение. Сейчас влияет только на настройки mock-шага.' },
+      scale: { type: 'number', title: 'Масштаб', enum: [2, 4], default: 2, description: 'Во сколько раз увеличить изображение. Сейчас влияет только на настройки mock-шага.' },
     }),
     supportedModels: [
-      { slug: 'upscale-x2', title: 'Upscale x2 Mock', tierHint: 'standard', estimatedCostCoins: 0, estimatedCostUsd: 0, provider: 'mock', description: 'Mock x2 upscale.', limits: { maxFileSize: 'dev/test only' }, requiredParams: ['image_url'] },
-      { slug: 'upscale-x4', title: 'Upscale x4 Mock', tierHint: 'pro', estimatedCostCoins: 0, estimatedCostUsd: 0, provider: 'mock', description: 'Mock x4 upscale.', limits: { maxFileSize: 'dev/test only' }, requiredParams: ['image_url'] },
+      { slug: 'upscale-x2', title: 'Mock upscale x2', tierHint: 'standard', estimatedCostCoins: 0, estimatedCostUsd: 0, provider: 'mock', description: 'Тестовое увеличение изображения в 2 раза без платного AI-вызова. Используйте для проверки pipeline и себестоимости до подключения реального upscale-провайдера.', limits: { maxFileSize: 'dev/test only' }, requiredParams: ['image_url'] },
+      { slug: 'upscale-x4', title: 'Mock upscale x4', tierHint: 'pro', estimatedCostCoins: 0, estimatedCostUsd: 0, provider: 'mock', description: 'Тестовое увеличение изображения в 4 раза без платного AI-вызова. Подходит для Pro-ветки в dev/test сценариях, где важно проверить порядок шагов.', limits: { maxFileSize: 'dev/test only' }, requiredParams: ['image_url'] },
     ],
   },
   {
@@ -421,11 +425,11 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
       {
         model: modelTierObject,
         prompt: promptSchema,
-        negative_prompt: { type: 'string', title: 'Negative prompt', description: 'Compatibility-поле. Nano Banana 2 в PiAPI его не принимает, поэтому worker не отправляет это поле.' },
-        strength: { type: 'number', title: 'Strength', minimum: 0, maximum: 1, description: 'Compatibility-поле. Для Nano Banana 2 не отправляется в PiAPI; оставлено для будущих моделей.' },
-        output_format: { type: 'string', title: 'Output format', enum: ['jpg', 'png', 'webp'], default: 'jpg', description: 'Формат результата. jpg обычно дешевле хранить, png лучше для графики, webp экономит размер файла.' },
+        negative_prompt: { type: 'string', title: 'Негативный промпт', description: 'Compatibility-поле. Nano Banana 2 в PiAPI его не принимает, поэтому worker не отправляет это поле.' },
+        strength: { type: 'number', title: 'Сила обработки', minimum: 0, maximum: 1, description: 'Compatibility-поле. Для Nano Banana 2 не отправляется в PiAPI; оставлено для будущих моделей.' },
+        output_format: { type: 'string', title: 'Формат результата', enum: ['jpg', 'png', 'webp'], default: 'jpg', description: 'Формат результата. jpg обычно дешевле хранить, png лучше для графики, webp экономит размер файла.' },
         aspect_ratio: aspectRatioSchema,
-        resolution: { type: 'string', title: 'Resolution', enum: ['1K', '2K', '4K'], default: '1K', description: 'Разрешение результата Nano Banana 2. 1K дешевле всего; 4K стоит дороже и дольше обрабатывается.' },
+        resolution: { type: 'string', title: 'Разрешение', enum: ['1K', '2K', '4K'], default: '1K', description: 'Разрешение результата Nano Banana 2. 1K дешевле всего; 4K стоит дороже и дольше обрабатывается.' },
       },
       ['prompt'],
     ),
@@ -445,8 +449,8 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         duration: durationSchema,
         prompt: promptSchema,
         aspect_ratio: aspectRatioSchema,
-        resolution: { type: 'string', title: 'Resolution', enum: ['720p', '1080p', '768P'], default: '720p', description: 'Разрешение результата, если модель поддерживает выбор. 1080p дороже и медленнее; для Hailuo используйте 768P/1080P.' },
-        enable_audio: { type: 'boolean', title: 'Generate audio', default: false, description: 'Включает аудио, если конкретная модель поддерживает это поле. Для Kling 3.0 аудио повышает стоимость.' },
+        resolution: { type: 'string', title: 'Разрешение', enum: ['720p', '1080p', '768P'], default: '720p', description: 'Разрешение результата, если модель поддерживает выбор. 1080p дороже и медленнее; для Hailuo используйте 768P/1080P.' },
+        enable_audio: { type: 'boolean', title: 'Генерировать аудио', default: false, description: 'Включает аудио, если конкретная модель поддерживает это поле. Для Kling 3.0 аудио повышает стоимость.' },
       },
       ['duration'],
     ),
@@ -457,20 +461,28 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
     title: 'Перенос движения на фото',
     description: 'Анимация исходного фото человека по референс-видео. Берет движения и мимику из видео-референса и переносит на статичное фото лица. Идеально для серий "ты танцуешь как..."; в отличие от face-swap-video, не меняет лицо в видео, а оживляет фото.',
     category: 'motion',
-    useWhen: 'Когда нужен танец, жест или мимика из driving video, но итог должен быть создан из фото пользователя.',
+    useWhen: 'Когда нужен танец, жест или мимика из видео-референса, но итог должен быть создан из фото пользователя.',
     compatibleInputs: ['photo', 'image-edit output', 'avatar image'],
     examples: ['Пользователь загружает фото -> motion-transfer переносит танец из trend-video.', 'Nano Banana чистит портрет -> Kling Motion Control переносит движение из референса.'],
     paramsSchema: objectSchema(
       {
         model: modelTierObject,
-        input_image: { type: 'string', title: 'Input image URL', description: 'Фото лица/человека. Обычно оставьте пустым и используйте input шага, либо укажите placeholder вроде {{user.photo}}.' },
-        driving_video: { type: 'string', title: 'Driving video URL', description: 'Видео-референс с движением. Для трендов используйте {{user.trendVideo}} или MediaAsset publicUrl.' },
+        input_image: {
+          type: 'string',
+          title: 'Изображение для анимации',
+          description: sourceSelect('image', 'Фото лица или человека для анимации', 'Фото, которое нужно оживить. Обычно выбирайте фото от пользователя или результат предыдущего image-edit шага.'),
+        },
+        video_url: {
+          type: 'string',
+          title: 'Видео-референс с движением',
+          description: sourceSelect('video', 'Видео-референс с движением', 'Видео, из которого модель возьмет движение, позу и мимику. Для трендов обычно выбирайте ролик из библиотеки медиа.'),
+        },
         prompt: promptSchema,
         duration: durationSchema,
         aspect_ratio: aspectRatioSchema,
-        resolution: { type: 'string', title: 'Resolution', enum: ['720p', '1080p'], default: '720p', description: 'Разрешение результата для моделей, где PiAPI поддерживает выбор. 1080p заметно дороже.' },
+        resolution: { type: 'string', title: 'Разрешение', enum: ['720p', '1080p'], default: '720p', description: 'Разрешение результата для моделей, где PiAPI поддерживает выбор. 1080p заметно дороже.' },
       },
-      ['driving_video'],
+      ['video_url'],
     ),
     supportedModels: motionTransferModels,
   },
@@ -485,10 +497,14 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
     paramsSchema: objectSchema(
       {
         model: modelTierObject,
-        target_video: { type: 'string', title: 'Target video URL', description: 'Готовое видео, куда будет вставлено лицо. Для media-select используйте placeholder вроде {{user.trendVideo}}.' },
-        prompt: { type: 'string', title: 'Prompt', description: 'Внутренняя заметка для администратора. Qubico face-swap не использует prompt в payload.' },
+        target_video: {
+          type: 'string',
+          title: 'Целевое видео для подмены лица',
+          description: sourceSelect('video', 'Целевое видео для подмены лица', 'Готовое видео, в которое будет вставлено лицо пользователя. Обычно выбирайте trend-video из библиотеки или поле media-select от пользователя.'),
+        },
+        prompt: { type: 'string', title: 'Промпт', description: 'Внутренняя заметка для администратора. Qubico face-swap не использует prompt в payload.' },
         duration: durationSchema,
-        estimatedFrames: { type: 'number', title: 'Estimated frames', default: 120, minimum: 1, description: 'Оценка числа кадров для расчета себестоимости. Qubico тарифицируется примерно по $0.004 за кадр.' },
+        estimatedFrames: { type: 'number', title: 'Оценка кадров', default: 120, minimum: 1, description: 'Оценка числа кадров для расчета себестоимости. Qubico тарифицируется примерно по $0.004 за кадр.' },
         aspect_ratio: aspectRatioSchema,
       },
       ['target_video'],
@@ -537,8 +553,8 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         mode: { type: 'string', title: 'Mode', enum: ['text_to_video'], default: 'text_to_video', description: 'Режим Seedance/PiAPI для генерации из текста. Оставьте text_to_video.' },
         duration: durationSchema,
         aspect_ratio: aspectRatioSchema,
-        resolution: { type: 'string', title: 'Resolution', enum: ['480p', '720p', '1080p'], default: '720p', description: 'Разрешение результата. 1080p дороже, 480p дешевле и быстрее.' },
-        generate_audio: { type: 'boolean', title: 'Generate audio', default: false, description: 'Просит модель сгенерировать аудио, если провайдер это поддерживает. У Veo 3.1 это повышает себестоимость.' },
+        resolution: { type: 'string', title: 'Разрешение', enum: ['480p', '720p', '1080p'], default: '720p', description: 'Разрешение результата. 1080p дороже, 480p дешевле и быстрее.' },
+        generate_audio: { type: 'boolean', title: 'Генерировать аудио', default: false, description: 'Просит модель сгенерировать аудио, если провайдер это поддерживает. У Veo 3.1 это повышает себестоимость.' },
       },
       ['prompt', 'duration'],
     ),

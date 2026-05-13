@@ -46,10 +46,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BlockCatalogItem, JsonSchemaObject, ModelOption } from '@allvision/shared';
+import type { BlockCatalogItem, JsonSchemaObject, ModelOption, SourceMediaKind } from '@allvision/shared';
 import {
   formatMoney,
   formatAdminServiceValidationError,
+  parseSourceSelectDescription,
   serviceMargin,
   summarizePipelinePricing,
   validatePipelineConfig,
@@ -75,6 +76,7 @@ import {
 } from '@/store/api/admin-services-api';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
+import { SourceSelector, type AvailableSourceStep } from './SourceSelector';
 
 const editableCategories: ServiceCategory[] = [
   'NOSTALGIA',
@@ -354,6 +356,52 @@ function blockBySlug(blocks: BlockCatalogItem[] | undefined, slug: string) {
   return blocks?.find((block) => block.slug === slug);
 }
 
+function blockOutputKind(block: BlockCatalogItem | undefined): SourceMediaKind | undefined {
+  if (!block) return undefined;
+  if (block.category === 'image') return 'image';
+  if (block.category === 'video' || block.category === 'motion' || block.category === 'compose') return 'video';
+  return undefined;
+}
+
+function blockInputKind(block: BlockCatalogItem | undefined): SourceMediaKind {
+  if (!block) return 'image';
+  if (block.slug === 'video-compose') return 'video';
+  return 'image';
+}
+
+function availableSourceSteps(
+  steps: PipelineStep[],
+  blocks: BlockCatalogItem[] | undefined,
+  index: number,
+): AvailableSourceStep[] {
+  return steps.slice(0, index).map((step, current) => {
+    const block = blockBySlug(blocks, step.blockSlug);
+    return {
+      id: step.id,
+      title: `Шаг ${current + 1}: ${block?.title ?? step.blockSlug}`,
+      outputKind: blockOutputKind(block),
+    };
+  });
+}
+
+function canonicaliseParamsForBlock(blockSlug: string, params: unknown): Record<string, unknown> {
+  const record = isRecord(params) ? { ...params } : {};
+  if (blockSlug === 'motion-transfer') {
+    if (record.video_url === undefined && record.driving_video !== undefined) {
+      record.video_url = record.driving_video;
+    }
+    delete record.driving_video;
+  }
+  return record;
+}
+
+function canonicalisePipelineConfig(steps: PipelineStep[]) {
+  return steps.map((step) => ({
+    ...step,
+    params: canonicaliseParamsForBlock(step.blockSlug, step.params),
+  }));
+}
+
 function stepCost(step: PipelineStep, block: BlockCatalogItem | undefined, tier: 'standard' | 'pro') {
   if (!block) return 0;
   const params = isRecord(step.params) ? step.params : {};
@@ -473,13 +521,17 @@ function BlockParamsForm({
   value,
   onChange,
   usdToRub,
+  userInputFields,
+  availableSteps,
 }: {
   block: BlockCatalogItem;
   value: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
   usdToRub: number;
+  userInputFields: UserInputField[];
+  availableSteps: AvailableSourceStep[];
 }) {
-  const update = (key: string, next: unknown) => onChange({ ...value, [key]: next });
+  const update = (key: string, next: unknown) => onChange(canonicaliseParamsForBlock(block.slug, { ...value, [key]: next }));
   const modelValue = value.model;
   const standardModel = modelBySlug(
     block.supportedModels,
@@ -562,7 +614,9 @@ function BlockParamsForm({
       <div className="grid gap-4 md:grid-cols-2">
       {Object.entries(block.paramsSchema.properties ?? {}).map(([key, rawSchema]) => {
         const schema = schemaObject(rawSchema);
-        const label = schema.title ?? key;
+        const sourceMeta = parseSourceSelectDescription(schema.description);
+        const label = sourceMeta?.label ?? schema.title ?? key;
+        const description = sourceMeta?.description ?? schema.description;
 
         if (key === 'model' || isTierModelSchema(schema)) {
           const current = isRecord(value[key]) ? value[key] : defaultValueForSchema(schema, block, key);
@@ -592,6 +646,26 @@ function BlockParamsForm({
           );
         }
 
+        if (sourceMeta) {
+          const sourceValue =
+            block.slug === 'motion-transfer' && key === 'video_url' && value[key] === undefined
+              ? selectValue(value.driving_video)
+              : selectValue(value[key]);
+          return (
+            <div key={key} className="md:col-span-2">
+              <SourceSelector
+                value={sourceValue}
+                onChange={(next) => update(key, next)}
+                mediaKind={sourceMeta.mediaKind}
+                userInputFields={userInputFields}
+                availableSteps={availableSteps}
+                label={label}
+                description={description}
+              />
+            </div>
+          );
+        }
+
         if (schema.enum?.length) {
           return (
             <div key={key} className="space-y-2">
@@ -607,7 +681,7 @@ function BlockParamsForm({
                   </option>
                 ))}
               </select>
-              {schema.description && <p className="text-xs text-slate-500">{schema.description}</p>}
+              {description && <p className="text-xs text-slate-500">{description}</p>}
             </div>
           );
         }
@@ -623,7 +697,7 @@ function BlockParamsForm({
               />
               {label}
               <HelpTip text={fieldHelp(key, schema)} />
-              {schema.description && <span className="text-xs text-slate-500">{schema.description}</span>}
+              {description && <span className="text-xs text-slate-500">{description}</span>}
             </label>
           );
         }
@@ -637,7 +711,7 @@ function BlockParamsForm({
                 value={selectValue(value[key])}
                 onChange={(event) => update(key, event.target.value === '' ? undefined : Number(event.target.value))}
               />
-              {schema.description && <p className="text-xs text-slate-500">{schema.description}</p>}
+              {description && <p className="text-xs text-slate-500">{description}</p>}
             </div>
           );
         }
@@ -651,7 +725,7 @@ function BlockParamsForm({
             ) : (
               <Input value={selectValue(value[key])} onChange={(event) => update(key, event.target.value)} />
             )}
-            {schema.description && <p className="text-xs text-slate-500">{schema.description}</p>}
+            {description && <p className="text-xs text-slate-500">{description}</p>}
           </div>
         );
       })}
@@ -684,11 +758,19 @@ function PipelineBuilder({
     const block = blockBySlug(blocks, slug);
     if (!block) return;
     const previous = steps[steps.length - 1];
+    const previousBlock = previous ? blockBySlug(blocks, previous.blockSlug) : undefined;
+    const inputKind = blockInputKind(block);
+    const defaultInput =
+      previous && blockOutputKind(previousBlock) === inputKind
+        ? `{{${previous.id}.output}}`
+        : inputKind === 'video'
+          ? '{{user.trendVideo}}'
+          : '{{user.photo}}';
     const id = buildStepId(steps);
     const nextStep: PipelineStep = {
       id,
       blockSlug: block.slug,
-      input: previous ? `{{${previous.id}.output}}` : '{{user.photo}}',
+      input: defaultInput,
       params: defaultParams(block),
     };
     onChange([...steps, nextStep]);
@@ -720,6 +802,7 @@ function PipelineBuilder({
               const block = blockBySlug(blocks, step.blockSlug);
               const params = isRecord(step.params) ? step.params : {};
               const isExpanded = expanded[step.id] ?? true;
+              const sourceSteps = availableSourceSteps(steps, blocks, index);
               return (
                 <SortableFrame key={step.id} id={step.id}>
                   {(handle) => (
@@ -774,12 +857,14 @@ function PipelineBuilder({
                                   </select>
                                 </div>
                                 <div className="space-y-2">
-                                  <Label>Вход</Label>
-                                  <Input
+                                  <SourceSelector
                                     value={selectValue(step.input)}
-                                    onChange={(event) => updateStep(index, { input: event.target.value })}
-                                    placeholder="{{user.photo}} или {{step_1.output}}"
-                                    className="font-mono"
+                                    onChange={(input) => updateStep(index, { input })}
+                                    mediaKind={blockInputKind(block)}
+                                    userInputFields={fields}
+                                    availableSteps={sourceSteps}
+                                    label="Вход"
+                                    description="Основной файл, который получает этот шаг. Можно выбрать поле пользователя, результат предыдущего шага, файл из библиотеки или ручной placeholder."
                                   />
                                 </div>
                               </div>
@@ -789,6 +874,8 @@ function PipelineBuilder({
                                   value={params}
                                   onChange={(value) => updateStep(index, { params: value })}
                                   usdToRub={usdToRub}
+                                  userInputFields={fields}
+                                  availableSteps={sourceSteps}
                                 />
                               ) : (
                                 <div className="rounded-md border border-red-900/50 bg-red-950/30 p-3 text-sm text-red-200">
@@ -1203,7 +1290,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         shortDesc: draft.shortDesc,
         description: draft.description,
         category: draft.category,
-        pipelineConfig: draft.pipelineConfig,
+        pipelineConfig: canonicalisePipelineConfig(draft.pipelineConfig),
         userInputForm: draft.userInputForm,
         priceCoinsStandard: draft.priceCoinsStandard,
         priceCoinsPro: draft.priceCoinsPro,
