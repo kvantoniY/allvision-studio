@@ -63,7 +63,8 @@ export async function runPipeline(
   });
   if (!project) throw new Error(`Generation project not found: ${params.generationId}`);
 
-  const pipelineConfig = await hydrateAssetReferences(params.pipelineConfig, project.userId);
+  const storage = dependencies.storage ?? getStorageProvider();
+  const pipelineConfig = await hydratePipelineReferences(params.pipelineConfig, project.userId, storage);
   const steps = parsePipelineConfig(pipelineConfig);
   if (steps.length === 0) {
     throw new Error('Pipeline config must contain at least one step');
@@ -71,7 +72,6 @@ export async function runPipeline(
 
   const getBlockFn = dependencies.getBlock ?? getBlock;
   const logger = dependencies.logger ?? defaultLogger;
-  const storage = dependencies.storage ?? getStorageProvider();
   const providerFactory = dependencies.getAIProvider ?? getAIProvider;
   const selectedTier = params.selectedTier ?? 'standard';
   const mode = params.mode ?? 'production';
@@ -336,6 +336,72 @@ async function hydrateAssetReferences(value: unknown, userId: string): Promise<u
     throw new Error(`INVALID_ASSET_ACCESS: ${forbidden.id}`);
   }
   return replaceAssetReferences(value, new Map(assets.map((asset) => [asset.id, asset.publicUrl])));
+}
+
+function collectChatUploadReferenceKeys(value: unknown, keys = new Set<string>()): Set<string> {
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectChatUploadReferenceKeys(item, keys));
+    return keys;
+  }
+
+  if (value && typeof value === 'object') {
+    Object.values(value).forEach((item) => collectChatUploadReferenceKeys(item, keys));
+    return keys;
+  }
+
+  if (typeof value === 'string') {
+    const key = chatUploadKeyFromRef(value);
+    if (key) keys.add(key);
+  }
+  return keys;
+}
+
+function replaceChatUploadReferences(value: unknown, urls: Map<string, string>): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => replaceChatUploadReferences(item, urls));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, replaceChatUploadReferences(item, urls)]),
+    );
+  }
+
+  if (typeof value !== 'string') return value;
+  const key = chatUploadKeyFromRef(value);
+  if (!key) return value;
+  return urls.get(key) ?? value;
+}
+
+function chatUploadKeyFromRef(value: string): string | null {
+  if (value.startsWith('chat:')) return value.slice('chat:'.length).replace(/^\/+/, '');
+  if (value.startsWith('user-uploads/chat/')) return value.replace(/^\/+/, '');
+  return null;
+}
+
+function assertChatUploadKeyAccess(key: string, userId: string): string {
+  const normalized = key.replace(/^\/+/, '');
+  const expectedPrefix = `user-uploads/chat/${userId}/`;
+  if (!normalized.startsWith(expectedPrefix) || normalized.includes('..')) {
+    throw new Error(`INVALID_CHAT_UPLOAD_ACCESS: ${key}`);
+  }
+  return normalized;
+}
+
+async function hydrateChatUploadReferences(value: unknown, userId: string, storage: StorageProvider): Promise<unknown> {
+  const keys = Array.from(collectChatUploadReferenceKeys(value));
+  if (keys.length === 0) return value;
+  const urls = new Map<string, string>();
+  for (const rawKey of keys) {
+    const key = assertChatUploadKeyAccess(rawKey, userId);
+    urls.set(key, await storage.getSignedUrl(key, 7 * 24 * 60 * 60));
+  }
+  return replaceChatUploadReferences(value, urls);
+}
+
+async function hydratePipelineReferences(value: unknown, userId: string, storage: StorageProvider): Promise<unknown> {
+  const withAssets = await hydrateAssetReferences(value, userId);
+  return hydrateChatUploadReferences(withAssets, userId, storage);
 }
 
 async function hydrateMediaAssetInputs(inputs: Record<string, unknown>, userId: string): Promise<Record<string, unknown>> {

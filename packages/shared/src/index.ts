@@ -4,6 +4,7 @@ export * from './constants';
 export * from './errors';
 export * from './utils';
 export * from './blocks';
+export * from './chat';
 export * from './providers/ai-provider';
 export * from './providers/payment-provider';
 export * from './providers/provider-mode';

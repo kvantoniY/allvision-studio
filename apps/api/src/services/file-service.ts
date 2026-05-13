@@ -20,6 +20,7 @@ const MAX_TREND_PREVIEW_SIZE = 50 * 1024 * 1024;
 const MAX_TREND_THUMBNAIL_SIZE = 5 * 1024 * 1024;
 const ALLOWED_V3_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_V3_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
+const ALLOWED_CHAT_VIDEO_MIME = new Set(['video/mp4', 'video/quicktime']);
 const MAX_CHARACTER_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_SCENE_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_TEMPLATE_PREVIEW_SIZE = 50 * 1024 * 1024;
@@ -27,6 +28,7 @@ const MAX_TEMPLATE_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_SERVICE_PREVIEW_VIDEO_SIZE = 50 * 1024 * 1024;
 const MAX_SERVICE_PREVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_USER_INPUT_IMAGE_SIZE = 25 * 1024 * 1024;
+const MAX_CHAT_INPUT_SIZE = 25 * 1024 * 1024;
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -278,6 +280,40 @@ export async function uploadUserInput(
     contentType: processed.contentType,
   });
   return { url, key, dimensions: processed.dimensions };
+}
+
+export async function uploadChatInput(
+  userId: string,
+  file: Express.Multer.File,
+): Promise<{ url: string; key: string; ref: string; mediaKind: 'image' | 'video'; dimensions?: { width: number; height: number } }> {
+  if (file.size > MAX_CHAT_INPUT_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Файл должен быть не тяжелее 25 МБ');
+  }
+
+  const now = Date.now();
+  const safeName = `${now}-${crypto.randomUUID()}`;
+  if (ALLOWED_V3_IMAGE_MIME.has(file.mimetype)) {
+    const processed = await validateAndProcessImage(file.buffer);
+    const key = `user-uploads/chat/${userId}/${safeName}.${ext(processed.contentType)}`;
+    const { url } = await getStorageProvider().upload({
+      key,
+      body: processed.buffer,
+      contentType: processed.contentType,
+    });
+    return { url, key, ref: `chat:${key}`, mediaKind: 'image', dimensions: processed.dimensions };
+  }
+
+  if (ALLOWED_CHAT_VIDEO_MIME.has(file.mimetype)) {
+    const key = `user-uploads/chat/${userId}/${safeName}.${ext(file.mimetype)}`;
+    const { url } = await getStorageProvider().upload({
+      key,
+      body: file.buffer,
+      contentType: file.mimetype,
+    });
+    return { url, key, ref: `chat:${key}`, mediaKind: 'video' };
+  }
+
+  throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются только JPEG, PNG, WebP, MP4 и MOV');
 }
 
 export async function deleteFile(key: string): Promise<void> {

@@ -18,6 +18,7 @@ import { adminUsersApi } from './api/admin-users-api';
 import { adminProjectsApi } from './api/admin-projects-api';
 import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
+import { userChatApi } from './api/user-chat-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -42,6 +43,7 @@ export const store = configureStore({
     [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
     [servicesApi.reducerPath]: servicesApi.reducer,
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
+    [userChatApi.reducerPath]: userChatApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -64,6 +66,7 @@ export const store = configureStore({
       adminProjectsApi.middleware,
       servicesApi.middleware,
       userMediaAssetsApi.middleware,
+      userChatApi.middleware,
     ),
 });
 
