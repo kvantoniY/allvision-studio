@@ -1,4 +1,5 @@
 import { getBlockCatalogItem } from '../blocks/catalog';
+import { costUsdToCoins, estimateModelCostUsd } from '../blocks/pricing';
 import type { BlockCatalogItem, ModelOption } from '../blocks/types';
 
 export type ChatCategory = 'image' | 'video';
@@ -16,6 +17,12 @@ export interface ChatModelOption {
   acceptsVideoInput: boolean;
   acceptsTextOnly: boolean;
   supportedAspectRatios: ChatAspectRatio[];
+  supportsAudio: boolean;
+  audioParam?: 'enable_audio' | 'generate_audio';
+  minDurationSec?: number;
+  maxDurationSec?: number;
+  defaultDurationSec?: number;
+  durationOptions: number[];
   experimental?: boolean;
 }
 
@@ -44,6 +51,11 @@ function fromCatalog(params: {
   experimental?: boolean;
 }): ChatModelOption {
   const model = requireModel(params.blockSlug, params.modelSlug);
+  const audioParam = model.optionalParams?.includes('enable_audio')
+    ? 'enable_audio'
+    : model.optionalParams?.includes('generate_audio')
+      ? 'generate_audio'
+      : undefined;
   return {
     slug: model.slug,
     blockSlug: params.blockSlug,
@@ -56,8 +68,56 @@ function fromCatalog(params: {
     acceptsVideoInput: params.acceptsVideoInput ?? false,
     acceptsTextOnly: params.acceptsTextOnly,
     supportedAspectRatios: params.supportedAspectRatios ?? ['auto', '1:1', '9:16', '16:9'],
+    supportsAudio: !!audioParam,
+    audioParam,
+    minDurationSec: model.limits?.minDurationSec,
+    maxDurationSec: model.limits?.maxDurationSec,
+    defaultDurationSec: defaultDurationForModel(model),
+    durationOptions: params.category === 'video' ? durationOptionsForModel(model) : [],
     experimental: params.experimental,
   };
+}
+
+function defaultDurationForModel(model: ModelOption) {
+  if (model.slug.startsWith('veo-3.1')) return 8;
+  if (model.limits?.minDurationSec && model.limits.minDurationSec > 5) return model.limits.minDurationSec;
+  return 5;
+}
+
+function durationOptionsForModel(model: ModelOption) {
+  const min = model.limits?.minDurationSec ?? 5;
+  const max = model.limits?.maxDurationSec ?? 10;
+  const candidates = max <= 8
+    ? [max]
+    : min > 5
+      ? [min, max]
+      : max >= 15
+        ? [5, 10, 15]
+        : [5, 10];
+  return [...new Set(candidates.filter((value) => value >= min && value <= max))];
+}
+
+function modelBySlug(slug: string) {
+  const chatModel = getChatModel(slug);
+  if (!chatModel) return null;
+  return requireModel(chatModel.blockSlug, chatModel.slug);
+}
+
+export function estimateChatGenerationCostCoins(
+  modelSlug: string,
+  options: { duration?: number; generateAudio?: boolean } = {},
+) {
+  const chatModel = getChatModel(modelSlug);
+  const catalogModel = modelBySlug(modelSlug);
+  if (!chatModel || !catalogModel) return 0;
+  const params: Record<string, unknown> = {};
+  if (chatModel.category === 'video') {
+    params.duration = options.duration ?? chatModel.defaultDurationSec ?? 5;
+  }
+  if (options.generateAudio && chatModel.audioParam) {
+    params[chatModel.audioParam] = true;
+  }
+  return costUsdToCoins(estimateModelCostUsd(catalogModel, params));
 }
 
 export const CHAT_MODELS: ChatModelOption[] = [

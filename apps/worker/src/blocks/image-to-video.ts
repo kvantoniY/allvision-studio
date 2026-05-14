@@ -19,6 +19,9 @@ const paramsSchema = z.object({
   duration: z.number().min(1).max(30).optional(),
   prompt: z.string().optional(),
   aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1']).default('auto').optional(),
+  resolution: z.string().optional(),
+  enable_audio: z.boolean().optional(),
+  expand_prompt: z.boolean().optional(),
 });
 
 export const imageToVideoBlock: BlockDefinition = {

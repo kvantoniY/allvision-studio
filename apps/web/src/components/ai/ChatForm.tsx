@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlertTriangle, ChevronDown, Clock3, Coins, Frame, ImageIcon, Loader2, Paperclip, Send, Sparkles, Video, X } from 'lucide-react';
-import { CHAT_MODELS, type ChatCategory, type ChatModelOption } from '@allvision/shared';
+import { AlertTriangle, ChevronDown, Clock3, Coins, Frame, ImageIcon, Loader2, Paperclip, Send, Sparkles, Video, Volume2, VolumeX, X } from 'lucide-react';
+import { CHAT_MODELS, estimateChatGenerationCostCoins, type ChatCategory, type ChatModelOption } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -41,6 +41,9 @@ function apiErrorMessage(error: unknown) {
 }
 
 function defaultModel(category: ChatCategory): ChatModelOption {
+  if (category === 'video') {
+    return CHAT_MODELS.find((model) => model.category === 'video' && model.acceptsTextOnly) ?? CHAT_MODELS.find((model) => model.category === 'video') ?? CHAT_MODELS[0];
+  }
   return CHAT_MODELS.find((model) => model.category === category) ?? CHAT_MODELS[0];
 }
 
@@ -56,12 +59,18 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '9:16' | '16:9' | 'auto'>('1:1');
   const [duration, setDuration] = useState(5);
+  const [generateAudio, setGenerateAudio] = useState(false);
   const [source, setSource] = useState<SelectedInputSource | null>(null);
 
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
   const selectedModel = models.find((model) => model.slug === modelSlug) ?? models[0] ?? CHAT_MODELS[0];
   const balance = me.data?.user.tokenBalance ?? 0;
-  const canPay = balance >= selectedModel.estimatedCostCoins;
+  const effectiveGenerateAudio = selectedModel.supportsAudio && generateAudio;
+  const estimatedCostCoins = estimateChatGenerationCostCoins(selectedModel.slug, {
+    duration: selectedModel.category === 'video' ? duration : undefined,
+    generateAudio: effectiveGenerateAudio,
+  });
+  const canPay = balance >= estimatedCostCoins;
   const needsInput = !selectedModel.acceptsTextOnly && selectedModel.acceptsImageInput;
   const canUseInput = selectedModel.acceptsImageInput || selectedModel.acceptsVideoInput;
   const inputKind = selectedModel.acceptsVideoInput && !selectedModel.acceptsImageInput ? 'video' : 'image';
@@ -75,6 +84,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     const next = defaultModel(category);
     setModelSlug(next.slug);
     setAspectRatio(next.supportedAspectRatios[0] ?? 'auto');
+    setDuration(next.defaultDurationSec ?? next.durationOptions[0] ?? 5);
+    setGenerateAudio(false);
     setSource(null);
   }, [category]);
 
@@ -82,7 +93,13 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     if (!selectedModel.supportedAspectRatios.includes(aspectRatio)) {
       setAspectRatio(selectedModel.supportedAspectRatios[0] ?? 'auto');
     }
-  }, [aspectRatio, selectedModel]);
+    if (selectedModel.category === 'video' && !selectedModel.durationOptions.includes(duration)) {
+      setDuration(selectedModel.defaultDurationSec ?? selectedModel.durationOptions[0] ?? 5);
+    }
+    if (!selectedModel.supportsAudio && generateAudio) {
+      setGenerateAudio(false);
+    }
+  }, [aspectRatio, duration, generateAudio, selectedModel]);
 
   useEffect(() => {
     if (!initialReference) return;
@@ -109,6 +126,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           prompt,
           aspectRatio,
           duration: selectedModel.category === 'video' ? duration : undefined,
+          generateAudio: selectedModel.category === 'video' ? effectiveGenerateAudio : undefined,
           inputRef: source?.ref,
         },
       }).unwrap();
@@ -128,7 +146,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       : needsInput && !source
         ? 'Нужен референс'
         : canPay
-          ? `${selectedModel.estimatedCostCoins} коинов`
+          ? `${estimatedCostCoins} коинов`
           : 'Недостаточно коинов';
 
   return (
@@ -160,7 +178,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             )}
             {!canPay && (
               <div className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-100">
-                На балансе {balance}, нужно {selectedModel.estimatedCostCoins}
+                На балансе {balance}, нужно {estimatedCostCoins}
               </div>
             )}
             {selectedModel.experimental && <Badge className="bg-amber-500/15 text-amber-200">Бета</Badge>}
@@ -190,7 +208,14 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               values={selectedModel.supportedAspectRatios}
               onChange={(value) => setAspectRatio(value as typeof aspectRatio)}
             />
-            {category === 'video' && <DurationControl value={duration} onChange={setDuration} />}
+            {category === 'video' && <DurationControl value={duration} values={selectedModel.durationOptions} onChange={setDuration} />}
+            {category === 'video' && (
+              <AudioControl
+                enabled={effectiveGenerateAudio}
+                supported={selectedModel.supportsAudio}
+                onChange={setGenerateAudio}
+              />
+            )}
             {canUseInput ? (
               <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact />
             ) : (
@@ -270,7 +295,9 @@ function ModelControl({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{model.title}</span>
-                  <span className="text-xs text-amber-300">{model.estimatedCostCoins} коинов</span>
+                  <span className="text-xs text-amber-300">
+                    от {estimateChatGenerationCostCoins(model.slug, { duration: model.defaultDurationSec })} коинов
+                  </span>
                   {model.experimental && <span className="text-xs text-amber-200">бета</span>}
                 </div>
                 <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{model.description}</div>
@@ -316,7 +343,7 @@ function AspectControl({
   );
 }
 
-function DurationControl({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+function DurationControl({ value, values, onChange }: { value: number; values: number[]; onChange: (value: number) => void }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -329,12 +356,43 @@ function DurationControl({ value, onChange }: { value: number; onChange: (value:
       <DropdownMenuContent align="start" className="border-slate-800 bg-slate-950 text-slate-100">
         <DropdownMenuLabel>Длительность</DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-slate-800" />
-        {[5, 10].map((item) => (
+        {values.map((item) => (
           <DropdownMenuItem key={item} className="focus:bg-slate-900" onClick={() => onChange(item)}>
             {item} секунд
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function AudioControl({
+  enabled,
+  supported,
+  onChange,
+}: {
+  enabled: boolean;
+  supported: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  const Icon = enabled ? Volume2 : VolumeX;
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={cn(
+        'h-9 border-slate-700 bg-slate-950',
+        enabled && 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100',
+        !supported && 'text-slate-500',
+      )}
+      disabled={!supported}
+      aria-pressed={enabled}
+      title={supported ? 'Включить или выключить генерацию звука' : 'Эта модель не генерирует звук'}
+      onClick={() => onChange(!enabled)}
+    >
+      <Icon className="h-4 w-4" />
+      {supported ? (enabled ? 'Со звуком' : 'Без звука') : 'Звук недоступен'}
+    </Button>
   );
 }

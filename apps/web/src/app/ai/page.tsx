@@ -97,7 +97,7 @@ function AiContent() {
   const messages = chatQuery.data?.messages ?? [];
 
   return (
-    <div className="grid h-[calc(100vh-56px)] min-h-[560px] overflow-hidden bg-slate-950 md:h-screen md:grid-cols-[300px_minmax(0,1fr)]">
+    <div className="grid h-[calc(100dvh-56px)] min-h-0 overflow-hidden bg-slate-950 md:h-dvh md:grid-cols-[300px_minmax(0,1fr)]">
       <div className="hidden min-h-0 md:block">
         <ChatHistoryList
           items={chats.data?.items ?? []}
@@ -108,7 +108,7 @@ function AiContent() {
         />
       </div>
 
-      <section className="flex min-w-0 flex-col">
+      <section className="flex min-h-0 min-w-0 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <Sheet open={chatListOpen} onOpenChange={setChatListOpen}>

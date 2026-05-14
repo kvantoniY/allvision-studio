@@ -30,6 +30,13 @@ function isActive(status?: string) {
   return status === 'PENDING' || status === 'PROCESSING';
 }
 
+function hasGeneratedAudio(userInputs: unknown) {
+  if (!userInputs || typeof userInputs !== 'object' || Array.isArray(userInputs)) return false;
+  const meta = (userInputs as Record<string, unknown>).chatGeneration;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return false;
+  return (meta as Record<string, unknown>).generateAudio === true;
+}
+
 export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry }: ChatResultViewProps) {
   if (isLoading) {
     return (
@@ -85,6 +92,7 @@ function MessageCard({
   const resultUrl = resultVideo ?? resultImage ?? resultThumbnail;
   const failed = status === 'FAILED';
   const processing = isActive(status);
+  const withAudio = hasGeneratedAudio(project.userInputs);
 
   return (
     <Card className="border-slate-800 bg-slate-900/80">
@@ -97,6 +105,7 @@ function MessageCard({
               </Badge>
               <Badge variant="outline" className="border-slate-700 text-slate-300">{message.modelSlug}</Badge>
               {message.aspectRatio && <Badge variant="outline" className="border-slate-700 text-slate-300">{message.aspectRatio}</Badge>}
+              {withAudio && <Badge variant="outline" className="border-emerald-500/50 text-emerald-200">со звуком</Badge>}
               {message.inputRef && <Badge variant="outline" className="border-violet-500/50 text-violet-200">референс</Badge>}
             </div>
             <div className="text-xs text-slate-500">{formatDateTime(message.createdAt)}</div>

@@ -1,5 +1,5 @@
 import { BLOCK_CATALOG } from '../blocks/catalog';
-import { CHAT_MODELS } from '../chat/chat-models';
+import { CHAT_MODELS, estimateChatGenerationCostCoins, getChatModel } from '../chat/chat-models';
 
 describe('CHAT_MODELS', () => {
   it('points every chat model at an existing catalog block and model', () => {
@@ -15,6 +15,14 @@ describe('CHAT_MODELS', () => {
   it('keeps narrow service blocks out of the free chat list', () => {
     expect(CHAT_MODELS.map((model) => model.blockSlug)).not.toEqual(
       expect.arrayContaining(['face-swap-video', 'motion-transfer', 'video-compose', 'image-restore', 'image-upscale']),
+    );
+  });
+
+  it('marks audio-capable models and prices audio requests higher when provider charges for audio', () => {
+    expect(getChatModel('veo-3.1-fast')?.supportsAudio).toBe(true);
+    expect(getChatModel('seedance-2-fast')?.supportsAudio).toBe(false);
+    expect(estimateChatGenerationCostCoins('veo-3.1-fast', { duration: 8, generateAudio: true })).toBeGreaterThan(
+      estimateChatGenerationCostCoins('veo-3.1-fast', { duration: 8, generateAudio: false }),
     );
   });
 });

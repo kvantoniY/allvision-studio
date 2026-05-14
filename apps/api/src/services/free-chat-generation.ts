@@ -1,5 +1,5 @@
 import { Prisma, prisma } from '@allvision/database';
-import { getChatModel, type ChatAspectRatio } from '@allvision/shared';
+import { estimateChatGenerationCostCoins, getChatModel, type ChatAspectRatio } from '@allvision/shared';
 import { z } from 'zod';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
@@ -10,6 +10,7 @@ export const chatMessageSchema = z.object({
   prompt: z.string().trim().min(1).max(4000),
   aspectRatio: z.enum(['1:1', '9:16', '16:9', 'auto']).optional(),
   duration: z.coerce.number().int().min(1).max(30).optional(),
+  generateAudio: z.boolean().optional(),
   inputRef: z.string().trim().min(1).optional(),
   imageInputRef: z.string().trim().min(1).optional(),
   videoInputRef: z.string().trim().min(1).optional(),
@@ -155,6 +156,8 @@ function buildPipeline(params: {
   prompt: string;
   aspectRatio: ChatAspectRatio;
   duration?: number;
+  generateAudio?: boolean;
+  audioParam?: 'enable_audio' | 'generate_audio';
   inputRef: string | null;
 }) {
   const baseParams: Record<string, unknown> = {
@@ -163,6 +166,7 @@ function buildPipeline(params: {
     aspect_ratio: params.aspectRatio,
   };
   if (params.duration !== undefined) baseParams.duration = params.duration;
+  if (params.generateAudio && params.audioParam) baseParams[params.audioParam] = true;
   if (params.blockSlug === 'image-edit') {
     baseParams.output_format = 'jpg';
     baseParams.resolution = '1K';
@@ -216,6 +220,16 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   if (!model.supportedAspectRatios.includes(aspectRatio)) {
     throw new HttpError(400, 'UNSUPPORTED_ASPECT_RATIO', 'Эта модель не поддерживает выбранное соотношение сторон');
   }
+  if (body.generateAudio && !model.supportsAudio) {
+    throw new HttpError(400, 'AUDIO_NOT_SUPPORTED', 'Эта модель не генерирует звук');
+  }
+  const duration = model.category === 'video' ? body.duration ?? model.defaultDurationSec ?? 5 : undefined;
+  if (duration !== undefined && model.minDurationSec !== undefined && duration < model.minDurationSec) {
+    throw new HttpError(400, 'UNSUPPORTED_DURATION', `Минимальная длительность для этой модели: ${model.minDurationSec} сек.`);
+  }
+  if (duration !== undefined && model.maxDurationSec !== undefined && duration > model.maxDurationSec) {
+    throw new HttpError(400, 'UNSUPPORTED_DURATION', `Максимальная длительность для этой модели: ${model.maxDurationSec} сек.`);
+  }
 
   const genericInput = body.inputRef ? await resolveInputRef(body.inputRef, userId) : null;
   const imageInput = body.imageInputRef ? await resolveInputRef(body.imageInputRef, userId) : genericInput?.mediaKind === 'image' ? genericInput : null;
@@ -240,13 +254,16 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   }
 
   const input = imageInput ?? videoInput;
-  const tokensCost = model.estimatedCostCoins;
+  const generateAudio = model.supportsAudio && body.generateAudio === true;
+  const tokensCost = estimateChatGenerationCostCoins(model.slug, { duration, generateAudio });
   const pipelineSnapshot = buildPipeline({
     blockSlug: model.blockSlug,
     modelSlug: model.slug,
     prompt: body.prompt,
     aspectRatio,
-    duration: model.category === 'video' ? body.duration ?? 5 : undefined,
+    duration,
+    generateAudio,
+    audioParam: model.audioParam,
     inputRef: input?.ref.startsWith('result:') ? input.publicUrl : input?.ref ?? null,
   });
   const stepProgress = pipelineSnapshot.map((step) => ({
@@ -283,7 +300,8 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
               category: model.category,
               prompt: body.prompt,
               aspectRatio,
-              duration: model.category === 'video' ? body.duration ?? 5 : undefined,
+              duration,
+              generateAudio: generateAudio || undefined,
               inputRef: input?.ref,
               imageInputRef: imageInput?.ref,
               videoInputRef: videoInput?.ref,
@@ -337,7 +355,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
     status: 'queued' as const,
     estimatedDurationSec: estimateDurationSec(model.category),
     aspectRatio,
-    duration: model.category === 'video' ? body.duration ?? 5 : undefined,
+    duration,
   };
 }
 
