@@ -33,6 +33,8 @@ export type UserInputField = {
   maxSizeMb?: number;
   mediaKind?: string;
   allowedFormats?: string[];
+  allowStudioAvatars?: boolean;
+  allowSystemLibrary?: boolean;
   avatarTypes?: string[];
   options?: Array<{ label: string; value: string }>;
 };

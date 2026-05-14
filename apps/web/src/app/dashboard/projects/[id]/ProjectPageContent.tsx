@@ -23,6 +23,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import {
   type ProjectDetails,
   useGetProjectQuery,
@@ -438,6 +439,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 <Share2 className="h-4 w-4" />
                 Поделиться
               </Button>
+              <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
             </div>
           </TooltipProvider>
 
@@ -652,6 +654,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                   <Button asChild variant="outline">
                     <Link href="/dashboard/projects">К списку проектов</Link>
                   </Button>
+                  <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
                 </div>
               </div>
             ) : (

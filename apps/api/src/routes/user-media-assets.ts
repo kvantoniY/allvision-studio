@@ -1,14 +1,20 @@
+import crypto from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { Prisma, prisma } from '@allvision/database';
+import sharp from 'sharp';
+import { Prisma, prisma, ProjectStatus } from '@allvision/database';
 import { getBlockCatalogItem } from '@allvision/shared';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { uploadMediaAsset } from '../middleware/upload';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
+import { resolveWorkspacePath } from '../utils/paths';
 import * as queues from '../queues';
 import * as fileService from '../services/file-service';
 import { processAndUploadMediaAsset } from '../services/media-asset-service';
+import { getStorageProvider } from '../providers';
 
 export const userMediaAssetsRouter = Router();
 
@@ -44,6 +50,14 @@ const generateSchema = z.object({
   model: z.literal('nano-banana').default('nano-banana'),
   title: z.string().trim().min(1).max(160),
   aspectRatio: z.enum(['1:1', '9:16', '16:9', 'auto']).optional(),
+});
+
+const saveFromProjectSchema = z.object({
+  projectId: z.string().trim().min(1),
+  kind: z.enum(USER_MEDIA_KINDS),
+  title: z.string().trim().min(1).max(160),
+  description: z.string().trim().max(1000).optional(),
+  tags: z.union([z.array(z.string()), z.string()]).optional(),
 });
 
 function parseJsonOrBody(req: Request) {
@@ -99,6 +113,88 @@ function toAssetResponse<T extends { thumbnailKey: string | null }>(asset: T) {
 function nanoBananaCostCoins() {
   const model = getBlockCatalogItem('image-edit')?.supportedModels.find((item) => item.slug === 'nano-banana');
   return model?.estimatedCostCoins ?? 10;
+}
+
+function projectOutputUrl(project: { resultImage: string | null; resultVideo: string | null; resultThumbnail: string | null }) {
+  return project.resultVideo ?? project.resultImage ?? project.resultThumbnail;
+}
+
+function staticKeyFromUrl(value: string): string | null {
+  const rawPath = (() => {
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      try {
+        return new URL(value).pathname;
+      } catch {
+        return null;
+      }
+    }
+    return value;
+  })();
+  if (!rawPath) return null;
+  const marker = '/static/';
+  if (!rawPath.includes(marker)) return null;
+  return decodeURIComponent(rawPath.slice(rawPath.indexOf(marker) + marker.length).replace(/^\/+/, ''));
+}
+
+function mimeTypeForUrl(value: string) {
+  const ext = value.split('?')[0]?.split('.').pop()?.toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'mp4') return 'video/mp4';
+  if (ext === 'webm') return 'video/webm';
+  if (ext === 'mov') return 'video/quicktime';
+  return 'image/jpeg';
+}
+
+function extensionFor(contentType: string, url: string) {
+  if (contentType.includes('png')) return 'png';
+  if (contentType.includes('webp')) return 'webp';
+  if (contentType.includes('mp4')) return 'mp4';
+  if (contentType.includes('webm')) return 'webm';
+  if (contentType.includes('quicktime')) return 'mov';
+  const ext = url.split('?')[0]?.split('.').pop()?.toLowerCase();
+  if (ext && /^[a-z0-9]+$/.test(ext)) return ext === 'jpeg' ? 'jpg' : ext;
+  return 'jpg';
+}
+
+async function readStaticFile(key: string) {
+  const rootDir = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
+  const target = path.resolve(rootDir, key.replace(/^\/+/, ''));
+  if (!target.startsWith(rootDir + path.sep) && target !== rootDir) {
+    throw new Error(`INVALID_STORAGE_KEY: ${key}`);
+  }
+  return fs.readFile(target);
+}
+
+async function readOutputBuffer(outputUrl: string) {
+  const staticKey = staticKeyFromUrl(outputUrl);
+  if (staticKey) {
+    return {
+      buffer: await readStaticFile(staticKey),
+      contentType: mimeTypeForUrl(staticKey),
+    };
+  }
+
+  const absoluteUrl = outputUrl.startsWith('/static/')
+    ? `${(process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')}${outputUrl}`
+    : outputUrl;
+  const downloaded = await fetch(absoluteUrl);
+  if (!downloaded.ok) {
+    throw new HttpError(502, 'PROJECT_OUTPUT_DOWNLOAD_FAILED', 'Не удалось скачать результат проекта');
+  }
+  return {
+    buffer: Buffer.from(await downloaded.arrayBuffer()),
+    contentType: downloaded.headers.get('content-type') ?? mimeTypeForUrl(outputUrl),
+  };
+}
+
+async function mediaDimensions(buffer: Buffer, contentType: string) {
+  if (!contentType.startsWith('image/')) return {};
+  const metadata = await sharp(buffer).metadata().catch(() => undefined);
+  return {
+    width: metadata?.width,
+    height: metadata?.height,
+  };
 }
 
 function isPrismaNotFound(error: unknown): boolean {
@@ -250,6 +346,69 @@ userMediaAssetsRouter.post('/generate', async (req: Request, res: Response, next
     }
 
     res.status(202).json({ project });
+  } catch (err) {
+    next(err);
+  }
+});
+
+userMediaAssetsRouter.post('/save-from-project', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const body = saveFromProjectSchema.parse(req.body);
+    const userId = req.user!.id;
+    const project = await prisma.project.findFirst({
+      where: { id: body.projectId, userId },
+      select: {
+        id: true,
+        mode: true,
+        status: true,
+        title: true,
+        resultImage: true,
+        resultVideo: true,
+        resultThumbnail: true,
+      },
+    });
+    if (!project) throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Проект не найден');
+    if (!['free-chat', 'library-generation', 'service'].includes(project.mode)) {
+      throw new HttpError(400, 'PROJECT_MODE_NOT_SUPPORTED', 'Этот проект нельзя сохранить в Студию');
+    }
+    if (project.status !== ProjectStatus.COMPLETED) {
+      throw new HttpError(400, 'PROJECT_NOT_COMPLETED', 'Сохранить можно только завершённый проект');
+    }
+
+    const outputUrl = projectOutputUrl(project);
+    if (!outputUrl) throw new HttpError(400, 'PROJECT_OUTPUT_MISSING', 'У проекта нет готового результата');
+
+    const { buffer, contentType } = await readOutputBuffer(outputUrl);
+    const ext = extensionFor(contentType, outputUrl);
+    const storageKey = `user-uploads/library/${userId}/${crypto.randomUUID()}.${ext}`;
+    const uploaded = await getStorageProvider().upload({ key: storageKey, body: buffer, contentType });
+    const dimensions = await mediaDimensions(buffer, contentType);
+    const aggregate = await prisma.mediaAsset.aggregate({
+      where: { ownerUserId: userId, kind: body.kind },
+      _max: { sortOrder: true },
+    });
+    const asset = await prisma.mediaAsset.create({
+      data: {
+        ownerUserId: userId,
+        kind: body.kind,
+        title: body.title,
+        description: body.description ?? `Сохранено из проекта: ${project.title}`,
+        tags: [...new Set([...normaliseTags(body.tags), 'from-project', `project:${project.id}`])],
+        storageKey: uploaded.key,
+        publicUrl: uploaded.url,
+        thumbnailKey: null,
+        durationSec: null,
+        width: dimensions.width ?? null,
+        height: dimensions.height ?? null,
+        frameCount: null,
+        fileSize: buffer.length,
+        mimeType: contentType,
+        isActive: true,
+        sortOrder: (aggregate._max.sortOrder ?? 0) + 10,
+      },
+      select: selectAsset(),
+    });
+    res.status(201).json({ asset: toAssetResponse(asset) });
   } catch (err) {
     next(err);
   }

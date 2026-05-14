@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import { cn } from '@/lib/utils';
 import { useGetProjectQuery, useGetProjectStatusQuery } from '@/store/api/projects-api';
 
@@ -157,6 +158,9 @@ export function ChatResultView({ projectId, onUseAsReference }: ChatResultViewPr
               <RotateCcw className="h-4 w-4" />
               Использовать как референс
             </Button>
+          )}
+          {status === 'COMPLETED' && (
+            <SaveToStudioButton projectId={project.id} defaultTitle={project.title.replace(/^Чат:\s*/, '')} />
           )}
         </div>
       )}

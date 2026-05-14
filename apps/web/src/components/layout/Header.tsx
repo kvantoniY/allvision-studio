@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Coins, LogOut, Menu, Sparkles, User } from 'lucide-react';
+import { Coins, Grid3X3, Home, LogOut, Menu, Palette, Sparkles, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -25,6 +25,14 @@ const navItems = [
   { href: '/pricing', label: 'Цены' },
 ];
 
+const userNavItems = [
+  { href: '/', label: 'Главная', icon: Home },
+  { href: '/ai', label: 'Allvision AI', icon: Sparkles },
+  { href: '/services', label: 'Услуги', icon: Grid3X3 },
+  { href: '/studio', label: 'Студия', icon: Palette },
+  { href: '/profile', label: 'Профиль', icon: User },
+];
+
 function initialsOf(name: string | null | undefined, email: string) {
   if (name) {
     const parts = name.trim().split(/\s+/);
@@ -36,13 +44,21 @@ function initialsOf(name: string | null | undefined, email: string) {
 export function Header() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
-  const inDashboard = pathname?.startsWith('/dashboard') ?? false;
+  const userWorkspaceRoute = !!user && (
+    pathname === '/' ||
+    pathname?.startsWith('/ai') ||
+    pathname?.startsWith('/services') ||
+    pathname?.startsWith('/studio') ||
+    pathname?.startsWith('/profile') ||
+    pathname?.startsWith('/dashboard')
+  );
+  const visibleNavItems = user ? userNavItems : navItems;
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
-          {inDashboard && <DashboardSidebarMobile />}
+          {userWorkspaceRoute && <DashboardSidebarMobile />}
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <Sparkles className="h-5 w-5 text-primary" />
             <span>Allvision Studio</span>
@@ -50,7 +66,7 @@ export function Header() {
         </div>
 
         <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link key={item.href} href={item.href} className="hover:text-foreground transition-colors">
               {item.label}
             </Link>
@@ -69,24 +85,28 @@ export function Header() {
                 <SheetTitle>Allvision Studio</SheetTitle>
               </SheetHeader>
               <nav className="mt-8 grid gap-4">
-                {navItems.map((item) => (
+                {visibleNavItems.map((item) => (
                   <Link key={item.href} href={item.href} className="text-lg font-medium">
                     {item.label}
                   </Link>
                 ))}
-                <Link href="/about" className="text-lg font-medium">
-                  О проекте
-                </Link>
-                <Link href="/contacts" className="text-lg font-medium">
-                  Контакты
-                </Link>
+                {!user && (
+                  <>
+                    <Link href="/about" className="text-lg font-medium">
+                      О проекте
+                    </Link>
+                    <Link href="/contacts" className="text-lg font-medium">
+                      Контакты
+                    </Link>
+                  </>
+                )}
               </nav>
             </SheetContent>
           </Sheet>
           {user ? (
             <div className="flex items-center gap-2">
               <Link
-                href="/pricing"
+                href="/profile?tab=billing"
                 className="hidden items-baseline gap-1 rounded-full bg-slate-800 px-3 py-1 text-sm font-semibold text-amber-400 transition hover:bg-slate-700 sm:inline-flex"
               >
                 <Coins className="h-4 w-4" />
@@ -120,18 +140,18 @@ export function Header() {
                         {user.tokenBalance} коинов
                       </span>
                       <Button asChild size="sm" className="h-8 bg-amber-500 text-slate-950 hover:bg-amber-400">
-                        <Link href="/pricing">Пополнить</Link>
+                        <Link href="/profile?tab=billing">Пополнить</Link>
                       </Button>
                     </div>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
-                    <Link href="/dashboard" className="cursor-pointer">
-                      <User className="mr-2 h-4 w-4" /> Кабинет
+                    <Link href="/" className="cursor-pointer">
+                      <Home className="mr-2 h-4 w-4" /> Главная
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
-                    <Link href="/pricing" className="cursor-pointer">
+                    <Link href="/profile?tab=billing" className="cursor-pointer">
                       <Coins className="mr-2 h-4 w-4" /> Купить коины
                     </Link>
                   </DropdownMenuItem>

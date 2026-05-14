@@ -45,6 +45,8 @@ export const userInputFieldSchema = z.object({
   maxLength: z.number().int().min(1).max(5000).optional(),
   maxSizeMb: z.number().int().min(1).max(100).optional(),
   allowedFormats: z.array(z.string().trim().min(1)).optional(),
+  allowStudioAvatars: z.boolean().optional(),
+  allowSystemLibrary: z.boolean().optional(),
   avatarTypes: z.array(z.enum(['HUMAN', 'PET', 'OBJECT', 'all'])).optional(),
   options: z.array(z.object({
     label: z.string().trim().min(1).max(120),

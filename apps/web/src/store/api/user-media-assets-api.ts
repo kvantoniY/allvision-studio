@@ -51,6 +51,14 @@ export type GenerateUserMediaAssetBody = {
   aspectRatio?: '1:1' | '9:16' | '16:9' | 'auto';
 };
 
+export type SaveProjectToStudioBody = {
+  projectId: string;
+  kind: UserMediaKind;
+  title: string;
+  tags?: string[];
+  description?: string;
+};
+
 export const userMediaAssetsApi = createApi({
   reducerPath: 'userMediaAssetsApi',
   baseQuery: createBaseQueryWithReauth('/api/user/media-assets'),
@@ -96,6 +104,10 @@ export const userMediaAssetsApi = createApi({
         dispatch(projectsApi.util.invalidateTags(['Project']));
       },
     }),
+    saveProjectToStudio: build.mutation<{ asset: UserMediaAsset }, SaveProjectToStudioBody>({
+      query: (body) => ({ url: '/save-from-project', method: 'POST', body }),
+      invalidatesTags: ['UserMediaAsset'],
+    }),
   }),
 });
 
@@ -106,4 +118,5 @@ export const {
   useUpdateUserMediaAssetMutation,
   useDeleteUserMediaAssetMutation,
   useGenerateUserMediaAssetMutation,
+  useSaveProjectToStudioMutation,
 } = userMediaAssetsApi;

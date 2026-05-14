@@ -199,4 +199,79 @@ describe('/api/user/media-assets', () => {
     });
     expect(refund?.amount).toBeGreaterThan(0);
   });
+
+  it('saves a completed project output to the user library and validates project access', async () => {
+    const projectId = `save-project-${RUN_ID}`;
+    const outputKey = `results/${projectId}/output.png`;
+    const outputPath = path.join(tmpDir, outputKey);
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    fs.writeFileSync(outputPath, await pngBuffer());
+
+    await prisma.project.create({
+      data: {
+        id: projectId,
+        userId,
+        mode: 'free-chat',
+        title: `Library ${RUN_ID} completed project`,
+        status: 'COMPLETED',
+        progress: 100,
+        inputImages: [],
+        tokensCost: 10,
+        resultImage: `http://test.local:4000/static/${outputKey}`,
+      },
+    });
+    const pending = await prisma.project.create({
+      data: {
+        userId,
+        mode: 'service',
+        title: `Library ${RUN_ID} pending project`,
+        status: 'PENDING',
+        progress: 0,
+        inputImages: [],
+        tokensCost: 10,
+      },
+    });
+    const foreign = await prisma.project.create({
+      data: {
+        userId: otherUserId,
+        mode: 'free-chat',
+        title: `Library ${RUN_ID} foreign project`,
+        status: 'COMPLETED',
+        progress: 100,
+        inputImages: [],
+        tokensCost: 10,
+        resultImage: `http://test.local:4000/static/${outputKey}`,
+      },
+    });
+
+    const foreignRes = await request(app)
+      .post('/api/user/media-assets/save-from-project')
+      .set('Cookie', authCookie(userId))
+      .send({ projectId: foreign.id, kind: 'user-avatar', title: `Library ${RUN_ID} denied` });
+    expect(foreignRes.status).toBe(404);
+
+    const pendingRes = await request(app)
+      .post('/api/user/media-assets/save-from-project')
+      .set('Cookie', authCookie(userId))
+      .send({ projectId: pending.id, kind: 'user-avatar', title: `Library ${RUN_ID} pending denied` });
+    expect(pendingRes.status).toBe(400);
+    expect(pendingRes.body.error.code).toBe('PROJECT_NOT_COMPLETED');
+
+    const res = await request(app)
+      .post('/api/user/media-assets/save-from-project')
+      .set('Cookie', authCookie(userId))
+      .send({
+        projectId,
+        kind: 'user-avatar',
+        title: `Library ${RUN_ID} saved from project`,
+        tags: ['saved', 'project'],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.asset.ownerUserId).toBe(userId);
+    expect(res.body.asset.kind).toBe('user-avatar');
+    expect(res.body.asset.storageKey).toContain(`user-uploads/library/${userId}/`);
+    expect(res.body.asset.tags).toEqual(expect.arrayContaining(['saved', 'project', 'from-project', `project:${projectId}`]));
+    expect(fs.existsSync(path.join(tmpDir, res.body.asset.storageKey))).toBe(true);
+  });
 });

@@ -144,6 +144,53 @@ function requiredMissing(value: unknown): boolean {
   return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
 }
 
+function assetReferenceId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = value.trim().match(/^asset:([a-zA-Z0-9_-]+)$/);
+  return match?.[1] ?? null;
+}
+
+type UserInputAsset = {
+  ref: string;
+  publicUrl: string;
+  title: string;
+};
+
+async function resolvePhotoInputAsset(field: UserInputFieldInput, value: unknown, userId: string): Promise<UserInputAsset | null> {
+  if (requiredMissing(value)) return null;
+  const id = assetReferenceId(value);
+  if (!id) {
+    throw new HttpError(400, 'INVALID_MEDIA_ASSET', `${field.id} must be selected from Studio or uploaded as a file`);
+  }
+
+  const asset = await prisma.mediaAsset.findFirst({
+    where: { id, isActive: true },
+    select: { id: true, kind: true, title: true, publicUrl: true, ownerUserId: true, mimeType: true },
+  });
+  if (!asset || (asset.ownerUserId && asset.ownerUserId !== userId)) {
+    throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Media asset not found');
+  }
+  if (!asset.mimeType.startsWith('image/')) {
+    throw new HttpError(400, 'INVALID_MEDIA_ASSET', `${field.id} must be an image`);
+  }
+
+  const studioAllowed =
+    asset.ownerUserId === userId &&
+    asset.kind === 'user-avatar' &&
+    (field.type === 'avatar' || field.allowStudioAvatars !== false);
+  const systemAllowed =
+    !asset.ownerUserId &&
+    asset.kind === 'preview-image' &&
+    field.type === 'photo' &&
+    field.allowSystemLibrary === true;
+
+  if (!studioAllowed && !systemAllowed) {
+    throw new HttpError(400, 'MEDIA_ASSET_NOT_ALLOWED', `${field.id} cannot use this media asset`);
+  }
+
+  return { ref: `asset:${asset.id}`, publicUrl: asset.publicUrl, title: asset.title };
+}
+
 function formFields(value: unknown): UserInputFieldInput[] {
   try {
     return userInputFormSchema.parse(value);
@@ -283,6 +330,7 @@ servicesRouter.post(
       const photoFields = fields.filter((field) => field.type === 'photo');
       const fileMap = filesByField(req, new Set(photoFields.map((field) => field.id)));
       const tierField = fields.find((field) => field.type === 'tier');
+      const userId = req.user!.id;
       if (!tierField) throw new HttpError(400, 'TIER_FIELD_REQUIRED', 'Tier field is required');
 
       const tierValue = data[tierField.id];
@@ -290,10 +338,17 @@ servicesRouter.post(
         throw new HttpError(400, 'INVALID_TIER', 'Tier must be standard or pro');
       }
 
+      const assetInputs = new Map<string, UserInputAsset>();
       for (const field of fields) {
         if (field.type === 'photo') {
-          if (field.required && !fileMap.has(field.id)) {
+          const hasFile = fileMap.has(field.id);
+          const value = data[field.id];
+          if (field.required && !hasFile && requiredMissing(value)) {
             throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
+          }
+          if (!hasFile && !requiredMissing(value)) {
+            const asset = await resolvePhotoInputAsset(field, value, userId);
+            if (asset) assetInputs.set(field.id, asset);
           }
           continue;
         }
@@ -303,7 +358,11 @@ servicesRouter.post(
           throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
         }
         if (requiredMissing(value)) continue;
-        if (field.type === 'text' || field.type === 'textarea' || field.type === 'avatar') {
+        if (field.type === 'avatar') {
+          const asset = await resolvePhotoInputAsset(field, value, userId);
+          if (asset) assetInputs.set(field.id, asset);
+        }
+        if (field.type === 'text' || field.type === 'textarea') {
           validateTextField(field, value);
         }
         if (field.type === 'select') {
@@ -314,11 +373,13 @@ servicesRouter.post(
         }
       }
 
-      const userId = req.user!.id;
       const projectId = crypto.randomUUID();
       const userInputs: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(data)) {
         userInputs[key] = value;
+      }
+      for (const [fieldId, asset] of assetInputs) {
+        userInputs[fieldId] = asset.ref;
       }
 
       for (const field of photoFields) {
@@ -349,7 +410,7 @@ servicesRouter.post(
           ? service.priceCoinsPro ?? service.priceTokens
           : service.priceCoinsStandard ?? service.priceTokens;
       const inputImages = photoFields
-        .map((field) => userInputs[field.id])
+        .map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id])
         .filter((value): value is string => typeof value === 'string');
       const stepProgress = steps.map((step) => ({
         stepId: step.id,

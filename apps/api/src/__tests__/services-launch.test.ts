@@ -244,6 +244,86 @@ describe('POST /api/services/:slug/launch', () => {
     expect(transaction.amount).toBe(-100);
   });
 
+  it('launches with a Studio avatar asset without re-uploading the file', async () => {
+    const service = await createService({
+      ...serviceData(),
+      userInputForm: [
+        { id: 'photo', type: 'photo', label: 'Photo', required: true, allowStudioAvatars: true, allowSystemLibrary: false },
+        {
+          id: 'mood',
+          type: 'select',
+          label: 'Mood',
+          required: true,
+          options: [{ label: 'Warm', value: 'warm' }],
+        },
+        { id: 'tier', type: 'tier', label: 'Quality', required: true },
+      ],
+    });
+    const asset = await prisma.mediaAsset.create({
+      data: {
+        ownerUserId: userId,
+        kind: 'user-avatar',
+        title: `Launch ${RUN_ID} avatar`,
+        tags: [],
+        storageKey: `media-assets/user-avatar/${RUN_ID}.jpg`,
+        publicUrl: `http://test.local:4000/static/media-assets/user-avatar/${RUN_ID}.jpg`,
+        fileSize: 100,
+        mimeType: 'image/jpeg',
+        isActive: true,
+      },
+    });
+    const addJob = jest.spyOn(queuesModule, 'addServicePipelineJob').mockResolvedValue({} as never);
+
+    const res = await request(app)
+      .post(`/api/services/${service.slug}/launch`)
+      .set('Cookie', authCookie(userId))
+      .field('data', JSON.stringify({ tier: 'standard', mood: 'warm', photo: `asset:${asset.id}` }));
+
+    expect(res.status).toBe(201);
+    expect(addJob).toHaveBeenCalledWith({ projectId: res.body.project.id, userId });
+    const project = await prisma.project.findUniqueOrThrow({ where: { id: res.body.project.id } });
+    expect(project.userInputs).toEqual(expect.objectContaining({ photo: `asset:${asset.id}` }));
+    expect(project.inputImages).toEqual([asset.publicUrl]);
+  });
+
+  it('rejects a foreign Studio avatar asset before launch', async () => {
+    const service = await createService({
+      ...serviceData(),
+      userInputForm: [
+        { id: 'photo', type: 'photo', label: 'Photo', required: true, allowStudioAvatars: true, allowSystemLibrary: false },
+        {
+          id: 'mood',
+          type: 'select',
+          label: 'Mood',
+          required: true,
+          options: [{ label: 'Warm', value: 'warm' }],
+        },
+        { id: 'tier', type: 'tier', label: 'Quality', required: true },
+      ],
+    });
+    const asset = await prisma.mediaAsset.create({
+      data: {
+        ownerUserId: lowBalanceUserId,
+        kind: 'user-avatar',
+        title: `Launch ${RUN_ID} foreign avatar`,
+        tags: [],
+        storageKey: `media-assets/user-avatar/${RUN_ID}-foreign.jpg`,
+        publicUrl: `http://test.local:4000/static/media-assets/user-avatar/${RUN_ID}-foreign.jpg`,
+        fileSize: 100,
+        mimeType: 'image/jpeg',
+        isActive: true,
+      },
+    });
+
+    const res = await request(app)
+      .post(`/api/services/${service.slug}/launch`)
+      .set('Cookie', authCookie(userId))
+      .field('data', JSON.stringify({ tier: 'standard', mood: 'warm', photo: `asset:${asset.id}` }));
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe('MEDIA_ASSET_NOT_FOUND');
+  });
+
   it('charges pro price when pro tier is selected', async () => {
     const service = await createService();
     jest.spyOn(queuesModule, 'addServicePipelineJob').mockResolvedValue({} as never);

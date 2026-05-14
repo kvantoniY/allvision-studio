@@ -1,4 +1,4 @@
-import { BookOpen, FileText, Film, Home, ImageIcon, Map, Palette, Sparkles, User, Users, Wallet } from 'lucide-react';
+import { Grid3X3, Home, Palette, Sparkles, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -14,30 +14,17 @@ export type SidebarSection = {
 
 export const SIDEBAR_SECTIONS: SidebarSection[] = [
   {
-    items: [{ href: '/dashboard', label: 'Кабинет', icon: Home }],
-  },
-  {
-    label: 'Моя студия',
     items: [
+      { href: '/', label: 'Главная', icon: Home },
       { href: '/ai', label: 'Allvision AI', icon: Sparkles },
+      { href: '/services', label: 'Услуги', icon: Grid3X3 },
       { href: '/studio', label: 'Студия', icon: Palette },
-      { href: '/dashboard/characters', label: 'Персонажи', icon: Users },
-      { href: '/dashboard/scenes', label: 'Сцены', icon: Map },
-      { href: '/dashboard/episodes', label: 'Эпизоды', icon: Film },
-    ],
-  },
-  {
-    items: [
-      { href: '/dashboard/projects', label: 'Проекты', icon: ImageIcon },
-      { href: '/dashboard/orders', label: 'Заказы', icon: FileText },
-      { href: '/dashboard/fairy-tales', label: 'Сказки', icon: BookOpen },
-      { href: '/dashboard/billing', label: 'Биллинг', icon: Wallet },
-      { href: '/dashboard/profile', label: 'Профиль', icon: User },
+      { href: '/profile', label: 'Профиль', icon: User },
     ],
   },
 ];
 
 export function isActive(itemHref: string, pathname: string): boolean {
-  if (itemHref === '/dashboard') return pathname === '/dashboard';
+  if (itemHref === '/') return pathname === '/';
   return pathname === itemHref || pathname.startsWith(itemHref + '/');
 }

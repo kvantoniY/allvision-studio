@@ -63,10 +63,10 @@ export default function MockPaymentPage() {
       window.setTimeout(() => {
         if (event === 'succeeded') {
           const tokens = payment.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';
-          router.replace(`/dashboard/billing?payment=success${tokens}`);
+          router.replace(`/profile?tab=billing&payment=success${tokens}`);
           return;
         }
-        router.replace('/dashboard/billing?payment=failed');
+        router.replace('/profile?tab=billing&payment=failed');
       }, event === 'succeeded' ? 1400 : 900);
     } catch {
       setScenario(null);
@@ -79,7 +79,7 @@ export default function MockPaymentPage() {
   };
 
   const simulateTimeout = () => {
-    router.replace('/dashboard/billing');
+    router.replace('/profile?tab=billing');
   };
 
   return (
@@ -123,7 +123,7 @@ export default function MockPaymentPage() {
                 icon={<CheckCircle2 className="h-8 w-8" />}
                 title="Платёж уже завершён"
                 description="Токены уже начислены на баланс."
-                href="/dashboard/billing"
+                href="/profile?tab=billing"
                 label="В личный кабинет"
               />
             ) : payment.status !== 'PENDING' ? (
@@ -131,7 +131,7 @@ export default function MockPaymentPage() {
                 icon={<AlertCircle className="h-8 w-8" />}
                 title="Платёж больше не активен"
                 description="Создайте новую покупку или повторите её из истории платежей."
-                href="/dashboard/billing"
+                href="/profile?tab=billing"
                 label="В биллинг"
               />
             ) : (

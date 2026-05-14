@@ -37,7 +37,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
       </div>
 
       <Link
-        href="/pricing"
+        href="/profile?tab=billing"
         onClick={onNavigate}
         className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 transition hover:border-amber-500/60 hover:bg-amber-500/15"
       >
@@ -83,7 +83,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
       </nav>
 
       <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
-        <Link href="/pricing" onClick={onNavigate}>
+        <Link href="/profile?tab=billing" onClick={onNavigate}>
           <Coins className="mr-2 h-4 w-4" />
           Купить коины
         </Link>

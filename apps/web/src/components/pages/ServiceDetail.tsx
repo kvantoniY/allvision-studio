@@ -2,9 +2,9 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, Coins, ImagePlus, Loader2, Lock, Sparkles, Star } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Coins, ImagePlus, Library, Loader2, Lock, Sparkles, Star, X } from 'lucide-react';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useGetServiceQuery, useLaunchServiceMutation } from '@/store/api/services-api';
+import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
+import { useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -40,11 +42,13 @@ type UserInputField = {
   maxLength?: number;
   options?: UserInputOption[];
   mediaKind?: string;
+  allowStudioAvatars?: boolean;
+  allowSystemLibrary?: boolean;
 };
 
 type FormValues = Record<string, string>;
 type FileValues = Record<string, File | undefined>;
-type MediaAssetOption = { id: string; title: string; publicUrl: string; thumbnailUrl?: string | null };
+type MediaAssetOption = { id: string; title: string; publicUrl: string; thumbnailUrl?: string | null; kind?: string; mimeType?: string };
 
 const categoryLabels: Record<string, string> = {
   NOSTALGIA: 'Ностальгия',
@@ -95,6 +99,8 @@ function parseFields(value: unknown): UserInputField[] {
       placeholder: typeof item.placeholder === 'string' ? item.placeholder : undefined,
       maxLength: typeof item.maxLength === 'number' ? item.maxLength : undefined,
       mediaKind: typeof item.mediaKind === 'string' ? item.mediaKind : undefined,
+      allowStudioAvatars: typeof item.allowStudioAvatars === 'boolean' ? item.allowStudioAvatars : undefined,
+      allowSystemLibrary: typeof item.allowSystemLibrary === 'boolean' ? item.allowSystemLibrary : undefined,
       options: Array.isArray(item.options)
         ? item.options
             .filter((option): option is Record<string, unknown> => !!option && typeof option === 'object' && !Array.isArray(option))
@@ -126,7 +132,13 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
   for (const field of fields) {
     if (field.type === 'tier') continue;
     if (field.type === 'photo') {
-      if (field.required && !files[field.id]) errors.push(`Загрузите файл: ${field.label ?? field.id}`);
+      if (field.required && !files[field.id] && !values[field.id]?.trim()) {
+        errors.push(`Загрузите файл или выберите аватар: ${field.label ?? field.id}`);
+      }
+      continue;
+    }
+    if (field.type === 'avatar') {
+      if (field.required && !values[field.id]?.trim()) errors.push(`Выберите аватар: ${field.label ?? field.id}`);
       continue;
     }
     const value = values[field.id]?.trim();
@@ -136,6 +148,208 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
     }
   }
   return errors;
+}
+
+type PhotoSourceTab = 'upload' | 'studio' | 'library';
+
+function assetIdFromRef(value?: string) {
+  return value?.match(/^asset:([a-zA-Z0-9_-]+)$/)?.[1] ?? null;
+}
+
+function isImageAsset(asset: { mimeType?: string | null }) {
+  return !asset.mimeType || asset.mimeType.startsWith('image/');
+}
+
+function ServicePhotoInput({
+  field,
+  label,
+  required,
+  value,
+  file,
+  onValueChange,
+  onFileChange,
+}: {
+  field: UserInputField;
+  label: string;
+  required: ReactNode;
+  value?: string;
+  file?: File;
+  onValueChange: (id: string, value: string) => void;
+  onFileChange: (id: string, file?: File) => void;
+}) {
+  const uploadEnabled = field.type === 'photo';
+  const studioEnabled = field.allowStudioAvatars !== false;
+  const libraryEnabled = field.type === 'photo' && field.allowSystemLibrary === true;
+  const defaultTab: PhotoSourceTab = uploadEnabled ? 'upload' : 'studio';
+  const [tab, setTab] = useState<PhotoSourceTab>(defaultTab);
+  const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 }, { skip: !studioEnabled });
+  const publicAssets = useGetPublicMediaAssetsQuery(
+    { kind: 'preview-image', active: true },
+    { skip: !libraryEnabled },
+  );
+
+  const studioAssets = useMemo(
+    () => (avatars.data?.items ?? []).filter(isImageAsset),
+    [avatars.data?.items],
+  );
+  const libraryAssets = useMemo(
+    () => (publicAssets.data?.assets ?? []).filter(isImageAsset),
+    [publicAssets.data?.assets],
+  );
+  const allAssets = useMemo(
+    () => [...studioAssets, ...libraryAssets],
+    [studioAssets, libraryAssets],
+  );
+  const selectedAsset = allAssets.find((asset) => asset.id === assetIdFromRef(value));
+
+  const selectAsset = (asset: MediaAssetOption) => {
+    onFileChange(field.id, undefined);
+    onValueChange(field.id, `asset:${asset.id}`);
+  };
+
+  const selectFile = (next?: File) => {
+    onValueChange(field.id, '');
+    onFileChange(field.id, next);
+  };
+
+  const tabs = [
+    uploadEnabled ? { id: 'upload' as const, label: 'Загрузить фото' } : null,
+    studioEnabled ? { id: 'studio' as const, label: 'Выбрать из Студии' } : null,
+    libraryEnabled ? { id: 'library' as const, label: 'Из библиотеки' } : null,
+  ].filter((item): item is { id: PhotoSourceTab; label: string } => Boolean(item));
+
+  return (
+    <div className="space-y-3">
+      <Label htmlFor={field.id}>{label} {required}</Label>
+      {tabs.length > 1 && (
+        <div className="grid gap-2 sm:grid-cols-3">
+          {tabs.map((item) => (
+            <Button
+              key={item.id}
+              type="button"
+              variant={tab === item.id ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setTab(item.id)}
+              className={cn(tab === item.id && 'bg-violet-600 hover:bg-violet-500')}
+            >
+              {item.id === 'upload' ? <ImagePlus className="h-4 w-4" /> : <Library className="h-4 w-4" />}
+              {item.label}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {selectedAsset && (
+        <div className="flex items-center gap-3 rounded-lg border border-violet-500/40 bg-violet-500/10 p-3">
+          <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-slate-950">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={selectedAsset.thumbnailUrl || selectedAsset.publicUrl} alt="" className="h-full w-full object-cover" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-white">{selectedAsset.title}</div>
+            <div className="text-xs text-violet-200">
+              {selectedAsset.kind === 'preview-image' ? 'Библиотека сайта' : 'Аватар из Студии'}
+            </div>
+          </div>
+          <Button type="button" variant="ghost" size="icon" onClick={() => onValueChange(field.id, '')}>
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      {tab === 'upload' && uploadEnabled && (
+        <label
+          htmlFor={field.id}
+          className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center transition hover:border-amber-400"
+        >
+          <ImagePlus className="h-8 w-8 text-slate-500" />
+          <span className="mt-3 text-sm font-medium text-slate-200">
+            {file ? file.name : 'Загрузить фото'}
+          </span>
+          {field.hint && <span className="mt-1 text-xs text-slate-500">{field.hint}</span>}
+          <Input
+            id={field.id}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(event) => selectFile(event.target.files?.[0])}
+          />
+        </label>
+      )}
+
+      {tab === 'studio' && studioEnabled && (
+        <AssetChoiceGrid
+          isLoading={avatars.isLoading}
+          items={studioAssets}
+          empty={
+            <div className="text-center">
+              <div className="text-sm text-slate-400">В Студии пока нет аватаров.</div>
+              <Button asChild variant="outline" size="sm" className="mt-3 border-slate-700 bg-slate-950">
+                <Link href="/studio">Создать первый аватар</Link>
+              </Button>
+            </div>
+          }
+          onSelect={selectAsset}
+        />
+      )}
+
+      {tab === 'library' && libraryEnabled && (
+        <AssetChoiceGrid
+          isLoading={publicAssets.isLoading}
+          items={libraryAssets}
+          empty={<div className="text-sm text-slate-400">В системной библиотеке нет подходящих изображений.</div>}
+          onSelect={selectAsset}
+        />
+      )}
+    </div>
+  );
+}
+
+function AssetChoiceGrid({
+  items,
+  isLoading,
+  empty,
+  onSelect,
+}: {
+  items: MediaAssetOption[];
+  isLoading?: boolean;
+  empty: ReactNode;
+  onSelect: (asset: MediaAssetOption) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-2 sm:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <Skeleton key={index} className="h-28 rounded-md" />
+        ))}
+      </div>
+    );
+  }
+  if (items.length === 0) {
+    return (
+      <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-slate-800 bg-slate-950/60 p-4">
+        {empty}
+      </div>
+    );
+  }
+  return (
+    <div className="grid max-h-72 gap-2 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/50 p-2 sm:grid-cols-3">
+      {items.map((asset) => (
+        <button
+          key={asset.id}
+          type="button"
+          onClick={() => onSelect(asset)}
+          className="overflow-hidden rounded-md border border-slate-800 bg-slate-950 text-left transition hover:border-violet-500"
+        >
+          <div className="relative aspect-square bg-slate-900">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+          </div>
+          <div className="truncate p-2 text-xs text-slate-100">{asset.title}</div>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function FieldControl({
@@ -160,26 +374,15 @@ function FieldControl({
 
   if (field.type === 'photo') {
     return (
-      <div className="space-y-2">
-        <Label htmlFor={field.id}>{label} {required}</Label>
-        <label
-          htmlFor={field.id}
-          className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center transition hover:border-amber-400"
-        >
-          <ImagePlus className="h-8 w-8 text-slate-500" />
-          <span className="mt-3 text-sm font-medium text-slate-200">
-            {file ? file.name : 'Загрузить фото'}
-          </span>
-          {field.hint && <span className="mt-1 text-xs text-slate-500">{field.hint}</span>}
-        </label>
-        <Input
-          id={field.id}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-          onChange={(event) => onFileChange(field.id, event.target.files?.[0])}
-        />
-      </div>
+      <ServicePhotoInput
+        field={field}
+        label={label}
+        required={required}
+        file={file}
+        value={value}
+        onValueChange={onValueChange}
+        onFileChange={onFileChange}
+      />
     );
   }
 
@@ -246,15 +449,14 @@ function FieldControl({
 
   if (field.type === 'avatar') {
     return (
-      <div className="rounded-lg border border-slate-800 bg-slate-950/70 p-4">
-        <div className="font-medium">{label} {required}</div>
-        <p className="mt-2 text-sm leading-6 text-slate-400">
-          Для этой услуги нужен готовый аватар. Создать и выбрать его можно в кабинете.
-        </p>
-        <Button asChild variant="outline" className="mt-3 border-slate-700 bg-slate-900">
-          <Link href="/dashboard/characters">Открыть аватары</Link>
-        </Button>
-      </div>
+      <ServicePhotoInput
+        field={{ ...field, allowStudioAvatars: true, allowSystemLibrary: false }}
+        label={label}
+        required={required}
+        value={value}
+        onValueChange={onValueChange}
+        onFileChange={onFileChange}
+      />
     );
   }
 
@@ -356,7 +558,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
         description: `Нужно ${price}, на балансе ${balance}.`,
         variant: 'destructive',
       });
-      router.push('/pricing');
+      router.push('/profile?tab=billing');
       return;
     }
 
@@ -393,7 +595,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
           description: 'Пополните баланс и запустите услугу снова.',
           variant: 'destructive',
         });
-        router.push('/pricing');
+        router.push('/profile?tab=billing');
         return;
       }
       toast({
@@ -547,7 +749,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                 </Button>
                 {!hasEnoughCoins && user && (
                   <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">
-                    <Link href="/pricing">Пополнить баланс</Link>
+                    <Link href="/profile?tab=billing">Пополнить баланс</Link>
                   </Button>
                 )}
               </>

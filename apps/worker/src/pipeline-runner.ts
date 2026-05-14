@@ -405,7 +405,9 @@ async function hydratePipelineReferences(value: unknown, userId: string, storage
 }
 
 async function hydrateMediaAssetInputs(inputs: Record<string, unknown>, userId: string): Promise<Record<string, unknown>> {
-  const ids = Object.values(inputs).filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const ids = Object.values(inputs)
+    .map((value) => mediaAssetInputId(value))
+    .filter((value): value is string => typeof value === 'string' && value.length > 0);
   if (ids.length === 0) return inputs;
   const assets = await prisma.mediaAsset.findMany({
     where: { id: { in: ids }, isActive: true },
@@ -420,9 +422,18 @@ async function hydrateMediaAssetInputs(inputs: Record<string, unknown>, userId: 
   return Object.fromEntries(
     Object.entries(inputs).map(([key, value]) => [
       key,
-      typeof value === 'string' && urls.has(value) ? urls.get(value) : value,
+      typeof value === 'string' && mediaAssetInputId(value) && urls.has(mediaAssetInputId(value)!)
+        ? urls.get(mediaAssetInputId(value)!)
+        : value,
     ]),
   );
+}
+
+function mediaAssetInputId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const match = value.match(/^asset:([a-zA-Z0-9_-]+)$/);
+  if (match) return match[1];
+  return value;
 }
 
 function resolveToken(token: string, context: PlaceholderContext): unknown {

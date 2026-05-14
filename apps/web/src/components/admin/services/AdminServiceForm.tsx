@@ -954,7 +954,9 @@ function UserInputFormBuilder({
       required: type === 'tier' || type === 'photo',
       ...(type === 'media-select' ? { mediaKind: 'trend-video' } : {}),
       ...(type === 'select' ? { options: [{ label: 'Вариант 1', value: 'option_1' }] } : {}),
-      ...(type === 'photo' ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'] } : {}),
+      ...(type === 'photo'
+        ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'], allowStudioAvatars: true, allowSystemLibrary: false }
+        : {}),
     };
     onChange([...fields, next]);
   };
@@ -1069,6 +1071,26 @@ function UserInputFormBuilder({
                                   onChange={(event) => updateField(index, { maxSizeMb: event.target.value ? Number(event.target.value) : undefined })}
                                   className="h-8 w-24"
                                 />
+                              </label>
+                            )}
+                            {field.type === 'photo' && (
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={field.allowStudioAvatars !== false}
+                                  onChange={(event) => updateField(index, { allowStudioAvatars: event.target.checked })}
+                                />
+                                Разрешить выбор из Студии
+                              </label>
+                            )}
+                            {field.type === 'photo' && (
+                              <label className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={field.allowSystemLibrary === true}
+                                  onChange={(event) => updateField(index, { allowSystemLibrary: event.target.checked })}
+                                />
+                                Разрешить системную библиотеку
                               </label>
                             )}
                             {field.type === 'media-select' && (

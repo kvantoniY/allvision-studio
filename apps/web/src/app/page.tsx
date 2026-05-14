@@ -1,12 +1,5 @@
 import type { Metadata } from 'next';
-import { HeroSection } from '@/components/landing/HeroSection';
-import { ServicesGrid } from '@/components/landing/ServicesGrid';
-import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
-import { ExamplesGallery } from '@/components/landing/ExamplesGallery';
-import { TestimonialsSection } from '@/components/landing/TestimonialsSection';
-import { PricingSection } from '@/components/landing/PricingSection';
-import { FAQSection } from '@/components/landing/FAQSection';
-import { CTASection } from '@/components/landing/CTASection';
+import { HomePageContent } from '@/components/pages/HomePageContent';
 
 export const metadata: Metadata = {
   title: 'Allvision Studio — цифровые подарки за минуты',
@@ -15,16 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
-  return (
-    <>
-      <HeroSection />
-      <ServicesGrid />
-      <HowItWorksSection />
-      <ExamplesGallery />
-      <TestimonialsSection />
-      <PricingSection />
-      <FAQSection />
-      <CTASection />
-    </>
-  );
+  return <HomePageContent />;
 }

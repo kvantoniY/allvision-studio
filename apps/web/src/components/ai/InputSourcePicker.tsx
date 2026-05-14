@@ -37,6 +37,10 @@ function fileAccept(mediaKind: 'image' | 'video') {
   return mediaKind === 'image' ? 'image/jpeg,image/png,image/webp' : 'video/mp4,video/quicktime';
 }
 
+function isImageAsset(asset: { mimeType?: string | null }) {
+  return !asset.mimeType || asset.mimeType.startsWith('image/');
+}
+
 export function InputSourcePicker({ mediaKind, value, required, onChange }: InputSourcePickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<PickerTab>('upload');
@@ -46,7 +50,7 @@ export function InputSourcePicker({ mediaKind, value, required, onChange }: Inpu
   const publicAssets = useGetPublicMediaAssetsQuery({ kind: mediaKind === 'image' ? 'preview-image' : 'trend-video', active: true });
 
   const studioItems = useMemo(
-    () => [...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])],
+    () => [...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])].filter(isImageAsset),
     [avatars.data?.items, locations.data?.items],
   );
 

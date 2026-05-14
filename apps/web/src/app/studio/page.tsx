@@ -58,6 +58,26 @@ function originLabel(asset: UserMediaAsset) {
   return asset.tags.includes('generated') ? 'Сгенерировано' : 'Загружено';
 }
 
+function assetRefsFromInputs(value: unknown): string[] {
+  const refs: string[] = [];
+  const walk = (item: unknown) => {
+    if (typeof item === 'string') {
+      const match = item.match(/^asset:([a-zA-Z0-9_-]+)$/);
+      if (match) refs.push(match[1]);
+      return;
+    }
+    if (Array.isArray(item)) {
+      item.forEach(walk);
+      return;
+    }
+    if (item && typeof item === 'object') {
+      Object.values(item as Record<string, unknown>).forEach(walk);
+    }
+  };
+  walk(value);
+  return refs;
+}
+
 export default function StudioPage() {
   return (
     <AuthGuard>
@@ -79,6 +99,10 @@ function StudioContent() {
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 });
   const locations = useListUserMediaAssetsQuery({ kind: 'user-location', limit: 100 });
   const projects = useListProjectsQuery({ page: 1, limit: 30 });
+  const assetTitleById = useMemo(
+    () => new Map([...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])].map((asset) => [asset.id, asset.title])),
+    [avatars.data?.items, locations.data?.items],
+  );
 
   return (
     <div className="space-y-6">
@@ -143,7 +167,10 @@ function StudioContent() {
                 >
                   <div>
                     <div className="font-medium text-white">{project.title}</div>
-                    <div className="mt-1 text-xs text-slate-500">{formatDate(project.createdAt)} · {project.mode === 'library-generation' ? 'Генерация для библиотеки' : 'Услуга'}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {formatDate(project.createdAt)} · {project.mode === 'library-generation' ? 'Генерация для библиотеки' : project.mode === 'free-chat' ? 'Allvision AI' : 'Услуга'}
+                      {assetRefsFromInputs(project.userInputs).map((assetId) => assetTitleById.get(assetId)).filter(Boolean).map((title) => ` · использован аватар: ${title}`).join('')}
+                    </div>
                   </div>
                   <Badge className="bg-slate-700 text-slate-100">{project.status}</Badge>
                 </Link>
@@ -224,6 +251,7 @@ function AssetCard({ asset }: { asset: UserMediaAsset }) {
   const [title, setTitle] = useState(asset.title);
   const [updateAsset] = useUpdateUserMediaAssetMutation();
   const [deleteAsset] = useDeleteUserMediaAssetMutation();
+  const isVideo = asset.mimeType.startsWith('video/');
 
   const save = async () => {
     try {
@@ -248,8 +276,12 @@ function AssetCard({ asset }: { asset: UserMediaAsset }) {
   return (
     <Card className="group overflow-hidden border-slate-800 bg-slate-900">
       <div className="relative aspect-square bg-slate-950">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+        {isVideo ? (
+          <video src={asset.publicUrl} className="h-full w-full object-cover" muted playsInline />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+        )}
         <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/80 via-black/10 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
           <div className="flex w-full gap-2">
             <Button type="button" size="sm" variant="outline" className="flex-1" onClick={() => setEditing(true)}>

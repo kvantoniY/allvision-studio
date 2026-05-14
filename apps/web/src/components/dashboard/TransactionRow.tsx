@@ -6,6 +6,7 @@ import { formatDateTime, transactionDescription } from './labels';
 
 export function TransactionRow({ tx }: { tx: TokenTransaction }) {
   const isTopup = tx.amount > 0;
+  const projectReasons = new Set(['project_created', 'service_launch', 'free_chat', 'library_generation']);
   return (
     <tr className="border-b border-slate-800">
       <td className="py-3 px-3 text-sm text-slate-400 whitespace-nowrap">{formatDateTime(tx.createdAt)}</td>
@@ -21,7 +22,7 @@ export function TransactionRow({ tx }: { tx: TokenTransaction }) {
       </td>
       <td className="py-3 px-3 text-sm">
         <div>{transactionDescription(tx.reason)}</div>
-        {tx.refId && tx.reason === 'project_created' && (
+        {tx.refId && projectReasons.has(tx.reason) && (
           <Link
             href={`/dashboard/projects/${tx.refId}`}
             className="text-xs text-violet-400 hover:underline"

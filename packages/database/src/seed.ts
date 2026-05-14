@@ -222,6 +222,8 @@ const giftFactoryServices = [
         hint: 'JPG/PNG/WebP, до 10MB',
         maxSizeMb: 10,
         allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
       },
       { id: 'tier', type: 'tier', label: 'Качество', required: true },
     ],
@@ -279,7 +281,15 @@ const giftFactoryServices = [
     isFeatured: true,
     sortOrder: 2,
     userInputForm: [
-      { id: 'face', type: 'photo', label: 'Ваше фото лица', required: true, hint: 'Лучше всего работает портрет анфас' },
+      {
+        id: 'face',
+        type: 'photo',
+        label: 'Ваше фото лица',
+        required: true,
+        hint: 'Лучше всего работает портрет анфас',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
       {
         id: 'trendVideo',
         type: 'media-select',
@@ -333,7 +343,14 @@ const giftFactoryServices = [
     isFeatured: true,
     sortOrder: 3,
     userInputForm: [
-      { id: 'child_photo', type: 'photo', label: 'Фото ребёнка', required: true },
+      {
+        id: 'child_photo',
+        type: 'photo',
+        label: 'Фото ребёнка',
+        required: true,
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
       { id: 'child_name', type: 'text', label: 'Имя ребёнка', required: true, hint: 'Будет в видео', maxLength: 60 },
       {
         id: 'world',
@@ -389,7 +406,14 @@ const giftFactoryServices = [
     isFeatured: false,
     sortOrder: 4,
     userInputForm: [
-      { id: 'photos', type: 'photo', label: 'Фотография юбиляра', required: true },
+      {
+        id: 'photos',
+        type: 'photo',
+        label: 'Фотография юбиляра',
+        required: true,
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
       {
         id: 'occasion',
         type: 'select',
@@ -844,7 +868,8 @@ async function seedPilotServices() {
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
     if (existing) {
       if ((service.slug === 'face-in-trend' && needsFaceInTrendP7aPatch(existing))
-        || (service.slug === 'revive-old-photo' && needsReviveOldPhotoP7aPatch(existing))) {
+        || (service.slug === 'revive-old-photo' && needsReviveOldPhotoP7aPatch(existing))
+        || needsPhotoSourceDefaultsPatch(existing.userInputForm)) {
         await prisma.service.update({
           where: { slug: service.slug },
           data: {
@@ -927,6 +952,17 @@ function needsReviveOldPhotoP7aPatch(service: {
     !pipelineJson.includes('"blockSlug":"image-edit"') ||
     !pipelineJson.includes('nano-banana') ||
     !pipelineJson.includes('PLACEHOLDER:')
+  );
+}
+
+function needsPhotoSourceDefaultsPatch(userInputForm: unknown) {
+  return (
+    Array.isArray(userInputForm) &&
+    userInputForm.some((field) => {
+      if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
+      const raw = field as { type?: unknown; allowStudioAvatars?: unknown; allowSystemLibrary?: unknown };
+      return raw.type === 'photo' && (raw.allowStudioAvatars !== true || raw.allowSystemLibrary !== false);
+    })
   );
 }
 
