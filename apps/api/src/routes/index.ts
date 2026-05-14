@@ -11,6 +11,7 @@ import { scenesRouter } from './scenes';
 import { episodesRouter } from './episodes';
 import { userMediaAssetsRouter } from './user-media-assets';
 import { userChatRouter } from './user/chat';
+import { userChatsRouter } from './user/chats';
 import { adminRouter } from './admin';
 import { adminReadonlyRouter } from './admin-readonly';
 
@@ -29,5 +30,6 @@ router.use('/scenes', scenesRouter);
 router.use('/episodes', episodesRouter);
 router.use('/user/media-assets', userMediaAssetsRouter);
 router.use('/user/chat', userChatRouter);
+router.use('/user/chats', userChatsRouter);
 router.use('/admin', adminRouter);
 router.use('/admin-readonly', adminReadonlyRouter);

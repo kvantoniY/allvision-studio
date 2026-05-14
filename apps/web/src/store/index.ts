@@ -11,6 +11,7 @@ import { episodesApi } from './api/episodes-api';
 import { adminScenarioTemplatesApi } from './api/admin-scenario-templates-api';
 import { adminServicesApi } from './api/admin-services-api';
 import { adminMediaAssetsApi } from './api/admin-media-assets-api';
+import { adminStylePresetsApi } from './api/admin-style-presets-api';
 import { adminUsageApi } from './api/admin-usage-api';
 import { adminDiagnosticsApi } from './api/admin-diagnostics-api';
 import { adminSettingsApi } from './api/admin-settings-api';
@@ -36,6 +37,7 @@ export const store = configureStore({
     [adminScenarioTemplatesApi.reducerPath]: adminScenarioTemplatesApi.reducer,
     [adminServicesApi.reducerPath]: adminServicesApi.reducer,
     [adminMediaAssetsApi.reducerPath]: adminMediaAssetsApi.reducer,
+    [adminStylePresetsApi.reducerPath]: adminStylePresetsApi.reducer,
     [adminUsageApi.reducerPath]: adminUsageApi.reducer,
     [adminDiagnosticsApi.reducerPath]: adminDiagnosticsApi.reducer,
     [adminSettingsApi.reducerPath]: adminSettingsApi.reducer,
@@ -59,6 +61,7 @@ export const store = configureStore({
       adminScenarioTemplatesApi.middleware,
       adminServicesApi.middleware,
       adminMediaAssetsApi.middleware,
+      adminStylePresetsApi.middleware,
       adminUsageApi.middleware,
       adminDiagnosticsApi.middleware,
       adminSettingsApi.middleware,

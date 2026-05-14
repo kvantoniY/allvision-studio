@@ -7,7 +7,6 @@ import { useDispatch } from 'react-redux';
 import { Bell, Coins, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
 import type { Payment } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
-import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { PaymentRow } from '@/components/dashboard/PaymentRow';
 import { TransactionRow } from '@/components/dashboard/TransactionRow';
 import { EmptyState } from '@/components/dashboard/EmptyState';
@@ -66,13 +65,8 @@ function apiErrorMessage(error: unknown) {
 export default function ProfilePage() {
   return (
     <AuthGuard>
-      <div className="flex min-h-[calc(100vh-64px)]">
-        <DashboardSidebar />
-        <main className="min-w-0 flex-1 bg-slate-950">
-          <div className="container py-8">
-            <ProfileContent />
-          </div>
-        </main>
+      <div className="container py-8">
+        <ProfileContent />
       </div>
     </AuthGuard>
   );

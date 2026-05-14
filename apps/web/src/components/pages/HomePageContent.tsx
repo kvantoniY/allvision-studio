@@ -10,7 +10,6 @@ import { TestimonialsSection } from '@/components/landing/TestimonialsSection';
 import { PricingSection } from '@/components/landing/PricingSection';
 import { FAQSection } from '@/components/landing/FAQSection';
 import { CTASection } from '@/components/landing/CTASection';
-import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { ProjectCard } from '@/components/dashboard/ProjectCard';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { EmptyState } from '@/components/dashboard/EmptyState';
@@ -85,13 +84,8 @@ export function HomePageContent() {
   if (!user) return <LandingHome />;
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)]">
-      <DashboardSidebar />
-      <main className="min-w-0 flex-1 bg-slate-950">
-        <div className="container space-y-8 py-8">
-          <AuthedHome />
-        </div>
-      </main>
+    <div className="container space-y-8 py-8">
+      <AuthedHome />
     </div>
   );
 }

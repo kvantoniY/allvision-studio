@@ -33,6 +33,7 @@ model User {
   scenes     Scene[]
   episodes   Episode[]
   mediaAssets MediaAsset[]
+  chats     Chat[]
 }
 
 enum Role {
@@ -168,8 +169,42 @@ model Project {
   service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
   trend       Trend?       @relation(fields: [trendId], references: [id], onDelete: SetNull)
   aiUsageLogs AIUsageLog[]
+  chatMessages ChatMessage[]
 
   @@index([userId, mode])
+}
+
+model Chat {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([deletedAt])
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  chatId    String
+  createdAt DateTime @default(now())
+
+  prompt      String @db.Text
+  modelSlug   String
+  aspectRatio String?
+  duration    Int?
+  inputRef    String?
+  projectId   String
+
+  chat    Chat    @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
 }
 
 enum ProjectStatus {
@@ -559,6 +594,7 @@ model MediaAsset {
   description String?
   tags        String[]
   ownerUserId String?
+  parentAssetId String?
 
   storageKey   String
   publicUrl    String
@@ -575,10 +611,28 @@ model MediaAsset {
   sortOrder Int     @default(0)
 
   owner User? @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  parentAsset MediaAsset? @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  variations MediaAsset[] @relation("MediaAssetVariations")
 
   @@index([kind])
   @@index([ownerUserId, kind])
+  @@index([parentAssetId])
   @@index([isActive, sortOrder])
+}
+
+model StylePreset {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  kind        String
+  title       String
+  description String
+  promptText  String   @db.Text
+  thumbnail   String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@index([kind, isActive, sortOrder])
 }
 
 model TokenPackage {

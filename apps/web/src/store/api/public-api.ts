@@ -7,6 +7,7 @@ import type {
   PublicServicesResponse,
   PublicSettingsResponse,
   PublicMediaAssetsResponse,
+  PublicStylePresetsResponse,
   PublicTokenPackagesResponse,
   PublicTrendResponse,
   PublicTrendsResponse,
@@ -15,7 +16,7 @@ import type {
 export const publicApi = createApi({
   reducerPath: 'publicApi',
   baseQuery: createBaseQueryWithReauth('/api/public'),
-  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets'],
+  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets', 'StylePresets'],
   endpoints: (build) => ({
     getServices: build.query<PublicServicesResponse, void>({
       query: () => ({ url: '/services' }),
@@ -54,6 +55,15 @@ export const publicApi = createApi({
       },
       providesTags: ['MediaAssets'],
     }),
+    getStylePresets: build.query<PublicStylePresetsResponse, { kind?: 'user-avatar' | 'user-location' } | void>({
+      query: (q) => {
+        const params = new URLSearchParams();
+        if (q?.kind) params.set('kind', q.kind);
+        const query = params.toString();
+        return { url: `/style-presets${query ? `?${query}` : ''}` };
+      },
+      providesTags: ['StylePresets'],
+    }),
     sendContact: build.mutation<ContactResponse, ContactInput>({
       query: (body) => ({ url: '/contact', method: 'POST', body }),
     }),
@@ -68,5 +78,6 @@ export const {
   useGetTokenPackagesQuery,
   useGetPublicSettingsQuery,
   useGetPublicMediaAssetsQuery,
+  useGetStylePresetsQuery,
   useSendContactMutation,
 } = publicApi;

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Loader2, Send, Sparkles } from 'lucide-react';
+import { AlertTriangle, Loader2, Send, Sparkles, X } from 'lucide-react';
 import { CHAT_MODELS, type ChatCategory, type ChatModelOption } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,13 +11,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
-import { useGenerateChatMutation } from '@/store/api/user-chat-api';
+import { useCreateChatMessageMutation } from '@/store/api/user-chat-api';
 import { InputSourcePicker, type SelectedInputSource } from './InputSourcePicker';
 
 type ChatFormProps = {
-  onCreated: (projectId: string) => void;
+  chatId: string;
+  onCreated: () => void;
   initialReference: SelectedInputSource | null;
+  initialPrompt?: string;
   onReferenceConsumed: () => void;
+  onPromptConsumed?: () => void;
 };
 
 const categoryLabels: Record<ChatCategory, string> = {
@@ -33,9 +36,9 @@ function defaultModel(category: ChatCategory): ChatModelOption {
   return CHAT_MODELS.find((model) => model.category === category) ?? CHAT_MODELS[0];
 }
 
-export function ChatForm({ onCreated, initialReference, onReferenceConsumed }: ChatFormProps) {
+export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, onReferenceConsumed, onPromptConsumed }: ChatFormProps) {
   const me = useGetMeQuery();
-  const [generate, generateState] = useGenerateChatMutation();
+  const [createMessage, createMessageState] = useCreateChatMessageMutation();
   const [category, setCategory] = useState<ChatCategory>('image');
   const [modelSlug, setModelSlug] = useState(defaultModel('image').slug);
   const [prompt, setPrompt] = useState('');
@@ -50,7 +53,11 @@ export function ChatForm({ onCreated, initialReference, onReferenceConsumed }: C
   const needsInput = !selectedModel.acceptsTextOnly && selectedModel.acceptsImageInput;
   const canUseInput = selectedModel.acceptsImageInput || selectedModel.acceptsVideoInput;
   const inputKind = selectedModel.acceptsVideoInput && !selectedModel.acceptsImageInput ? 'video' : 'image';
-  const canSubmit = prompt.trim().length > 0 && canPay && (!needsInput || !!source) && !generateState.isLoading;
+  const referenceUnsupported = !!source && (
+    (source.mediaKind === 'image' && !selectedModel.acceptsImageInput) ||
+    (source.mediaKind === 'video' && !selectedModel.acceptsVideoInput)
+  );
+  const canSubmit = prompt.trim().length > 0 && canPay && (!needsInput || !!source) && !referenceUnsupported && !createMessageState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -73,22 +80,30 @@ export function ChatForm({ onCreated, initialReference, onReferenceConsumed }: C
     onReferenceConsumed();
   }, [initialReference, onReferenceConsumed]);
 
+  useEffect(() => {
+    if (!initialPrompt) return;
+    setPrompt(initialPrompt);
+    onPromptConsumed?.();
+  }, [initialPrompt, onPromptConsumed]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
     try {
-      const result = await generate({
-        modelSlug: selectedModel.slug,
-        prompt,
-        aspectRatio,
-        duration: selectedModel.category === 'video' ? duration : undefined,
-        imageInputRef: source?.mediaKind === 'image' ? source.ref : undefined,
-        videoInputRef: source?.mediaKind === 'video' ? source.ref : undefined,
+      await createMessage({
+        chatId,
+        body: {
+          modelSlug: selectedModel.slug,
+          prompt,
+          aspectRatio,
+          duration: selectedModel.category === 'video' ? duration : undefined,
+          inputRef: source?.ref,
+        },
       }).unwrap();
       toast({ title: 'Генерация запущена' });
       setPrompt('');
       if (!selectedModel.acceptsImageInput) setSource(null);
-      onCreated(result.projectId);
+      onCreated();
     } catch (error) {
       toast({ title: apiErrorMessage(error), variant: 'destructive' });
     }
@@ -128,6 +143,12 @@ export function ChatForm({ onCreated, initialReference, onReferenceConsumed }: C
                 ))}
               </select>
               <p className="text-xs leading-5 text-slate-500">{selectedModel.description}</p>
+              {referenceUnsupported && (
+                <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>Модель {selectedModel.title} не принимает этот референс. Уберите прикреплённое или выберите другую модель.</span>
+                </div>
+              )}
             </div>
             <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
               <div className="flex items-center justify-between gap-3">
@@ -192,20 +213,40 @@ export function ChatForm({ onCreated, initialReference, onReferenceConsumed }: C
             )}
           </div>
 
-          {canUseInput ? (
-            <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} />
-          ) : (
-            <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-500">
-              Эта модель работает только с текстовым промптом, референс не нужен.
+          {source && !canUseInput && (
+            <div className="flex min-w-0 items-center gap-3 rounded-md border border-slate-800 bg-slate-950 p-2">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-slate-900">
+                {source.mediaKind === 'image' ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={source.url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <video src={source.url} className="h-full w-full object-cover" muted />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm text-slate-100">{source.title}</div>
+                <div className="text-xs text-slate-500">Референс прикреплён</div>
+              </div>
+              <Button type="button" variant="ghost" size="icon" onClick={() => setSource(null)}>
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           )}
 
+          {canUseInput ? (
+            <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} />
+          ) : !source ? (
+            <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-500">
+              Эта модель работает только с текстовым промптом, референс не нужен.
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm text-slate-500">
-              {!prompt.trim() ? 'Напишите промпт.' : needsInput && !source ? 'Прикрепите изображение для этой модели.' : canPay ? 'Можно запускать.' : 'Недостаточно коинов.'}
+              {!prompt.trim() ? 'Напишите промпт.' : referenceUnsupported ? 'Референс не подходит выбранной модели.' : needsInput && !source ? 'Прикрепите изображение для этой модели.' : canPay ? 'Можно запускать.' : 'Недостаточно коинов.'}
             </div>
             <Button type="submit" disabled={!canSubmit} className="bg-amber-500 text-slate-950 hover:bg-amber-400">
-              {generateState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Создать
             </Button>
           </div>

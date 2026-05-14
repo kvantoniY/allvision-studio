@@ -98,6 +98,17 @@ export type PublicMediaAsset = {
   sortOrder: number;
 };
 
+export type PublicStylePreset = {
+  id: string;
+  slug: string;
+  kind: 'user-avatar' | 'user-location';
+  title: string;
+  description: string;
+  promptText: string;
+  thumbnail: string | null;
+  sortOrder: number;
+};
+
 export type PublicServicesResponse = { services: PublicService[] };
 export type PublicServiceResponse = { service: PublicService };
 export type PublicTrendsResponse = { trends: PublicTrend[] };
@@ -107,4 +118,5 @@ export type PublicScenarioTemplateResponse = { template: PublicScenarioTemplate 
 export type PublicTokenPackagesResponse = { packages: PublicTokenPackage[] };
 export type PublicSettingsResponse = { settings: PublicSettings };
 export type PublicMediaAssetsResponse = { assets: PublicMediaAsset[] };
+export type PublicStylePresetsResponse = { presets: PublicStylePreset[] };
 export type ContactResponse = { ok: true };

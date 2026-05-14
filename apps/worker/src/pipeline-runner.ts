@@ -475,6 +475,7 @@ type LibraryGenerationMeta = {
   kind: LibraryMediaKind;
   title: string;
   prompt: string;
+  parentAssetId?: string;
 };
 
 export function parseLibraryGenerationMeta(value: unknown): LibraryGenerationMeta | null {
@@ -486,10 +487,11 @@ export function parseLibraryGenerationMeta(value: unknown): LibraryGenerationMet
   const kind = meta.kind;
   const title = meta.title;
   const prompt = meta.prompt;
+  const parentAssetId = typeof meta.parentAssetId === 'string' ? meta.parentAssetId : undefined;
   if ((kind !== 'user-avatar' && kind !== 'user-location') || typeof title !== 'string' || typeof prompt !== 'string') {
     return null;
   }
-  return { kind, title, prompt };
+  return { kind, title, prompt, parentAssetId };
 }
 
 export async function createLibraryMediaAssetFromProject(params: {
@@ -511,6 +513,7 @@ export async function createLibraryMediaAssetFromProject(params: {
   return prisma.mediaAsset.create({
     data: {
       ownerUserId: params.userId,
+      parentAssetId: meta.parentAssetId ?? null,
       kind: meta.kind,
       title: meta.title,
       description: meta.prompt,

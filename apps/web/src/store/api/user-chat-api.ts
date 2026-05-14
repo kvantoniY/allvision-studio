@@ -4,7 +4,7 @@ import { createBaseQueryWithReauth } from './base-query';
 import { authApi } from './auth-api';
 import { projectsApi } from './projects-api';
 
-export type ChatHistoryItem = {
+export type ChatProjectState = {
   id: string;
   title: string;
   status: ProjectStatus;
@@ -26,35 +26,54 @@ export type ChatHistoryItem = {
   outputPreview: string | null;
 };
 
-export type ChatHistoryResponse = {
-  items: ChatHistoryItem[];
+export type ChatSummary = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  lastResultPreview: string | null;
+  lastStatus: ProjectStatus | null;
+};
+
+export type ChatMessage = {
+  id: string;
+  chatId: string;
+  createdAt: string;
+  prompt: string;
+  modelSlug: string;
+  aspectRatio: string | null;
+  duration: number | null;
+  inputRef: string | null;
+  projectId: string;
+  project: ChatProjectState;
+};
+
+export type ChatDetails = {
+  chat: ChatSummary & { deletedAt?: string | null };
+  messages: ChatMessage[];
+};
+
+export type ChatsResponse = {
+  items: ChatSummary[];
   total: number;
   limit: number;
   offset: number;
 };
 
-export type ChatGenerateBody = {
+export type ChatMessageBody = {
   modelSlug: string;
   prompt: string;
   aspectRatio?: '1:1' | '9:16' | '16:9' | 'auto';
   duration?: number;
-  imageInputRef?: string;
-  videoInputRef?: string;
+  inputRef?: string;
 };
 
-export type ChatGenerateResponse = {
+export type CreateChatMessageResponse = {
+  message: ChatMessage;
   projectId: string;
   status: 'queued';
   estimatedDurationSec: number;
-  project: {
-    id: string;
-    status: string;
-    progress: number;
-    tokensCost: number;
-    createdAt: string;
-    serviceId: string | null;
-    title: string;
-  };
 };
 
 export type ChatUploadResponse = {
@@ -69,35 +88,55 @@ export type ChatUploadResponse = {
 
 export const userChatApi = createApi({
   reducerPath: 'userChatApi',
-  baseQuery: createBaseQueryWithReauth('/api/user/chat'),
-  tagTypes: ['ChatHistory'],
+  baseQuery: createBaseQueryWithReauth('/api/user'),
+  tagTypes: ['Chats', 'Chat'],
   endpoints: (build) => ({
-    getChatHistory: build.query<ChatHistoryResponse, { limit?: number; offset?: number } | void>({
+    listChats: build.query<ChatsResponse, { limit?: number; offset?: number } | void>({
       query: (q) => {
         const params = new URLSearchParams();
         params.set('limit', String(q?.limit ?? 50));
         params.set('offset', String(q?.offset ?? 0));
-        return { url: `/history?${params.toString()}` };
+        return { url: `/chats?${params.toString()}` };
       },
-      providesTags: ['ChatHistory'],
+      providesTags: ['Chats'],
     }),
-    uploadChatInput: build.mutation<ChatUploadResponse, FormData>({
-      query: (body) => ({ url: '/upload', method: 'POST', body }),
+    createChat: build.mutation<{ chat: ChatSummary }, { title?: string } | void>({
+      query: (body) => ({ url: '/chats', method: 'POST', body: body ?? {} }),
+      invalidatesTags: ['Chats'],
     }),
-    generateChat: build.mutation<ChatGenerateResponse, ChatGenerateBody>({
-      query: (body) => ({ url: '/generate', method: 'POST', body }),
-      invalidatesTags: ['ChatHistory'],
+    getChat: build.query<ChatDetails, string>({
+      query: (id) => ({ url: `/chats/${id}` }),
+      providesTags: (_result, _error, id) => [{ type: 'Chat', id }],
+    }),
+    renameChat: build.mutation<{ chat: ChatSummary }, { id: string; title: string }>({
+      query: ({ id, title }) => ({ url: `/chats/${id}`, method: 'PATCH', body: { title } }),
+      invalidatesTags: (_result, _error, { id }) => ['Chats', { type: 'Chat', id }],
+    }),
+    deleteChat: build.mutation<{ ok: true }, string>({
+      query: (id) => ({ url: `/chats/${id}`, method: 'DELETE' }),
+      invalidatesTags: ['Chats'],
+    }),
+    createChatMessage: build.mutation<CreateChatMessageResponse, { chatId: string; body: ChatMessageBody }>({
+      query: ({ chatId, body }) => ({ url: `/chats/${chatId}/messages`, method: 'POST', body }),
+      invalidatesTags: (_result, _error, { chatId }) => ['Chats', { type: 'Chat', id: chatId }],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         await queryFulfilled;
         dispatch(authApi.util.invalidateTags(['Me', 'User']));
         dispatch(projectsApi.util.invalidateTags(['Project']));
       },
     }),
+    uploadChatInput: build.mutation<ChatUploadResponse, FormData>({
+      query: (body) => ({ url: '/chat/upload', method: 'POST', body }),
+    }),
   }),
 });
 
 export const {
-  useGetChatHistoryQuery,
-  useGenerateChatMutation,
+  useListChatsQuery,
+  useCreateChatMutation,
+  useGetChatQuery,
+  useRenameChatMutation,
+  useDeleteChatMutation,
+  useCreateChatMessageMutation,
   useUploadChatInputMutation,
 } = userChatApi;

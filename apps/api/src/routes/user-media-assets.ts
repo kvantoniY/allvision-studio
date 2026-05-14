@@ -50,6 +50,7 @@ const generateSchema = z.object({
   model: z.literal('nano-banana').default('nano-banana'),
   title: z.string().trim().min(1).max(160),
   aspectRatio: z.enum(['1:1', '9:16', '16:9', 'auto']).optional(),
+  parentAssetId: z.string().trim().min(1).optional(),
 });
 
 const saveFromProjectSchema = z.object({
@@ -95,6 +96,7 @@ function selectAsset() {
     publicUrl: true,
     thumbnailKey: true,
     ownerUserId: true,
+    parentAssetId: true,
     durationSec: true,
     width: true,
     height: true,
@@ -103,11 +105,13 @@ function selectAsset() {
     mimeType: true,
     isActive: true,
     sortOrder: true,
+    _count: { select: { variations: true } },
   } as const;
 }
 
-function toAssetResponse<T extends { thumbnailKey: string | null }>(asset: T) {
-  return { ...asset, thumbnailUrl: staticUrlForKey(asset.thumbnailKey) };
+function toAssetResponse<T extends { thumbnailKey: string | null; _count?: { variations: number } }>(asset: T) {
+  const { _count, ...rest } = asset;
+  return { ...rest, thumbnailUrl: staticUrlForKey(asset.thumbnailKey), variationsCount: _count?.variations ?? 0 };
 }
 
 function nanoBananaCostCoins() {
@@ -244,11 +248,20 @@ userMediaAssetsRouter.post('/generate', async (req: Request, res: Response, next
     const userId = req.user!.id;
     const tokensCost = nanoBananaCostCoins();
     const aspectRatio = body.aspectRatio ?? (body.kind === 'user-avatar' ? '1:1' : '16:9');
+    const parentAsset = body.parentAssetId
+      ? await prisma.mediaAsset.findFirst({
+          where: { id: body.parentAssetId, ownerUserId: userId, kind: body.kind, isActive: true },
+          select: { id: true, publicUrl: true },
+        })
+      : null;
+    if (body.parentAssetId && !parentAsset) {
+      throw new HttpError(404, 'PARENT_ASSET_NOT_FOUND', 'Исходный образ не найден');
+    }
     const pipelineSnapshot = [
       {
         id: 'step_1',
         blockSlug: 'image-edit',
-        input: null,
+        input: parentAsset ? `asset:${parentAsset.id}` : null,
         params: {
           model: body.model,
           prompt: body.prompt,
@@ -274,7 +287,7 @@ userMediaAssetsRouter.post('/generate', async (req: Request, res: Response, next
             title: `Создание образа: ${body.title}`,
             status: 'PENDING',
             progress: 0,
-            inputImages: [],
+            inputImages: parentAsset ? [parentAsset.publicUrl] : [],
             inputText: body.prompt,
             tokensCost,
             pipelineSnapshot,
@@ -286,6 +299,7 @@ userMediaAssetsRouter.post('/generate', async (req: Request, res: Response, next
                 prompt: body.prompt,
                 model: body.model,
                 aspectRatio,
+                parentAssetId: parentAsset?.id,
               },
             },
             stepProgress: [],

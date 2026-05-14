@@ -18,6 +18,8 @@ export type UserMediaAsset = {
   thumbnailKey: string | null;
   thumbnailUrl?: string | null;
   ownerUserId: string;
+  parentAssetId: string | null;
+  variationsCount: number;
   durationSec: number | null;
   width: number | null;
   height: number | null;
@@ -49,6 +51,7 @@ export type GenerateUserMediaAssetBody = {
   title: string;
   model?: 'nano-banana';
   aspectRatio?: '1:1' | '9:16' | '16:9' | 'auto';
+  parentAssetId?: string;
 };
 
 export type SaveProjectToStudioBody = {

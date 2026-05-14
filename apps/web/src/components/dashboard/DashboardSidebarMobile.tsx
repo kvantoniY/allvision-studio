@@ -12,13 +12,13 @@ export function DashboardSidebarMobile() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Открыть меню кабинета" className="lg:hidden">
+        <Button variant="ghost" size="icon" aria-label="Открыть меню кабинета" className="md:hidden">
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="w-72 p-0">
         <SheetHeader className="border-b border-slate-800 p-4">
-          <SheetTitle>Личный кабинет</SheetTitle>
+          <SheetTitle>Allvision Studio</SheetTitle>
         </SheetHeader>
         <DashboardSidebarContent onNavigate={() => setOpen(false)} />
       </SheetContent>

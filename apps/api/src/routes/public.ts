@@ -222,6 +222,35 @@ publicRouter.get('/media-assets', async (req: Request, res: Response<PublicMedia
   }
 });
 
+publicRouter.get('/style-presets', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const kind = typeof req.query.kind === 'string' ? req.query.kind.trim() : undefined;
+    if (kind && kind !== 'user-avatar' && kind !== 'user-location') {
+      throw new HttpError(400, 'INVALID_STYLE_PRESET_KIND', 'Неизвестный тип шаблона');
+    }
+    const presets = await prisma.stylePreset.findMany({
+      where: {
+        isActive: true,
+        ...(kind ? { kind } : {}),
+      },
+      orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+      select: {
+        id: true,
+        slug: true,
+        kind: true,
+        title: true,
+        description: true,
+        promptText: true,
+        thumbnail: true,
+        sortOrder: true,
+      },
+    });
+    res.json({ presets });
+  } catch (e) {
+    next(e);
+  }
+});
+
 publicRouter.get(
   '/scenario-templates',
   async (req: Request, res: Response<PublicScenarioTemplatesResponse>, next: NextFunction) => {

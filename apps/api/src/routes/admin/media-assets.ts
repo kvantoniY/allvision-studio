@@ -79,6 +79,7 @@ function selectAsset() {
     publicUrl: true,
     thumbnailKey: true,
     ownerUserId: true,
+    parentAssetId: true,
     durationSec: true,
     width: true,
     height: true,

@@ -9,6 +9,7 @@ import { adminDiagnosticsRouter } from './diagnostics';
 import { adminSettingsRouter } from './settings';
 import { adminUsersRouter } from './users';
 import { adminProjectsRouter } from './projects';
+import { adminStylePresetsRouter } from './style-presets';
 
 export const adminRouter = Router();
 
@@ -20,5 +21,6 @@ adminRouter.use('/projects', adminProjectsRouter);
 adminRouter.use('/', adminUsageRouter);
 adminRouter.use('/services', adminServicesRouter);
 adminRouter.use('/media-assets', adminMediaAssetsRouter);
+adminRouter.use('/style-presets', adminStylePresetsRouter);
 adminRouter.use('/trends', adminTrendsRouter);
 adminRouter.use('/scenario-templates', adminScenarioTemplatesRouter);

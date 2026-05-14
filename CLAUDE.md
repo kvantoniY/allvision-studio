@@ -835,3 +835,55 @@ Technical debt:
 
 - Payments не проверялись реальной картой/ЮKassa sandbox, только существующий flow создания платежа и mock-payment redirect.
 - Email-подтверждения и email-уведомления остаются будущим этапом.
+
+## Этап P8.4 ✅
+
+Navigation / shell:
+
+- Пользовательский top-navigation убран для workspace-route'ов; `UserWorkspaceShell` теперь оборачивает авторизованные `/`, `/ai`, `/services`, `/services/[slug]`, `/studio`, `/profile`, `/dashboard/*`.
+- Sidebar единый: логотип `Allvision Studio` сверху, 5 ссылок `Главная / Allvision AI / Услуги / Студия / Профиль`, баланс и профиль внизу.
+- На mobile `<768px` sidebar скрыт; сверху есть compact bar с бургером слева, балансом и аватаркой справа. Sidebar открывается через Sheet overlay.
+- Гостевой лендинг `/`, auth-страницы и админка не используют пользовательский sidebar; админка сохранила свой layout.
+
+Multi-turn Allvision AI:
+
+- Добавлены Prisma модели `Chat` и `ChatMessage`: чат = контейнер, сообщение = пара "запрос + связанный free-chat Project".
+- Добавлен `apps/api/src/routes/user/chats.ts`: `GET/POST /api/user/chats`, `GET/PATCH/DELETE /api/user/chats/:id`, `POST /api/user/chats/:id/messages`.
+- Создание сообщения переиспользует free-chat project pipeline: списание коинов, `mode = "free-chat"`, queue `service-pipeline`, embedded project state в деталях чата.
+- `Chat.updatedAt` обновляется при новом сообщении; первый prompt автоматически становится title чата, если title был `Новый чат`.
+- `result:<projectId>` теперь поддержан как reference: API проверяет ownership/completed project и резолвит final output URL для pipeline.
+- Старые `/api/user/chat/generate` и `/api/user/chat/history` возвращают `410 CHAT_ENDPOINT_DEPRECATED`; `/api/user/chat/upload` и `/api/user/chat/models` оставлены.
+
+AI UI:
+
+- `/ai` перестроен в двухколоночный multi-turn интерфейс: список чатов слева, активная лента сообщений справа, sticky form снизу.
+- Список чатов содержит `+ Новый чат`, поиск, title/date/messageCount и thumbnail последнего результата; на mobile список открывается отдельным Sheet.
+- Сообщение показывает prompt, model/aspect/reference badges, progress для queued/processing, media result для completed, error/retry для failed.
+- Completed result поддерживает `Скачать`, `Использовать как референс` (`result:<projectId>`) и `Сохранить в Студию`.
+- Форма отправляет в `/api/user/chats/:id/messages`; при несовместимой модели и прикрепленном reference показывает warning и блокирует submit.
+
+StylePreset / Studio:
+
+- Добавлена Prisma модель `StylePreset` и seed стартового набора: 6 avatar presets и 6 location presets с английскими generic prompt fragments.
+- Добавлен shared helper `buildStylePresetPrompt(presetPrompt, userPrompt)` и unit-test.
+- Public API: `GET /api/public/style-presets?kind=user-avatar|user-location`.
+- Admin CRUD: `/api/admin/style-presets` и страница `/admin/style-presets` с заголовком "Шаблоны образов".
+- `/studio` генерация образа теперь показывает секцию "Шаблоны" + карточку "Без шаблона"; final prompt собирается как `<preset.promptText> <user prompt>`.
+
+Variations:
+
+- `MediaAsset` получил `parentAssetId` с self relation `onDelete: SetNull`: вариации переживают удаление родителя, но связь обнуляется.
+- В карточках ассетов Студии добавлена кнопка "Создать вариацию"; flow запускает `library-generation` через `image-edit` Nano Banana с исходным ассетом как `image_input`.
+- Новый ассет, созданный worker'ом после `library-generation`, получает `parentAssetId`; карточка показывает количество вариаций.
+
+Tests/checks:
+
+- Добавлены DB-backed API-тесты для `/api/user/chats` CRUD, `/api/user/chats/:id/messages`, deprecated `/api/user/chat/generate|history`, `/api/admin/style-presets` и `/api/public/style-presets`.
+- Локально проходят `npm run build -w @allvision/database`, `npm run build -w @allvision/shared`, `npm run build -w @allvision/api`, `npm run build -w @allvision/worker`, `npm run build -w @allvision/web`.
+- Локально проходят `npm test -w @allvision/shared -- --runInBand chat-models style-presets` и `npm test -w @allvision/worker -- --runInBand asset-reference`.
+- DB-backed API-тест `npm test -w @allvision/api -- --runInBand user-chat user-chats style-presets` локально блокируется без Postgres `localhost:5433`, как и прежние DB-backed API-тесты.
+
+Technical debt:
+
+- Multi-input generation через Kling Elements не делали.
+- Email/SMTP, ЮKassa sandbox, cleanup временных chat-upload файлов, NSFW-фильтр, voice messages и streaming остались за рамками P8.4.

@@ -4,9 +4,8 @@ import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ImageIcon, Loader2, MapPin, Palette, Plus, Trash2, Upload, Wand2 } from 'lucide-react';
-import { getBlockCatalogItem } from '@allvision/shared';
+import { buildStylePresetPrompt, getBlockCatalogItem, type PublicStylePreset } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
-import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -16,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
+import { useGetStylePresetsQuery } from '@/store/api/public-api';
 import { useListProjectsQuery } from '@/store/api/projects-api';
 import {
   type UserMediaAsset,
@@ -28,7 +28,7 @@ import {
 } from '@/store/api/user-media-assets-api';
 
 type Tab = 'avatars' | 'locations' | 'history';
-type ModalKind = null | { action: 'upload' | 'generate'; kind: UserMediaKind };
+type ModalKind = null | { action: 'upload' | 'generate'; kind: UserMediaKind } | { action: 'variation'; asset: UserMediaAsset };
 
 const kindLabels: Record<UserMediaKind, { title: string; empty: string; icon: typeof ImageIcon }> = {
   'user-avatar': {
@@ -81,13 +81,8 @@ function assetRefsFromInputs(value: unknown): string[] {
 export default function StudioPage() {
   return (
     <AuthGuard>
-      <div className="flex min-h-[calc(100vh-64px)]">
-        <DashboardSidebar />
-        <main className="min-w-0 flex-1 bg-slate-950">
-          <div className="container py-8">
-            <StudioContent />
-          </div>
-        </main>
+      <div className="container py-8">
+        <StudioContent />
       </div>
     </AuthGuard>
   );
@@ -144,6 +139,7 @@ function StudioContent() {
           isLoading={avatars.isLoading}
           onUpload={() => setModal({ action: 'upload', kind: 'user-avatar' })}
           onGenerate={() => setModal({ action: 'generate', kind: 'user-avatar' })}
+          onVariation={(asset) => setModal({ action: 'variation', asset })}
         />
       )}
       {tab === 'locations' && (
@@ -153,6 +149,7 @@ function StudioContent() {
           isLoading={locations.isLoading}
           onUpload={() => setModal({ action: 'upload', kind: 'user-location' })}
           onGenerate={() => setModal({ action: 'generate', kind: 'user-location' })}
+          onVariation={(asset) => setModal({ action: 'variation', asset })}
         />
       )}
       {tab === 'history' && (
@@ -185,6 +182,7 @@ function StudioContent() {
 
       {modal?.action === 'upload' && <UploadAssetModal kind={modal.kind} onClose={() => setModal(null)} />}
       {modal?.action === 'generate' && <GenerateAssetModal kind={modal.kind} onClose={() => setModal(null)} />}
+      {modal?.action === 'variation' && <VariationAssetModal asset={modal.asset} onClose={() => setModal(null)} />}
     </div>
   );
 }
@@ -195,12 +193,14 @@ function AssetSection({
   isLoading,
   onUpload,
   onGenerate,
+  onVariation,
 }: {
   kind: UserMediaKind;
   items: UserMediaAsset[];
   isLoading: boolean;
   onUpload: () => void;
   onGenerate: () => void;
+  onVariation: (asset: UserMediaAsset) => void;
 }) {
   const meta = kindLabels[kind];
   const Icon = meta.icon;
@@ -239,14 +239,14 @@ function AssetSection({
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {items.map((asset) => <AssetCard key={asset.id} asset={asset} />)}
+          {items.map((asset) => <AssetCard key={asset.id} asset={asset} onVariation={() => onVariation(asset)} />)}
         </div>
       )}
     </div>
   );
 }
 
-function AssetCard({ asset }: { asset: UserMediaAsset }) {
+function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation: () => void }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(asset.title);
   const [updateAsset] = useUpdateUserMediaAssetMutation();
@@ -308,6 +308,12 @@ function AssetCard({ asset }: { asset: UserMediaAsset }) {
         <Button type="button" variant="outline" size="sm" className="w-full" disabled>
           Использовать в услуге
         </Button>
+        <Button type="button" variant="outline" size="sm" className="w-full border-violet-500/40 bg-violet-500/10" onClick={onVariation}>
+          Создать вариацию
+        </Button>
+        {asset.variationsCount > 0 && (
+          <div className="text-xs text-violet-200">у этого образа ещё {asset.variationsCount} вариации</div>
+        )}
       </CardContent>
     </Card>
   );
@@ -368,17 +374,21 @@ function UploadAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: () 
 function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: () => void }) {
   const router = useRouter();
   const me = useGetMeQuery();
+  const presets = useGetStylePresetsQuery({ kind });
+  const [presetSlug, setPresetSlug] = useState<string>('none');
   const [prompt, setPrompt] = useState('');
   const [title, setTitle] = useState('');
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '9:16' | '16:9' | 'auto'>(kind === 'user-avatar' ? '1:1' : '16:9');
   const [generate, state] = useGenerateUserMediaAssetMutation();
   const balance = me.data?.user.tokenBalance ?? 0;
   const canPay = balance >= generationCost;
+  const selectedPreset = (presets.data?.presets ?? []).find((preset) => preset.slug === presetSlug);
+  const finalPrompt = buildStylePresetPrompt(selectedPreset?.promptText, prompt);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     try {
-      const result = await generate({ kind, prompt, title, aspectRatio }).unwrap();
+      const result = await generate({ kind, prompt: finalPrompt, title, aspectRatio }).unwrap();
       toast({ title: 'Генерация запущена' });
       onClose();
       router.push(`/dashboard/projects/${result.project.id}`);
@@ -397,8 +407,14 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
           <Label>Название</Label>
           <Input value={title} onChange={(event) => setTitle(event.target.value)} required />
         </div>
+        <StylePresetPicker
+          presets={presets.data?.presets ?? []}
+          selectedSlug={presetSlug}
+          onSelect={setPresetSlug}
+          isLoading={presets.isLoading}
+        />
         <div className="space-y-2">
-          <Label>Промпт</Label>
+          <Label>Свой промпт</Label>
           <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} required />
         </div>
         <div className="space-y-2">
@@ -423,6 +439,132 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
         </div>
       </form>
     </Modal>
+  );
+}
+
+function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClose: () => void }) {
+  const router = useRouter();
+  const me = useGetMeQuery();
+  const presets = useGetStylePresetsQuery({ kind: asset.kind });
+  const [presetSlug, setPresetSlug] = useState<string>('none');
+  const [prompt, setPrompt] = useState('');
+  const [title, setTitle] = useState(`${asset.title} — вариация`);
+  const [generate, state] = useGenerateUserMediaAssetMutation();
+  const balance = me.data?.user.tokenBalance ?? 0;
+  const canPay = balance >= generationCost;
+  const selectedPreset = (presets.data?.presets ?? []).find((preset) => preset.slug === presetSlug);
+  const finalPrompt = buildStylePresetPrompt(selectedPreset?.promptText, prompt);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    try {
+      const result = await generate({
+        kind: asset.kind,
+        prompt: finalPrompt,
+        title,
+        aspectRatio: asset.kind === 'user-avatar' ? '1:1' : '16:9',
+        parentAssetId: asset.id,
+      }).unwrap();
+      toast({ title: 'Вариация запущена' });
+      onClose();
+      router.push(`/dashboard/projects/${result.project.id}`);
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <Modal title="Создать вариацию" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="flex items-center gap-3 rounded-md border border-slate-800 bg-slate-950 p-3">
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-slate-900">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+          </div>
+          <div>
+            <div className="font-medium text-white">{asset.title}</div>
+            <div className="mt-1 text-sm text-slate-500">Исходный образ будет использован как image input.</div>
+          </div>
+        </div>
+        <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
+          Стоимость: {generationCost} коинов · ~{generationCost} ₽. Баланс: {balance} коинов · {canPay ? 'хватит' : 'не хватает'}.
+        </div>
+        <div className="space-y-2">
+          <Label>Название</Label>
+          <Input value={title} onChange={(event) => setTitle(event.target.value)} required />
+        </div>
+        <StylePresetPicker
+          presets={presets.data?.presets ?? []}
+          selectedSlug={presetSlug}
+          onSelect={setPresetSlug}
+          isLoading={presets.isLoading}
+        />
+        <div className="space-y-2">
+          <Label>Свой промпт</Label>
+          <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} required />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Отмена</Button>
+          <Button type="submit" disabled={state.isLoading || !canPay} className="bg-violet-600 hover:bg-violet-500">
+            {state.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+            Создать вариацию
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function StylePresetPicker({
+  presets,
+  selectedSlug,
+  onSelect,
+  isLoading,
+}: {
+  presets: PublicStylePreset[];
+  selectedSlug: string;
+  onSelect: (slug: string) => void;
+  isLoading?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Шаблоны</Label>
+      <div className="grid max-h-72 gap-2 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/50 p-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={() => onSelect('none')}
+          className={cn(
+            'rounded-md border p-3 text-left transition',
+            selectedSlug === 'none' ? 'border-violet-500 bg-violet-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700',
+          )}
+        >
+          <div className="font-medium text-white">Без шаблона</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">Использовать только ваш промпт.</div>
+        </button>
+        {isLoading ? (
+          <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-500">Загрузка...</div>
+        ) : presets.map((preset) => (
+          <button
+            key={preset.slug}
+            type="button"
+            onClick={() => onSelect(preset.slug)}
+            className={cn(
+              'overflow-hidden rounded-md border text-left transition',
+              selectedSlug === preset.slug ? 'border-violet-500 bg-violet-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700',
+            )}
+          >
+            {preset.thumbnail && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preset.thumbnail} alt="" className="aspect-video w-full object-cover" />
+            )}
+            <div className="p-3">
+              <div className="font-medium text-white">{preset.title}</div>
+              <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{preset.description}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -691,6 +691,117 @@ const tokenPackages = [
   { title: 'Максимум', tokens: 3000, priceRub: 2999, bonus: 600, sortOrder: 40 },
 ];
 
+const stylePresets = [
+  {
+    slug: 'avatar-realistic-portrait',
+    kind: 'user-avatar',
+    title: 'Реалистичный портрет',
+    description: 'Чистый студийный портрет с естественным светом.',
+    promptText:
+      'Create a realistic studio portrait with natural skin texture, balanced facial proportions, and soft professional lighting. Keep the subject recognizable and avoid exaggerated retouching. Use a clean background and a refined editorial mood.',
+    sortOrder: 10,
+  },
+  {
+    slug: 'avatar-cartoon-character',
+    kind: 'user-avatar',
+    title: 'Мультяшный герой',
+    description: 'Дружелюбный персонаж для семейных и детских сцен.',
+    promptText:
+      'Transform the subject into a warm cartoon character with expressive eyes, clear silhouette, and charming family-friendly styling. Preserve the main identity cues while simplifying details into polished animation art. Use bright but tasteful colors and soft depth.',
+    sortOrder: 20,
+  },
+  {
+    slug: 'avatar-anime',
+    kind: 'user-avatar',
+    title: 'Аниме',
+    description: 'Стильный аниме-портрет с аккуратной детализацией.',
+    promptText:
+      'Create an anime-inspired character portrait with elegant linework, expressive eyes, and polished cel-shaded lighting. Keep the pose natural and the character appealing without overloading the frame. Preserve recognizable features through hairstyle, face shape, and key accessories.',
+    sortOrder: 30,
+  },
+  {
+    slug: 'avatar-watercolor',
+    kind: 'user-avatar',
+    title: 'Акварель',
+    description: 'Мягкий художественный портрет с бумажной фактурой.',
+    promptText:
+      'Render the subject as a delicate watercolor portrait on textured paper, with translucent washes and gentle color transitions. Keep facial features clear and recognizable while letting edges stay slightly organic. The mood should feel handcrafted, calm, and luminous.',
+    sortOrder: 40,
+  },
+  {
+    slug: 'avatar-cyberpunk',
+    kind: 'user-avatar',
+    title: 'Киберпанк',
+    description: 'Неоновый футуристичный образ для эффектных роликов.',
+    promptText:
+      'Create a cinematic cyberpunk portrait with neon rim lights, futuristic clothing accents, and a dramatic urban atmosphere. Keep the subject sharp and recognizable, with high contrast lighting and subtle tech details. Avoid clutter; the character should remain the clear focus.',
+    sortOrder: 50,
+  },
+  {
+    slug: 'avatar-vintage-film',
+    kind: 'user-avatar',
+    title: 'Винтажное кино',
+    description: 'Портрет с плёночным зерном и ретро-настроением.',
+    promptText:
+      'Create a vintage film portrait with warm analog color grading, subtle grain, and classic photographic lighting. Preserve the person’s identity and use timeless wardrobe details that do not overpower the face. The final image should feel like a carefully restored archival still.',
+    sortOrder: 60,
+  },
+  {
+    slug: 'location-forest-nature',
+    kind: 'user-location',
+    title: 'Природа и лес',
+    description: 'Живая природная сцена с глубиной и мягким светом.',
+    promptText:
+      'Create a rich natural environment with layered forest depth, organic details, and soft sunlight filtering through foliage. Make the location inviting and cinematic, with clear foreground, midground, and background. Leave visual space where a character could naturally appear.',
+    sortOrder: 10,
+  },
+  {
+    slug: 'location-city-street',
+    kind: 'user-location',
+    title: 'Городская улица',
+    description: 'Современная улица для динамичных городских сцен.',
+    promptText:
+      'Create a cinematic urban street scene with realistic architecture, atmospheric lighting, and believable street details. Use strong perspective lines and a clean composition suitable for placing a person in the frame. The mood should feel modern, lively, and visually grounded.',
+    sortOrder: 20,
+  },
+  {
+    slug: 'location-cozy-interior',
+    kind: 'user-location',
+    title: 'Уютный интерьер',
+    description: 'Тёплая домашняя или студийная обстановка.',
+    promptText:
+      'Create a cozy interior environment with warm practical lighting, tasteful decor, and a comfortable lived-in feeling. Keep the scene uncluttered enough for characters or products to stand out. Use realistic materials, soft shadows, and a welcoming color palette.',
+    sortOrder: 30,
+  },
+  {
+    slug: 'location-fantasy-world',
+    kind: 'user-location',
+    title: 'Фэнтези',
+    description: 'Сказочная сцена для волшебных историй.',
+    promptText:
+      'Create a fantasy environment with magical atmosphere, imaginative architecture or nature elements, and cinematic depth. Keep the scene readable and not overly busy, with a strong focal area for a character. Use rich lighting, subtle mist, and enchanting details.',
+    sortOrder: 40,
+  },
+  {
+    slug: 'location-sci-fi-space',
+    kind: 'user-location',
+    title: 'Sci-fi / космос',
+    description: 'Футуристичная сцена с технологичным настроением.',
+    promptText:
+      'Create a polished science-fiction environment with sleek technology, distant space or futuristic city elements, and dramatic cinematic lighting. Keep the composition clean and believable, with clear surfaces and scale cues. The scene should feel premium, spacious, and ready for a character.',
+    sortOrder: 50,
+  },
+  {
+    slug: 'location-studio-backdrop',
+    kind: 'user-location',
+    title: 'Студийный фон',
+    description: 'Чистый фон для портретов, карточек и обложек.',
+    promptText:
+      'Create a refined studio backdrop with controlled lighting, subtle texture, and a professional photography setup. Keep the background simple enough to support portraits, products, or avatars without distraction. Use soft gradients of light from real lamps rather than decorative abstract effects.',
+    sortOrder: 60,
+  },
+];
+
 const publicSettings = [
   {
     key: 'fairy_tale_themes',
@@ -722,10 +833,13 @@ export async function runSeed(options: SeedOptions = {}) {
   console.log('[seed] step 2/4: catalog (services, trends, scenarios)');
   await ensureCatalog(options);
 
-  console.log('[seed] step 3/4: token packages');
+  console.log('[seed] step 3/5: token packages');
   await ensureTokenPackages();
 
-  console.log('[seed] step 4/4: media assets migration');
+  console.log('[seed] step 4/5: style presets');
+  await ensureStylePresets();
+
+  console.log('[seed] step 5/5: media assets migration');
   await ensureMediaAssetsMigration();
 
   let devUserEmail: string | undefined;
@@ -833,6 +947,30 @@ async function ensureTokenPackages() {
   if (createdSettings > 0) {
     console.log(`[seed] public settings: ${createdSettings} created`);
   }
+}
+
+async function ensureStylePresets() {
+  let ensured = 0;
+  for (const preset of stylePresets) {
+    await prisma.stylePreset.upsert({
+      where: { slug: preset.slug },
+      update: {
+        kind: preset.kind,
+        title: preset.title,
+        description: preset.description,
+        promptText: preset.promptText,
+        sortOrder: preset.sortOrder,
+        isActive: true,
+      },
+      create: {
+        ...preset,
+        thumbnail: null,
+        isActive: true,
+      },
+    });
+    ensured += 1;
+  }
+  console.log(`[seed] style presets: ${ensured} ensured`);
 }
 
 async function ensureMediaAssetsMigration() {
@@ -1053,6 +1191,8 @@ async function truncateForDevSeed() {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "AIUsageLog",
+      "ChatMessage",
+      "Chat",
       "MediaAsset",
       "EpisodeCharacter",
       "Episode",
@@ -1068,6 +1208,7 @@ async function truncateForDevSeed() {
       "ScenarioTemplate",
       "Service",
       "TokenPackage",
+      "StylePreset",
       "Setting",
       "User"
     RESTART IDENTITY CASCADE
