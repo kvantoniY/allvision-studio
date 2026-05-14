@@ -1,13 +1,21 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlertTriangle, Loader2, Send, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Clock3, Coins, Frame, ImageIcon, Loader2, Paperclip, Send, Sparkles, Video, X } from 'lucide-react';
 import { CHAT_MODELS, type ChatCategory, type ChatModelOption } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
@@ -34,6 +42,10 @@ function apiErrorMessage(error: unknown) {
 
 function defaultModel(category: ChatCategory): ChatModelOption {
   return CHAT_MODELS.find((model) => model.category === category) ?? CHAT_MODELS[0];
+}
+
+function compactModelTitle(title: string) {
+  return title.replace(/\s*\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
 }
 
 export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, onReferenceConsumed, onPromptConsumed }: ChatFormProps) {
@@ -109,149 +121,220 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     }
   };
 
+  const statusText = !prompt.trim()
+    ? 'Напишите промпт'
+    : referenceUnsupported
+      ? 'Референс не подходит модели'
+      : needsInput && !source
+        ? 'Нужен референс'
+        : canPay
+          ? `${selectedModel.estimatedCostCoins} коинов`
+          : 'Недостаточно коинов';
+
   return (
-    <Card className="border-slate-800 bg-slate-900">
-      <CardContent className="p-4">
-        <form onSubmit={submit} className="space-y-4">
-          <div className="flex flex-wrap gap-2">
-            {(['image', 'video'] as const).map((item) => (
-              <Button
-                key={item}
-                type="button"
-                variant={category === item ? 'default' : 'outline'}
-                onClick={() => setCategory(item)}
-                className={cn(category === item && 'bg-violet-600 hover:bg-violet-500')}
-              >
-                {item === 'image' ? <Sparkles className="h-4 w-4" /> : null}
-                {categoryLabels[item]}
-              </Button>
-            ))}
-          </div>
-
-          <div className="grid gap-3 lg:grid-cols-[1fr_0.6fr]">
-            <div className="space-y-2">
-              <Label>Модель</Label>
-              <select
-                value={selectedModel.slug}
-                onChange={(event) => setModelSlug(event.target.value)}
-                className="h-11 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100"
-              >
-                {models.map((model) => (
-                  <option key={model.slug} value={model.slug}>
-                    {model.title} · {model.estimatedCostCoins} коинов{model.experimental ? ' · бета' : ''}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs leading-5 text-slate-500">{selectedModel.description}</p>
-              {referenceUnsupported && (
-                <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <span>Модель {selectedModel.title} не принимает этот референс. Уберите прикреплённое или выберите другую модель.</span>
+    <form onSubmit={submit} className="mx-auto max-w-5xl">
+      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-2xl shadow-black/20">
+        {(source || referenceUnsupported || !canPay || selectedModel.experimental) && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/45 px-3 py-2">
+            {source && (
+              <div className="flex min-w-0 items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5">
+                <div className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900">
+                  {source.mediaKind === 'image' ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={source.url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <video src={source.url} className="h-full w-full object-cover" muted />
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
-              <div className="flex items-center justify-between gap-3">
-                <span>Стоимость</span>
-                <span className="font-semibold text-amber-300">{selectedModel.estimatedCostCoins} коинов · ~{selectedModel.estimatedCostCoins} ₽</span>
+                <span className="max-w-[220px] truncate text-xs text-slate-200">{source.title}</span>
+                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSource(null)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
               </div>
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <span>Баланс</span>
-                <span className={canPay ? 'text-emerald-300' : 'text-red-300'}>
-                  {balance} коинов · {canPay ? 'хватит' : 'не хватает'}
-                </span>
+            )}
+            {referenceUnsupported && (
+              <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-100">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>Модель {selectedModel.title} не принимает этот референс</span>
               </div>
-              {selectedModel.experimental && <Badge className="mt-3 bg-amber-500/15 text-amber-200">Бета</Badge>}
-            </div>
+            )}
+            {!canPay && (
+              <div className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-100">
+                На балансе {balance}, нужно {selectedModel.estimatedCostCoins}
+              </div>
+            )}
+            {selectedModel.experimental && <Badge className="bg-amber-500/15 text-amber-200">Бета</Badge>}
           </div>
+        )}
 
-          <div className="space-y-2">
-            <Label>Промпт</Label>
-            <Textarea
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              rows={4}
-              placeholder="Опишите сцену, стиль, камеру, настроение и важные ограничения..."
-              className="resize-none bg-slate-950"
+        <Textarea
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+          rows={2}
+          placeholder="Опишите результат: сюжет, стиль, камера, настроение..."
+          className="min-h-[76px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+              event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
+            }
+          }}
+        />
+
+        <div className="flex flex-col gap-3 border-t border-slate-800 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <CategoryControl category={category} onChange={setCategory} />
+            <ModelControl selectedModel={selectedModel} models={models} onChange={setModelSlug} />
+            <AspectControl
+              value={aspectRatio}
+              values={selectedModel.supportedAspectRatios}
+              onChange={(value) => setAspectRatio(value as typeof aspectRatio)}
             />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-[1fr_0.7fr]">
-            <div className="space-y-2">
-              <Label>Соотношение сторон</Label>
-              <div className="flex flex-wrap gap-2">
-                {selectedModel.supportedAspectRatios.map((ratio) => (
-                  <Button
-                    key={ratio}
-                    type="button"
-                    variant={aspectRatio === ratio ? 'default' : 'outline'}
-                    onClick={() => setAspectRatio(ratio)}
-                    className={cn(aspectRatio === ratio && 'bg-violet-600 hover:bg-violet-500')}
-                  >
-                    {ratio}
-                  </Button>
-                ))}
-              </div>
-            </div>
-            {category === 'video' && (
-              <div className="space-y-2">
-                <Label>Длительность</Label>
-                <div className="flex gap-2">
-                  {[5, 10].map((item) => (
-                    <Button
-                      key={item}
-                      type="button"
-                      variant={duration === item ? 'default' : 'outline'}
-                      onClick={() => setDuration(item)}
-                      className={cn(duration === item && 'bg-violet-600 hover:bg-violet-500')}
-                    >
-                      {item} сек
-                    </Button>
-                  ))}
-                </div>
-              </div>
+            {category === 'video' && <DurationControl value={duration} onChange={setDuration} />}
+            {canUseInput ? (
+              <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact />
+            ) : (
+              <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950 text-slate-400" disabled>
+                <Paperclip className="h-4 w-4" />
+                Без референса
+              </Button>
             )}
           </div>
 
-          {source && !canUseInput && (
-            <div className="flex min-w-0 items-center gap-3 rounded-md border border-slate-800 bg-slate-950 p-2">
-              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-slate-900">
-                {source.mediaKind === 'image' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={source.url} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  <video src={source.url} className="h-full w-full object-cover" muted />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-slate-100">{source.title}</div>
-                <div className="text-xs text-slate-500">Референс прикреплён</div>
-              </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setSource(null)}>
-                <X className="h-4 w-4" />
-              </Button>
+          <div className="flex items-center justify-between gap-3 lg:justify-end">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Coins className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
+              <span className={canPay ? 'text-slate-400' : 'text-red-200'}>{statusText}</span>
+              <span className="hidden text-slate-600 sm:inline">Баланс {balance}</span>
             </div>
-          )}
-
-          {canUseInput ? (
-            <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} />
-          ) : !source ? (
-            <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-500">
-              Эта модель работает только с текстовым промптом, референс не нужен.
-            </div>
-          ) : null}
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm text-slate-500">
-              {!prompt.trim() ? 'Напишите промпт.' : referenceUnsupported ? 'Референс не подходит выбранной модели.' : needsInput && !source ? 'Прикрепите изображение для этой модели.' : canPay ? 'Можно запускать.' : 'Недостаточно коинов.'}
-            </div>
-            <Button type="submit" disabled={!canSubmit} className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+            <Button type="submit" disabled={!canSubmit} className="h-10 bg-amber-500 px-4 text-slate-950 hover:bg-amber-400">
               {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Создать
             </Button>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function CategoryControl({ category, onChange }: { category: ChatCategory; onChange: (value: ChatCategory) => void }) {
+  return (
+    <div className="inline-grid h-9 grid-cols-2 rounded-md border border-slate-700 bg-slate-950 p-0.5">
+      {(['image', 'video'] as const).map((item) => {
+        const active = category === item;
+        const Icon = item === 'image' ? ImageIcon : Video;
+        return (
+          <button
+            key={item}
+            type="button"
+            onClick={() => onChange(item)}
+            className={cn(
+              'inline-flex items-center gap-1.5 rounded px-3 text-sm font-medium transition',
+              active ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white',
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            {categoryLabels[item]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ModelControl({
+  selectedModel,
+  models,
+  onChange,
+}: {
+  selectedModel: ChatModelOption;
+  models: ChatModelOption[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 max-w-[260px] border-slate-700 bg-slate-950">
+          <Sparkles className="h-4 w-4 text-violet-300" />
+          <span className="truncate">{compactModelTitle(selectedModel.title)}</span>
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[min(92vw,420px)] border-slate-800 bg-slate-950 text-slate-100">
+        <DropdownMenuLabel>Модель</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-slate-800" />
+        <DropdownMenuRadioGroup value={selectedModel.slug} onValueChange={onChange}>
+          {models.map((model) => (
+            <DropdownMenuRadioItem key={model.slug} value={model.slug} className="items-start gap-3 py-2 focus:bg-slate-900">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{model.title}</span>
+                  <span className="text-xs text-amber-300">{model.estimatedCostCoins} коинов</span>
+                  {model.experimental && <span className="text-xs text-amber-200">бета</span>}
+                </div>
+                <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{model.description}</div>
+              </div>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function AspectControl({
+  value,
+  values,
+  onChange,
+}: {
+  value: string;
+  values: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950">
+          <Frame className="h-4 w-4 text-slate-400" />
+          {value}
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="border-slate-800 bg-slate-950 text-slate-100">
+        <DropdownMenuLabel>Формат</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-slate-800" />
+        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
+          {values.map((ratio) => (
+            <DropdownMenuRadioItem key={ratio} value={ratio} className="focus:bg-slate-900">
+              {ratio}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DurationControl({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950">
+          <Clock3 className="h-4 w-4 text-slate-400" />
+          {value} сек
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="border-slate-800 bg-slate-950 text-slate-100">
+        <DropdownMenuLabel>Длительность</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-slate-800" />
+        {[5, 10].map((item) => (
+          <DropdownMenuItem key={item} className="focus:bg-slate-900" onClick={() => onChange(item)}>
+            {item} секунд
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

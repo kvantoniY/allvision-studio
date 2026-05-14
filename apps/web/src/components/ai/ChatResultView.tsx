@@ -41,15 +41,15 @@ export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry 
 
   if (messages.length === 0) {
     return (
-      <Card className="border-slate-800 bg-slate-900">
-        <CardContent className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
-          <Sparkles className="h-12 w-12 text-violet-300" />
+      <div className="flex h-full min-h-[320px] items-center justify-center">
+        <div className="max-w-md text-center">
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg border border-violet-500/30 bg-violet-500/10">
+            <Sparkles className="h-7 w-7 text-violet-300" />
+          </div>
           <h2 className="mt-5 text-2xl font-bold text-white">Allvision AI</h2>
-          <p className="mt-3 max-w-lg text-sm leading-6 text-slate-400">
-            Новый чат готов. Напишите промпт, выберите модель и при необходимости прикрепите референс.
-          </p>
-        </CardContent>
-      </Card>
+          <p className="mt-3 text-sm leading-6 text-slate-400">Новый чат готов.</p>
+        </div>
+      </div>
     );
   }
 
@@ -87,7 +87,7 @@ function MessageCard({
   const processing = isActive(status);
 
   return (
-    <Card className="border-slate-800 bg-slate-900">
+    <Card className="border-slate-800 bg-slate-900/80">
       <CardContent className="space-y-4 p-4 md:p-5">
         <div className="space-y-3 border-b border-slate-800 pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">

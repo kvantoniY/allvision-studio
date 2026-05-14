@@ -97,7 +97,7 @@ function AiContent() {
   const messages = chatQuery.data?.messages ?? [];
 
   return (
-    <div className="grid h-[calc(100vh-56px)] min-h-[560px] bg-slate-950 md:h-screen md:grid-cols-[300px_minmax(0,1fr)]">
+    <div className="grid h-[calc(100vh-56px)] min-h-[560px] overflow-hidden bg-slate-950 md:h-screen md:grid-cols-[300px_minmax(0,1fr)]">
       <div className="hidden min-h-0 md:block">
         <ChatHistoryList
           items={chats.data?.items ?? []}
@@ -148,7 +148,7 @@ function AiContent() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-8">
           <ChatResultView
             messages={messages}
             isLoading={chatQuery.isLoading && !!activeChatId}
@@ -158,7 +158,7 @@ function AiContent() {
         </div>
 
         {activeChatId && (
-          <div className="sticky bottom-0 border-t border-slate-800 bg-slate-950/95 p-4 backdrop-blur lg:p-6">
+          <div className="sticky bottom-0 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur lg:px-8">
             <ChatForm
               chatId={activeChatId}
               initialReference={reference}

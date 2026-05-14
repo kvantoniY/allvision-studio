@@ -24,6 +24,7 @@ type InputSourcePickerProps = {
   mediaKind: 'image' | 'video';
   value: SelectedInputSource | null;
   required?: boolean;
+  compact?: boolean;
   onChange: (value: SelectedInputSource | null) => void;
 };
 
@@ -41,7 +42,7 @@ function isImageAsset(asset: { mimeType?: string | null }) {
   return !asset.mimeType || asset.mimeType.startsWith('image/');
 }
 
-export function InputSourcePicker({ mediaKind, value, required, onChange }: InputSourcePickerProps) {
+export function InputSourcePicker({ mediaKind, value, required, compact, onChange }: InputSourcePickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<PickerTab>('upload');
   const [upload, uploadState] = useUploadChatInputMutation();
@@ -76,13 +77,19 @@ export function InputSourcePicker({ mediaKind, value, required, onChange }: Inpu
   };
 
   return (
-    <div className="space-y-3">
+    <div className={cn('space-y-3', compact && 'space-y-0')}>
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="outline" className="border-slate-700 bg-slate-900" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size={compact ? 'sm' : 'default'}
+          className={cn('border-slate-700', compact ? 'h-9 bg-slate-950' : 'bg-slate-900')}
+          onClick={() => setOpen(true)}
+        >
           <Library className="h-4 w-4" />
-          {value ? 'Заменить референс' : required ? 'Выбрать референс' : 'Прикрепить'}
+          {compact ? (value ? 'Референс' : required ? 'Нужен реф.' : 'Прикрепить') : value ? 'Заменить референс' : required ? 'Выбрать референс' : 'Прикрепить'}
         </Button>
-        {value && (
+        {value && !compact && (
           <div className="flex min-w-0 items-center gap-3 rounded-md border border-slate-800 bg-slate-900 p-2">
             <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-slate-950">
               {value.mediaKind === 'image' ? (

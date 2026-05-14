@@ -384,9 +384,17 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
   const canPay = balance >= generationCost;
   const selectedPreset = (presets.data?.presets ?? []).find((preset) => preset.slug === presetSlug);
   const finalPrompt = buildStylePresetPrompt(selectedPreset?.promptText, prompt);
+  const promptRequired = presetSlug === 'none';
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (finalPrompt.trim().length < 8) {
+      toast({
+        title: promptRequired ? 'Опишите образ' : 'Выберите шаблон или добавьте описание',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       const result = await generate({ kind, prompt: finalPrompt, title, aspectRatio }).unwrap();
       toast({ title: 'Генерация запущена' });
@@ -414,8 +422,19 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
           isLoading={presets.isLoading}
         />
         <div className="space-y-2">
-          <Label>Свой промпт</Label>
-          <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} required />
+          <Label>{promptRequired ? 'Свой промпт' : 'Дополнение к шаблону'}</Label>
+          <Textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            rows={5}
+            required={promptRequired}
+            placeholder={promptRequired ? 'Опишите образ своими словами...' : 'Необязательно: уточните детали, персонажа, цвет, настроение...'}
+          />
+          {!promptRequired && (
+            <p className="text-xs leading-5 text-slate-500">
+              Шаблон уже содержит основной промпт. Это поле можно оставить пустым.
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label>Соотношение сторон</Label>
@@ -454,9 +473,17 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
   const canPay = balance >= generationCost;
   const selectedPreset = (presets.data?.presets ?? []).find((preset) => preset.slug === presetSlug);
   const finalPrompt = buildStylePresetPrompt(selectedPreset?.promptText, prompt);
+  const promptRequired = presetSlug === 'none';
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (finalPrompt.trim().length < 8) {
+      toast({
+        title: promptRequired ? 'Опишите вариацию' : 'Выберите шаблон или добавьте описание',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       const result = await generate({
         kind: asset.kind,
@@ -500,8 +527,19 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
           isLoading={presets.isLoading}
         />
         <div className="space-y-2">
-          <Label>Свой промпт</Label>
-          <Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={5} required />
+          <Label>{promptRequired ? 'Свой промпт' : 'Дополнение к шаблону'}</Label>
+          <Textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            rows={5}
+            required={promptRequired}
+            placeholder={promptRequired ? 'Опишите вариацию своими словами...' : 'Необязательно: уточните, что изменить относительно исходного образа...'}
+          />
+          {!promptRequired && (
+            <p className="text-xs leading-5 text-slate-500">
+              Шаблон уже задаёт стиль вариации. Поле можно оставить пустым.
+            </p>
+          )}
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onClose}>Отмена</Button>
