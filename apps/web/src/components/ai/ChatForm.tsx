@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlertTriangle, ChevronDown, Clock3, Coins, Frame, ImageIcon, Loader2, Paperclip, Send, Sparkles, Video, Volume2, VolumeX, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Sparkles, Video, Volume2, VolumeX, X } from 'lucide-react';
 import { CHAT_MODELS, estimateChatGenerationCostCoins, type ChatCategory, type ChatModelOption } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { TokenIcon } from '@/components/ui/token-icon';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -146,8 +147,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       : needsInput && !source
         ? 'Нужен референс'
         : canPay
-          ? `${estimatedCostCoins} коинов`
-          : 'Недостаточно коинов';
+          ? `${estimatedCostCoins} токенов`
+          : 'Недостаточно токенов';
 
   return (
     <form onSubmit={submit} className="mx-auto max-w-5xl">
@@ -228,7 +229,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
           <div className="flex items-center justify-between gap-3 lg:justify-end">
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Coins className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
+              <TokenIcon className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
               <span className={canPay ? 'text-slate-400' : 'text-red-200'}>{statusText}</span>
               <span className="hidden text-slate-600 sm:inline">Баланс {balance}</span>
             </div>
@@ -296,7 +297,7 @@ function ModelControl({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{model.title}</span>
                   <span className="text-xs text-amber-300">
-                    от {estimateChatGenerationCostCoins(model.slug, { duration: model.defaultDurationSec })} коинов
+                    от {estimateChatGenerationCostCoins(model.slug, { duration: model.defaultDurationSec })} токенов
                   </span>
                   {model.experimental && <span className="text-xs text-amber-200">бета</span>}
                 </div>

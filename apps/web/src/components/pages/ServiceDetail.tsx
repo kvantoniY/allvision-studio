@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, Coins, ImagePlus, Library, Loader2, Lock, Sparkles, Star, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ImagePlus, Library, Loader2, Lock, Sparkles, Star, X } from 'lucide-react';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +21,7 @@ import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import { useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { cn } from '@/lib/utils';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 type ServiceDetailProps = {
@@ -554,7 +555,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     }
     if (!hasEnoughCoins) {
       toast({
-        title: 'Недостаточно коинов',
+        title: 'Недостаточно токенов',
         description: `Нужно ${price}, на балансе ${balance}.`,
         variant: 'destructive',
       });
@@ -591,7 +592,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       const code = getErrorCode(error);
       if (code === 'INSUFFICIENT_TOKENS') {
         toast({
-          title: 'Недостаточно коинов',
+          title: 'Недостаточно токенов',
           description: 'Пополните баланс и запустите услугу снова.',
           variant: 'destructive',
         });
@@ -688,7 +689,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   >
                     <div className="text-sm font-semibold">{item === 'standard' ? 'Standard' : 'Pro'}</div>
                     <div className="mt-1 text-xl font-black">{priceFor(service, item)}</div>
-                    <div className={cn('mt-1 text-xs', active ? 'text-slate-800' : 'text-slate-500')}>коинов</div>
+                    <div className={cn('mt-1 text-xs', active ? 'text-slate-800' : 'text-slate-500')}>токенов</div>
                   </button>
                 );
               })}
@@ -726,13 +727,13 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-slate-400">Ваш баланс</span>
                     <span className={cn('font-bold', hasEnoughCoins ? 'text-emerald-300' : 'text-amber-300')}>
-                      {balance} коинов
+                      {balance} токенов
                     </span>
                   </div>
                   {!hasEnoughCoins && (
                     <div className="mt-3 flex items-start gap-2 text-sm text-amber-200">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>Недостаточно коинов для запуска выбранного качества.</span>
+                      <span>Недостаточно токенов для запуска выбранного качества.</span>
                     </div>
                   )}
                 </div>
@@ -744,8 +745,8 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400"
                   size="lg"
                 >
-                  {launchState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
-                  Создать за {price} коинов
+                  {launchState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TokenIcon className="h-4 w-4" />}
+                  Создать за {price} токенов
                 </Button>
                 {!hasEnoughCoins && user && (
                   <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">

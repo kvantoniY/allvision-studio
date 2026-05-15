@@ -127,7 +127,7 @@ function MessageCard({
           <Alert variant="destructive">
             <AlertTitle>Генерация не удалась</AlertTitle>
             <AlertDescription>
-              {project.errorMessage ?? 'Коины будут возвращены стандартным механизмом refund.'}
+              {project.errorMessage ?? 'Токены будут возвращены стандартным механизмом refund.'}
             </AlertDescription>
           </Alert>
         )}

@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { CheckCircle2, Clock, Coins, Film, Image as ImageIcon, Users } from 'lucide-react';
+import { CheckCircle2, Clock, Film, Image as ImageIcon, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -11,6 +11,7 @@ import { TEMPLATE_CATEGORY_LABEL } from '@/components/studio/v3-labels';
 import { useAuth } from '@/hooks/use-auth';
 import { useGetPublicScenarioTemplateQuery } from '@/store/api/public-scenario-templates-api';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 function categoryLabel(category: string) {
   return TEMPLATE_CATEGORY_LABEL[category] ?? category;
 }
@@ -120,7 +121,7 @@ export default function ScenarioDetailPage() {
           <aside className="space-y-3 rounded-lg border border-slate-800 bg-slate-900 p-5">
             <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <span className="flex items-center gap-2 text-sm text-slate-400">
-                <Coins className="h-4 w-4 text-amber-400" />
+                <TokenIcon className="h-4 w-4 text-amber-400" />
                 Цена
               </span>
               <span className="font-semibold">{template.priceTokens} токенов</span>

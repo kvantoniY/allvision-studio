@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Coins } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import type { PublicService } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { Card, CardFooter, CardHeader } from '@/components/ui/card';
 import { getServiceBadgeLabel } from '@/lib/public-content';
 import { cn } from '@/lib/utils';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 type ServiceCardProps = {
   service: PublicService;
   detailed?: boolean;
@@ -46,7 +47,7 @@ export function ServiceCard({ service, detailed = false, className }: ServiceCar
             {detailed ? service.description.split('\n\n')[0] : service.shortDesc}
           </p>
           <div className="mt-5 flex items-baseline gap-2">
-            <Coins className="h-5 w-5 shrink-0 text-amber-400" />
+            <TokenIcon className="h-5 w-5 shrink-0 text-amber-400" />
             <span className="text-lg font-bold text-amber-400">
               {isRubPrice ? `от ${service.priceTokens} ₽/мин` : `${service.priceTokens} токенов`}
             </span>

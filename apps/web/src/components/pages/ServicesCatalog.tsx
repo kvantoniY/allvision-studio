@@ -97,7 +97,7 @@ function ServiceTile({ service, featured = false }: { service: PublicService; fe
           <div className="mt-5 flex items-center justify-between gap-3">
             <div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Цена</div>
-              <div className="text-lg font-bold text-amber-400">от {priceFrom(service)} коинов</div>
+              <div className="text-lg font-bold text-amber-400">от {priceFrom(service)} токенов</div>
             </div>
             <span className="grid h-10 w-10 place-items-center rounded-md border border-slate-700 bg-slate-800 text-slate-100 transition group-hover:border-amber-400 group-hover:text-amber-300">
               <ArrowRight className="h-4 w-4" />

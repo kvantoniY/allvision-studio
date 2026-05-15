@@ -409,7 +409,7 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
     <Modal title="Создать образ" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
-          Стоимость: {generationCost} коинов · ~{generationCost} ₽. Баланс: {balance} коинов · {canPay ? 'хватит' : 'не хватает'}.
+          Стоимость: {generationCost} токенов · ~{generationCost} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
         </div>
         <div className="space-y-2">
           <Label>Название</Label>
@@ -514,7 +514,7 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
           </div>
         </div>
         <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
-          Стоимость: {generationCost} коинов · ~{generationCost} ₽. Баланс: {balance} коинов · {canPay ? 'хватит' : 'не хватает'}.
+          Стоимость: {generationCost} токенов · ~{generationCost} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
         </div>
         <div className="space-y-2">
           <Label>Название</Label>

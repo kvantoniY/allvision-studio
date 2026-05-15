@@ -635,7 +635,7 @@ function BlockParamsForm({
                     >
                       {block.supportedModels.map((model) => (
                         <option key={model.slug} value={model.slug}>
-                          {model.title} · ~{model.estimatedCostCoins} коинов
+                          {model.title} · ~{model.estimatedCostCoins} токенов
                         </option>
                       ))}
                     </select>
@@ -1501,7 +1501,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="priceStandard">Цена Стандарт, коины</Label>
+              <Label htmlFor="priceStandard">Цена Стандарт, токены</Label>
               <Input
                 id="priceStandard"
                 type="number"
@@ -1511,7 +1511,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pricePro">Цена Pro, коины</Label>
+              <Label htmlFor="pricePro">Цена Pro, токены</Label>
               <Input
                 id="pricePro"
                 type="number"
@@ -1523,7 +1523,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
             <div className="text-sm text-slate-400">Себестоимость</div>
-            <div className="mt-2 text-lg font-semibold text-white">Стандарт: ~{costStandard} коинов · Pro: ~{costPro} коинов</div>
+            <div className="mt-2 text-lg font-semibold text-white">Стандарт: ~{costStandard} токенов · Pro: ~{costPro} токенов</div>
             <p className="mt-2 text-xs text-slate-500">Рекомендуем минимум 3-4× себестоимости.</p>
           </div>
         </div>

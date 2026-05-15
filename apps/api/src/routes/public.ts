@@ -124,6 +124,19 @@ const publicSettingMap = {
   realistic_base_rate_per_minute: 'realisticBaseRatePerMinute',
 } as const;
 
+const HOME_PAGE_CONTENT_KEY = 'home_page_content_v1';
+
+function parseHomePageContent(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (err) {
+    logger.warn('Failed to parse public home page content setting', { err });
+    return null;
+  }
+}
+
 publicRouter.get('/services', async (_req: Request, res: Response<PublicServicesResponse>, next: NextFunction) => {
   try {
     const services = await prisma.service.findMany({
@@ -217,6 +230,15 @@ publicRouter.get('/media-assets', async (req: Request, res: Response<PublicMedia
         thumbnailUrl: staticUrlForKey(asset.thumbnailKey),
       })),
     });
+  } catch (e) {
+    next(e);
+  }
+});
+
+publicRouter.get('/home-page', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const row = await prisma.setting.findUnique({ where: { key: HOME_PAGE_CONTENT_KEY } });
+    res.json({ content: parseHomePageContent(row?.value) });
   } catch (e) {
     next(e);
   }

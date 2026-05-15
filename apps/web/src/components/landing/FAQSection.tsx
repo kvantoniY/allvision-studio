@@ -12,7 +12,7 @@ export function FAQSection() {
           <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">FAQ</p>
           <h2 className="mt-3 text-3xl font-bold md:text-5xl">Частые вопросы</h2>
           <p className="mt-4 text-lg leading-8 text-muted-foreground">
-            Собрали ответы на самые частые вопросы про коины, качество, сроки и регенерацию.
+            Собрали ответы на самые частые вопросы про токены, качество, сроки и регенерацию.
           </p>
         </Reveal>
 

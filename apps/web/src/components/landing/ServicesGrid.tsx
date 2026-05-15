@@ -133,7 +133,7 @@ export function ServicesGrid() {
                       <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-400">{service.shortDesc}</p>
                       <div className="mt-5 flex items-center justify-between gap-3">
                         <span className="text-sm font-semibold text-amber-300">
-                          от {giftServicePriceFrom(service)} коинов
+                          от {giftServicePriceFrom(service)} токенов
                         </span>
                         <ArrowRight className="h-4 w-4 text-amber-300 transition group-hover:translate-x-1" />
                       </div>

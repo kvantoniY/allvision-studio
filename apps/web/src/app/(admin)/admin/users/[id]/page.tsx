@@ -82,7 +82,7 @@ export default function AdminUserDetailPage() {
         <h2 className="font-semibold text-white">Изменить баланс</h2>
         <div className="mt-4 flex max-w-md items-end gap-3">
           <div className="flex-1 space-y-2">
-            <Label htmlFor="tokenBalance">Новый баланс, коины</Label>
+            <Label htmlFor="tokenBalance">Новый баланс, токены</Label>
             <Input id="tokenBalance" type="number" min={0} value={balance} onChange={(event) => setBalance(event.target.value)} />
           </div>
           <Button type="button" disabled={updateState.isLoading} onClick={saveBalance} className="bg-rose-500 hover:bg-rose-400">Сохранить</Button>
@@ -110,7 +110,7 @@ export default function AdminUserDetailPage() {
         <div className="mt-4 space-y-2">
           {(item.tokenTxns ?? []).map((txn) => (
             <div key={txn.id} className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-sm">
-              <div className="font-medium text-white">{txn.amount > 0 ? '+' : ''}{txn.amount} коинов · баланс {txn.balanceAfter}</div>
+              <div className="font-medium text-white">{txn.amount > 0 ? '+' : ''}{txn.amount} токенов · баланс {txn.balanceAfter}</div>
               <div className="mt-1 text-xs text-slate-500">{txn.reason} · {new Date(txn.createdAt).toLocaleString()}</div>
             </div>
           ))}

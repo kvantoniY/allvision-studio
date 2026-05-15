@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { CharacterGender, CharacterType } from '@allvision/shared';
 import { CHARACTER_SLOT_PRICE_TOKENS } from '@allvision/shared';
-import { ArrowLeft, ArrowRight, CheckCircle2, Coins, ShieldCheck, UploadCloud } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2, ShieldCheck, UploadCloud } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,6 +20,7 @@ import { useGetMeQuery } from '@/store/api/auth-api';
 import { useCreateCharacterMutation } from '@/store/api/characters-api';
 import { cn } from '@/lib/utils';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 const characterTypes: CharacterType[] = ['HUMAN', 'PET', 'GROUP', 'MASCOT'];
 const genders: Array<{ value: CharacterGender; label: string }> = [
   { value: 'MALE', label: 'Мужской' },
@@ -38,7 +39,7 @@ function apiErrorMessage(error: unknown) {
   if (code === 'CONSENT_REQUIRED') return 'Подтвердите согласие на использование изображения';
   if (code === 'FILE_REQUIRED') return 'Добавьте хотя бы одно фото';
   if (code === 'UNSUPPORTED_FORMAT') return 'Поддерживаются только JPEG, PNG и WebP';
-  if (code === 'INSUFFICIENT_TOKENS') return 'Недостаточно коинов для создания персонажа';
+  if (code === 'INSUFFICIENT_TOKENS') return 'Недостаточно токенов для создания персонажа';
   if (code === 'QUEUE_UNAVAILABLE') return 'Проверка фото временно недоступна. Попробуйте ещё раз чуть позже';
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Не удалось создать персонажа';
 }
@@ -105,7 +106,7 @@ export default function NewCharacterPage() {
     if (!validateStep(1) || !validateStep(2) || !validateStep(3)) return;
     if (requiresPayment && !canPay) {
       setStep(4);
-      toast({ title: 'Недостаточно коинов', variant: 'destructive' });
+      toast({ title: 'Недостаточно токенов', variant: 'destructive' });
       return;
     }
 
@@ -325,7 +326,7 @@ export default function NewCharacterPage() {
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <span className="grid h-10 w-10 place-items-center rounded-md bg-amber-500/10 text-amber-300">
-                  <Coins className="h-5 w-5" />
+                  <TokenIcon className="h-5 w-5" />
                 </span>
                 <div>
                   <h2 className="text-xl font-semibold">Оплата</h2>
@@ -335,13 +336,13 @@ export default function NewCharacterPage() {
 
               <div className="rounded-md border border-slate-800 bg-slate-950 p-5">
                 <div className="text-sm text-slate-400">Создание персонажа</div>
-                <div className="mt-1 text-3xl font-bold text-white">{CHARACTER_SLOT_PRICE_TOKENS} коинов</div>
-                <div className="mt-3 text-sm text-slate-300">Ваш баланс: {balance} коинов</div>
+                <div className="mt-1 text-3xl font-bold text-white">{CHARACTER_SLOT_PRICE_TOKENS} токенов</div>
+                <div className="mt-3 text-sm text-slate-300">Ваш баланс: {balance} токенов</div>
               </div>
 
               {!canPay && (
                 <Alert variant="destructive" className="border-red-500/40 bg-red-500/10">
-                  <AlertTitle>Недостаточно коинов</AlertTitle>
+                  <AlertTitle>Недостаточно токенов</AlertTitle>
                   <AlertDescription>Пополните баланс, чтобы создать второго и следующих персонажей.</AlertDescription>
                 </Alert>
               )}
@@ -376,7 +377,7 @@ export default function NewCharacterPage() {
               canPay ? (
                 <Button type="button" onClick={submit} disabled={createState.isLoading}>
                   <CheckCircle2 className="h-4 w-4" />
-                  Создать персонажа за {CHARACTER_SLOT_PRICE_TOKENS} коинов
+                  Создать персонажа за {CHARACTER_SLOT_PRICE_TOKENS} токенов
                 </Button>
               ) : (
                 <Button asChild>

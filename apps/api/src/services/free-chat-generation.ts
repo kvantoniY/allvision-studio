@@ -333,7 +333,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
     });
   } catch (err) {
     if (isPrismaNotFound(err)) {
-      throw new HttpError(402, 'INSUFFICIENT_TOKENS', 'Недостаточно коинов');
+      throw new HttpError(402, 'INSUFFICIENT_TOKENS', 'Недостаточно токенов');
     }
     throw err;
   }

@@ -10,6 +10,7 @@ import { adminSettingsRouter } from './settings';
 import { adminUsersRouter } from './users';
 import { adminProjectsRouter } from './projects';
 import { adminStylePresetsRouter } from './style-presets';
+import { adminHomePageRouter } from './home-page';
 
 export const adminRouter = Router();
 
@@ -22,5 +23,6 @@ adminRouter.use('/', adminUsageRouter);
 adminRouter.use('/services', adminServicesRouter);
 adminRouter.use('/media-assets', adminMediaAssetsRouter);
 adminRouter.use('/style-presets', adminStylePresetsRouter);
+adminRouter.use('/home-page', adminHomePageRouter);
 adminRouter.use('/trends', adminTrendsRouter);
 adminRouter.use('/scenario-templates', adminScenarioTemplatesRouter);

@@ -362,7 +362,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 <AlertTitle>Не удалось создать подарок</AlertTitle>
                 <AlertDescription>
                   <p>{friendlyError}</p>
-                  <p className="mt-2">Коины возвращены на баланс.</p>
+                  <p className="mt-2">Токены возвращены на баланс.</p>
                   {!isAdmin && errorMessage && (
                     <details className="mt-3">
                       <summary className="cursor-pointer">Детали для поддержки</summary>
@@ -460,7 +460,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wide text-slate-500">Стоимость</div>
-                  <div className="mt-1 font-semibold text-slate-100">{project.tokensCost} коинов</div>
+                  <div className="mt-1 font-semibold text-slate-100">{project.tokensCost} токенов</div>
                 </div>
               </div>
               <div>
@@ -664,7 +664,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                   <AlertTitle>Обработка не удалась</AlertTitle>
                   <AlertDescription>
                     <p>{friendlyError}</p>
-                    <p className="mt-2">Коины возвращены на баланс.</p>
+                    <p className="mt-2">Токены возвращены на баланс.</p>
                     {!isAdmin && errorMessage && (
                       <details className="mt-3">
                         <summary className="cursor-pointer">Детали для поддержки</summary>

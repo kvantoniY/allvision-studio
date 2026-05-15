@@ -327,7 +327,7 @@ userMediaAssetsRouter.post('/generate', async (req: Request, res: Response, next
       });
     } catch (err) {
       if (isPrismaNotFound(err)) {
-        throw new HttpError(402, 'INSUFFICIENT_TOKENS', 'Недостаточно коинов');
+        throw new HttpError(402, 'INSUFFICIENT_TOKENS', 'Недостаточно токенов');
       }
       throw err;
     }

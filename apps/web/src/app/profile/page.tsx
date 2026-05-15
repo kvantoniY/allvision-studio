@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDispatch } from 'react-redux';
-import { Bell, Coins, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
+import { Bell, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
 import type { Payment } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { PaymentRow } from '@/components/dashboard/PaymentRow';
@@ -23,6 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import type { AppDispatch } from '@/store';
 import { authApi } from '@/store/api/auth-api';
+import { TokenIcon } from '@/components/ui/token-icon';
 import {
   useChangePasswordMutation,
   useDeleteAccountMutation,
@@ -96,7 +97,7 @@ function ProfileContent() {
     const tokens = Number(searchParams.get('tokens') ?? 0);
 
     if (paymentResult === 'success') {
-      toast({ title: tokens > 0 ? `Оплата прошла успешно! +${tokens} коинов` : 'Оплата прошла успешно!' });
+      toast({ title: tokens > 0 ? `Оплата прошла успешно! +${tokens} токенов` : 'Оплата прошла успешно!' });
       invalidatePaymentSideEffects(dispatch);
     }
     if (paymentResult === 'failed') {
@@ -308,11 +309,11 @@ function BillingSection() {
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-6">
           <div className="flex items-center gap-4">
             <span className="grid h-12 w-12 place-items-center rounded-md bg-amber-500/20 text-amber-300">
-              <Coins className="h-6 w-6" />
+              <TokenIcon className="h-6 w-6" />
             </span>
             <div>
               <div className="text-sm text-slate-300">Ваш баланс</div>
-              <div className="text-3xl font-bold text-amber-300">{user.tokenBalance} <span className="text-base font-normal text-slate-300">коинов</span></div>
+              <div className="text-3xl font-bold text-amber-300">{user.tokenBalance} <span className="text-base font-normal text-slate-300">токенов</span></div>
             </div>
           </div>
           <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
@@ -322,7 +323,7 @@ function BillingSection() {
       </Card>
 
       <div id="packages" className="space-y-3">
-        <h2 className="text-xl font-semibold text-white">Пакеты коинов</h2>
+        <h2 className="text-xl font-semibold text-white">Пакеты токенов</h2>
         <PricingCards packages={packages.data?.packages} isLoading={packages.isLoading} fallbackHref="/login?redirect=/profile" />
       </div>
     </div>
@@ -349,7 +350,7 @@ function TransactionsSection() {
     const completed = items.find((payment) => previousPending.has(payment.id) && payment.status === 'SUCCEEDED');
     const nextPending = new Set(items.filter((payment) => payment.status === 'PENDING').map((payment) => payment.id));
     if (completed) {
-      toast({ title: completed.tokensAdded ? `Оплата прошла успешно! +${completed.tokensAdded} коинов` : 'Оплата прошла успешно!' });
+      toast({ title: completed.tokensAdded ? `Оплата прошла успешно! +${completed.tokensAdded} токенов` : 'Оплата прошла успешно!' });
       invalidatePaymentSideEffects(dispatch);
     }
     pendingIdsRef.current = nextPending;

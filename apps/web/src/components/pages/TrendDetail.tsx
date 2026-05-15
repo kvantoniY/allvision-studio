@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Camera, Coins, Play, Sparkles } from 'lucide-react';
+import { Camera, Play, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useGetTrendQuery } from '@/store/api/public-api';
 import { TrendUploader } from '@/components/services/TrendUploader';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 type TrendDetailProps = {
   id: string;
 };
@@ -64,7 +65,7 @@ export function TrendDetail({ id }: TrendDetailProps) {
           <p className="mt-5 text-lg leading-8 text-muted-foreground">{trend.description}</p>
           <div className="mt-7 grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <Coins className="h-5 w-5 text-amber-500" />
+              <TokenIcon className="h-5 w-5 text-amber-500" />
               <div className="mt-3 text-sm text-muted-foreground">Стоимость</div>
               <div className="mt-1 text-2xl font-bold">{trend.priceTokens} токенов</div>
             </div>

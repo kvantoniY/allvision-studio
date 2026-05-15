@@ -80,7 +80,7 @@ adminUsersRouter.get('/:id', async (req: Request, res: Response, next: NextFunct
 adminUsersRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = updateUserSchema.parse(req.body);
-    if (body.tokenBalance === undefined) throw new HttpError(400, 'BALANCE_REQUIRED', 'Укажите новый баланс коинов');
+    if (body.tokenBalance === undefined) throw new HttpError(400, 'BALANCE_REQUIRED', 'Укажите новый баланс токенов');
 
     const current = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, tokenBalance: true } });
     if (!current) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');

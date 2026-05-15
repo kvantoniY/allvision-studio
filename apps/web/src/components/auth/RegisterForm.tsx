@@ -49,7 +49,7 @@ export function RegisterForm() {
       dispatch(setUser(user));
       toast({
         title: 'Добро пожаловать!',
-        description: 'Вам начислено 25 коинов в подарок',
+        description: 'Вам начислено 25 токенов в подарок',
       });
       router.push('/dashboard');
     } catch {

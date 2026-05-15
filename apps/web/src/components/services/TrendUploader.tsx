@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Coins, ImagePlus, Loader2, LogIn, RefreshCw, UploadCloud, Wallet } from 'lucide-react';
+import { ImagePlus, Loader2, LogIn, RefreshCw, UploadCloud, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -12,6 +12,7 @@ import { useCreateProjectMutation } from '@/store/api/projects-api';
 import { cn } from '@/lib/utils';
 import { humanProjectError } from './ProjectUploader';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -180,7 +181,7 @@ export function TrendUploader({ trendId, tokensCost }: TrendUploaderProps) {
                 onClick={submit}
                 disabled={!file || isCreating}
               >
-                {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
+                {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <TokenIcon className="h-4 w-4" />}
                 Создать видео за {tokensCost} токенов
               </Button>
             </div>

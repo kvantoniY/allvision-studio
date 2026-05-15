@@ -1,5 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { createBaseQueryWithReauth } from './base-query';
+import type { HomeLandingContent } from '@/lib/home-landing-content';
 import type {
   ContactInput,
   ContactResponse,
@@ -13,11 +14,19 @@ import type {
   PublicTrendsResponse,
 } from '@allvision/shared';
 
+export type PublicHomePageResponse = {
+  content: Partial<HomeLandingContent> | null;
+};
+
 export const publicApi = createApi({
   reducerPath: 'publicApi',
   baseQuery: createBaseQueryWithReauth('/api/public'),
-  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets', 'StylePresets'],
+  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets', 'StylePresets', 'HomePage'],
   endpoints: (build) => ({
+    getHomePageContent: build.query<PublicHomePageResponse, void>({
+      query: () => ({ url: '/home-page' }),
+      providesTags: ['HomePage'],
+    }),
     getServices: build.query<PublicServicesResponse, void>({
       query: () => ({ url: '/services' }),
       providesTags: ['Services'],
@@ -72,6 +81,7 @@ export const publicApi = createApi({
 
 export const {
   useGetServicesQuery,
+  useGetHomePageContentQuery,
   useGetServiceQuery,
   useGetTrendsQuery,
   useGetTrendQuery,

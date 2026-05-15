@@ -43,7 +43,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-white">Пользователи</h1>
-        <p className="mt-2 text-sm text-slate-400">Аккаунты, роли, балансы коинов и последняя активность.</p>
+        <p className="mt-2 text-sm text-slate-400">Аккаунты, роли, балансы токенов и последняя активность.</p>
       </div>
 
       <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-4">

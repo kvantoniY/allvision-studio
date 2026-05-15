@@ -20,7 +20,7 @@ export function PricingPageContent() {
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Цены</p>
         <h1 className="mt-3 text-4xl font-bold md:text-6xl">Простая оплата — только за то что используете</h1>
         <p className="mt-5 text-lg leading-8 text-muted-foreground">
-          Пополняйте баланс коинами и запускайте готовые подарки без подписки. Заказные видео оцениваются отдельно до начала работы.
+          Пополняйте баланс токенами и запускайте готовые подарки без подписки. Заказные видео оцениваются отдельно до начала работы.
         </p>
       </div>
 
@@ -70,7 +70,7 @@ export function PricingPageContent() {
         <div className="divide-y dark:divide-slate-800">
           {(data?.packages ?? []).map((pkg) => (
             <div key={pkg.id} className="grid gap-3 p-6 md:grid-cols-[220px_1fr]">
-              <div className="font-semibold">На {pkg.tokens} коинов</div>
+              <div className="font-semibold">На {pkg.tokens} токенов</div>
               <div className="text-muted-foreground">{getPackageUsage(pkg.tokens)}</div>
             </div>
           ))}
@@ -81,7 +81,7 @@ export function PricingPageContent() {
         <div>
           <h2 className="text-3xl font-bold">FAQ по оплате</h2>
           <p className="mt-3 leading-7 text-muted-foreground">
-            Вопросы про срок действия коинов, возвраты, платежи и безопасность оплаты.
+            Вопросы про срок действия токенов, возвраты, платежи и безопасность оплаты.
           </p>
         </div>
         <div className="rounded-lg border bg-card px-5 dark:border-slate-800">

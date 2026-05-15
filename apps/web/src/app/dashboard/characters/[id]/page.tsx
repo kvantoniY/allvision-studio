@@ -243,7 +243,7 @@ export default function CharacterEditPage({ params }: PageProps) {
             <AlertTitle>Фото не прошли проверку</AlertTitle>
             <AlertDescription>
               К сожалению, фото не прошли проверку. Загрузите другие изображения.
-              {character.isPaid ? ' Коины возвращены на баланс.' : ''}
+              {character.isPaid ? ' Токены возвращены на баланс.' : ''}
             </AlertDescription>
           </Alert>
         )}

@@ -4,13 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Coins, ImagePlus, Loader2, LogIn, RefreshCw, UploadCloud, Wallet } from 'lucide-react';
+import { ImagePlus, Loader2, LogIn, RefreshCw, UploadCloud, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useCreateProjectMutation } from '@/store/api/projects-api';
 import { cn } from '@/lib/utils';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
@@ -29,13 +30,13 @@ function errorCode(error: unknown): string | undefined {
 export function humanProjectError(error: unknown): string {
   switch (errorCode(error)) {
     case 'INSUFFICIENT_TOKENS':
-      return 'Недостаточно коинов, пополните баланс';
+      return 'Недостаточно токенов, пополните баланс';
     case 'FILE_TOO_LARGE':
       return 'Файл слишком большой (макс. 25 MB)';
     case 'UNSUPPORTED_FORMAT':
       return 'Формат не поддерживается. JPEG, PNG или WebP';
     case 'QUEUE_UNAVAILABLE':
-      return 'Сервис временно недоступен, попробуйте через минуту. Коины возвращены';
+      return 'Сервис временно недоступен, попробуйте через минуту. Токены возвращены';
     default:
       return 'Что-то пошло не так. Попробуйте ещё раз';
   }
@@ -132,7 +133,7 @@ export function ProjectUploader({
             <Wallet className="mt-1 h-5 w-5 text-amber-300" />
             <div>
               <div className="font-semibold text-amber-100">
-                Не хватает коинов: ваш баланс {user.tokenBalance}, нужно {tokensCost}
+                Не хватает токенов: ваш баланс {user.tokenBalance}, нужно {tokensCost}
               </div>
               <p className="mt-1 text-sm text-amber-100/70">{lowBalanceDescription(serviceSlug)}</p>
             </div>
@@ -215,7 +216,7 @@ export function ProjectUploader({
                 onClick={submit}
                 disabled={!file || isCreating}
               >
-                {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
+                {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <TokenIcon className="h-4 w-4" />}
                 {ctaLabel}
               </Button>
             </div>

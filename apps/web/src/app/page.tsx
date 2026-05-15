@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import { HomePageContent } from '@/components/pages/HomePageContent';
 
 export const metadata: Metadata = {
-  title: 'Allvision Studio — цифровые подарки за минуты',
+  title: 'Allvision Studio — AI-генерация фото и видео',
   description:
-    'Allvision Studio помогает выбрать повод и формат подарка: оживить старое фото, собрать трендовое видео, сделать ребёнка героем мультика или подготовить видео-открытку.',
+    'Трендовые AI-услуги, свободный Allvision AI чат, фото- и видеомодели, аватары, локации и генерации без подписки.',
 };
 
 export default function HomePage() {

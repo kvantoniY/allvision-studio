@@ -15,4 +15,4 @@ export function isProviderUserSafeError(error: unknown) {
 }
 
 export const providerUnavailableMessage =
-  'Сервис временно перегружен, коины возвращены, попробуйте позже.';
+  'Сервис временно перегружен, токены возвращены, попробуйте позже.';

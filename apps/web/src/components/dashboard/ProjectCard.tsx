@@ -46,7 +46,7 @@ export function ProjectCard({ project }: { project: Project }) {
             <h3 className="font-semibold line-clamp-1">{project.title}</h3>
             <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
               <span>{formatDate(project.createdAt)}</span>
-              <span>{project.tokensCost} коин.</span>
+              <span>{project.tokensCost} токен.</span>
             </div>
             {project.status === 'PROCESSING' && (
               <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">

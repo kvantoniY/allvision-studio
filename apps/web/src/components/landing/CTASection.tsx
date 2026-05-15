@@ -13,7 +13,7 @@ export function CTASection() {
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-sm text-indigo-100">
               <Sparkles className="h-4 w-4 text-amber-300" />
-              25 коинов после регистрации
+              25 токенов после регистрации
             </div>
             <h2 className="text-3xl font-bold md:text-5xl">Готовы собрать подарок, который не забудут?</h2>
             <p className="mt-4 max-w-2xl text-lg leading-8 text-indigo-100">

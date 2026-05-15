@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Coins, LogOut, Sparkles } from 'lucide-react';
+import { LogOut, Sparkles } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { SIDEBAR_SECTIONS, isActive } from './sidebar-nav';
 
+import { TokenIcon } from '@/components/ui/token-icon';
 function initialsOf(name: string | null | undefined, email: string) {
   if (name) {
     const parts = name.trim().split(/\s+/);
@@ -24,13 +25,13 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
   if (!user) return null;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-4">
+    <div className="flex h-full min-h-0 flex-col gap-6 p-4">
       <Link href="/" onClick={onNavigate} className="flex items-center gap-2 px-2 py-1 font-semibold text-white">
         <Sparkles className="h-5 w-5 text-violet-300" />
         <span>Allvision Studio</span>
       </Link>
 
-      <nav className="flex flex-1 flex-col gap-1">
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
         {SIDEBAR_SECTIONS.map((section, sectionIndex) => (
           <div key={section.label ?? sectionIndex} className={cn(sectionIndex > 0 && 'mt-3 border-t border-slate-800 pt-3')}>
             {section.label && (
@@ -71,7 +72,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
           className="flex items-center justify-between rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-3 transition hover:border-amber-500/60 hover:bg-amber-500/15"
         >
           <span className="flex items-center gap-2 text-sm text-slate-300">
-            <Coins className="h-4 w-4 text-amber-400" />
+            <TokenIcon className="h-4 w-4 text-amber-400" />
             Баланс
           </span>
           <span className="text-lg font-bold text-amber-400">{user.tokenBalance}</span>
@@ -95,7 +96,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
         <div className="grid grid-cols-[1fr_auto] gap-2">
           <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
             <Link href="/profile?tab=billing" onClick={onNavigate}>
-              <Coins className="mr-2 h-4 w-4" />
+              <TokenIcon className="mr-2 h-4 w-4" />
               Купить
             </Link>
           </Button>
@@ -120,7 +121,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
 
 export function DashboardSidebar() {
   return (
-    <aside className="hidden w-64 shrink-0 border-r border-slate-800 bg-slate-950 md:block">
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-800 bg-slate-950 md:block">
       <DashboardSidebarContent />
     </aside>
   );

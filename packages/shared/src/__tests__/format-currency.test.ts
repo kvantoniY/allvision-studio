@@ -6,11 +6,11 @@ describe('formatMoney', () => {
   });
 
   it('formats coins with RUB secondary', () => {
-    expect(formatMoney({ coins: 40 }, { primary: 'coins', showAll: true })).toBe('40 коинов · ~40 ₽');
+    expect(formatMoney({ coins: 40 }, { primary: 'coins', showAll: true })).toBe('40 токенов · ~40 ₽');
   });
 
   it('handles singular coin forms and missing amounts', () => {
-    expect(formatMoney({ coins: 1 }, { primary: 'coins', showAll: false })).toBe('1 коин');
+    expect(formatMoney({ coins: 1 }, { primary: 'coins', showAll: false })).toBe('1 токен');
     expect(formatMoney({}, { primary: 'usd', showAll: true })).toBe('—');
   });
 

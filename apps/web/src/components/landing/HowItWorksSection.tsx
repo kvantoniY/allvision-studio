@@ -26,7 +26,7 @@ function StepList() {
         <div className="flex items-start gap-3">
           <BadgeCheck className="mt-0.5 h-5 w-5 text-amber-500" />
           <p className="text-sm leading-6 text-muted-foreground">
-            Цена в коинах видна до запуска. Если готовый pipeline падает с технической ошибкой, коины возвращаются на баланс.
+            Цена в токенах видна до запуска. Если готовый pipeline падает с технической ошибкой, токены возвращаются на баланс.
           </p>
         </div>
       </div>
