@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ChangeEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { ImageIcon, Library, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -117,9 +118,9 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
         )}
       </div>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true">
-          <Card className="max-h-[86vh] w-full max-w-4xl overflow-hidden border-slate-800 bg-slate-900">
+      {open && typeof document !== 'undefined' && createPortal((
+        <div className="fixed inset-0 z-[100] grid min-h-dvh place-items-center overflow-y-auto bg-black/75 p-4" role="dialog" aria-modal="true">
+          <Card className="max-h-[calc(100dvh-2rem)] w-full max-w-4xl overflow-hidden border-slate-800 bg-slate-900">
             <CardContent className="p-0">
               <div className="flex items-center justify-between border-b border-slate-800 p-4">
                 <div>
@@ -149,7 +150,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
                 ))}
               </div>
 
-              <div className="max-h-[58vh] overflow-y-auto p-4">
+              <div className="max-h-[calc(100dvh-220px)] overflow-y-auto p-4">
                 {tab === 'upload' && (
                   <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950 p-8 text-center transition hover:border-violet-500">
                     {uploadState.isLoading ? <Loader2 className="h-8 w-8 animate-spin text-violet-300" /> : <Upload className="h-8 w-8 text-violet-300" />}
@@ -202,7 +203,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
             </CardContent>
           </Card>
         </div>
-      )}
+      ), document.body)}
     </div>
   );
 }

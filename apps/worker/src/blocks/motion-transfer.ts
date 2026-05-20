@@ -19,13 +19,15 @@ const paramsSchema = z.object({
   input_image: z.string().optional(),
   video_url: z.string().optional(),
   driving_video: z.string().optional(),
+  preset_motion: z.string().optional(),
+  motion_direction: z.enum(['', 'video', 'preset']).optional(),
   prompt: z.string().optional(),
   duration: z.number().min(1).max(30).optional(),
   aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1']).default('auto').optional(),
   resolution: z.enum(['720p', '1080p']).default('720p').optional(),
   keep_original_sound: z.boolean().optional(),
-}).refine((value) => Boolean(value.video_url ?? value.driving_video), {
-  message: 'motion-transfer requires video_url',
+}).refine((value) => Boolean(value.video_url ?? value.driving_video ?? value.preset_motion), {
+  message: 'motion-transfer requires video_url or preset_motion',
   path: ['video_url'],
 });
 
@@ -42,8 +44,8 @@ export const motionTransferBlock: BlockDefinition = {
       console.warn('motion-transfer: driving_video is deprecated, use video_url');
     }
     const videoUrl = parsed.video_url ?? parsed.driving_video;
-    if (!videoUrl) throw new Error('motion-transfer requires video_url');
-    const providerParams: Record<string, unknown> = { ...asObject(parsed), video_url: videoUrl };
+    if (!videoUrl && !parsed.preset_motion) throw new Error('motion-transfer requires video_url or preset_motion');
+    const providerParams: Record<string, unknown> = { ...asObject(parsed), ...(videoUrl ? { video_url: videoUrl } : {}) };
     delete providerParams.driving_video;
     await ctx.reportProgress(5);
     const result = await ctx.getAIProvider().motionTransfer({

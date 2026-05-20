@@ -67,7 +67,7 @@ export class StubAIProvider implements AIProvider {
 
   async motionTransfer(_input: {
     inputImageUrl: string;
-    drivingVideoUrl: string;
+    drivingVideoUrl?: string;
     prompt?: string;
     durationSec: number;
     model: string;

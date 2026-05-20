@@ -62,7 +62,7 @@ export interface AIProvider {
 
   motionTransfer(input: {
     inputImageUrl: string;
-    drivingVideoUrl: string;
+    drivingVideoUrl?: string;
     prompt?: string;
     durationSec: number;
     model: string;

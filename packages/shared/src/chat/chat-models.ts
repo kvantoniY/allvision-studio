@@ -11,6 +11,10 @@ export interface ChatModelOption {
   slug: string;
   blockSlug: string;
   category: ChatCategory;
+  familySlug: string;
+  familyTitle: string;
+  functionTitle: string;
+  functionDescription: string;
   title: string;
   description: string;
   estimatedCostCoins: number;
@@ -51,6 +55,10 @@ function fromCatalog(params: {
   modelSlug: string;
   category: ChatCategory;
   description: string;
+  familySlug?: string;
+  familyTitle?: string;
+  functionTitle?: string;
+  functionDescription?: string;
   acceptsImageInput: boolean;
   acceptsVideoInput?: boolean;
   acceptsAudioInput?: boolean;
@@ -68,10 +76,15 @@ function fromCatalog(params: {
   const audioInputParam = capability?.audio.inputParam;
   const ratios = (capability?.aspectRatios ?? params.supportedAspectRatios ?? ['auto', '1:1', '9:16', '16:9'])
     .filter((value): value is ChatAspectRatio => ['auto', '1:1', '9:16', '16:9', '4:3', '3:4', '21:9', '9:21'].includes(value));
+  const family = modelFamilyFor(model.slug, params.blockSlug);
   return {
     slug: model.slug,
     blockSlug: params.blockSlug,
     category: params.category,
+    familySlug: params.familySlug ?? family.slug,
+    familyTitle: params.familyTitle ?? family.title,
+    functionTitle: params.functionTitle ?? functionTitleFor(model.title, params.blockSlug),
+    functionDescription: params.functionDescription ?? params.description,
     title: model.title,
     description: params.description,
     estimatedCostCoins: model.estimatedCostCoins,
@@ -114,6 +127,33 @@ function durationOptionsForModel(model: ModelOption) {
         ? [5, 10, 15]
         : [5, 10];
   return [...new Set(candidates.filter((value) => value >= min && value <= max))];
+}
+
+function modelFamilyFor(modelSlug: string, blockSlug: string) {
+  if (modelSlug === 'nano-banana') return { slug: 'nano-banana', title: 'Nano Banana 2' };
+  if (modelSlug.startsWith('kling-motion-2.6') || modelSlug === 'kling-std' || modelSlug === 'kling-pro') return { slug: 'kling-2.6', title: 'Kling 2.6' };
+  if (modelSlug.startsWith('kling-motion-3.0') || modelSlug.startsWith('kling-3')) return { slug: 'kling-3.0', title: 'Kling 3.0' };
+  if (modelSlug.startsWith('seedance-2')) return { slug: 'seedance-2', title: 'Seedance 2' };
+  if (modelSlug.startsWith('hailuo-2.3')) return { slug: 'hailuo-2.3', title: 'Hailuo 2.3' };
+  if (modelSlug.startsWith('veo-3.1')) return { slug: 'veo-3.1', title: 'Veo 3.1' };
+  if (modelSlug.startsWith('wan-2.6')) return { slug: 'wan-2.6', title: 'Wan 2.6' };
+  if (modelSlug.startsWith('sora-2')) return { slug: 'sora-2', title: 'Sora 2' };
+  if (blockSlug === 'face-swap-video') return { slug: 'face-swap', title: 'Face Swap' };
+  return { slug: modelSlug, title: modelSlug };
+}
+
+function functionTitleFor(title: string, blockSlug: string) {
+  if (blockSlug === 'motion-transfer') return title.replace('Kling Motion Control ', 'Motion Control ');
+  if (blockSlug === 'face-swap-video') return 'Video Face Swap';
+  return title
+    .replace(/^Kling 2\.6\s*/, '')
+    .replace(/^Kling 3\.0\s*/, '')
+    .replace(/^Seedance 2\s*/, '')
+    .replace(/^Hailuo \/ MiniMax 2\.3\s*/, '')
+    .replace(/^Veo 3\.1\s*/, '')
+    .replace(/^Wan 2\.6\s*/, '')
+    .replace(/^Sora 2\s*/, 'Sora ')
+    .trim() || title;
 }
 
 function modelBySlug(slug: string) {
@@ -183,6 +223,26 @@ export const CHAT_MODELS: ChatModelOption[] = [
     acceptsTextOnly: false,
   }),
   fromCatalog({
+    blockSlug: 'motion-transfer',
+    modelSlug: 'kling-motion-2.6-std',
+    category: 'video',
+    description: 'Kling Motion Control 2.6 Standard: переносит движение из driving video или preset motion на загруженное фото.',
+    functionTitle: 'Motion Control Standard',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsTextOnly: false,
+  }),
+  fromCatalog({
+    blockSlug: 'motion-transfer',
+    modelSlug: 'kling-motion-2.6-pro',
+    category: 'video',
+    description: 'Kling Motion Control 2.6 Pro для более стабильного переноса движения и мимики на исходное фото.',
+    functionTitle: 'Motion Control Pro',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsTextOnly: false,
+  }),
+  fromCatalog({
     blockSlug: 'image-to-video',
     modelSlug: 'kling-3-std',
     category: 'video',
@@ -197,6 +257,37 @@ export const CHAT_MODELS: ChatModelOption[] = [
     description: 'Pro-режим Kling 3.0 для самых качественных роликов из изображения. Подходит для wow-сцен, промо и финальных вариантов.',
     acceptsImageInput: true,
     acceptsTextOnly: false,
+  }),
+  fromCatalog({
+    blockSlug: 'motion-transfer',
+    modelSlug: 'kling-motion-3.0-std',
+    category: 'video',
+    description: 'Kling Motion Control 3.0 Standard: более современный перенос движения с выбором 720p/1080p.',
+    functionTitle: 'Motion Control Standard',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsTextOnly: false,
+  }),
+  fromCatalog({
+    blockSlug: 'motion-transfer',
+    modelSlug: 'kling-motion-3.0-pro',
+    category: 'video',
+    description: 'Kling Motion Control 3.0 Pro для премиального переноса сложной динамики, танца и мимики.',
+    functionTitle: 'Motion Control Pro',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsTextOnly: false,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
+    modelSlug: 'kling-3-omni',
+    category: 'video',
+    description: 'Kling 3.0 Omni: text-to-video с image/video references, @image/@video anchors, audio и multi_shots JSON.',
+    functionTitle: 'Omni Reference',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsTextOnly: true,
+    supportedAspectRatios: ['auto', '16:9', '9:16', '1:1'],
   }),
   fromCatalog({
     blockSlug: 'image-to-video',
@@ -257,6 +348,19 @@ export const CHAT_MODELS: ChatModelOption[] = [
     acceptsAudioInput: true,
     acceptsTextOnly: false,
     supportedAspectRatios: ['16:9', '9:16', '1:1'],
+  }),
+  fromCatalog({
+    blockSlug: 'face-swap-video',
+    modelSlug: 'qubico-video-toolkit',
+    category: 'video',
+    description: 'Qubico Video Toolkit face swap: вставляет лицо из загруженного фото в выбранное target video.',
+    familySlug: 'face-swap',
+    familyTitle: 'Face Swap',
+    functionTitle: 'Video Face Swap',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsTextOnly: false,
+    supportedAspectRatios: ['auto', '16:9', '9:16', '1:1'],
   }),
   fromCatalog({
     blockSlug: 'text-to-video',

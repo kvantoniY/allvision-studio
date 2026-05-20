@@ -56,6 +56,7 @@ const TEXT_TO_VIDEO_MODELS = new Set([
   'hailuo-2.3-fast',
   'hailuo-2.3-text',
   'hailuo-2.3-fast-text',
+  'kling-3-omni',
   'veo-3.1',
   'veo-3.1-fast',
   'wan-2.6',
@@ -338,6 +339,8 @@ export class PiAPIProvider implements AIProvider {
         input: {
           swap_image: published.publicUrl,
           target_video: input.targetVideoUrl,
+          ...(readString(input.params, 'swap_faces_index') ? { swap_faces_index: readString(input.params, 'swap_faces_index') } : {}),
+          ...(readString(input.params, 'target_faces_index') ? { target_faces_index: readString(input.params, 'target_faces_index') } : {}),
         },
       };
       const created = await this.client.createTask(payload);
@@ -377,7 +380,7 @@ export class PiAPIProvider implements AIProvider {
 
   async motionTransfer(input: {
     inputImageUrl: string;
-    drivingVideoUrl: string;
+    drivingVideoUrl?: string;
     prompt?: string;
     durationSec: number;
     model: string;
@@ -401,15 +404,21 @@ export class PiAPIProvider implements AIProvider {
       const aspectRatio = await this.resolveImageAspectRatio(input.inputImageUrl, input.params);
       const isV3 = input.model.includes('3.0');
       const isPro = input.model.endsWith('-pro');
+      const presetMotion = readString(input.params, 'preset_motion');
+      if (!input.drivingVideoUrl && !presetMotion) {
+        throw new ProviderError('MOTION_REFERENCE_REQUIRED', 'PiAPI motion-transfer requires video_url or preset_motion');
+      }
       const payload = {
         model: 'kling',
         task_type: 'motion_control',
         input: {
           image_url: publishedImage.publicUrl,
-          video_url: input.drivingVideoUrl,
+          ...(input.drivingVideoUrl ? { video_url: input.drivingVideoUrl } : {}),
+          ...(presetMotion ? { preset_motion: presetMotion } : {}),
           prompt: input.prompt ?? '',
           duration: input.durationSec,
           mode: isPro ? 'pro' : 'std',
+          ...(readString(input.params, 'motion_direction') ? { motion_direction: readString(input.params, 'motion_direction') } : {}),
           ...(isV3 ? { version: '3.0' } : {}),
           ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
           ...(readBoolean(input.params, 'keep_original_sound') !== undefined ? { keep_original_sound: readBoolean(input.params, 'keep_original_sound') } : {}),
@@ -663,6 +672,18 @@ function readStringList(source: Record<string, unknown> | undefined, key: string
   return [];
 }
 
+function readJsonArray(source: Record<string, unknown> | undefined, key: string): unknown[] | undefined {
+  const value = source?.[key];
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || value.trim().length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function optionalSeed(source: Record<string, unknown> | undefined): number | undefined {
   const value = source?.seed;
   if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return value;
@@ -715,6 +736,8 @@ function buildImageToVideoPayload(
         ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
         ...(readString(input.params, 'camera_control') ? { camera_control: readString(input.params, 'camera_control') } : {}),
         ...(readBoolean(input.params, 'enable_audio') !== undefined ? { enable_audio: readBoolean(input.params, 'enable_audio') } : {}),
+        ...(readBoolean(input.params, 'prefer_multi_shots') !== undefined ? { prefer_multi_shots: readBoolean(input.params, 'prefer_multi_shots') } : {}),
+        ...(readJsonArray(input.params, 'multi_shots') ? { multi_shots: readJsonArray(input.params, 'multi_shots') } : {}),
         ...(input.aspectRatio ? { aspect_ratio: input.aspectRatio } : {}),
       },
     };
@@ -799,6 +822,28 @@ function buildTextToVideoPayload(
     params?: Record<string, unknown>;
   },
 ) {
+  if (model === 'kling-3-omni') {
+    const images = readStringList(input.params, 'images');
+    const video = readString(input.params, 'video');
+    return {
+      model: 'kling',
+      task_type: 'omni_video_generation',
+      input: {
+        prompt: input.prompt,
+        duration: input.durationSec,
+        aspect_ratio: providerAspectRatio(input.aspectRatio),
+        resolution: input.resolution ?? '720p',
+        version: '3.0',
+        enable_audio: readBoolean(input.params, 'enable_audio') ?? input.generateAudio,
+        ...(images.length > 0 ? { images } : {}),
+        ...(video ? { video } : {}),
+        ...(readBoolean(input.params, 'keep_original_audio') !== undefined ? { keep_original_audio: readBoolean(input.params, 'keep_original_audio') } : {}),
+        ...(readBoolean(input.params, 'prefer_multi_shots') !== undefined ? { prefer_multi_shots: readBoolean(input.params, 'prefer_multi_shots') } : {}),
+        ...(readJsonArray(input.params, 'multi_shots') ? { multi_shots: readJsonArray(input.params, 'multi_shots') } : {}),
+      },
+    };
+  }
+
   if (model.startsWith('seedance-2')) {
     const isOmni = model.endsWith('-omni') || readString(input.params, 'mode') === 'omni_reference';
     const imageUrls = readStringList(input.params, 'image_urls');

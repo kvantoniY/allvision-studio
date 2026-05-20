@@ -272,7 +272,7 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
 
   async motionTransfer(params: {
     inputImageUrl: string;
-    drivingVideoUrl: string;
+    drivingVideoUrl?: string;
     prompt?: string;
     durationSec: number;
     model: string;

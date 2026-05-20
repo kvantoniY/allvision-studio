@@ -14,7 +14,7 @@ describe('CHAT_MODELS', () => {
 
   it('keeps narrow service blocks out of the free chat list', () => {
     expect(CHAT_MODELS.map((model) => model.blockSlug)).not.toEqual(
-      expect.arrayContaining(['face-swap-video', 'motion-transfer', 'video-compose', 'image-restore', 'image-upscale']),
+      expect.arrayContaining(['video-compose', 'image-restore', 'image-upscale']),
     );
   });
 
@@ -44,6 +44,19 @@ describe('CHAT_MODELS', () => {
     const veoI2v = getChatModel('veo-3.1-i2v');
     expect(veoI2v?.durationOptions).toEqual([4, 6, 8]);
     expect(veoI2v?.supportedResolutions).toEqual(['1080p']);
+
+    const klingOmni = getChatModel('kling-3-omni');
+    expect(klingOmni?.familySlug).toBe('kling-3.0');
+    expect(klingOmni?.supportsAudio).toBe(true);
+    expect(klingOmni?.durationOptions).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+
+    const motion = getChatModel('kling-motion-3.0-pro');
+    expect(motion?.blockSlug).toBe('motion-transfer');
+    expect(motion?.advancedParams.map((param) => param.key)).toEqual(expect.arrayContaining(['video_url', 'preset_motion', 'keep_original_sound']));
+
+    const faceSwap = getChatModel('qubico-video-toolkit');
+    expect(faceSwap?.blockSlug).toBe('face-swap-video');
+    expect(faceSwap?.advancedParams.map((param) => param.key)).toEqual(expect.arrayContaining(['target_video', 'swap_faces_index', 'target_faces_index']));
 
     const soraPro = getChatModel('sora-2-pro');
     expect(soraPro?.supportedResolutions).toEqual(['720p', '1080p']);

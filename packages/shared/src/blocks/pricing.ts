@@ -123,6 +123,10 @@ export function estimateModelCostUsd(model: ModelOption, params: Record<string, 
     return perFiveSeconds * Math.max(1, Math.ceil(duration / 5));
   }
 
+  if (model.slug === 'kling-3-omni') {
+    return duration * kling3OmniPerSecond(resolution ?? '720p', enableAudio);
+  }
+
   if (model.slug === 'hailuo-2.3' || model.slug === 'hailuo-2.3-fast' || model.slug === 'hailuo-2.3-text' || model.slug === 'hailuo-2.3-fast-text') {
     return hailuoCost(model.slug, duration, resolution ?? '768P');
   }
@@ -253,6 +257,11 @@ function kling3UnitCost(slug: string, resolution: string, enableAudio: boolean) 
   if (slug === 'kling-3-pro') return resolution === '1080p' ? 2.8 : 1.3;
   if (enableAudio) return resolution === '1080p' ? 1.6 : 0.9;
   return resolution === '1080p' ? 1.2 : 0.5;
+}
+
+function kling3OmniPerSecond(resolution: string, enableAudio: boolean) {
+  if (resolution === '1080p') return enableAudio ? 0.2 : 0.15;
+  return enableAudio ? 0.15 : 0.1;
 }
 
 function hailuoCost(slug: string, duration: number, resolution: string) {

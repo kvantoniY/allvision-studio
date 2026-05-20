@@ -216,10 +216,23 @@ async function normaliseChatParams(raw: Record<string, unknown> | undefined, use
     'image_urls',
     'video_urls',
     'audio_urls',
+    'images',
+    'video',
+    'video_url',
+    'target_video',
     'seed',
+    'estimatedFrames',
     'expand_prompt',
     'shot_type',
     'watermark',
+    'preset_motion',
+    'motion_direction',
+    'keep_original_sound',
+    'keep_original_audio',
+    'swap_faces_index',
+    'target_faces_index',
+    'prefer_multi_shots',
+    'multi_shots',
     'mode',
     'output_format',
     'camera_control',
@@ -230,7 +243,7 @@ async function normaliseChatParams(raw: Record<string, unknown> | undefined, use
   const entries = await Promise.all(Object.entries(source)
     .filter(([key]) => allowed.has(key))
     .map(async ([key, value]) => {
-      if (key === 'image_urls' || key === 'video_urls' || key === 'audio_urls') {
+      if (key === 'image_urls' || key === 'video_urls' || key === 'audio_urls' || key === 'images') {
         const resolved = await Promise.all(splitListParam(value).map((item) => resolveMaybeInputRef(item, userId)));
         return [key, resolved.filter((item): item is string => typeof item === 'string' && item.length > 0)] as const;
       }
@@ -310,7 +323,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   if (!model.acceptsTextOnly && model.acceptsImageInput && !imageInput) {
     throw new HttpError(400, 'IMAGE_INPUT_REQUIRED', 'Для этой модели нужно прикрепить изображение');
   }
-  if (!model.acceptsTextOnly && model.acceptsVideoInput && !videoInput) {
+  if (!model.acceptsTextOnly && model.acceptsVideoInput && !model.acceptsImageInput && !videoInput) {
     throw new HttpError(400, 'VIDEO_INPUT_REQUIRED', 'Для этой модели нужно прикрепить видео');
   }
 
@@ -319,16 +332,28 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   const extraParams = await normaliseChatParams(body.params, userId);
   const paramsWithReferences: Record<string, unknown> = {
     ...extraParams,
-    ...(model.blockSlug === 'text-to-video' && imageInput && model.acceptsImageInput && !extraParams.image_urls
+    ...(model.slug === 'kling-3-omni' && imageInput && !extraParams.images
+      ? { images: [imageInput.publicUrl] }
+      : {}),
+    ...(model.slug === 'kling-3-omni' && videoInput && !extraParams.video
+      ? { video: videoInput.publicUrl }
+      : {}),
+    ...(model.blockSlug === 'text-to-video' && model.slug !== 'kling-3-omni' && imageInput && model.acceptsImageInput && !extraParams.image_urls
       ? { image_urls: [imageInput.publicUrl] }
       : {}),
-    ...(model.blockSlug === 'text-to-video' && videoInput && model.acceptsVideoInput && !extraParams.video_urls
+    ...(model.blockSlug === 'text-to-video' && model.slug !== 'kling-3-omni' && videoInput && model.acceptsVideoInput && !extraParams.video_urls
       ? { video_urls: [videoInput.publicUrl] }
       : {}),
   };
   const paramsWithAudio = audioInput && model.audioInputParam && !paramsWithReferences[model.audioInputParam]
     ? { ...paramsWithReferences, [model.audioInputParam]: model.audioInputParam === 'audio_urls' ? [audioInput.publicUrl] : audioInput.publicUrl }
     : paramsWithReferences;
+  if (model.blockSlug === 'motion-transfer' && !paramsWithAudio.video_url && !paramsWithAudio.preset_motion) {
+    throw new HttpError(400, 'MOTION_REFERENCE_REQUIRED', 'Для Motion Control нужен driving video или preset motion');
+  }
+  if (model.blockSlug === 'face-swap-video' && !paramsWithAudio.target_video) {
+    throw new HttpError(400, 'TARGET_VIDEO_REQUIRED', 'Для face swap нужно выбрать target video');
+  }
   const tokensCost = estimateChatGenerationPriceCoins(model.slug, {
     duration,
     generateAudio,

@@ -63,6 +63,7 @@ export interface PiAPIModelCapability {
 const ratioOptions = ['16:9', '9:16', '1:1'].map((value) => ({ value, label: value }));
 const ratioAutoOptions = ['auto', '16:9', '9:16', '1:1'].map((value) => ({ value, label: value }));
 const videoDuration5to10: PiAPIDurationCapability = { minimum: 5, maximum: 10, default: 5, step: 1, options: [5, 10] };
+const kling3Duration: PiAPIDurationCapability = { minimum: 3, maximum: 15, default: 5, step: 1 };
 const videoDuration6to10: PiAPIDurationCapability = { minimum: 6, maximum: 10, default: 6, step: 1, options: [6, 10] };
 const seedanceDuration: PiAPIDurationCapability = { minimum: 4, maximum: 15, default: 5, step: 1 };
 const veoDuration: PiAPIDurationCapability = { minimum: 4, maximum: 8, default: 8, step: 1, options: [4, 6, 8] };
@@ -108,6 +109,26 @@ const videoRefsParam: PiAPIParamCapability = {
   kind: 'source-list',
   mediaKind: 'video',
   multiple: true,
+  advanced: true,
+};
+
+const klingImagesParam: PiAPIParamCapability = {
+  key: 'images',
+  title: 'Kling image references',
+  kind: 'source-list',
+  mediaKind: 'image',
+  multiple: true,
+  description: 'Reference images for Kling 3.0 Omni. Mention them in the prompt as @image_1, @image_2, etc.',
+  advanced: true,
+};
+
+const klingVideoParam: PiAPIParamCapability = {
+  key: 'video',
+  title: 'Kling video reference',
+  kind: 'source-list',
+  mediaKind: 'video',
+  multiple: false,
+  description: 'Optional video reference for Kling 3.0 Omni. Mention it in the prompt as @video.',
   advanced: true,
 };
 
@@ -186,6 +207,99 @@ const keepOriginalSoundParam: PiAPIParamCapability = {
   advanced: true,
 };
 
+const keepOriginalAudioParam: PiAPIParamCapability = {
+  key: 'keep_original_audio',
+  title: 'Keep original audio',
+  kind: 'boolean',
+  default: false,
+  description: 'For video-reference modes: keep the source video audio instead of generated audio when the provider supports it.',
+  advanced: true,
+};
+
+const motionVideoUrlParam: PiAPIParamCapability = {
+  key: 'video_url',
+  title: 'Driving video',
+  kind: 'source-list',
+  mediaKind: 'video',
+  multiple: false,
+  description: 'Motion reference video for Kling Motion Control.',
+  advanced: true,
+};
+
+const presetMotionParam: PiAPIParamCapability = {
+  key: 'preset_motion',
+  title: 'Preset motion',
+  kind: 'text',
+  description: 'Optional Kling preset motion name. Use it instead of Driving video when you want a provider preset.',
+  advanced: true,
+};
+
+const motionDirectionParam: PiAPIParamCapability = {
+  key: 'motion_direction',
+  title: 'Motion direction',
+  kind: 'select',
+  options: [
+    { value: '', label: 'Auto' },
+    { value: 'video', label: 'Driving video' },
+    { value: 'preset', label: 'Preset motion' },
+  ],
+  default: '',
+  advanced: true,
+};
+
+const targetVideoParam: PiAPIParamCapability = {
+  key: 'target_video',
+  title: 'Target video',
+  kind: 'source-list',
+  mediaKind: 'video',
+  multiple: false,
+  description: 'Video where Qubico will replace the target face.',
+  advanced: true,
+};
+
+const estimatedFramesParam: PiAPIParamCapability = {
+  key: 'estimatedFrames',
+  title: 'Estimated frames',
+  kind: 'number',
+  minimum: 1,
+  default: 120,
+  description: 'Used only for cost estimation. PiAPI bills Qubico face swap approximately per processed frame.',
+  advanced: true,
+};
+
+const swapFacesIndexParam: PiAPIParamCapability = {
+  key: 'swap_faces_index',
+  title: 'Swap face indexes',
+  kind: 'text',
+  description: 'Optional comma-separated indexes of faces from the uploaded source image.',
+  advanced: true,
+};
+
+const targetFacesIndexParam: PiAPIParamCapability = {
+  key: 'target_faces_index',
+  title: 'Target face indexes',
+  kind: 'text',
+  description: 'Optional comma-separated indexes of faces in the target video.',
+  advanced: true,
+};
+
+const preferMultiShotsParam: PiAPIParamCapability = {
+  key: 'prefer_multi_shots',
+  title: 'Prefer multi shots',
+  kind: 'boolean',
+  default: false,
+  description: 'Ask Kling 3.0 to use the multi_shots JSON payload when provided.',
+  advanced: true,
+};
+
+const multiShotsParam: PiAPIParamCapability = {
+  key: 'multi_shots',
+  title: 'Multi shots JSON',
+  kind: 'textarea',
+  description: 'Advanced Kling 3.0 shot list as JSON array. Leave empty for a normal single prompt.',
+  advanced: true,
+};
+
 function klingCapability(params: {
   slug: string;
   title: string;
@@ -208,7 +322,7 @@ function klingCapability(params: {
     docsUrl: params.version === '3.0'
       ? 'https://piapi.ai/docs/kling-api/kling-3-api'
       : 'https://piapi.ai/docs/kling-api/create-task',
-    duration: videoDuration5to10,
+    duration: params.version === '3.0' ? kling3Duration : videoDuration5to10,
     aspectRatios: ['auto', '16:9', '9:16', '1:1'],
     resolutions: params.resolution,
     defaultResolution: params.resolution?.[0],
@@ -228,6 +342,7 @@ function klingCapability(params: {
         kind: 'boolean' as const,
         default: false,
       }] : []),
+      ...(params.version === '3.0' ? [preferMultiShotsParam, multiShotsParam] : []),
     ],
   };
 }
@@ -264,6 +379,19 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
       },
       imageRefsParam,
     ],
+  },
+  {
+    slug: 'qubico-video-toolkit',
+    title: 'Qubico Video Toolkit Face Swap',
+    blockSlug: 'face-swap-video',
+    blockCategory: 'video',
+    providerModel: 'Qubico/video-toolkit',
+    taskType: 'face-swap',
+    inputKinds: ['image', 'video'],
+    outputKind: 'video',
+    docsUrl: 'https://piapi.ai/docs/faceswap-api/video-faceswap',
+    audio: { mode: 'none' },
+    params: [targetVideoParam, estimatedFramesParam, swapFacesIndexParam, targetFacesIndexParam],
   },
   klingCapability({ slug: 'kling-std', title: 'Kling 2.6 Standard', mode: 'std' }),
   klingCapability({
@@ -486,6 +614,38 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
         default: '720p',
       },
       seedParam,
+    ],
+  },
+  {
+    slug: 'kling-3-omni',
+    title: 'Kling 3.0 Omni',
+    blockSlug: 'text-to-video',
+    blockCategory: 'video',
+    providerModel: 'kling',
+    taskType: 'omni_video_generation',
+    mode: 'omni',
+    providerVersion: '3.0',
+    inputKinds: ['text', 'image', 'video'],
+    outputKind: 'video',
+    docsUrl: 'https://piapi.ai/docs/kling-api/kling-3-omni-api',
+    duration: kling3Duration,
+    aspectRatios: ['auto', '16:9', '9:16', '1:1'],
+    resolutions: ['720p', '1080p'],
+    defaultResolution: '720p',
+    audio: { mode: 'generate', booleanParam: 'enable_audio' },
+    params: [
+      {
+        key: 'resolution',
+        title: 'Resolution',
+        kind: 'select',
+        options: ['720p', '1080p'].map((value) => ({ value, label: value })),
+        default: '720p',
+      },
+      klingImagesParam,
+      klingVideoParam,
+      keepOriginalAudioParam,
+      preferMultiShotsParam,
+      multiShotsParam,
     ],
   },
   {
@@ -740,7 +900,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     duration: videoDuration5to10,
     aspectRatios: ['auto', '16:9', '9:16', '1:1'],
     audio: { mode: 'preserve', preserveParam: 'keep_original_sound' },
-    params: [keepOriginalSoundParam],
+    params: [motionVideoUrlParam, presetMotionParam, motionDirectionParam, keepOriginalSoundParam],
   },
   {
     slug: 'kling-motion-2.6-pro',
@@ -756,7 +916,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     duration: videoDuration5to10,
     aspectRatios: ['auto', '16:9', '9:16', '1:1'],
     audio: { mode: 'preserve', preserveParam: 'keep_original_sound' },
-    params: [keepOriginalSoundParam],
+    params: [motionVideoUrlParam, presetMotionParam, motionDirectionParam, keepOriginalSoundParam],
   },
   {
     slug: 'kling-motion-3.0-std',
@@ -783,6 +943,9 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
         options: ['720p', '1080p'].map((value) => ({ value, label: value })),
         default: '720p',
       },
+      motionVideoUrlParam,
+      presetMotionParam,
+      motionDirectionParam,
       keepOriginalSoundParam,
     ],
   },
@@ -811,6 +974,9 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
         options: ['720p', '1080p'].map((value) => ({ value, label: value })),
         default: '720p',
       },
+      motionVideoUrlParam,
+      presetMotionParam,
+      motionDirectionParam,
       keepOriginalSoundParam,
     ],
   },

@@ -92,10 +92,33 @@ function normaliseAdvancedParams(params: ChatAdvancedParams) {
   );
 }
 
+function missingAdvancedRequirement(model: ChatModelOption, params: Record<string, unknown>) {
+  if (model.blockSlug === 'motion-transfer' && !params.video_url && !params.preset_motion) {
+    return 'Нужен driving video или preset motion';
+  }
+  if (model.blockSlug === 'face-swap-video' && !params.target_video) {
+    return 'Нужно target video';
+  }
+  return null;
+}
+
 function sourceListValue(value: ChatAdvancedParams[string]): string[] {
   if (Array.isArray(value)) return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
   if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean);
   return [];
+}
+
+function modelFamilies(models: ChatModelOption[]) {
+  const map = new Map<string, { slug: string; title: string; models: ChatModelOption[] }>();
+  for (const model of models) {
+    const family = map.get(model.familySlug);
+    if (family) {
+      family.models.push(model);
+    } else {
+      map.set(model.familySlug, { slug: model.familySlug, title: model.familyTitle, models: [model] });
+    }
+  }
+  return [...map.values()];
 }
 
 export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, onReferenceConsumed, onPromptConsumed }: ChatFormProps) {
@@ -113,7 +136,11 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
   const selectedModel = models.find((model) => model.slug === modelSlug) ?? models[0] ?? CHAT_MODELS[0];
+  const families = useMemo(() => modelFamilies(models), [models]);
+  const selectedFamily = families.find((family) => family.slug === selectedModel.familySlug) ?? families[0];
+  const familyModels = selectedFamily?.models ?? models;
   const cleanedAdvancedParams = useMemo(() => normaliseAdvancedParams(advancedParams), [advancedParams]);
+  const missingAdvanced = missingAdvancedRequirement(selectedModel, cleanedAdvancedParams);
   const modelPriceOverrides = modelPricing.data?.modelPriceOverrides;
   const balance = me.data?.user.tokenBalance ?? 0;
   const effectiveGenerateAudio = selectedModel.supportsAudio && generateAudio;
@@ -124,14 +151,15 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     priceOverrides: modelPriceOverrides,
   });
   const canPay = balance >= estimatedCostCoins;
-  const needsInput = !selectedModel.acceptsTextOnly && selectedModel.acceptsImageInput;
-  const canUseInput = selectedModel.acceptsImageInput || selectedModel.acceptsVideoInput;
-  const inputKind = selectedModel.acceptsVideoInput && !selectedModel.acceptsImageInput ? 'video' : 'image';
+  const needsInput = !selectedModel.acceptsTextOnly && (selectedModel.acceptsImageInput || selectedModel.acceptsVideoInput || selectedModel.acceptsAudioInput);
+  const canUseInput = selectedModel.acceptsImageInput || selectedModel.acceptsVideoInput || selectedModel.acceptsAudioInput;
+  const inputKind = selectedModel.acceptsImageInput ? 'image' : selectedModel.acceptsVideoInput ? 'video' : 'audio';
   const referenceUnsupported = !!source && (
     (source.mediaKind === 'image' && !selectedModel.acceptsImageInput) ||
-    (source.mediaKind === 'video' && !selectedModel.acceptsVideoInput)
+    (source.mediaKind === 'video' && !selectedModel.acceptsVideoInput) ||
+    (source.mediaKind === 'audio' && !selectedModel.acceptsAudioInput)
   );
-  const canSubmit = prompt.trim().length > 0 && canPay && (!needsInput || !!source) && !referenceUnsupported && !createMessageState.isLoading;
+  const canSubmit = prompt.trim().length > 0 && canPay && (!needsInput || !!source) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -194,12 +222,13 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           inputRef: source?.ref,
           imageInputRef: source?.mediaKind === 'image' ? source.ref : undefined,
           videoInputRef: source?.mediaKind === 'video' ? source.ref : undefined,
+          audioInputRef: source?.mediaKind === 'audio' ? source.ref : undefined,
           params: Object.keys(cleanedAdvancedParams).length > 0 ? cleanedAdvancedParams : undefined,
         },
       }).unwrap();
       toast({ title: 'Генерация запущена' });
       setPrompt('');
-      if (!selectedModel.acceptsImageInput) setSource(null);
+      if (!canUseInput) setSource(null);
       onCreated();
     } catch (error) {
       toast({ title: apiErrorMessage(error), variant: 'destructive' });
@@ -211,6 +240,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     ? 'Референс не подходит модели'
     : needsInput && !source
       ? 'Нужен референс'
+      : missingAdvanced
+        ? missingAdvanced
       : !canPay
         ? 'Недостаточно токенов'
         : !prompt.trim()
@@ -228,8 +259,10 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                   {source.mediaKind === 'image' ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={source.url} alt="" className="h-full w-full object-cover" />
-                  ) : (
+                  ) : source.mediaKind === 'video' ? (
                     <video src={source.url} className="h-full w-full object-cover" muted />
+                  ) : (
+                    <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
                   )}
                 </div>
                 <span className="max-w-[220px] truncate text-xs text-slate-200">{source.title}</span>
@@ -270,7 +303,15 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         <div className="flex flex-col gap-3 border-t border-slate-800 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <CategoryControl category={category} onChange={setCategory} />
-            <ModelControl selectedModel={selectedModel} models={models} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
+            <ModelFamilyControl
+              selectedFamily={selectedFamily}
+              families={families}
+              onChange={(familySlug) => {
+                const next = families.find((family) => family.slug === familySlug);
+                if (next?.models[0]) setModelSlug(next.models[0].slug);
+              }}
+            />
+            <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
             <AspectControl
               value={aspectRatio}
               values={selectedModel.supportedAspectRatios}
@@ -347,7 +388,45 @@ function CategoryControl({ category, onChange }: { category: ChatCategory; onCha
   );
 }
 
-function ModelControl({
+function ModelFamilyControl({
+  selectedFamily,
+  families,
+  onChange,
+}: {
+  selectedFamily?: { slug: string; title: string; models: ChatModelOption[] };
+  families: { slug: string; title: string; models: ChatModelOption[] }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 max-w-[220px] border-slate-700 bg-slate-950">
+          <Sparkles className="h-4 w-4 text-violet-300" />
+          <span className="truncate">{selectedFamily?.title ?? 'Модель'}</span>
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[min(92vw,320px)] border-slate-800 bg-slate-950 text-slate-100">
+        <DropdownMenuLabel>Модель</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-slate-800" />
+        <DropdownMenuRadioGroup value={selectedFamily?.slug} onValueChange={onChange}>
+          {families.map((family) => (
+            <DropdownMenuRadioItem key={family.slug} value={family.slug} className="items-start gap-3 py-2 focus:bg-slate-900">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{family.title}</span>
+                  <span className="text-xs text-slate-500">{family.models.length} функций</span>
+                </div>
+              </div>
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function ModelFunctionControl({
   selectedModel,
   models,
   duration,
@@ -365,25 +444,25 @@ function ModelControl({
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="h-9 max-w-[260px] border-slate-700 bg-slate-950">
           <Sparkles className="h-4 w-4 text-violet-300" />
-          <span className="truncate">{compactModelTitle(selectedModel.title)}</span>
+          <span className="truncate">{selectedModel.functionTitle || compactModelTitle(selectedModel.title)}</span>
           <ChevronDown className="h-4 w-4 text-slate-500" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[min(92vw,420px)] border-slate-800 bg-slate-950 text-slate-100">
-        <DropdownMenuLabel>Модель</DropdownMenuLabel>
+        <DropdownMenuLabel>Функция модели</DropdownMenuLabel>
         <DropdownMenuSeparator className="bg-slate-800" />
         <DropdownMenuRadioGroup value={selectedModel.slug} onValueChange={onChange}>
           {models.map((model) => (
             <DropdownMenuRadioItem key={model.slug} value={model.slug} className="items-start gap-3 py-2 focus:bg-slate-900">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{model.title}</span>
+                  <span className="font-medium">{model.functionTitle || compactModelTitle(model.title)}</span>
                   <span className="text-xs text-amber-300">
                     от {estimateChatGenerationPriceCoins(model.slug, { duration: model.defaultDurationSec ?? duration, priceOverrides })} токенов
                   </span>
                   {model.experimental && <span className="text-xs text-amber-200">бета</span>}
                 </div>
-                <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{model.description}</div>
+                <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{model.functionDescription || model.description}</div>
               </div>
             </DropdownMenuRadioItem>
           ))}
@@ -498,6 +577,39 @@ function ResolutionControl({
   );
 }
 
+const advancedSectionsMeta = {
+  references: {
+    title: 'Референсы',
+    description: 'Дополнительные изображения, видео или аудио, которые PiAPI принимает именно для выбранной функции.',
+  },
+  quality: {
+    title: 'Качество',
+    description: 'Настройки разрешения, кадров, seed и стоимости результата.',
+  },
+  motion: {
+    title: 'Движение',
+    description: 'Управление камерой, движением, preset motion и shot list.',
+  },
+  audio: {
+    title: 'Аудио',
+    description: 'Опции генерации, сохранения или передачи звука, если модель это поддерживает.',
+  },
+  prompt: {
+    title: 'Промпт',
+    description: 'Ограничения, negative prompt и расширение промпта.',
+  },
+} as const;
+
+type AdvancedSectionKey = keyof typeof advancedSectionsMeta;
+
+function advancedSectionForParam(param: PiAPIParamCapability): AdvancedSectionKey {
+  if (param.kind === 'source-list' || ['image_urls', 'video_urls', 'audio_urls', 'images', 'video', 'video_url', 'target_video', 'tail_image_url'].includes(param.key)) return 'references';
+  if (param.key.includes('audio') || param.key.includes('sound')) return 'audio';
+  if (['camera_control', 'shot_type', 'preset_motion', 'motion_direction', 'prefer_multi_shots', 'multi_shots'].includes(param.key)) return 'motion';
+  if (['resolution', 'quality', 'seed', 'estimatedFrames'].includes(param.key)) return 'quality';
+  return 'prompt';
+}
+
 function AdvancedParamsControl({
   model,
   value,
@@ -510,6 +622,9 @@ function AdvancedParamsControl({
   const params = visibleAdvancedParams(model);
   if (params.length === 0) return null;
   const update = (key: string, next: ChatAdvancedParams[string]) => onChange({ ...value, [key]: next });
+  const sections = (Object.keys(advancedSectionsMeta) as AdvancedSectionKey[])
+    .map((key) => ({ key, params: params.filter((param) => advancedSectionForParam(param) === key) }))
+    .filter((section) => section.params.length > 0);
 
   return (
     <DropdownMenu modal={false}>
@@ -524,19 +639,33 @@ function AdvancedParamsControl({
         align="start"
         side="top"
         sideOffset={8}
-        className="w-[min(92vw,560px)] space-y-3 border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40"
+        className="max-h-[calc(100dvh-2rem)] w-[min(92vw,560px)] space-y-3 overflow-y-auto border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40"
       >
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{compactModelTitle(model.title)}</div>
-        <div className="grid gap-3 md:grid-cols-2">
-          {params.map((param) => (
-            <AdvancedParamField
-              key={param.key}
-              param={param}
-              value={value[param.key]}
-              onChange={(next) => update(param.key, next)}
-            />
-          ))}
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{compactModelTitle(model.title)}</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">Показываются только параметры, которые есть в документации PiAPI для выбранной функции.</div>
         </div>
+        {sections.map((section) => {
+          const meta = advancedSectionsMeta[section.key];
+          return (
+            <div key={section.key} className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
+              <div className="mb-3">
+                <div className="text-sm font-semibold text-slate-100">{meta.title}</div>
+                <div className="mt-0.5 text-xs leading-5 text-slate-500">{meta.description}</div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {section.params.map((param) => (
+                  <AdvancedParamField
+                    key={param.key}
+                    param={param}
+                    value={value[param.key]}
+                    onChange={(next) => update(param.key, next)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );

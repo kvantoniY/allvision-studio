@@ -83,6 +83,41 @@ describe('PiAPI payload builders', () => {
     });
   });
 
+  it('builds Kling 3.0 Omni payload with references and audio controls', () => {
+    const payload = buildTextToVideoPayload('kling-3-omni', {
+      prompt: 'use @image_1 and @video as references',
+      durationSec: 12,
+      aspectRatio: '16:9',
+      resolution: '1080p',
+      generateAudio: true,
+      params: {
+        images: ['https://cdn.test/ref.jpg'],
+        video: 'https://cdn.test/ref.mp4',
+        keep_original_audio: true,
+        multi_shots: '[{"duration":4,"prompt":"opening shot"}]',
+        prefer_multi_shots: true,
+      },
+    });
+
+    expect(payload).toEqual({
+      model: 'kling',
+      task_type: 'omni_video_generation',
+      input: {
+        prompt: 'use @image_1 and @video as references',
+        duration: 12,
+        aspect_ratio: '16:9',
+        resolution: '1080p',
+        version: '3.0',
+        enable_audio: true,
+        images: ['https://cdn.test/ref.jpg'],
+        video: 'https://cdn.test/ref.mp4',
+        keep_original_audio: true,
+        prefer_multi_shots: true,
+        multi_shots: [{ duration: 4, prompt: 'opening shot' }],
+      },
+    });
+  });
+
   it('builds Wan image-to-video payload with audio reference and advanced controls', () => {
     const payload = buildImageToVideoPayload('wan-2.6-i2v', {
       imageUrl: 'https://cdn.test/input.jpg',
