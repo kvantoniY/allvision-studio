@@ -12,6 +12,11 @@ const MIME_TO_EXT: Record<string, string> = {
   'video/mp4': 'mp4',
   'video/webm': 'webm',
   'video/quicktime': 'mov',
+  'audio/mpeg': 'mp3',
+  'audio/mp3': 'mp3',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/ogg': 'ogg',
 };
 
 const ALLOWED_TREND_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
@@ -21,6 +26,7 @@ const MAX_TREND_THUMBNAIL_SIZE = 5 * 1024 * 1024;
 const ALLOWED_V3_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_V3_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
 const ALLOWED_CHAT_VIDEO_MIME = new Set(['video/mp4', 'video/quicktime']);
+const ALLOWED_CHAT_AUDIO_MIME = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg']);
 const MAX_CHARACTER_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_SCENE_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_TEMPLATE_PREVIEW_SIZE = 50 * 1024 * 1024;
@@ -285,7 +291,7 @@ export async function uploadUserInput(
 export async function uploadChatInput(
   userId: string,
   file: Express.Multer.File,
-): Promise<{ url: string; key: string; ref: string; mediaKind: 'image' | 'video'; dimensions?: { width: number; height: number } }> {
+): Promise<{ url: string; key: string; ref: string; mediaKind: 'image' | 'video' | 'audio'; dimensions?: { width: number; height: number } }> {
   if (file.size > MAX_CHAT_INPUT_SIZE) {
     throw new HttpError(413, 'FILE_TOO_LARGE', 'Файл должен быть не тяжелее 25 МБ');
   }
@@ -313,7 +319,17 @@ export async function uploadChatInput(
     return { url, key, ref: `chat:${key}`, mediaKind: 'video' };
   }
 
-  throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются только JPEG, PNG, WebP, MP4 и MOV');
+  if (ALLOWED_CHAT_AUDIO_MIME.has(file.mimetype)) {
+    const key = `user-uploads/chat/${userId}/${safeName}.${ext(file.mimetype)}`;
+    const { url } = await getStorageProvider().upload({
+      key,
+      body: file.buffer,
+      contentType: file.mimetype,
+    });
+    return { url, key, ref: `chat:${key}`, mediaKind: 'audio' };
+  }
+
+  throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются JPEG, PNG, WebP, MP4, MOV и audio');
 }
 
 export async function deleteFile(key: string): Promise<void> {

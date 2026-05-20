@@ -64,10 +64,14 @@ export type ChatsResponse = {
 export type ChatMessageBody = {
   modelSlug: string;
   prompt: string;
-  aspectRatio?: '1:1' | '9:16' | '16:9' | 'auto';
+  aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4' | '21:9' | '9:21' | 'auto';
   duration?: number;
   generateAudio?: boolean;
+  params?: Record<string, unknown>;
   inputRef?: string;
+  imageInputRef?: string;
+  videoInputRef?: string;
+  audioInputRef?: string;
 };
 
 export type CreateChatMessageResponse = {
@@ -82,7 +86,7 @@ export type ChatUploadResponse = {
     url: string;
     key: string;
     ref: string;
-    mediaKind: 'image' | 'video';
+    mediaKind: 'image' | 'video' | 'audio';
     dimensions?: { width: number; height: number };
   };
 };

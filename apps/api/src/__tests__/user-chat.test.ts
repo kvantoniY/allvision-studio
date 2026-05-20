@@ -66,6 +66,14 @@ describe('/api/user/chat legacy upload', () => {
     expect(ok.body.input.ref).toContain(`chat:user-uploads/chat/${userId}/`);
     expect(ok.body.input.mediaKind).toBe('image');
 
+    const audio = await request(app)
+      .post('/api/user/chat/upload')
+      .set('Cookie', authCookie(userId))
+      .attach('file', Buffer.from('fake mp3 bytes'), { filename: 'music.mp3', contentType: 'audio/mpeg' });
+    expect(audio.status).toBe(201);
+    expect(audio.body.input.ref).toContain(`chat:user-uploads/chat/${userId}/`);
+    expect(audio.body.input.mediaKind).toBe('audio');
+
     const invalid = await request(app)
       .post('/api/user/chat/upload')
       .set('Cookie', authCookie(userId))

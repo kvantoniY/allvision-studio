@@ -23,6 +23,7 @@ const paramsSchema = z.object({
   duration: z.number().min(1).max(30).optional(),
   aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1']).default('auto').optional(),
   resolution: z.enum(['720p', '1080p']).default('720p').optional(),
+  keep_original_sound: z.boolean().optional(),
 }).refine((value) => Boolean(value.video_url ?? value.driving_video), {
   message: 'motion-transfer requires video_url',
   path: ['video_url'],

@@ -1,4 +1,4 @@
-export type SourceMediaKind = 'image' | 'video';
+export type SourceMediaKind = 'image' | 'video' | 'audio';
 
 export type ParsedSourceValue =
   | { kind: 'empty'; raw: string }
@@ -33,7 +33,7 @@ export function parseSourceSelectDescription(description: string | undefined): S
   if (!description?.startsWith('source-select:')) return null;
   const [, rest] = description.split('source-select:', 2);
   const [kind, label, ...descriptionParts] = rest.split('|');
-  if (kind !== 'image' && kind !== 'video') return null;
+  if (kind !== 'image' && kind !== 'video' && kind !== 'audio') return null;
   return {
     mediaKind: kind,
     label: label?.trim() || undefined,

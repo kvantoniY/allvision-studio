@@ -46,10 +46,11 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BlockCatalogItem, JsonSchemaObject, ModelOption, SourceMediaKind } from '@allvision/shared';
+import type { BlockCatalogItem, JsonSchemaObject, ModelOption, PiAPIParamCapability, SourceMediaKind } from '@allvision/shared';
 import {
   formatMoney,
   formatAdminServiceValidationError,
+  getPiAPIModelCapability,
   parseSourceSelectDescription,
   serviceMargin,
   summarizePipelinePricing,
@@ -206,6 +207,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function unique<T>(items: T[]): T[] {
+  return [...new Set(items.filter((item) => item !== undefined && item !== null))];
+}
+
 function schemaObject(value: unknown): JsonSchemaObject {
   return isRecord(value) && typeof value.type === 'string' ? (value as JsonSchemaObject) : { type: 'string' };
 }
@@ -228,16 +233,103 @@ function isTierModelSchema(schema: JsonSchemaObject) {
 }
 
 function preferredModel(models: ModelOption[], tier: 'standard' | 'pro') {
+  const candidates = models.some((model) => model.provider !== 'mock')
+    ? models.filter((model) => model.provider !== 'mock')
+    : models;
   return (
-    models.find((model) => model.tierHint === tier)?.slug ??
-    models.find((model) => model.tierHint === 'both')?.slug ??
-    models[0]?.slug ??
+    candidates.find((model) => model.tierHint === tier)?.slug ??
+    candidates.find((model) => model.tierHint === 'both')?.slug ??
+    candidates[0]?.slug ??
     ''
   );
 }
 
 function modelBySlug(models: ModelOption[], slug: unknown) {
   return typeof slug === 'string' ? models.find((model) => model.slug === slug) : undefined;
+}
+
+function modelParamKey(value: string) {
+  return value.split('=')[0].replace(/\[\]$/, '');
+}
+
+function modelSupportedParamKeys(model: ModelOption) {
+  const capability = getPiAPIModelCapability(model.slug);
+  return new Set([
+    ...(model.requiredParams ?? []).map(modelParamKey),
+    ...(model.optionalParams ?? []).map(modelParamKey),
+    ...(capability?.duration ? ['duration'] : []),
+    ...(capability?.aspectRatios?.length ? ['aspect_ratio'] : []),
+    ...(capability?.resolutions?.length ? ['resolution'] : []),
+    ...(capability?.mode ? ['mode'] : []),
+    ...(capability?.params.map((param) => param.key) ?? []),
+    ...(capability?.audio.booleanParam ? [capability.audio.booleanParam] : []),
+    ...(capability?.audio.inputParam ? [capability.audio.inputParam] : []),
+    ...(capability?.audio.preserveParam ? [capability.audio.preserveParam] : []),
+  ]);
+}
+
+function capabilityParamMap(models: ModelOption[]) {
+  const map = new Map<string, PiAPIParamCapability>();
+  for (const model of models) {
+    for (const param of getPiAPIModelCapability(model.slug)?.params ?? []) {
+      if (!map.has(param.key)) map.set(param.key, param);
+    }
+  }
+  return map;
+}
+
+function shouldShowParamForModels(block: BlockCatalogItem, key: string, schema: JsonSchemaObject, models: ModelOption[]) {
+  if (key === 'model' || isTierModelSchema(schema)) return true;
+  if (models.length === 0 || models.some((model) => model.provider !== 'piapi')) return true;
+  const coreKeys = new Set(['prompt', 'duration', 'aspect_ratio', 'input_image', 'video_url', 'target_video', 'estimatedFrames', 'title', 'music']);
+  if (coreKeys.has(key) || block.paramsSchema.required?.includes(key)) return true;
+  return models.some((model) => modelSupportedParamKeys(model).has(key));
+}
+
+function schemaWithModelOptions(key: string, schema: JsonSchemaObject, models: ModelOption[], capabilityParam?: PiAPIParamCapability): JsonSchemaObject {
+  const capabilities = models.map((model) => getPiAPIModelCapability(model.slug)).filter(Boolean);
+  if (capabilityParam?.kind === 'select' && capabilityParam.options?.length) {
+    return {
+      ...schema,
+      enum: capabilityParam.options.map((option) => option.value),
+      default: capabilityParam.default ?? schema.default,
+      title: schema.title ?? capabilityParam.title,
+      description: schema.description ?? capabilityParam.description,
+    };
+  }
+  if (key === 'resolution') {
+    const values = unique(capabilities.flatMap((capability) => capability?.resolutions ?? []));
+    if (values.length > 0) return { ...schema, enum: values, default: capabilities[0]?.defaultResolution ?? schema.default };
+  }
+  if (key === 'aspect_ratio') {
+    const values = unique(capabilities.flatMap((capability) => capability?.aspectRatios ?? []));
+    if (values.length > 0) return { ...schema, enum: values, default: values.includes('auto') ? 'auto' : values[0] };
+  }
+  if (key === 'mode') {
+    const values = unique(capabilities.map((capability) => capability?.mode).filter((value): value is string => Boolean(value)));
+    if (values.length > 0) return { ...schema, enum: values, default: values[0] };
+  }
+  if (key === 'duration') {
+    const minimum = Math.max(...capabilities.map((capability) => capability?.duration?.minimum ?? schema.minimum ?? 1));
+    const maximum = Math.min(...capabilities.map((capability) => capability?.duration?.maximum ?? schema.maximum ?? 30));
+    return {
+      ...schema,
+      minimum: Number.isFinite(minimum) ? minimum : schema.minimum,
+      maximum: Number.isFinite(maximum) ? maximum : schema.maximum,
+      default: capabilities[0]?.duration?.default ?? schema.default,
+    };
+  }
+  if (capabilityParam) {
+    return {
+      ...schema,
+      title: schema.title ?? capabilityParam.title,
+      description: schema.description ?? capabilityParam.description,
+      minimum: capabilityParam.minimum ?? schema.minimum,
+      maximum: capabilityParam.maximum ?? schema.maximum,
+      default: capabilityParam.default ?? schema.default,
+    };
+  }
+  return schema;
 }
 
 function providerLabel(provider: ModelOption['provider']) {
@@ -516,6 +608,79 @@ function Section({ title, description, children }: { title: string; description?
   );
 }
 
+function sourceListValues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+function SourceListParamField({
+  param,
+  value,
+  onChange,
+  userInputFields,
+  availableSteps,
+}: {
+  param: PiAPIParamCapability;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  userInputFields: UserInputField[];
+  availableSteps: AvailableSourceStep[];
+}) {
+  const mediaKind = (param.mediaKind ?? 'image') as SourceMediaKind;
+  if (!param.multiple) {
+    return (
+      <div className="md:col-span-2">
+        <SourceSelector
+          value={selectValue(value)}
+          onChange={onChange}
+          mediaKind={mediaKind}
+          userInputFields={userInputFields}
+          availableSteps={availableSteps}
+          label={param.title}
+          description={param.description}
+        />
+      </div>
+    );
+  }
+
+  const items = sourceListValues(value);
+  return (
+    <div className="space-y-2 md:col-span-2">
+      <FieldLabel help={param.description}>{param.title}</FieldLabel>
+      <div className="grid gap-2 md:grid-cols-[1fr_220px]">
+        <Input
+          value={items.join(', ')}
+          onChange={(event) => onChange(sourceListValues(event.target.value))}
+          placeholder="{{user.photo}}, {{step_1.output}}, asset:id or URL"
+        />
+        <SourceSelector
+          value=""
+          onChange={(next) => onChange([...items, next])}
+          mediaKind={mediaKind}
+          userInputFields={userInputFields}
+          availableSteps={availableSteps}
+          label=""
+        />
+      </div>
+      {items.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="max-w-[260px] truncate rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1 text-xs text-slate-300"
+              onClick={() => onChange(items.filter((current) => current !== item))}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BlockParamsForm({
   block,
   value,
@@ -553,6 +718,9 @@ function BlockParamsForm({
       }
       return [];
     });
+  const capabilityParams = capabilityParamMap(selectedModels);
+  const paramEntries = Object.entries(block.paramsSchema.properties ?? {})
+    .filter(([key, rawSchema]) => shouldShowParamForModels(block, key, schemaObject(rawSchema), selectedModels));
 
   return (
     <div className="space-y-4">
@@ -612,8 +780,9 @@ function BlockParamsForm({
         </details>
       )}
       <div className="grid gap-4 md:grid-cols-2">
-      {Object.entries(block.paramsSchema.properties ?? {}).map(([key, rawSchema]) => {
-        const schema = schemaObject(rawSchema);
+      {paramEntries.map(([key, rawSchema]) => {
+        const capabilityParam = capabilityParams.get(key);
+        const schema = schemaWithModelOptions(key, schemaObject(rawSchema), selectedModels, capabilityParam);
         const sourceMeta = parseSourceSelectDescription(schema.description);
         const label = sourceMeta?.label ?? schema.title ?? key;
         const description = sourceMeta?.description ?? schema.description;
@@ -643,6 +812,19 @@ function BlockParamsForm({
                 ))}
               </div>
             </div>
+          );
+        }
+
+        if (capabilityParam?.kind === 'source-list' && capabilityParam.mediaKind) {
+          return (
+            <SourceListParamField
+              key={key}
+              param={capabilityParam}
+              value={value[key]}
+              onChange={(next) => update(key, next)}
+              userInputFields={userInputFields}
+              availableSteps={availableSteps}
+            />
           );
         }
 

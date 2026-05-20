@@ -17,10 +17,19 @@ const paramsSchema = z.object({
   model: z.union([z.string(), tierModelParamsSchema]).optional(),
   prompt: z.string().min(1),
   duration: z.number().min(1).max(30).optional(),
-  aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1']).default('auto').optional(),
+  aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21']).default('auto').optional(),
+  mode: z.enum(['text_to_video', 'omni_reference']).optional(),
   resolution: z.string().optional(),
   generate_audio: z.boolean().optional(),
+  negative_prompt: z.string().optional(),
+  image_urls: z.union([z.string(), z.array(z.string())]).optional(),
+  video_urls: z.union([z.string(), z.array(z.string())]).optional(),
+  audio_urls: z.union([z.string(), z.array(z.string())]).optional(),
+  audio_url: z.string().optional(),
   seed: z.union([z.string(), z.number()]).optional(),
+  expand_prompt: z.boolean().optional(),
+  shot_type: z.string().optional(),
+  watermark: z.boolean().optional(),
 });
 
 export const textToVideoBlock: BlockDefinition = {

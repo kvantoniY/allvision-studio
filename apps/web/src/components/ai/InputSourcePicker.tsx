@@ -16,12 +16,12 @@ export type SelectedInputSource = {
   ref: string;
   url: string;
   title: string;
-  mediaKind: 'image' | 'video';
+  mediaKind: 'image' | 'video' | 'audio';
   origin: 'upload' | 'studio' | 'site' | 'result';
 };
 
 type InputSourcePickerProps = {
-  mediaKind: 'image' | 'video';
+  mediaKind: 'image' | 'video' | 'audio';
   value: SelectedInputSource | null;
   required?: boolean;
   compact?: boolean;
@@ -34,8 +34,10 @@ function errorMessage(error: unknown) {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Не удалось загрузить файл';
 }
 
-function fileAccept(mediaKind: 'image' | 'video') {
-  return mediaKind === 'image' ? 'image/jpeg,image/png,image/webp' : 'video/mp4,video/quicktime';
+function fileAccept(mediaKind: 'image' | 'video' | 'audio') {
+  if (mediaKind === 'image') return 'image/jpeg,image/png,image/webp';
+  if (mediaKind === 'video') return 'video/mp4,video/quicktime';
+  return 'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg';
 }
 
 function isImageAsset(asset: { mimeType?: string | null }) {
@@ -48,7 +50,10 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
   const [upload, uploadState] = useUploadChatInputMutation();
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 }, { skip: mediaKind !== 'image' });
   const locations = useListUserMediaAssetsQuery({ kind: 'user-location', limit: 100 }, { skip: mediaKind !== 'image' });
-  const publicAssets = useGetPublicMediaAssetsQuery({ kind: mediaKind === 'image' ? 'preview-image' : 'trend-video', active: true });
+  const publicAssets = useGetPublicMediaAssetsQuery({
+    kind: mediaKind === 'image' ? 'preview-image' : mediaKind === 'video' ? 'trend-video' : 'music-track',
+    active: true,
+  });
 
   const studioItems = useMemo(
     () => [...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])].filter(isImageAsset),
@@ -95,8 +100,10 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
               {value.mediaKind === 'image' ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={value.url} alt="" className="h-full w-full object-cover" />
-              ) : (
+              ) : value.mediaKind === 'video' ? (
                 <video src={value.url} className="h-full w-full object-cover" muted />
+              ) : (
+                <div className="grid h-full w-full place-items-center text-[10px] text-slate-400">AUDIO</div>
               )}
             </div>
             <div className="min-w-0">
@@ -117,7 +124,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
               <div className="flex items-center justify-between border-b border-slate-800 p-4">
                 <div>
                   <h3 className="text-lg font-semibold text-white">Выбор референса</h3>
-                  <p className="text-sm text-slate-500">{mediaKind === 'image' ? 'Изображение для модели' : 'Видео для модели'}</p>
+                  <p className="text-sm text-slate-500">{mediaKind === 'image' ? 'Изображение для модели' : mediaKind === 'video' ? 'Видео для модели' : 'Audio reference'}</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => setOpen(false)}>
                   <X className="h-4 w-4" />
@@ -148,7 +155,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
                     {uploadState.isLoading ? <Loader2 className="h-8 w-8 animate-spin text-violet-300" /> : <Upload className="h-8 w-8 text-violet-300" />}
                     <span className="mt-3 font-medium text-slate-100">Выберите файл</span>
                     <span className="mt-1 text-sm text-slate-500">
-                      {mediaKind === 'image' ? 'JPEG, PNG или WebP до 25 МБ' : 'MP4 или MOV до 25 МБ'}
+                      {mediaKind === 'image' ? 'JPEG, PNG или WebP до 25 МБ' : mediaKind === 'video' ? 'MP4 или MOV до 25 МБ' : 'MP3, WAV или OGG до 25 МБ'}
                     </span>
                     <Input type="file" accept={fileAccept(mediaKind)} className="sr-only" onChange={changeFile} />
                   </label>
@@ -207,7 +214,7 @@ type AssetGridItem = {
   fullUrl: string;
   title: string;
   badge: string;
-  mediaKind: 'image' | 'video';
+  mediaKind: 'image' | 'video' | 'audio';
 };
 
 function AssetGrid({
@@ -240,8 +247,10 @@ function AssetGrid({
             {item.mediaKind === 'image' ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={item.url} alt="" className="h-full w-full object-cover" />
-            ) : (
+            ) : item.mediaKind === 'video' ? (
               <video src={item.fullUrl} className="h-full w-full object-cover" muted />
+            ) : (
+              <div className="grid h-full w-full place-items-center text-xs text-slate-400">AUDIO</div>
             )}
             <Badge className="absolute left-2 top-2 bg-slate-950/80 text-slate-100">{item.badge}</Badge>
           </div>

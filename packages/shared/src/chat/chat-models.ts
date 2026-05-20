@@ -1,9 +1,10 @@
 import { getBlockCatalogItem } from '../blocks/catalog';
 import { costUsdToCoins, estimateModelCostUsd } from '../blocks/pricing';
 import type { BlockCatalogItem, ModelOption } from '../blocks/types';
+import { capabilityDurationOptions, getPiAPIModelCapability, type PiAPIParamCapability } from '../piapi/capabilities';
 
 export type ChatCategory = 'image' | 'video';
-export type ChatAspectRatio = '1:1' | '9:16' | '16:9' | 'auto';
+export type ChatAspectRatio = '1:1' | '9:16' | '16:9' | '4:3' | '3:4' | '21:9' | '9:21' | 'auto';
 
 export interface ChatModelOption {
   slug: string;
@@ -15,14 +16,19 @@ export interface ChatModelOption {
   estimatedCostUsd: number;
   acceptsImageInput: boolean;
   acceptsVideoInput: boolean;
+  acceptsAudioInput: boolean;
   acceptsTextOnly: boolean;
   supportedAspectRatios: ChatAspectRatio[];
   supportsAudio: boolean;
   audioParam?: 'enable_audio' | 'generate_audio';
+  audioInputParam?: 'audio_url' | 'audio_urls';
   minDurationSec?: number;
   maxDurationSec?: number;
   defaultDurationSec?: number;
   durationOptions: number[];
+  supportedResolutions: string[];
+  defaultResolution?: string;
+  advancedParams: PiAPIParamCapability[];
   experimental?: boolean;
 }
 
@@ -46,16 +52,21 @@ function fromCatalog(params: {
   description: string;
   acceptsImageInput: boolean;
   acceptsVideoInput?: boolean;
+  acceptsAudioInput?: boolean;
   acceptsTextOnly: boolean;
   supportedAspectRatios?: ChatAspectRatio[];
   experimental?: boolean;
 }): ChatModelOption {
   const model = requireModel(params.blockSlug, params.modelSlug);
+  const capability = getPiAPIModelCapability(model.slug);
   const audioParam = model.optionalParams?.includes('enable_audio')
     ? 'enable_audio'
     : model.optionalParams?.includes('generate_audio')
       ? 'generate_audio'
       : undefined;
+  const audioInputParam = capability?.audio.inputParam;
+  const ratios = (capability?.aspectRatios ?? params.supportedAspectRatios ?? ['auto', '1:1', '9:16', '16:9'])
+    .filter((value): value is ChatAspectRatio => ['auto', '1:1', '9:16', '16:9', '4:3', '3:4', '21:9', '9:21'].includes(value));
   return {
     slug: model.slug,
     blockSlug: params.blockSlug,
@@ -64,16 +75,21 @@ function fromCatalog(params: {
     description: params.description,
     estimatedCostCoins: model.estimatedCostCoins,
     estimatedCostUsd: model.estimatedCostUsd ?? 0,
-    acceptsImageInput: params.acceptsImageInput,
-    acceptsVideoInput: params.acceptsVideoInput ?? false,
+    acceptsImageInput: params.acceptsImageInput || !!capability?.inputKinds.includes('image'),
+    acceptsVideoInput: params.acceptsVideoInput ?? !!capability?.inputKinds.includes('video'),
+    acceptsAudioInput: params.acceptsAudioInput ?? !!capability?.inputKinds.includes('audio'),
     acceptsTextOnly: params.acceptsTextOnly,
-    supportedAspectRatios: params.supportedAspectRatios ?? ['auto', '1:1', '9:16', '16:9'],
+    supportedAspectRatios: ratios.length ? ratios : ['auto'],
     supportsAudio: !!audioParam,
     audioParam,
-    minDurationSec: model.limits?.minDurationSec,
-    maxDurationSec: model.limits?.maxDurationSec,
-    defaultDurationSec: defaultDurationForModel(model),
+    audioInputParam,
+    minDurationSec: capability?.duration?.minimum ?? model.limits?.minDurationSec,
+    maxDurationSec: capability?.duration?.maximum ?? model.limits?.maxDurationSec,
+    defaultDurationSec: capability?.duration?.default ?? defaultDurationForModel(model),
     durationOptions: params.category === 'video' ? durationOptionsForModel(model) : [],
+    supportedResolutions: capability?.resolutions ?? model.limits?.resolutions ?? [],
+    defaultResolution: capability?.defaultResolution,
+    advancedParams: capability?.params ?? [],
     experimental: params.experimental,
   };
 }
@@ -85,6 +101,8 @@ function defaultDurationForModel(model: ModelOption) {
 }
 
 function durationOptionsForModel(model: ModelOption) {
+  const capability = getPiAPIModelCapability(model.slug);
+  if (capability) return capabilityDurationOptions(capability);
   const min = model.limits?.minDurationSec ?? 5;
   const max = model.limits?.maxDurationSec ?? 10;
   const candidates = max <= 8
@@ -105,12 +123,12 @@ function modelBySlug(slug: string) {
 
 export function estimateChatGenerationCostCoins(
   modelSlug: string,
-  options: { duration?: number; generateAudio?: boolean } = {},
+  options: { duration?: number; generateAudio?: boolean; params?: Record<string, unknown> } = {},
 ) {
   const chatModel = getChatModel(modelSlug);
   const catalogModel = modelBySlug(modelSlug);
   if (!chatModel || !catalogModel) return 0;
-  const params: Record<string, unknown> = {};
+  const params: Record<string, unknown> = { ...(options.params ?? {}) };
   if (chatModel.category === 'video') {
     params.duration = options.duration ?? chatModel.defaultDurationSec ?? 5;
   }
@@ -179,6 +197,50 @@ export const CHAT_MODELS: ChatModelOption[] = [
     acceptsTextOnly: false,
   }),
   fromCatalog({
+    blockSlug: 'image-to-video',
+    modelSlug: 'veo-3.1-fast-i2v',
+    category: 'video',
+    description: 'Fast Veo 3.1 image-to-video с выбором длительности, формата, negative prompt и опционального звука.',
+    acceptsImageInput: true,
+    acceptsTextOnly: false,
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+  }),
+  fromCatalog({
+    blockSlug: 'image-to-video',
+    modelSlug: 'veo-3.1-i2v',
+    category: 'video',
+    description: 'Quality Veo 3.1 image-to-video для коротких сцен с 1080p и опциональным звуком.',
+    acceptsImageInput: true,
+    acceptsTextOnly: false,
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+  }),
+  fromCatalog({
+    blockSlug: 'image-to-video',
+    modelSlug: 'seedance-2-fast-first-last',
+    category: 'video',
+    description: 'Seedance first/last frame mode: анимирует стартовое изображение с optional last-frame reference.',
+    acceptsImageInput: true,
+    acceptsTextOnly: false,
+  }),
+  fromCatalog({
+    blockSlug: 'image-to-video',
+    modelSlug: 'seedance-2-first-last',
+    category: 'video',
+    description: 'Pro first/last frame mode Seedance 2 для контролируемого перехода между кадрами.',
+    acceptsImageInput: true,
+    acceptsTextOnly: false,
+  }),
+  fromCatalog({
+    blockSlug: 'image-to-video',
+    modelSlug: 'wan-2.6-i2v',
+    category: 'video',
+    description: 'Wan 2.6 image-to-video с audio_url, seed, negative prompt и настройками движения.',
+    acceptsImageInput: true,
+    acceptsAudioInput: true,
+    acceptsTextOnly: false,
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
+  }),
+  fromCatalog({
     blockSlug: 'text-to-video',
     modelSlug: 'seedance-2-fast',
     category: 'video',
@@ -198,6 +260,42 @@ export const CHAT_MODELS: ChatModelOption[] = [
   }),
   fromCatalog({
     blockSlug: 'text-to-video',
+    modelSlug: 'seedance-2-fast-omni',
+    category: 'video',
+    description: 'Seedance Fast omni-reference mode: текст плюс image/video/audio references.',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsAudioInput: true,
+    acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
+    modelSlug: 'seedance-2-omni',
+    category: 'video',
+    description: 'Seedance Pro omni-reference mode для генерации по тексту с несколькими референсами.',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsAudioInput: true,
+    acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
+    modelSlug: 'hailuo-2.3-fast-text',
+    category: 'video',
+    description: 'Hailuo/MiniMax 2.3 Fast text-to-video через PiAPI generate-video endpoint.',
+    acceptsImageInput: false,
+    acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
+    modelSlug: 'hailuo-2.3-text',
+    category: 'video',
+    description: 'Hailuo/MiniMax 2.3 text-to-video как альтернатива Seedance/Veo.',
+    acceptsImageInput: false,
+    acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
     modelSlug: 'veo-3.1-fast',
     category: 'video',
     description: 'Быстрый Veo 3.1 для кинематографичных роликов по промпту. Подходит для коротких сцен, фонов и establishing shots.',
@@ -211,6 +309,16 @@ export const CHAT_MODELS: ChatModelOption[] = [
     description: 'Veo 3.1 для более качественной text-to-video генерации. Используйте для запросов, где важны камера, свет и реалистичная сцена.',
     acceptsImageInput: false,
     acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
+    modelSlug: 'wan-2.6',
+    category: 'video',
+    description: 'Wan 2.6 text-to-video с audio_url, seed, negative prompt и выбором качества.',
+    acceptsImageInput: false,
+    acceptsAudioInput: true,
+    acceptsTextOnly: true,
+    supportedAspectRatios: ['16:9', '9:16', '1:1'],
   }),
   fromCatalog({
     blockSlug: 'text-to-video',

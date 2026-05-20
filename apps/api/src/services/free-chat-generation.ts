@@ -8,12 +8,14 @@ import * as queues from '../queues';
 export const chatMessageSchema = z.object({
   modelSlug: z.string().trim().min(1),
   prompt: z.string().trim().min(1).max(4000),
-  aspectRatio: z.enum(['1:1', '9:16', '16:9', 'auto']).optional(),
+  aspectRatio: z.enum(['1:1', '9:16', '16:9', '4:3', '3:4', '21:9', '9:21', 'auto']).optional(),
   duration: z.coerce.number().int().min(1).max(30).optional(),
   generateAudio: z.boolean().optional(),
+  params: z.record(z.unknown()).optional(),
   inputRef: z.string().trim().min(1).optional(),
   imageInputRef: z.string().trim().min(1).optional(),
   videoInputRef: z.string().trim().min(1).optional(),
+  audioInputRef: z.string().trim().min(1).optional(),
 });
 
 export type ChatMessageBody = z.infer<typeof chatMessageSchema>;
@@ -21,7 +23,7 @@ export type ChatMessageBody = z.infer<typeof chatMessageSchema>;
 type InputRef = {
   ref: string;
   publicUrl: string;
-  mediaKind: 'image' | 'video';
+  mediaKind: 'image' | 'video' | 'audio';
 };
 
 function isPrismaNotFound(error: unknown): boolean {
@@ -39,15 +41,17 @@ function chatKeyFromRef(value: string) {
   return null;
 }
 
-function mediaKindFromMime(mimeType: string): 'image' | 'video' | null {
+function mediaKindFromMime(mimeType: string): 'image' | 'video' | 'audio' | null {
   if (mimeType.startsWith('image/')) return 'image';
   if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('audio/')) return 'audio';
   return null;
 }
 
-function mediaKindFromKey(key: string): 'image' | 'video' | null {
+function mediaKindFromKey(key: string): 'image' | 'video' | 'audio' | null {
   if (/\.(jpe?g|png|webp)(\?|$)/i.test(key)) return 'image';
   if (/\.(mp4|mov|webm)(\?|$)/i.test(key)) return 'video';
+  if (/\.(mp3|wav|ogg|m4a)(\?|$)/i.test(key)) return 'audio';
   return null;
 }
 
@@ -158,21 +162,23 @@ function buildPipeline(params: {
   duration?: number;
   generateAudio?: boolean;
   audioParam?: 'enable_audio' | 'generate_audio';
+  extraParams?: Record<string, unknown>;
   inputRef: string | null;
 }) {
   const baseParams: Record<string, unknown> = {
     model: params.modelSlug,
     prompt: params.prompt,
     aspect_ratio: params.aspectRatio,
+    ...(params.extraParams ?? {}),
   };
   if (params.duration !== undefined) baseParams.duration = params.duration;
   if (params.generateAudio && params.audioParam) baseParams[params.audioParam] = true;
   if (params.blockSlug === 'image-edit') {
-    baseParams.output_format = 'jpg';
-    baseParams.resolution = '1K';
+    if (baseParams.output_format === undefined) baseParams.output_format = 'jpg';
+    if (baseParams.resolution === undefined) baseParams.resolution = '1K';
   }
-  if (params.blockSlug === 'text-to-video') {
-    baseParams.mode = 'text_to_video';
+  if (params.blockSlug === 'text-to-video' && baseParams.mode === undefined) {
+    baseParams.mode = params.modelSlug.includes('-omni') ? 'omni_reference' : 'text_to_video';
   }
   return [
     {
@@ -186,6 +192,53 @@ function buildPipeline(params: {
 
 function removeUndefined<T extends Record<string, unknown>>(value: T): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined));
+}
+
+function splitListParam(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  if (typeof value === 'string') return value.split(',').map((item) => item.trim()).filter(Boolean);
+  return [];
+}
+
+async function resolveMaybeInputRef(value: unknown, userId: string): Promise<unknown> {
+  if (typeof value !== 'string' || !/^(asset|chat|result):/.test(value)) return value;
+  return (await resolveInputRef(value, userId)).publicUrl;
+}
+
+async function normaliseChatParams(raw: Record<string, unknown> | undefined, userId: string) {
+  const allowed = new Set([
+    'resolution',
+    'quality',
+    'negative_prompt',
+    'tail_image_url',
+    'audio_url',
+    'image_urls',
+    'video_urls',
+    'audio_urls',
+    'seed',
+    'expand_prompt',
+    'shot_type',
+    'watermark',
+    'mode',
+    'output_format',
+    'camera_control',
+    'enable_audio',
+    'generate_audio',
+  ]);
+  const source = raw ?? {};
+  const entries = await Promise.all(Object.entries(source)
+    .filter(([key]) => allowed.has(key))
+    .map(async ([key, value]) => {
+      if (key === 'image_urls' || key === 'video_urls' || key === 'audio_urls') {
+        const resolved = await Promise.all(splitListParam(value).map((item) => resolveMaybeInputRef(item, userId)));
+        return [key, resolved.filter((item): item is string => typeof item === 'string' && item.length > 0)] as const;
+      }
+      return [key, await resolveMaybeInputRef(value, userId)] as const;
+    }));
+  return Object.fromEntries(entries.filter(([, value]) => {
+    if (Array.isArray(value)) return value.length > 0;
+    return value !== undefined && value !== null && value !== '';
+  }));
 }
 
 async function refundQueuedProject(projectId: string, userId: string, tokensCost: number) {
@@ -234,17 +287,24 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   const genericInput = body.inputRef ? await resolveInputRef(body.inputRef, userId) : null;
   const imageInput = body.imageInputRef ? await resolveInputRef(body.imageInputRef, userId) : genericInput?.mediaKind === 'image' ? genericInput : null;
   const videoInput = body.videoInputRef ? await resolveInputRef(body.videoInputRef, userId) : genericInput?.mediaKind === 'video' ? genericInput : null;
+  const audioInput = body.audioInputRef ? await resolveInputRef(body.audioInputRef, userId) : genericInput?.mediaKind === 'audio' ? genericInput : null;
   if (imageInput && imageInput.mediaKind !== 'image') {
     throw new HttpError(400, 'IMAGE_INPUT_REQUIRED', 'Выберите изображение как референс');
   }
   if (videoInput && videoInput.mediaKind !== 'video') {
     throw new HttpError(400, 'VIDEO_INPUT_REQUIRED', 'Выберите видео как референс');
   }
+  if (audioInput && audioInput.mediaKind !== 'audio') {
+    throw new HttpError(400, 'AUDIO_INPUT_REQUIRED', 'Выберите аудио как референс');
+  }
   if (imageInput && !model.acceptsImageInput) {
     throw new HttpError(400, 'IMAGE_INPUT_NOT_SUPPORTED', 'Эта модель работает только с промптом');
   }
   if (videoInput && !model.acceptsVideoInput) {
     throw new HttpError(400, 'VIDEO_INPUT_NOT_SUPPORTED', 'Эта модель не принимает видео-референс');
+  }
+  if (audioInput && !model.acceptsAudioInput) {
+    throw new HttpError(400, 'AUDIO_INPUT_NOT_SUPPORTED', 'Эта модель не принимает аудио-референс');
   }
   if (!model.acceptsTextOnly && model.acceptsImageInput && !imageInput) {
     throw new HttpError(400, 'IMAGE_INPUT_REQUIRED', 'Для этой модели нужно прикрепить изображение');
@@ -253,9 +313,22 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
     throw new HttpError(400, 'VIDEO_INPUT_REQUIRED', 'Для этой модели нужно прикрепить видео');
   }
 
-  const input = imageInput ?? videoInput;
+  const input = imageInput ?? videoInput ?? audioInput;
   const generateAudio = model.supportsAudio && body.generateAudio === true;
-  const tokensCost = estimateChatGenerationCostCoins(model.slug, { duration, generateAudio });
+  const extraParams = await normaliseChatParams(body.params, userId);
+  const paramsWithReferences: Record<string, unknown> = {
+    ...extraParams,
+    ...(model.blockSlug === 'text-to-video' && imageInput && model.acceptsImageInput && !extraParams.image_urls
+      ? { image_urls: [imageInput.publicUrl] }
+      : {}),
+    ...(model.blockSlug === 'text-to-video' && videoInput && model.acceptsVideoInput && !extraParams.video_urls
+      ? { video_urls: [videoInput.publicUrl] }
+      : {}),
+  };
+  const paramsWithAudio = audioInput && model.audioInputParam && !paramsWithReferences[model.audioInputParam]
+    ? { ...paramsWithReferences, [model.audioInputParam]: model.audioInputParam === 'audio_urls' ? [audioInput.publicUrl] : audioInput.publicUrl }
+    : paramsWithReferences;
+  const tokensCost = estimateChatGenerationCostCoins(model.slug, { duration, generateAudio, params: paramsWithAudio });
   const pipelineSnapshot = buildPipeline({
     blockSlug: model.blockSlug,
     modelSlug: model.slug,
@@ -264,6 +337,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
     duration,
     generateAudio,
     audioParam: model.audioParam,
+    extraParams: paramsWithAudio,
     inputRef: input?.ref.startsWith('result:') ? input.publicUrl : input?.ref ?? null,
   });
   const stepProgress = pipelineSnapshot.map((step) => ({
@@ -302,9 +376,11 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
               aspectRatio,
               duration,
               generateAudio: generateAudio || undefined,
+              params: Object.keys(paramsWithAudio).length > 0 ? paramsWithAudio : undefined,
               inputRef: input?.ref,
               imageInputRef: imageInput?.ref,
               videoInputRef: videoInput?.ref,
+              audioInputRef: audioInput?.ref,
               inputPreviewUrl: input?.publicUrl,
             }),
           } as Prisma.InputJsonValue,

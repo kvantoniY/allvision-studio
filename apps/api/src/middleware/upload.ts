@@ -82,7 +82,7 @@ function chatInputFileFilter(
   file: Express.Multer.File,
   cb: multer.FileFilterCallback,
 ) {
-  if (ALLOWED_IMAGE_MIME.has(file.mimetype) || ALLOWED_CHAT_VIDEO_MIME.has(file.mimetype)) {
+  if (ALLOWED_IMAGE_MIME.has(file.mimetype) || ALLOWED_CHAT_VIDEO_MIME.has(file.mimetype) || ALLOWED_AUDIO_MIME.has(file.mimetype)) {
     cb(null, true);
     return;
   }

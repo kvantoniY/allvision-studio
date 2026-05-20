@@ -1,4 +1,5 @@
 import type { BlockCatalogItem, JsonSchemaObject, ModelOption } from './types';
+import { getPiAPIModelCapability } from '../piapi/capabilities';
 
 function objectSchema(
   properties: Record<string, JsonSchemaObject | Record<string, unknown>>,
@@ -15,6 +16,39 @@ function objectSchema(
 function coins(usd: number) {
   if (!Number.isFinite(usd) || usd <= 0) return 0;
   return Math.ceil((usd * 80) / 10) * 10;
+}
+
+function unique<T>(items: T[]): T[] {
+  return [...new Set(items.filter((item) => item !== undefined && item !== null))];
+}
+
+function withPiAPICapability(model: ModelOption): ModelOption {
+  const capability = getPiAPIModelCapability(model.slug);
+  if (!capability) return model;
+  return {
+    ...model,
+    providerModel: model.providerModel ?? capability.providerModel,
+    taskType: model.taskType ?? capability.taskType,
+    docsUrl: model.docsUrl ?? capability.docsUrl,
+    limits: {
+      ...(model.limits ?? {}),
+      ...(capability.duration ? {
+        minDurationSec: capability.duration.minimum,
+        maxDurationSec: capability.duration.maximum,
+      } : {}),
+      ...(capability.aspectRatios ? { aspectRatios: capability.aspectRatios } : {}),
+      ...(capability.resolutions ? { resolutions: capability.resolutions, maxResolution: capability.resolutions[capability.resolutions.length - 1] } : {}),
+      ...(capability.aspectRatios ? { aspectRatios: capability.aspectRatios } : {}),
+      audioMode: capability.audio.mode,
+    },
+    optionalParams: unique([
+      ...(model.optionalParams ?? []),
+      ...capability.params.map((param) => param.key),
+      ...(capability.audio.booleanParam ? [capability.audio.booleanParam] : []),
+      ...(capability.audio.inputParam ? [capability.audio.inputParam] : []),
+      ...(capability.audio.preserveParam ? [capability.audio.preserveParam] : []),
+    ]),
+  };
 }
 
 const modelTierObject: JsonSchemaObject = objectSchema(
@@ -36,7 +70,7 @@ const modelTierObject: JsonSchemaObject = objectSchema(
 const aspectRatioSchema = {
   type: 'string',
   title: 'Формат кадра',
-  enum: ['auto', '9:16', '16:9', '1:1'],
+  enum: ['auto', '9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21'],
   default: 'auto',
   description: 'Формат кадра. auto пытается сохранить пропорции входного фото или видео; 9:16 подходит для Reels/TikTok, 16:9 для горизонтальных роликов, 1:1 для квадратных превью.',
 };
@@ -56,7 +90,7 @@ const promptSchema = {
   description: 'Текстовая инструкция для модели. Хороший prompt коротко описывает действие, камеру, стиль и ограничения, например: subject smiles softly, slow camera push-in, natural light.',
 };
 
-function sourceSelect(kind: 'image' | 'video', label: string, description: string) {
+function sourceSelect(kind: 'image' | 'video' | 'audio', label: string, description: string) {
   return `source-select:${kind}|${label}|${description}`;
 }
 
@@ -72,7 +106,7 @@ const restoreModels: ModelOption[] = [
     limits: { maxFileSize: 'dev/test only' },
     requiredParams: ['image_url'],
   },
-];
+].map((model) => withPiAPICapability(model as ModelOption));
 
 const imageEditModels: ModelOption[] = [
   {
@@ -90,7 +124,7 @@ const imageEditModels: ModelOption[] = [
     optionalParams: ['output_format', 'aspect_ratio', 'resolution'],
     docsUrl: 'https://piapi.ai/docs/gemini-api/nano-banana-2',
   },
-];
+].map((model) => withPiAPICapability(model as ModelOption));
 
 const imageToVideoModels: ModelOption[] = [
   {
@@ -183,7 +217,82 @@ const imageToVideoModels: ModelOption[] = [
     optionalParams: ['duration', 'resolution', 'expand_prompt'],
     docsUrl: 'https://piapi.ai/docs/hailuo-api/image-to-video',
   },
-];
+  {
+    slug: 'veo-3.1-fast-i2v',
+    title: 'Veo 3.1 Fast Image-to-Video',
+    tierHint: 'standard',
+    estimatedCostCoins: coins(0.48),
+    estimatedCostUsd: 0.48,
+    provider: 'piapi',
+    providerModel: 'veo3.1',
+    taskType: 'veo3.1-video-fast',
+    description: 'Fast Veo 3.1 image-to-video через PiAPI. Поддерживает короткие клипы, aspect ratio, negative prompt и опциональную генерацию аудио.',
+    limits: { minDurationSec: 4, maxDurationSec: 8, maxResolution: '720p', resolutions: ['720p'], aspectRatios: ['9:16', '16:9', '1:1'] },
+    requiredParams: ['image_url', 'prompt'],
+    optionalParams: ['duration', 'aspect_ratio', 'negative_prompt', 'tail_image_url', 'generate_audio'],
+    docsUrl: 'https://piapi.ai/docs/veo31-api/image-to-video',
+  },
+  {
+    slug: 'veo-3.1-i2v',
+    title: 'Veo 3.1 Quality Image-to-Video',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.96),
+    estimatedCostUsd: 0.96,
+    provider: 'piapi',
+    providerModel: 'veo3.1',
+    taskType: 'veo3.1-video',
+    description: 'Quality Veo 3.1 image-to-video для более дорогих коротких сцен. Поддерживает 1080p, negative prompt и опциональное аудио.',
+    limits: { minDurationSec: 4, maxDurationSec: 8, maxResolution: '1080p', resolutions: ['1080p'], aspectRatios: ['9:16', '16:9', '1:1'] },
+    requiredParams: ['image_url', 'prompt'],
+    optionalParams: ['duration', 'aspect_ratio', 'negative_prompt', 'tail_image_url', 'generate_audio'],
+    docsUrl: 'https://piapi.ai/docs/veo31-api/image-to-video',
+  },
+  {
+    slug: 'seedance-2-fast-first-last',
+    title: 'Seedance 2 Fast First/Last Frame',
+    tierHint: 'standard',
+    estimatedCostCoins: coins(0.8),
+    estimatedCostUsd: 0.8,
+    provider: 'piapi',
+    providerModel: 'seedance',
+    taskType: 'seedance-2-fast',
+    description: 'Seedance first/last frame mode: стартовый кадр берется из input image, финальный можно передать через tail_image_url.',
+    limits: { minDurationSec: 4, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21'] },
+    requiredParams: ['image_url', 'prompt', 'mode=first_last_frames'],
+    optionalParams: ['duration', 'aspect_ratio', 'resolution', 'tail_image_url', 'seed'],
+    docsUrl: 'https://piapi.ai/docs/seedance-api/seedance-2',
+  },
+  {
+    slug: 'seedance-2-first-last',
+    title: 'Seedance 2 Pro First/Last Frame',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(1),
+    estimatedCostUsd: 1,
+    provider: 'piapi',
+    providerModel: 'seedance',
+    taskType: 'seedance-2',
+    description: 'Pro first/last frame mode Seedance 2 для контролируемого перехода между двумя изображениями.',
+    limits: { minDurationSec: 4, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21'] },
+    requiredParams: ['image_url', 'prompt', 'mode=first_last_frames'],
+    optionalParams: ['duration', 'aspect_ratio', 'resolution', 'tail_image_url', 'seed'],
+    docsUrl: 'https://piapi.ai/docs/seedance-api/seedance-2',
+  },
+  {
+    slug: 'wan-2.6-i2v',
+    title: 'Wan 2.6 Image-to-Video',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.7),
+    estimatedCostUsd: 0.7,
+    provider: 'piapi',
+    providerModel: 'wan',
+    taskType: 'wan26-i2v',
+    description: 'Wan 2.6 image-to-video с расширенными настройками prompt, negative prompt, shot type, audio_url, seed и watermark.',
+    limits: { maxDurationSec: 10, maxResolution: '1080p', resolutions: ['720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1'] },
+    requiredParams: ['image_url', 'prompt'],
+    optionalParams: ['duration', 'aspect_ratio', 'resolution', 'negative_prompt', 'expand_prompt', 'shot_type', 'audio_url', 'watermark', 'seed'],
+    docsUrl: 'https://piapi.ai/docs/wan-api/wan26-image-to-video',
+  },
+].map((model) => withPiAPICapability(model as ModelOption));
 
 const faceSwapModels: ModelOption[] = [
   {
@@ -201,7 +310,7 @@ const faceSwapModels: ModelOption[] = [
     optionalParams: ['estimatedFrames'],
     docsUrl: 'https://piapi.ai/docs/faceswap-api/video-faceswap',
   },
-];
+].map((model) => withPiAPICapability(model as ModelOption));
 
 const textToVideoModels: ModelOption[] = [
   {
@@ -236,7 +345,7 @@ const textToVideoModels: ModelOption[] = [
     providerModel: 'seedance',
     taskType: 'seedance-2-fast',
     description: 'Быстрый text-to-video режим Seedance 2. Используйте для недорогих генераций по промпту, тестовых услуг и вариантов, где скорость важнее максимальной детализации. Результат - ролик из текста, дешевле Pro-режима.',
-    limits: { maxDurationSec: 10, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1'] },
+    limits: { minDurationSec: 4, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1'] },
     requiredParams: ['prompt', 'mode=text_to_video', 'duration', 'aspect_ratio'],
     optionalParams: ['resolution', 'seed'],
     docsUrl: 'https://piapi.ai/docs/seedance-api/seedance-2',
@@ -251,10 +360,70 @@ const textToVideoModels: ModelOption[] = [
     providerModel: 'seedance',
     taskType: 'seedance-2',
     description: 'Качественный text-to-video режим Seedance 2. Используйте для Pro-услуг, когда нужно создать ролик полностью из описания без исходного фото. Результат дороже Fast, но лучше по движению, деталям и стабильности кадра.',
-    limits: { maxDurationSec: 10, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1'] },
+    limits: { minDurationSec: 4, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1'] },
     requiredParams: ['prompt', 'mode=text_to_video', 'duration', 'aspect_ratio'],
     optionalParams: ['resolution', 'seed'],
     docsUrl: 'https://piapi.ai/docs/seedance-api/seedance-2',
+  },
+  {
+    slug: 'seedance-2-fast-omni',
+    title: 'Seedance 2 Fast Omni Reference',
+    tierHint: 'standard',
+    estimatedCostCoins: coins(0.8),
+    estimatedCostUsd: 0.8,
+    provider: 'piapi',
+    providerModel: 'seedance',
+    taskType: 'seedance-2-fast',
+    description: 'Seedance 2 omni-reference mode с image/video/audio references для более управляемой генерации.',
+    limits: { minDurationSec: 4, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21'] },
+    requiredParams: ['prompt', 'mode=omni_reference'],
+    optionalParams: ['duration', 'aspect_ratio', 'resolution', 'image_urls', 'video_urls', 'audio_urls', 'seed'],
+    docsUrl: 'https://piapi.ai/docs/seedance-api/seedance-2',
+  },
+  {
+    slug: 'seedance-2-omni',
+    title: 'Seedance 2 Pro Omni Reference',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(1),
+    estimatedCostUsd: 1,
+    provider: 'piapi',
+    providerModel: 'seedance',
+    taskType: 'seedance-2',
+    description: 'Pro omni-reference mode Seedance 2 с несколькими референсами изображений, видео и аудио.',
+    limits: { minDurationSec: 4, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['480p', '720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21'] },
+    requiredParams: ['prompt', 'mode=omni_reference'],
+    optionalParams: ['duration', 'aspect_ratio', 'resolution', 'image_urls', 'video_urls', 'audio_urls', 'seed'],
+    docsUrl: 'https://piapi.ai/docs/seedance-api/seedance-2',
+  },
+  {
+    slug: 'hailuo-2.3-fast-text',
+    title: 'Hailuo / MiniMax 2.3 Fast Text',
+    tierHint: 'standard',
+    estimatedCostCoins: coins(0.14),
+    estimatedCostUsd: 0.14,
+    provider: 'piapi',
+    providerModel: 'hailuo',
+    taskType: 'video_generation',
+    description: 'Hailuo/MiniMax 2.3 Fast text-to-video через общий PiAPI generate-video endpoint.',
+    limits: { minDurationSec: 6, maxDurationSec: 10, maxResolution: '1080P', resolutions: ['768P', '1080P'] },
+    requiredParams: ['prompt'],
+    optionalParams: ['duration', 'resolution', 'expand_prompt'],
+    docsUrl: 'https://piapi.ai/docs/hailuo-api/generate-video',
+  },
+  {
+    slug: 'hailuo-2.3-text',
+    title: 'Hailuo / MiniMax 2.3 Text',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.23),
+    estimatedCostUsd: 0.23,
+    provider: 'piapi',
+    providerModel: 'hailuo',
+    taskType: 'video_generation',
+    description: 'Hailuo/MiniMax 2.3 text-to-video для альтернативного движения и сцен без входного изображения.',
+    limits: { minDurationSec: 6, maxDurationSec: 10, maxResolution: '1080P', resolutions: ['768P', '1080P'] },
+    requiredParams: ['prompt'],
+    optionalParams: ['duration', 'resolution', 'expand_prompt'],
+    docsUrl: 'https://piapi.ai/docs/hailuo-api/generate-video',
   },
   {
     slug: 'veo-3.1-fast',
@@ -287,18 +456,33 @@ const textToVideoModels: ModelOption[] = [
     docsUrl: 'https://piapi.ai/docs/veo31-api/text-to-video',
   },
   {
+    slug: 'wan-2.6',
+    title: 'Wan 2.6 Text-to-Video',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.7),
+    estimatedCostUsd: 0.7,
+    provider: 'piapi',
+    providerModel: 'wan',
+    taskType: 'wan26-t2v',
+    description: 'Wan 2.6 text-to-video с negative prompt, prompt expansion, shot type, seed, watermark и опциональным audio_url.',
+    limits: { maxDurationSec: 10, maxResolution: '1080p', resolutions: ['720p', '1080p'], aspectRatios: ['9:16', '16:9', '1:1'] },
+    requiredParams: ['prompt'],
+    optionalParams: ['duration', 'aspect_ratio', 'resolution', 'negative_prompt', 'expand_prompt', 'shot_type', 'audio_url', 'watermark', 'seed'],
+    docsUrl: 'https://piapi.ai/docs/wan-api/wan26-text-to-video',
+  },
+  {
     slug: 'sora-2',
     title: 'Sora 2',
     tierHint: 'standard',
     estimatedCostCoins: coins(0.8),
     estimatedCostUsd: 0.8,
     provider: 'piapi',
-    providerModel: 'sora',
-    taskType: 'sora-2',
+    providerModel: 'sora2',
+    taskType: 'sora2-video',
     description: 'Sora 2 для генерации видео из текста через PiAPI. Используйте как альтернативу Seedance/Veo, когда нужен другой стиль движения и сцены. Результат - короткий ролик по prompt, стоимость считается по секундам.',
-    limits: { maxDurationSec: 15, maxResolution: '720p', aspectRatios: ['9:16', '16:9', '1:1'] },
+    limits: { minDurationSec: 4, maxDurationSec: 20, maxResolution: '720p', resolutions: ['720p'], aspectRatios: ['9:16', '16:9'] },
     requiredParams: ['prompt'],
-    optionalParams: ['aspect_ratio', 'duration'],
+    optionalParams: ['aspect_ratio', 'duration', 'resolution'],
     docsUrl: 'https://piapi.ai/docs/sora2-api/text-to-video',
   },
   {
@@ -308,15 +492,15 @@ const textToVideoModels: ModelOption[] = [
     estimatedCostCoins: coins(2.4),
     estimatedCostUsd: 2.4,
     provider: 'piapi',
-    providerModel: 'sora',
-    taskType: 'sora-2-pro',
+    providerModel: 'sora2',
+    taskType: 'sora2-pro-video',
     description: 'Более дорогой Pro-режим Sora 2. Используйте для премиальных текстовых генераций, когда важны детализация и стабильность сцены. Результат дороже стандартного Sora 2, но лучше подходит для финальных Pro-клипов.',
-    limits: { maxDurationSec: 15, maxResolution: '1080p', aspectRatios: ['9:16', '16:9', '1:1'] },
+    limits: { minDurationSec: 4, maxDurationSec: 20, maxResolution: '1080p', resolutions: ['720p', '1080p'], aspectRatios: ['9:16', '16:9'] },
     requiredParams: ['prompt'],
-    optionalParams: ['aspect_ratio', 'duration'],
+    optionalParams: ['aspect_ratio', 'duration', 'resolution'],
     docsUrl: 'https://piapi.ai/docs/sora2-pro-api/text-to-video',
   },
-];
+].map((model) => withPiAPICapability(model as ModelOption));
 
 const motionTransferModels: ModelOption[] = [
   {
@@ -379,7 +563,7 @@ const motionTransferModels: ModelOption[] = [
     optionalParams: ['prompt', 'aspect_ratio', 'duration', 'resolution', 'version=3.0', 'mode=pro'],
     docsUrl: 'https://piapi.ai/docs/kling-api/motion-control',
   },
-];
+].map((model) => withPiAPICapability(model as ModelOption));
 
 export const BLOCK_CATALOG: BlockCatalogItem[] = [
   {
@@ -430,6 +614,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         output_format: { type: 'string', title: 'Формат результата', enum: ['jpg', 'png', 'webp'], default: 'jpg', description: 'Формат результата. jpg обычно дешевле хранить, png лучше для графики, webp экономит размер файла.' },
         aspect_ratio: aspectRatioSchema,
         resolution: { type: 'string', title: 'Разрешение', enum: ['1K', '2K', '4K'], default: '1K', description: 'Разрешение результата Nano Banana 2. 1K дешевле всего; 4K стоит дороже и дольше обрабатывается.' },
+        image_urls: { type: 'array', title: 'Image reference URLs', items: { type: 'string' }, description: 'Optional additional image references for Nano Banana 2.' },
       },
       ['prompt'],
     ),
@@ -451,6 +636,14 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         aspect_ratio: aspectRatioSchema,
         resolution: { type: 'string', title: 'Разрешение', enum: ['720p', '1080p', '768P'], default: '720p', description: 'Разрешение результата, если модель поддерживает выбор. 1080p дороже и медленнее; для Hailuo используйте 768P/1080P.' },
         enable_audio: { type: 'boolean', title: 'Генерировать аудио', default: false, description: 'Включает аудио, если конкретная модель поддерживает это поле. Для Kling 3.0 аудио повышает стоимость.' },
+        generate_audio: { type: 'boolean', title: 'Генерировать аудио', default: false, description: 'Параметр Veo image-to-video: просит модель сгенерировать звук.' },
+        negative_prompt: { type: 'string', title: 'Negative prompt', description: 'Ограничения для моделей Veo/Wan.' },
+        tail_image_url: { type: 'string', title: 'Last frame URL', description: 'Опциональный last-frame URL для Veo/Seedance first-last frame.' },
+        audio_url: { type: 'string', title: 'Audio URL', description: 'Аудио-референс для Wan.' },
+        seed: { type: 'number', title: 'Seed', minimum: 0, maximum: 4294967295 },
+        expand_prompt: { type: 'boolean', title: 'Expand prompt', default: true },
+        shot_type: { type: 'string', title: 'Shot type', enum: ['auto', 'fixed', 'handheld', 'tracking', 'zoom'], default: 'auto' },
+        watermark: { type: 'boolean', title: 'Provider watermark', default: false },
       },
       ['duration'],
     ),
@@ -550,11 +743,20 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
       {
         model: modelTierObject,
         prompt: promptSchema,
-        mode: { type: 'string', title: 'Mode', enum: ['text_to_video'], default: 'text_to_video', description: 'Режим Seedance/PiAPI для генерации из текста. Оставьте text_to_video.' },
+        mode: { type: 'string', title: 'Mode', enum: ['text_to_video', 'omni_reference'], default: 'text_to_video', description: 'Режим Seedance/PiAPI для генерации видео.' },
         duration: durationSchema,
         aspect_ratio: aspectRatioSchema,
         resolution: { type: 'string', title: 'Разрешение', enum: ['480p', '720p', '1080p'], default: '720p', description: 'Разрешение результата. 1080p дороже, 480p дешевле и быстрее.' },
         generate_audio: { type: 'boolean', title: 'Генерировать аудио', default: false, description: 'Просит модель сгенерировать аудио, если провайдер это поддерживает. У Veo 3.1 это повышает себестоимость.' },
+        negative_prompt: { type: 'string', title: 'Negative prompt', description: 'Ограничения для Veo/Wan.' },
+        image_urls: { type: 'array', title: 'Image reference URLs', items: { type: 'string' }, description: 'URL/ref list for Seedance omni-reference.' },
+        video_urls: { type: 'array', title: 'Video reference URLs', items: { type: 'string' }, description: 'URL/ref list for Seedance omni-reference.' },
+        audio_urls: { type: 'array', title: 'Audio reference URLs', items: { type: 'string' }, description: 'URL/ref list for Seedance omni-reference.' },
+        audio_url: { type: 'string', title: 'Audio URL', description: 'Audio reference URL for Wan.' },
+        seed: { type: 'number', title: 'Seed', minimum: 0, maximum: 4294967295 },
+        expand_prompt: { type: 'boolean', title: 'Expand prompt', default: true },
+        shot_type: { type: 'string', title: 'Shot type', enum: ['auto', 'fixed', 'handheld', 'tracking', 'zoom'], default: 'auto' },
+        watermark: { type: 'boolean', title: 'Provider watermark', default: false },
       },
       ['prompt', 'duration'],
     ),

@@ -25,4 +25,33 @@ describe('CHAT_MODELS', () => {
       estimateChatGenerationCostCoins('veo-3.1-fast', { duration: 8, generateAudio: false }),
     );
   });
+
+  it('exposes current PiAPI video capabilities in Allvision AI', () => {
+    const wan = getChatModel('wan-2.6');
+    expect(wan?.acceptsAudioInput).toBe(true);
+    expect(wan?.audioInputParam).toBe('audio_url');
+    expect(wan?.supportedResolutions).toEqual(['720p', '1080p']);
+    expect(wan?.advancedParams.map((param) => param.key)).toEqual(expect.arrayContaining(['negative_prompt', 'audio_url', 'seed']));
+
+    const seedanceOmni = getChatModel('seedance-2-fast-omni');
+    expect(seedanceOmni?.acceptsImageInput).toBe(true);
+    expect(seedanceOmni?.acceptsVideoInput).toBe(true);
+    expect(seedanceOmni?.acceptsAudioInput).toBe(true);
+    expect(seedanceOmni?.audioInputParam).toBe('audio_urls');
+    expect(seedanceOmni?.supportedAspectRatios).toEqual(expect.arrayContaining(['21:9', '9:21']));
+    expect(seedanceOmni?.durationOptions).toEqual([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+
+    const veoI2v = getChatModel('veo-3.1-i2v');
+    expect(veoI2v?.durationOptions).toEqual([4, 6, 8]);
+    expect(veoI2v?.supportedResolutions).toEqual(['1080p']);
+
+    const soraPro = getChatModel('sora-2-pro');
+    expect(soraPro?.supportedResolutions).toEqual(['720p', '1080p']);
+  });
+
+  it('prices advanced resolution choices through chat cost estimation', () => {
+    expect(estimateChatGenerationCostCoins('wan-2.6', { duration: 10, params: { resolution: '1080p' } })).toBeGreaterThan(
+      estimateChatGenerationCostCoins('wan-2.6', { duration: 10, params: { resolution: '720p' } }),
+    );
+  });
 });

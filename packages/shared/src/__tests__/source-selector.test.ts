@@ -17,4 +17,12 @@ describe('source selector parsing', () => {
     });
     expect(parseSourceSelectDescription('Обычное описание')).toBeNull();
   });
+
+  it('parses audio source-select descriptions', () => {
+    expect(parseSourceSelectDescription('source-select:audio|Music|Select an audio reference')).toEqual({
+      mediaKind: 'audio',
+      label: 'Music',
+      description: 'Select an audio reference',
+    });
+  });
 });

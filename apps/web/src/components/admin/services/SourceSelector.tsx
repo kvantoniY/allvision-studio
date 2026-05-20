@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
-import { FilePlus2, ImageIcon, Link2, Upload, UserRound, Video } from 'lucide-react';
+import { FilePlus2, ImageIcon, Link2, Music2, Upload, UserRound, Video } from 'lucide-react';
 import {
   buildAssetSourceValue,
   buildStepSourceValue,
@@ -43,7 +43,20 @@ type SourceSelectorProps = {
 const mediaKinds: Record<SourceMediaKind, { primary: string; extra: string[]; uploadKinds: string[] }> = {
   image: { primary: 'preview-image', extra: [], uploadKinds: ['preview-image'] },
   video: { primary: 'trend-video', extra: [], uploadKinds: ['trend-video'] },
+  audio: { primary: 'music-track', extra: [], uploadKinds: ['music-track'] },
 };
+
+function SourceKindIcon({ mediaKind }: { mediaKind: SourceMediaKind }) {
+  if (mediaKind === 'image') return <ImageIcon className="h-4 w-4 text-slate-400" />;
+  if (mediaKind === 'video') return <Video className="h-4 w-4 text-slate-400" />;
+  return <Music2 className="h-4 w-4 text-slate-400" />;
+}
+
+function sourceKindLabel(mediaKind: SourceMediaKind) {
+  if (mediaKind === 'image') return 'изображение';
+  if (mediaKind === 'video') return 'видео';
+  return 'аудио';
+}
 
 export function SourceSelector({
   value,
@@ -142,10 +155,10 @@ export function SourceSelector({
         )}
       >
         <span className="flex min-w-0 items-center gap-2">
-          {mediaKind === 'image' ? <ImageIcon className="h-4 w-4 text-slate-400" /> : <Video className="h-4 w-4 text-slate-400" />}
+          <SourceKindIcon mediaKind={mediaKind} />
           <span className="truncate">{currentLabel}</span>
         </span>
-        <span className="text-xs text-slate-500">{mediaKind === 'image' ? 'изображение' : 'видео'}</span>
+        <span className="text-xs text-slate-500">{sourceKindLabel(mediaKind)}</span>
       </button>
       {description && <p className="text-xs text-slate-500">{description}</p>}
 
@@ -219,7 +232,7 @@ export function SourceSelector({
             <div className="mt-5 space-y-4">
               <div className="space-y-2">
                 <Label>Файл</Label>
-                <Input type="file" accept={mediaKind === 'image' ? 'image/*' : 'video/*'} onChange={onFileChange} />
+                <Input type="file" accept={mediaKind === 'image' ? 'image/*' : mediaKind === 'video' ? 'video/*' : 'audio/*'} onChange={onFileChange} />
               </div>
               <div className="space-y-2">
                 <Label>Тип библиотеки</Label>
@@ -292,7 +305,11 @@ function AssetPreview({ asset }: { asset: AdminMediaAsset }) {
   if (thumb) return <img src={thumb} alt="" className="h-11 w-11 rounded-md object-cover" />;
   return (
     <div className="flex h-11 w-11 items-center justify-center rounded-md bg-zinc-800">
-      {asset.mimeType.startsWith('video/') ? <Video className="h-5 w-5 text-slate-400" /> : <ImageIcon className="h-5 w-5 text-slate-400" />}
+      {asset.mimeType.startsWith('video/')
+        ? <Video className="h-5 w-5 text-slate-400" />
+        : asset.mimeType.startsWith('audio/')
+          ? <Music2 className="h-5 w-5 text-slate-400" />
+          : <ImageIcon className="h-5 w-5 text-slate-400" />}
     </div>
   );
 }
@@ -317,6 +334,9 @@ function userFieldMatchesMedia(field: UserInputField, mediaKind: SourceMediaKind
   if (mediaKind === 'image') {
     if (field.type === 'photo' || field.type === 'avatar') return true;
     return field.type === 'media-select' && Boolean(field.mediaKind?.includes('image'));
+  }
+  if (mediaKind === 'audio') {
+    return field.type === 'media-select' && Boolean(field.mediaKind?.includes('audio') || field.mediaKind?.includes('music'));
   }
   return field.type === 'media-select' && Boolean(field.mediaKind?.includes('video'));
 }

@@ -123,16 +123,20 @@ export function estimateModelCostUsd(model: ModelOption, params: Record<string, 
     return perFiveSeconds * Math.max(1, Math.ceil(duration / 5));
   }
 
-  if (model.slug === 'hailuo-2.3' || model.slug === 'hailuo-2.3-fast') {
+  if (model.slug === 'hailuo-2.3' || model.slug === 'hailuo-2.3-fast' || model.slug === 'hailuo-2.3-text' || model.slug === 'hailuo-2.3-fast-text') {
     return hailuoCost(model.slug, duration, resolution ?? '768P');
   }
 
-  if (model.slug === 'seedance-2' || model.slug === 'seedance-2-fast') {
+  if (model.slug === 'seedance-2' || model.slug === 'seedance-2-fast' || model.slug === 'seedance-2-omni' || model.slug === 'seedance-2-fast-omni' || model.slug === 'seedance-2-first-last' || model.slug === 'seedance-2-fast-first-last') {
     return duration * seedancePerSecond(model.slug, resolution ?? '720p');
   }
 
-  if (model.slug === 'veo-3.1' || model.slug === 'veo-3.1-fast') {
+  if (model.slug === 'veo-3.1' || model.slug === 'veo-3.1-fast' || model.slug === 'veo-3.1-i2v' || model.slug === 'veo-3.1-fast-i2v') {
     return duration * veoPerSecond(model.slug, generateAudio);
+  }
+
+  if (model.slug === 'wan-2.6' || model.slug === 'wan-2.6-i2v') {
+    return duration * wanPerSecond(resolution ?? '720p');
   }
 
   if (model.slug === 'sora-2' || model.slug === 'sora-2-pro') {
@@ -223,20 +227,26 @@ function booleanValue(value: unknown) {
 function defaultDuration(model: ModelOption) {
   if (model.slug.startsWith('veo-3.1')) return 8;
   if (model.slug.startsWith('hailuo-2.3')) return 6;
+  if (model.slug.startsWith('wan-2.6')) return 5;
   return 5;
 }
 
 function seedancePerSecond(slug: string, resolution: string) {
+  const canonical = slug.includes('fast') ? 'seedance-2-fast' : 'seedance-2';
   const table: Record<string, Record<string, number>> = {
     'seedance-2': { '480p': 0.1, '720p': 0.2, '1080p': 0.5 },
     'seedance-2-fast': { '480p': 0.06, '720p': 0.16, '1080p': 0.35 },
   };
-  return table[slug]?.[resolution] ?? table[slug]?.['720p'] ?? 0;
+  return table[canonical]?.[resolution] ?? table[canonical]?.['720p'] ?? 0;
 }
 
 function veoPerSecond(slug: string, generateAudio: boolean) {
-  if (slug === 'veo-3.1-fast') return generateAudio ? 0.09 : 0.06;
-  return generateAudio ? 0.4 : 0.15;
+  if (slug === 'veo-3.1-fast' || slug === 'veo-3.1-fast-i2v') return generateAudio ? 0.09 : 0.06;
+  return generateAudio ? 0.24 : 0.12;
+}
+
+function wanPerSecond(resolution: string) {
+  return resolution === '1080p' ? 0.12 : 0.07;
 }
 
 function kling3UnitCost(slug: string, resolution: string, enableAudio: boolean) {
@@ -246,7 +256,8 @@ function kling3UnitCost(slug: string, resolution: string, enableAudio: boolean) 
 }
 
 function hailuoCost(slug: string, duration: number, resolution: string) {
-  const key = `${slug}:${resolution}:${duration}`;
+  const canonical = slug.includes('fast') ? 'hailuo-2.3-fast' : 'hailuo-2.3';
+  const key = `${canonical}:${resolution}:${duration}`;
   const table: Record<string, number> = {
     'hailuo-2.3:768P:6': 0.23,
     'hailuo-2.3:1080P:6': 0.68,

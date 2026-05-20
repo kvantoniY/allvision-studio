@@ -42,13 +42,23 @@ const NANO_BANANA_COST_USD: Record<string, number> = {
   '2K': 0.08,
   '4K': 0.12,
 };
-const SUPPORTED_ASPECT_RATIOS = new Set(['9:16', '16:9', '1:1']);
+const SUPPORTED_ASPECT_RATIOS = new Set(['9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21']);
 const HAILUO_MODELS = new Set(['hailuo-2.3', 'hailuo-2.3-fast']);
+const VEO_IMAGE_TO_VIDEO_MODELS = new Set(['veo-3.1-i2v', 'veo-3.1-fast-i2v']);
+const SEEDANCE_IMAGE_TO_VIDEO_MODELS = new Set(['seedance-2-first-last', 'seedance-2-fast-first-last']);
+const WAN_IMAGE_TO_VIDEO_MODELS = new Set(['wan-2.6-i2v']);
 const TEXT_TO_VIDEO_MODELS = new Set([
   'seedance-2',
   'seedance-2-fast',
+  'seedance-2-omni',
+  'seedance-2-fast-omni',
+  'hailuo-2.3',
+  'hailuo-2.3-fast',
+  'hailuo-2.3-text',
+  'hailuo-2.3-fast-text',
   'veo-3.1',
   'veo-3.1-fast',
+  'wan-2.6',
   'sora-2',
   'sora-2-pro',
 ]);
@@ -121,6 +131,7 @@ export class PiAPIProvider implements AIProvider {
     try {
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
       const published = input.imageUrl ? await this.publisher.publishImageUrl(input.imageUrl, 1) : undefined;
+      const extraImageUrls = readStringList(input.params, 'image_urls');
       const payload = {
         model: 'gemini',
         task_type: 'nano-banana-2',
@@ -128,7 +139,7 @@ export class PiAPIProvider implements AIProvider {
           prompt: input.prompt,
           output_format: readString(input.params, 'output_format') ?? 'jpg',
           resolution,
-          ...(published ? { image_urls: [published.publicUrl] } : {}),
+          ...(published || extraImageUrls.length > 0 ? { image_urls: [...(published ? [published.publicUrl] : []), ...extraImageUrls] } : {}),
           ...(aspectRatio && aspectRatio !== 'auto' ? { aspect_ratio: aspectRatio } : {}),
         },
       };
@@ -176,7 +187,12 @@ export class PiAPIProvider implements AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
     const klingModel = KLING_PRICE_5S[input.model];
-    if (!klingModel && !HAILUO_MODELS.has(input.model)) {
+    const supported = klingModel
+      || HAILUO_MODELS.has(input.model)
+      || VEO_IMAGE_TO_VIDEO_MODELS.has(input.model)
+      || SEEDANCE_IMAGE_TO_VIDEO_MODELS.has(input.model)
+      || WAN_IMAGE_TO_VIDEO_MODELS.has(input.model);
+    if (!supported) {
       throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported image-to-video model: ${input.model}`);
     }
     const estimatedCost = estimatedCostForModel(input.model, {
@@ -191,34 +207,13 @@ export class PiAPIProvider implements AIProvider {
     try {
       const published = await this.publisher.publishImageUrl(input.imageUrl, 1);
       const aspectRatio = await this.resolveImageAspectRatio(input.imageUrl, input.params);
-      const payload = klingModel
-        ? {
-            model: 'kling',
-            task_type: 'video_generation',
-            input: {
-              mode: klingModel.mode,
-              duration: input.durationSec,
-              image_url: published.publicUrl,
-              prompt: input.prompt ?? '',
-              negative_prompt: '',
-              ...(klingModel.version ? { version: klingModel.version } : {}),
-              ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
-              ...(readBoolean(input.params, 'enable_audio') !== undefined ? { enable_audio: readBoolean(input.params, 'enable_audio') } : {}),
-              ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
-            },
-          }
-        : {
-            model: 'hailuo',
-            task_type: 'video_generation',
-            input: {
-              prompt: input.prompt ?? '',
-              image_url: published.publicUrl,
-              model: input.model === 'hailuo-2.3-fast' ? 'v2.3-fast' : 'v2.3',
-              duration: input.durationSec <= 6 ? 6 : 10,
-              resolution: normalizeHailuoResolution(readString(input.params, 'resolution')),
-              expand_prompt: readBoolean(input.params, 'expand_prompt') ?? true,
-            },
-          };
+      const payload = buildImageToVideoPayload(input.model, {
+        prompt: input.prompt ?? '',
+        durationSec: input.durationSec,
+        imageUrl: published.publicUrl,
+        aspectRatio,
+        params: input.params,
+      });
       const created = await this.client.createTask(payload);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
@@ -280,6 +275,7 @@ export class PiAPIProvider implements AIProvider {
         aspectRatio,
         resolution: readString(input.params, 'resolution'),
         generateAudio: readBoolean(input.params, 'generate_audio') ?? false,
+        params: input.params,
       });
       const created = await this.client.createTask(payload);
       taskId = created.taskId;
@@ -416,6 +412,7 @@ export class PiAPIProvider implements AIProvider {
           mode: isPro ? 'pro' : 'std',
           ...(isV3 ? { version: '3.0' } : {}),
           ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
+          ...(readBoolean(input.params, 'keep_original_sound') !== undefined ? { keep_original_sound: readBoolean(input.params, 'keep_original_sound') } : {}),
           ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
         },
       };
@@ -632,10 +629,10 @@ function readBoolean(source: Record<string, unknown> | undefined, key: string): 
   return undefined;
 }
 
-function normalizeAspectRatio(value: string | undefined): 'auto' | '9:16' | '16:9' | '1:1' | undefined {
+function normalizeAspectRatio(value: string | undefined): string | undefined {
   if (!value) return undefined;
   if (value === 'auto' || value === 'input') return 'auto';
-  return SUPPORTED_ASPECT_RATIOS.has(value) ? value as '9:16' | '16:9' | '1:1' : undefined;
+  return SUPPORTED_ASPECT_RATIOS.has(value) ? value : undefined;
 }
 
 function normalizeHailuoResolution(value: string | undefined): '768P' | '1080P' {
@@ -655,52 +652,239 @@ function estimatedCostForModel(slug: string, params: Record<string, unknown>, fa
   return estimated > 0 ? estimated : fallback;
 }
 
+function readStringList(source: Record<string, unknown> | undefined, key: string): string[] {
+  const value = source?.[key];
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+  }
+  if (typeof value === 'string') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function optionalSeed(source: Record<string, unknown> | undefined): number | undefined {
+  const value = source?.seed;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value)) return Number(value);
+  return undefined;
+}
+
+function providerAspectRatio(value: string | undefined, fallback = '16:9') {
+  return value && value !== 'auto' ? value : fallback;
+}
+
+function hailuoModelSlug(model: string) {
+  return model.includes('fast') ? 'v2.3-fast' : 'v2.3';
+}
+
+function boundedHailuoDuration(durationSec: number) {
+  return durationSec <= 6 ? 6 : 10;
+}
+
+function veoTaskType(model: string) {
+  return model.includes('fast') ? 'veo3.1-video-fast' : 'veo3.1-video';
+}
+
+function seedanceTaskType(model: string) {
+  return model.includes('fast') ? 'seedance-2-fast' : 'seedance-2';
+}
+
+function buildImageToVideoPayload(
+  model: string,
+  input: {
+    prompt: string;
+    durationSec: number;
+    imageUrl: string;
+    aspectRatio?: string;
+    params?: Record<string, unknown>;
+  },
+) {
+  const klingModel = KLING_PRICE_5S[model];
+  if (klingModel) {
+    return {
+      model: 'kling',
+      task_type: 'video_generation',
+      input: {
+        mode: klingModel.mode,
+        duration: input.durationSec,
+        image_url: input.imageUrl,
+        prompt: input.prompt,
+        negative_prompt: readString(input.params, 'negative_prompt') ?? '',
+        ...(klingModel.version ? { version: klingModel.version } : {}),
+        ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
+        ...(readString(input.params, 'camera_control') ? { camera_control: readString(input.params, 'camera_control') } : {}),
+        ...(readBoolean(input.params, 'enable_audio') !== undefined ? { enable_audio: readBoolean(input.params, 'enable_audio') } : {}),
+        ...(input.aspectRatio ? { aspect_ratio: input.aspectRatio } : {}),
+      },
+    };
+  }
+
+  if (HAILUO_MODELS.has(model)) {
+    return {
+      model: 'hailuo',
+      task_type: 'video_generation',
+      input: {
+        prompt: input.prompt,
+        image_url: input.imageUrl,
+        model: hailuoModelSlug(model),
+        duration: boundedHailuoDuration(input.durationSec),
+        resolution: normalizeHailuoResolution(readString(input.params, 'resolution')),
+        expand_prompt: readBoolean(input.params, 'expand_prompt') ?? true,
+      },
+    };
+  }
+
+  if (VEO_IMAGE_TO_VIDEO_MODELS.has(model)) {
+    return {
+      model: 'veo3.1',
+      task_type: veoTaskType(model),
+      input: {
+        prompt: input.prompt,
+        image_url: input.imageUrl,
+        duration: `${input.durationSec}s`,
+        aspect_ratio: providerAspectRatio(input.aspectRatio),
+        generate_audio: readBoolean(input.params, 'generate_audio') ?? false,
+        ...(readString(input.params, 'resolution') ? { resolution: readString(input.params, 'resolution') } : {}),
+        ...(readString(input.params, 'negative_prompt') ? { negative_prompt: readString(input.params, 'negative_prompt') } : {}),
+        ...(readString(input.params, 'tail_image_url') ? { tail_image_url: readString(input.params, 'tail_image_url') } : {}),
+      },
+    };
+  }
+
+  if (SEEDANCE_IMAGE_TO_VIDEO_MODELS.has(model)) {
+    const tailImageUrl = readString(input.params, 'tail_image_url');
+    return {
+      model: 'seedance',
+      task_type: seedanceTaskType(model),
+      input: {
+        prompt: input.prompt,
+        mode: 'first_last_frames',
+        image_urls: tailImageUrl ? [input.imageUrl, tailImageUrl] : [input.imageUrl],
+        duration: input.durationSec,
+        aspect_ratio: providerAspectRatio(input.aspectRatio),
+        resolution: readString(input.params, 'resolution') ?? '720p',
+        ...(optionalSeed(input.params) !== undefined ? { seed: optionalSeed(input.params) } : {}),
+      },
+    };
+  }
+
+  return {
+    model: 'wan',
+    task_type: 'wan26-i2v',
+    input: {
+      prompt: input.prompt,
+      image_url: input.imageUrl,
+      duration: input.durationSec,
+      aspect_ratio: providerAspectRatio(input.aspectRatio),
+      resolution: readString(input.params, 'resolution') ?? '720p',
+      ...(readString(input.params, 'negative_prompt') ? { negative_prompt: readString(input.params, 'negative_prompt') } : {}),
+      ...(readBoolean(input.params, 'expand_prompt') !== undefined ? { prompt_extend: readBoolean(input.params, 'expand_prompt') } : {}),
+      ...(readString(input.params, 'shot_type') ? { shot_type: readString(input.params, 'shot_type') } : {}),
+      ...(readString(input.params, 'audio_url') ? { audio_url: readString(input.params, 'audio_url') } : {}),
+      ...(readBoolean(input.params, 'watermark') !== undefined ? { watermark: readBoolean(input.params, 'watermark') } : {}),
+      ...(optionalSeed(input.params) !== undefined ? { seed: optionalSeed(input.params) } : {}),
+    },
+  };
+}
+
 function buildTextToVideoPayload(
   model: string,
   input: {
     prompt: string;
     durationSec: number;
-    aspectRatio?: 'auto' | '9:16' | '16:9' | '1:1';
+    aspectRatio?: string;
     resolution?: string;
     generateAudio: boolean;
+    params?: Record<string, unknown>;
   },
 ) {
-  if (model === 'seedance-2' || model === 'seedance-2-fast') {
+  if (model.startsWith('seedance-2')) {
+    const isOmni = model.endsWith('-omni') || readString(input.params, 'mode') === 'omni_reference';
+    const imageUrls = readStringList(input.params, 'image_urls');
+    const videoUrls = readStringList(input.params, 'video_urls');
+    const audioUrls = readStringList(input.params, 'audio_urls');
     return {
       model: 'seedance',
-      task_type: model,
+      task_type: seedanceTaskType(model),
       input: {
         prompt: input.prompt,
-        mode: 'text_to_video',
+        mode: isOmni ? 'omni_reference' : 'text_to_video',
         duration: input.durationSec,
-        aspect_ratio: input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : '16:9',
+        aspect_ratio: providerAspectRatio(input.aspectRatio),
         resolution: input.resolution ?? '720p',
+        ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
+        ...(videoUrls.length > 0 ? { video_urls: videoUrls } : {}),
+        ...(audioUrls.length > 0 ? { audio_urls: audioUrls } : {}),
+        ...(optionalSeed(input.params) !== undefined ? { seed: optionalSeed(input.params) } : {}),
+      },
+    };
+  }
+
+  if (model.startsWith('hailuo-2.3')) {
+    return {
+      model: 'hailuo',
+      task_type: 'video_generation',
+      input: {
+        prompt: input.prompt,
+        model: hailuoModelSlug(model),
+        duration: boundedHailuoDuration(input.durationSec),
+        resolution: normalizeHailuoResolution(input.resolution),
+        expand_prompt: readBoolean(input.params, 'expand_prompt') ?? true,
       },
     };
   }
 
   if (model === 'veo-3.1' || model === 'veo-3.1-fast') {
     return {
-      model: 'veo',
-      task_type: model === 'veo-3.1-fast' ? 'veo3.1-fast-generate-preview' : 'veo3.1-generate-preview',
+      model: 'veo3.1',
+      task_type: veoTaskType(model),
       input: {
         prompt: input.prompt,
-        aspect_ratio: input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : '16:9',
+        duration: `${input.durationSec}s`,
+        aspect_ratio: providerAspectRatio(input.aspectRatio),
         generate_audio: input.generateAudio,
+        ...(input.resolution ? { resolution: input.resolution } : {}),
+        ...(readString(input.params, 'negative_prompt') ? { negative_prompt: readString(input.params, 'negative_prompt') } : {}),
+      },
+    };
+  }
+
+  if (model === 'wan-2.6') {
+    return {
+      model: 'wan',
+      task_type: 'wan26-t2v',
+      input: {
+        prompt: input.prompt,
+        duration: input.durationSec,
+        aspect_ratio: providerAspectRatio(input.aspectRatio),
+        resolution: input.resolution ?? '720p',
+        ...(readString(input.params, 'negative_prompt') ? { negative_prompt: readString(input.params, 'negative_prompt') } : {}),
+        ...(readBoolean(input.params, 'expand_prompt') !== undefined ? { prompt_extend: readBoolean(input.params, 'expand_prompt') } : {}),
+        ...(readString(input.params, 'shot_type') ? { shot_type: readString(input.params, 'shot_type') } : {}),
+        ...(readString(input.params, 'audio_url') ? { audio_url: readString(input.params, 'audio_url') } : {}),
+        ...(readBoolean(input.params, 'watermark') !== undefined ? { watermark: readBoolean(input.params, 'watermark') } : {}),
+        ...(optionalSeed(input.params) !== undefined ? { seed: optionalSeed(input.params) } : {}),
       },
     };
   }
 
   return {
-    model: model === 'sora-2-pro' ? 'sora2-pro' : 'sora2',
+    model: 'sora2',
     task_type: model === 'sora-2-pro' ? 'sora2-pro-video' : 'sora2-video',
     input: {
       prompt: input.prompt,
       duration: input.durationSec,
-      aspect_ratio: input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : '16:9',
+      aspect_ratio: providerAspectRatio(input.aspectRatio),
+      ...(input.resolution ? { resolution: input.resolution } : {}),
     },
   };
 }
+
+export const __piapiPayloadBuildersForTests = {
+  buildImageToVideoPayload,
+  buildTextToVideoPayload,
+};
 
 function aspectRatioFromDimensions(width: number, height: number): '9:16' | '16:9' | '1:1' {
   const ratio = width / height;
