@@ -46,8 +46,9 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BlockCatalogItem, JsonSchemaObject, ModelOption, PiAPIParamCapability, SourceMediaKind } from '@allvision/shared';
+import type { BlockCatalogItem, JsonSchemaObject, ModelOption, ModelPriceOverrides, PiAPIParamCapability, SourceMediaKind } from '@allvision/shared';
 import {
+  applyModelPriceOverride,
   formatMoney,
   formatAdminServiceValidationError,
   getPiAPIModelCapability,
@@ -75,7 +76,7 @@ import {
   useTestRunAdminServiceMutation,
   useUpdateAdminServiceMutation,
 } from '@/store/api/admin-services-api';
-import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
+import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '@/store/api/admin-settings-api';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { SourceSelector, type AvailableSourceStep } from './SourceSelector';
 
@@ -246,6 +247,14 @@ function preferredModel(models: ModelOption[], tier: 'standard' | 'pro') {
 
 function modelBySlug(models: ModelOption[], slug: unknown) {
   return typeof slug === 'string' ? models.find((model) => model.slug === slug) : undefined;
+}
+
+function minimumModelPriceCoins(model: ModelOption) {
+  return Math.max(0, model.estimatedCostCoins ?? 0);
+}
+
+function effectiveModelPriceCoins(model: ModelOption, overrides?: ModelPriceOverrides) {
+  return applyModelPriceOverride(model.slug, minimumModelPriceCoins(model), overrides);
 }
 
 function modelParamKey(value: string) {
@@ -681,11 +690,79 @@ function SourceListParamField({
   );
 }
 
+function ModelPriceEditor({
+  model,
+  usdToRub,
+  overrides,
+  onSave,
+  disabled,
+}: {
+  model: ModelOption;
+  usdToRub: number;
+  overrides?: ModelPriceOverrides;
+  onSave: (slug: string, priceCoins: number) => Promise<void>;
+  disabled?: boolean;
+}) {
+  const minimum = minimumModelPriceCoins(model);
+  const effective = effectiveModelPriceCoins(model, overrides);
+  const [draft, setDraft] = useState(String(effective));
+
+  useEffect(() => {
+    setDraft(String(effective));
+  }, [effective]);
+
+  const parsed = Number(draft);
+  const nextPrice = Number.isFinite(parsed) ? Math.max(minimum, Math.ceil(parsed)) : minimum;
+  const changed = nextPrice !== effective;
+
+  return (
+    <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-900 p-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[180px] flex-1 space-y-1">
+          <Label htmlFor={`model-price-${model.slug}`}>Цена генерации, токены</Label>
+          <Input
+            id={`model-price-${model.slug}`}
+            type="number"
+            min={minimum}
+            step={1}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={() => setDraft(String(nextPrice))}
+          />
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || !changed}
+          onClick={() => onSave(model.slug, nextPrice)}
+        >
+          Сохранить цену
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={disabled || effective === minimum}
+          onClick={() => onSave(model.slug, minimum)}
+        >
+          Сбросить
+        </Button>
+      </div>
+      <div className="mt-2 text-xs text-slate-500">
+        Минимум {formatMoney({ coins: minimum }, { primary: 'coins', showAll: true, usdToRub })}
+        {model.estimatedCostUsd ? ` · себестоимость ${formatMoney({ usd: model.estimatedCostUsd }, { primary: 'usd', showAll: true, usdToRub })}` : ''}
+      </div>
+    </div>
+  );
+}
+
 function BlockParamsForm({
   block,
   value,
   onChange,
   usdToRub,
+  modelPriceOverrides,
+  onModelPriceChange,
+  modelPriceSaving,
   userInputFields,
   availableSteps,
 }: {
@@ -693,6 +770,9 @@ function BlockParamsForm({
   value: Record<string, unknown>;
   onChange: (value: Record<string, unknown>) => void;
   usdToRub: number;
+  modelPriceOverrides?: ModelPriceOverrides;
+  onModelPriceChange: (slug: string, priceCoins: number) => Promise<void>;
+  modelPriceSaving?: boolean;
   userInputFields: UserInputField[];
   availableSteps: AvailableSourceStep[];
 }) {
@@ -744,10 +824,17 @@ function BlockParamsForm({
           {selectedModels.map((model) => (
             <div key={model.slug} className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
               <div className="font-medium text-slate-100">
-                {model.title} · {providerLabel(model.provider)} · {formatMoney({ coins: model.estimatedCostCoins }, { primary: 'coins', showAll: true, usdToRub })}
+                {model.title} · {providerLabel(model.provider)} · цена {formatMoney({ coins: effectiveModelPriceCoins(model, modelPriceOverrides) }, { primary: 'coins', showAll: true, usdToRub })}
                 {model.estimatedCostUsd ? ` · ${formatMoney({ usd: model.estimatedCostUsd }, { primary: 'usd', showAll: true, usdToRub })}` : ''}
               </div>
               {model.description && <p className="mt-2 text-slate-400">{model.description}</p>}
+              <ModelPriceEditor
+                model={model}
+                usdToRub={usdToRub}
+                overrides={modelPriceOverrides}
+                onSave={onModelPriceChange}
+                disabled={modelPriceSaving}
+              />
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {model.limits && (
                   <div>
@@ -804,7 +891,7 @@ function BlockParamsForm({
                     >
                       {block.supportedModels.map((model) => (
                         <option key={model.slug} value={model.slug}>
-                          {model.title} · ~{model.estimatedCostCoins} токенов
+                          {model.title} · {effectiveModelPriceCoins(model, modelPriceOverrides)} токенов
                         </option>
                       ))}
                     </select>
@@ -922,12 +1009,18 @@ function PipelineBuilder({
   blocks,
   onChange,
   usdToRub,
+  modelPriceOverrides,
+  onModelPriceChange,
+  modelPriceSaving,
 }: {
   steps: PipelineStep[];
   fields: UserInputField[];
   blocks: BlockCatalogItem[] | undefined;
   onChange: (steps: PipelineStep[]) => void;
   usdToRub: number;
+  modelPriceOverrides?: ModelPriceOverrides;
+  onModelPriceChange: (slug: string, priceCoins: number) => Promise<void>;
+  modelPriceSaving?: boolean;
 }) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const sensors = useSensors(
@@ -1056,6 +1149,9 @@ function PipelineBuilder({
                                   value={params}
                                   onChange={(value) => updateStep(index, { params: value })}
                                   usdToRub={usdToRub}
+                                  modelPriceOverrides={modelPriceOverrides}
+                                  onModelPriceChange={onModelPriceChange}
+                                  modelPriceSaving={modelPriceSaving}
                                   userInputFields={fields}
                                   availableSteps={sourceSteps}
                                 />
@@ -1441,8 +1537,10 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const [updateService, updateState] = useUpdateAdminServiceMutation();
   const [testRun, testRunState] = useTestRunAdminServiceMutation();
   const settings = useGetAdminSettingsQuery();
+  const [updateSettings, updateSettingsState] = useUpdateAdminSettingsMutation();
   const blocks = blocksData?.blocks;
   const usdToRub = settings.data?.settings.usdToRub ?? 80;
+  const modelPriceOverrides = settings.data?.settings.modelPriceOverrides ?? {};
   const isCreate = mode === 'create';
   const isBusy = createState.isLoading || updateState.isLoading;
   const errors = useMemo(() => validationErrors(draft.pipelineConfig, draft.userInputForm), [draft.pipelineConfig, draft.userInputForm]);
@@ -1561,6 +1659,20 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
       setTestGenerationId(result.generationId);
     } catch (error) {
       toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const saveModelPrice = async (slug: string, priceCoins: number) => {
+    try {
+      await updateSettings({
+        modelPriceOverrides: {
+          ...modelPriceOverrides,
+          [slug]: priceCoins,
+        },
+      }).unwrap();
+      toast({ title: 'Цена модели сохранена' });
+    } catch {
+      toast({ title: 'Не удалось сохранить цену модели', variant: 'destructive' });
     }
   };
 
@@ -1718,6 +1830,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           blocks={blocks}
           onChange={(pipelineConfig) => updateDraft({ pipelineConfig })}
           usdToRub={usdToRub}
+          modelPriceOverrides={modelPriceOverrides}
+          onModelPriceChange={saveModelPrice}
+          modelPriceSaving={updateSettingsState.isLoading}
         />
       </Section>
 

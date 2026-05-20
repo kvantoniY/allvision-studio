@@ -1,8 +1,10 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
+import type { ModelPriceOverrides } from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 
 export type AdminSettings = {
   usdToRub: number;
+  modelPriceOverrides: ModelPriceOverrides;
 };
 
 export const adminSettingsApi = createApi({

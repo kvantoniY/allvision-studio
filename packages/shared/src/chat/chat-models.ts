@@ -5,6 +5,7 @@ import { capabilityDurationOptions, getPiAPIModelCapability, type PiAPIParamCapa
 
 export type ChatCategory = 'image' | 'video';
 export type ChatAspectRatio = '1:1' | '9:16' | '16:9' | '4:3' | '3:4' | '21:9' | '9:21' | 'auto';
+export type ModelPriceOverrides = Record<string, number>;
 
 export interface ChatModelOption {
   slug: string;
@@ -136,6 +137,23 @@ export function estimateChatGenerationCostCoins(
     params[chatModel.audioParam] = true;
   }
   return costUsdToCoins(estimateModelCostUsd(catalogModel, params));
+}
+
+export function applyModelPriceOverride(modelSlug: string, costCoins: number, priceOverrides?: ModelPriceOverrides) {
+  const override = priceOverrides?.[modelSlug];
+  if (typeof override !== 'number' || !Number.isFinite(override)) return costCoins;
+  return Math.max(costCoins, Math.ceil(override));
+}
+
+export function estimateChatGenerationPriceCoins(
+  modelSlug: string,
+  options: { duration?: number; generateAudio?: boolean; params?: Record<string, unknown>; priceOverrides?: ModelPriceOverrides } = {},
+) {
+  return applyModelPriceOverride(
+    modelSlug,
+    estimateChatGenerationCostCoins(modelSlug, options),
+    options.priceOverrides,
+  );
 }
 
 export const CHAT_MODELS: ChatModelOption[] = [

@@ -1,9 +1,10 @@
 import { Prisma, prisma } from '@allvision/database';
-import { estimateChatGenerationCostCoins, getChatModel, type ChatAspectRatio } from '@allvision/shared';
+import { estimateChatGenerationPriceCoins, getChatModel, type ChatAspectRatio } from '@allvision/shared';
 import { z } from 'zod';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
 import * as queues from '../queues';
+import { readModelPriceOverrides } from './model-pricing';
 
 export const chatMessageSchema = z.object({
   modelSlug: z.string().trim().min(1),
@@ -328,7 +329,12 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   const paramsWithAudio = audioInput && model.audioInputParam && !paramsWithReferences[model.audioInputParam]
     ? { ...paramsWithReferences, [model.audioInputParam]: model.audioInputParam === 'audio_urls' ? [audioInput.publicUrl] : audioInput.publicUrl }
     : paramsWithReferences;
-  const tokensCost = estimateChatGenerationCostCoins(model.slug, { duration, generateAudio, params: paramsWithAudio });
+  const tokensCost = estimateChatGenerationPriceCoins(model.slug, {
+    duration,
+    generateAudio,
+    params: paramsWithAudio,
+    priceOverrides: await readModelPriceOverrides(),
+  });
   const pipelineSnapshot = buildPipeline({
     blockSlug: model.blockSlug,
     modelSlug: model.slug,

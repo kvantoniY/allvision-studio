@@ -1,5 +1,5 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
-import type { ProjectStatus } from '@allvision/shared';
+import type { ChatModelOption, ModelPriceOverrides, ProjectStatus } from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 import { authApi } from './auth-api';
 import { projectsApi } from './projects-api';
@@ -91,11 +91,20 @@ export type ChatUploadResponse = {
   };
 };
 
+export type ChatModelsResponse = {
+  models: ChatModelOption[];
+  modelPriceOverrides: ModelPriceOverrides;
+};
+
 export const userChatApi = createApi({
   reducerPath: 'userChatApi',
   baseQuery: createBaseQueryWithReauth('/api/user'),
-  tagTypes: ['Chats', 'Chat'],
+  tagTypes: ['Chats', 'Chat', 'ChatModels'],
   endpoints: (build) => ({
+    getChatModels: build.query<ChatModelsResponse, void>({
+      query: () => ({ url: '/chat/models' }),
+      providesTags: ['ChatModels'],
+    }),
     listChats: build.query<ChatsResponse, { limit?: number; offset?: number } | void>({
       query: (q) => {
         const params = new URLSearchParams();
@@ -140,6 +149,7 @@ export const {
   useListChatsQuery,
   useCreateChatMutation,
   useGetChatQuery,
+  useGetChatModelsQuery,
   useRenameChatMutation,
   useDeleteChatMutation,
   useCreateChatMessageMutation,

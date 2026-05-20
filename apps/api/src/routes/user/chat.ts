@@ -4,13 +4,18 @@ import { requireAuth } from '../../middleware/auth';
 import { uploadChatInput as uploadChatInputMiddleware } from '../../middleware/upload';
 import { HttpError } from '../../utils/http-error';
 import * as fileService from '../../services/file-service';
+import { readModelPriceOverrides } from '../../services/model-pricing';
 
 export const userChatRouter = Router();
 
 userChatRouter.use(requireAuth);
 
-userChatRouter.get('/models', (_req: Request, res: Response) => {
-  res.json({ models: listChatModels() });
+userChatRouter.get('/models', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ models: listChatModels(), modelPriceOverrides: await readModelPriceOverrides() });
+  } catch (err) {
+    next(err);
+  }
 });
 
 userChatRouter.post('/upload', uploadChatInputMiddleware, async (req: Request, res: Response, next: NextFunction) => {

@@ -1,5 +1,5 @@
 import { BLOCK_CATALOG } from '../blocks/catalog';
-import { CHAT_MODELS, estimateChatGenerationCostCoins, getChatModel } from '../chat/chat-models';
+import { CHAT_MODELS, estimateChatGenerationCostCoins, estimateChatGenerationPriceCoins, getChatModel } from '../chat/chat-models';
 
 describe('CHAT_MODELS', () => {
   it('points every chat model at an existing catalog block and model', () => {
@@ -53,5 +53,11 @@ describe('CHAT_MODELS', () => {
     expect(estimateChatGenerationCostCoins('wan-2.6', { duration: 10, params: { resolution: '1080p' } })).toBeGreaterThan(
       estimateChatGenerationCostCoins('wan-2.6', { duration: 10, params: { resolution: '720p' } }),
     );
+  });
+
+  it('applies admin model prices without going below model cost', () => {
+    const base = estimateChatGenerationCostCoins('nano-banana');
+    expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': base + 50 } })).toBe(base + 50);
+    expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(base);
   });
 });

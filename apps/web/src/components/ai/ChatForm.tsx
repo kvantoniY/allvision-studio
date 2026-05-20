@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { AlertTriangle, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, Video, Volume2, VolumeX, X } from 'lucide-react';
-import { CHAT_MODELS, estimateChatGenerationCostCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type PiAPIParamCapability } from '@allvision/shared';
+import { CHAT_MODELS, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
-import { useCreateChatMessageMutation } from '@/store/api/user-chat-api';
+import { useCreateChatMessageMutation, useGetChatModelsQuery } from '@/store/api/user-chat-api';
 import { InputSourcePicker, type SelectedInputSource } from './InputSourcePicker';
 
 type ChatFormProps = {
@@ -100,6 +100,7 @@ function sourceListValue(value: ChatAdvancedParams[string]): string[] {
 
 export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, onReferenceConsumed, onPromptConsumed }: ChatFormProps) {
   const me = useGetMeQuery();
+  const modelPricing = useGetChatModelsQuery();
   const [createMessage, createMessageState] = useCreateChatMessageMutation();
   const [category, setCategory] = useState<ChatCategory>('image');
   const [modelSlug, setModelSlug] = useState(defaultModel('image').slug);
@@ -113,12 +114,14 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
   const selectedModel = models.find((model) => model.slug === modelSlug) ?? models[0] ?? CHAT_MODELS[0];
   const cleanedAdvancedParams = useMemo(() => normaliseAdvancedParams(advancedParams), [advancedParams]);
+  const modelPriceOverrides = modelPricing.data?.modelPriceOverrides;
   const balance = me.data?.user.tokenBalance ?? 0;
   const effectiveGenerateAudio = selectedModel.supportsAudio && generateAudio;
-  const estimatedCostCoins = estimateChatGenerationCostCoins(selectedModel.slug, {
+  const estimatedCostCoins = estimateChatGenerationPriceCoins(selectedModel.slug, {
     duration: selectedModel.category === 'video' ? duration : undefined,
     generateAudio: effectiveGenerateAudio,
     params: cleanedAdvancedParams,
+    priceOverrides: modelPriceOverrides,
   });
   const canPay = balance >= estimatedCostCoins;
   const needsInput = !selectedModel.acceptsTextOnly && selectedModel.acceptsImageInput;
@@ -267,7 +270,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         <div className="flex flex-col gap-3 border-t border-slate-800 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <CategoryControl category={category} onChange={setCategory} />
-            <ModelControl selectedModel={selectedModel} models={models} onChange={setModelSlug} />
+            <ModelControl selectedModel={selectedModel} models={models} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
             <AspectControl
               value={aspectRatio}
               values={selectedModel.supportedAspectRatios}
@@ -347,14 +350,18 @@ function CategoryControl({ category, onChange }: { category: ChatCategory; onCha
 function ModelControl({
   selectedModel,
   models,
+  duration,
+  priceOverrides,
   onChange,
 }: {
   selectedModel: ChatModelOption;
   models: ChatModelOption[];
+  duration: number;
+  priceOverrides?: Record<string, number>;
   onChange: (value: string) => void;
 }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="h-9 max-w-[260px] border-slate-700 bg-slate-950">
           <Sparkles className="h-4 w-4 text-violet-300" />
@@ -372,7 +379,7 @@ function ModelControl({
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{model.title}</span>
                   <span className="text-xs text-amber-300">
-                    от {estimateChatGenerationCostCoins(model.slug, { duration: model.defaultDurationSec })} токенов
+                    от {estimateChatGenerationPriceCoins(model.slug, { duration: model.defaultDurationSec ?? duration, priceOverrides })} токенов
                   </span>
                   {model.experimental && <span className="text-xs text-amber-200">бета</span>}
                 </div>
@@ -396,7 +403,7 @@ function AspectControl({
   onChange: (value: string) => void;
 }) {
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950">
           <Frame className="h-4 w-4 text-slate-400" />
@@ -423,7 +430,7 @@ function DurationControl({ value, values, onChange }: { value: number; values: n
   const min = values.length ? Math.min(...values) : 1;
   const max = values.length ? Math.max(...values) : 30;
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950">
           <Clock3 className="h-4 w-4 text-slate-400" />
@@ -505,13 +512,20 @@ function AdvancedParamsControl({
   const update = (key: string, next: ChatAdvancedParams[string]) => onChange({ ...value, [key]: next });
 
   return (
-    <details className="relative">
-      <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 transition hover:border-violet-500">
-        <Settings2 className="h-4 w-4 text-slate-400" />
-        Advanced
-        <ChevronDown className="h-4 w-4 text-slate-500" />
-      </summary>
-      <div className="absolute left-0 z-40 mt-2 w-[min(92vw,560px)] space-y-3 rounded-lg border border-slate-800 bg-slate-950 p-4 shadow-2xl shadow-black/40">
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950">
+          <Settings2 className="h-4 w-4 text-slate-400" />
+          Advanced
+          <ChevronDown className="h-4 w-4 text-slate-500" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="start"
+        side="top"
+        sideOffset={8}
+        className="w-[min(92vw,560px)] space-y-3 border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40"
+      >
         <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{compactModelTitle(model.title)}</div>
         <div className="grid gap-3 md:grid-cols-2">
           {params.map((param) => (
@@ -523,8 +537,8 @@ function AdvancedParamsControl({
             />
           ))}
         </div>
-      </div>
-    </details>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

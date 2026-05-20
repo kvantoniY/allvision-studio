@@ -4,7 +4,7 @@ import path from 'node:path';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import sharp from 'sharp';
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
-import { getBlockCatalogItem } from '@allvision/shared';
+import { applyModelPriceOverride, getBlockCatalogItem } from '@allvision/shared';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { uploadMediaAsset } from '../middleware/upload';
@@ -15,6 +15,7 @@ import * as queues from '../queues';
 import * as fileService from '../services/file-service';
 import { processAndUploadMediaAsset } from '../services/media-asset-service';
 import { getStorageProvider } from '../providers';
+import { readModelPriceOverrides } from '../services/model-pricing';
 
 export const userMediaAssetsRouter = Router();
 
@@ -246,7 +247,7 @@ userMediaAssetsRouter.post('/generate', async (req: Request, res: Response, next
   try {
     const body = generateSchema.parse(req.body);
     const userId = req.user!.id;
-    const tokensCost = nanoBananaCostCoins();
+    const tokensCost = applyModelPriceOverride('nano-banana', nanoBananaCostCoins(), await readModelPriceOverrides());
     const aspectRatio = body.aspectRatio ?? (body.kind === 'user-avatar' ? '1:1' : '16:9');
     const parentAsset = body.parentAssetId
       ? await prisma.mediaAsset.findFirst({
