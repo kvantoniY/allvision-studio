@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { TicketPercent } from 'lucide-react';
+import Link from 'next/link';
+import { CreditCard, FileText, ShieldCheck, TicketPercent } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PricingCards } from '@/components/public/PricingCards';
 import { getPackageUsage, pricingFaqs } from '@/lib/public-content';
+import { merchantInfo } from '@/lib/merchant';
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
 
 export function PricingPageContent() {
@@ -26,6 +28,37 @@ export function PricingPageContent() {
 
       <div className="mt-10">
         <PricingCards packages={data?.packages} isLoading={isLoading} fallbackHref="/login?redirect=/pricing" />
+      </div>
+
+      <div className="mt-8 grid gap-4 rounded-lg border bg-card p-5 dark:border-slate-800 md:grid-cols-3">
+        <div className="flex gap-3">
+          <ShieldCheck className="mt-1 h-5 w-5 shrink-0 text-emerald-500" />
+          <div>
+            <div className="font-semibold">Платёж через Робокассу</div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">Данные карты вводятся на защищённой странице платёжного провайдера.</p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <FileText className="mt-1 h-5 w-5 shrink-0 text-indigo-500" />
+          <div>
+            <div className="font-semibold">Документы до оплаты</div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Доступны{' '}
+              <Link href="/offer" className="underline underline-offset-4">оферта</Link>,{' '}
+              <Link href="/privacy" className="underline underline-offset-4">политика</Link>{' '}
+              и реквизиты исполнителя.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <CreditCard className="mt-1 h-5 w-5 shrink-0 text-amber-500" />
+          <div>
+            <div className="font-semibold">Исполнитель</div>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {merchantInfo.legalName}, ИНН {merchantInfo.inn}, НПД.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="mx-auto mt-8 max-w-2xl rounded-lg border bg-card px-5 dark:border-slate-800">

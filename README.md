@@ -149,6 +149,8 @@ docker/
 
 ## Фаза разработки
 
-Сейчас MVP-подготовка: платежи ещё mock, часть AI-блоков mock, а `image-to-video`
-и `face-swap-video` в data-driven `service-pipeline` подключены к PiAPI для
-закрытого тестирования.
+Для локальной разработки платежи по умолчанию идут через `PAYMENT_PROVIDER=mock`.
+Боевой провайдер `robokassa` подготовлен отдельно: переменные окружения и URL для
+кабинета описаны в `docs/ROBOKASSA.md`. Часть AI-блоков остаётся mock, а
+`image-to-video` и `face-swap-video` в data-driven `service-pipeline` подключены
+к PiAPI для закрытого тестирования.

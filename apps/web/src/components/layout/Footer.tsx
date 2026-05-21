@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Instagram, MessageCircle, Music2, Send, Sparkles, Youtube } from 'lucide-react';
+import { merchantInfo } from '@/lib/merchant';
 import { serviceLinks } from '@/lib/public-content';
 
 const companyLinks = [
@@ -76,25 +77,26 @@ export function Footer() {
           <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
             <li>
               Email:{' '}
-              <a href="mailto:hello@allvision.studio" className="underline-offset-4 transition hover:text-foreground hover:underline">
-                hello@allvision.studio
+              <a href={`mailto:${merchantInfo.email}`} className="underline-offset-4 transition hover:text-foreground hover:underline">
+                {merchantInfo.email}
               </a>
             </li>
             <li>
               Telegram:{' '}
               <a href="https://t.me/allvision_support" className="underline-offset-4 transition hover:text-foreground hover:underline">
-                @allvision_support
+                {merchantInfo.supportTelegram}
               </a>
             </li>
-            <li>Время работы: ежедневно с 9:00 до 22:00 МСК</li>
+            <li>Телефон: {merchantInfo.phone}</li>
+            <li>Время работы: {merchantInfo.workingHours}</li>
           </ul>
         </div>
       </div>
 
       <div className="border-t dark:border-slate-800">
         <div className="container flex flex-col gap-2 py-5 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
-          <div>© 2026 Allvision Studio. Все права защищены.</div>
-          <div>Работаем на основе самозанятости (НПД)</div>
+          <div>© 2026 {merchantInfo.brandName}. Все права защищены.</div>
+          <div>{merchantInfo.legalName}, ИНН {merchantInfo.inn}, НПД</div>
           <a href="#" className="underline-offset-4 transition hover:text-foreground hover:underline">
             Сайт сделан с ❤️ и нейросетями
           </a>

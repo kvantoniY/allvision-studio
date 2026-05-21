@@ -104,6 +104,10 @@ function ProfileContent() {
       toast({ title: 'Платёж не прошёл', description: 'Платёж отклонён банком', variant: 'destructive' });
       invalidatePaymentSideEffects(dispatch);
     }
+    if (paymentResult === 'pending') {
+      toast({ title: 'Платёж принят', description: 'Ждём подтверждение от платёжного провайдера.' });
+      invalidatePaymentSideEffects(dispatch);
+    }
     if (paymentResult === 'cancelled') {
       toast({ title: 'Платёж отменён' });
       invalidatePaymentSideEffects(dispatch);

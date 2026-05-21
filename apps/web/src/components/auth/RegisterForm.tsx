@@ -92,10 +92,18 @@ export function RegisterForm() {
           Согласен с{' '}
           <Link href="/offer" className="underline">
             офертой
+          </Link>
+          ,{' '}
+          <Link href="/terms" className="underline">
+            пользовательским соглашением
+          </Link>
+          ,{' '}
+          <Link href="/privacy" className="underline">
+            политикой конфиденциальности
           </Link>{' '}
           и{' '}
-          <Link href="/privacy" className="underline">
-            обработкой персональных данных
+          <Link href="/pd-consent" className="underline">
+            согласием на обработку персональных данных
           </Link>
           .
         </span>

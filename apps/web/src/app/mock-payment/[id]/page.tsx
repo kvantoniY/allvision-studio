@@ -93,7 +93,7 @@ export default function MockPaymentPage() {
           <WalletCards className="h-6 w-6 text-sky-600" />
           Платёжная система
         </Link>
-        <Badge className="bg-white text-slate-700 shadow-sm">Mock YooKassa</Badge>
+        <Badge className="bg-white text-slate-700 shadow-sm">Mock Robokassa</Badge>
       </div>
 
       <section className="mx-auto grid w-full max-w-5xl gap-6 px-4 lg:grid-cols-[1fr_360px]">
@@ -234,7 +234,7 @@ export default function MockPaymentPage() {
             <div className="text-sm font-semibold text-slate-900">Безопасное тестирование</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
               Эта страница имитирует внешний провайдер: успех, отказ и таймаут проходят через тот же backend-flow,
-              что и будущая интеграция ЮKassa.
+              что и будущая интеграция Robokassa.
             </p>
           </div>
           <Button asChild variant="ghost" className="w-full text-slate-600">

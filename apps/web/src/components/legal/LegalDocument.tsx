@@ -1,4 +1,4 @@
-import { AlertTriangle } from 'lucide-react';
+import { Info } from 'lucide-react';
 import { legalNotice } from '@/lib/public-content';
 
 type LegalSection = {
@@ -17,7 +17,7 @@ export function LegalDocument({ title, description, sections }: LegalDocumentPro
     <section className="container py-14 md:py-20">
       <div className="mx-auto max-w-4xl">
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm leading-6 text-amber-900 dark:text-amber-100">
-          <AlertTriangle className="mr-2 inline h-4 w-4" />
+          <Info className="mr-2 inline h-4 w-4" />
           {legalNotice}
         </div>
 
@@ -35,7 +35,7 @@ export function LegalDocument({ title, description, sections }: LegalDocumentPro
               </h2>
               <div className="mt-4 space-y-4 leading-7 text-muted-foreground">
                 {section.paragraphs.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
+                  <p key={paragraph} className="whitespace-pre-line">{paragraph}</p>
                 ))}
               </div>
             </article>

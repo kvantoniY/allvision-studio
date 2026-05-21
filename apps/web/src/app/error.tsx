@@ -2,6 +2,7 @@
 
 import { RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { merchantInfo } from '@/lib/merchant';
 
 export default function ErrorPage({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
@@ -16,7 +17,7 @@ export default function ErrorPage({ reset }: { error: Error & { digest?: string 
           <RotateCcw className="h-4 w-4" />
           Попробовать снова
         </Button>
-        <p className="mt-5 text-sm text-muted-foreground">Если проблема повторяется — напишите в поддержку: hello@allvision.studio</p>
+        <p className="mt-5 text-sm text-muted-foreground">Если проблема повторяется — напишите в поддержку: {merchantInfo.email}</p>
       </div>
     </section>
   );

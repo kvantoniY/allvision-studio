@@ -4,6 +4,7 @@ import { HttpError } from '../utils/http-error';
 import { getPaymentProvider } from './payment-provider';
 
 type PaymentListItem = Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;
+type WebhookHandleResult = { ok: true; providerPaymentId?: string };
 
 function paymentProviderName() {
   return process.env.PAYMENT_PROVIDER ?? 'mock';
@@ -23,6 +24,11 @@ function buildConfirmationMetadata(metadata: Record<string, unknown>, confirmati
   };
 }
 
+async function getUserEmail(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  return user?.email;
+}
+
 export async function createTopupPayment(
   userId: string,
   tokenPackageId: string,
@@ -35,6 +41,7 @@ export async function createTopupPayment(
     throw new HttpError(400, 'TOKEN_PACKAGE_INACTIVE', 'Token package is inactive');
   }
 
+  const customerEmail = await getUserEmail(userId);
   const tokensAdded = pkg.tokens + pkg.bonus;
   const metadata = {
     tokenPackageId: pkg.id,
@@ -65,6 +72,7 @@ export async function createTopupPayment(
       packageTitle: pkg.title,
       baseTokens: String(pkg.tokens),
       bonusTokens: String(pkg.bonus),
+      ...(customerEmail ? { customerEmail } : {}),
     },
   });
 
@@ -111,6 +119,7 @@ export async function createOrderPayment(
     orderId: order.id,
     orderType: order.type,
   };
+  const customerEmail = await getUserEmail(userId);
 
   const payment = await prisma.payment.create({
     data: {
@@ -132,6 +141,7 @@ export async function createOrderPayment(
       paymentId: payment.id,
       orderId: order.id,
       orderType: order.type,
+      ...(customerEmail ? { customerEmail } : {}),
     },
   });
 
@@ -182,7 +192,7 @@ export async function getPaymentStatusForUser(userId: string, id: string): Promi
   return { status: payment.status };
 }
 
-export async function handlePaymentWebhook(rawBody: Buffer, signature: string): Promise<{ ok: true }> {
+export async function handlePaymentWebhook(rawBody: Buffer, signature: string): Promise<WebhookHandleResult> {
   const event = await getPaymentProvider().verifyWebhook(rawBody, signature);
   const status = providerEventToStatus(event.type);
   const payment = await prisma.payment.findFirst({
@@ -193,8 +203,12 @@ export async function handlePaymentWebhook(rawBody: Buffer, signature: string): 
     throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
   }
 
+  if (event.amountRub > 0 && event.amountRub !== payment.amountRub) {
+    throw new HttpError(400, 'PAYMENT_AMOUNT_MISMATCH', 'Payment amount does not match');
+  }
+
   if (payment.status === 'SUCCEEDED') {
-    return { ok: true };
+    return { ok: true, providerPaymentId: event.providerPaymentId };
   }
 
   if (status !== 'SUCCEEDED') {
@@ -202,7 +216,7 @@ export async function handlePaymentWebhook(rawBody: Buffer, signature: string): 
       where: { id: payment.id },
       data: { status },
     });
-    return { ok: true };
+    return { ok: true, providerPaymentId: event.providerPaymentId };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -248,5 +262,5 @@ export async function handlePaymentWebhook(rawBody: Buffer, signature: string): 
     });
   });
 
-  return { ok: true };
+  return { ok: true, providerPaymentId: event.providerPaymentId };
 }

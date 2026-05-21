@@ -28,6 +28,15 @@ app.use(
     },
   }),
 );
+app.use(
+  express.urlencoded({
+    extended: false,
+    limit: '1mb',
+    verify: (req, _res, buf) => {
+      (req as typeof req & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    },
+  }),
+);
 app.use(cookieParser());
 app.use(requestLogger);
 

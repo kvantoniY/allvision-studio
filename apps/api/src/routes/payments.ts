@@ -10,6 +10,41 @@ const topupSchema = z.object({
   tokenPackageId: z.string().min(1),
 });
 
+function paramsToRawBody(value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return Buffer.from('');
+  }
+
+  const params = new URLSearchParams();
+  for (const [key, rawValue] of Object.entries(value)) {
+    if (Array.isArray(rawValue)) {
+      rawValue.forEach((item) => params.append(key, String(item)));
+      continue;
+    }
+    if (rawValue != null) {
+      params.set(key, String(rawValue));
+    }
+  }
+
+  return Buffer.from(params.toString(), 'utf8');
+}
+
+function rawPaymentBody(req: Request) {
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  if (rawBody && rawBody.length > 0) return rawBody;
+  return paramsToRawBody(req.method === 'GET' ? req.query : req.body);
+}
+
+function paymentSignature(req: Request) {
+  return String(
+    req.headers['x-payment-signature'] ??
+      req.body?.signature ??
+      req.body?.SignatureValue ??
+      req.query?.SignatureValue ??
+      '',
+  );
+}
+
 paymentsRouter.post('/topup', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = topupSchema.parse(req.body);
@@ -29,11 +64,38 @@ paymentsRouter.post('/order/:orderId', requireAuth, async (req: Request, res: Re
   }
 });
 
+paymentsRouter.all('/robokassa/result', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await payments.handlePaymentWebhook(rawPaymentBody(req), paymentSignature(req));
+    res.type('text/plain').send(`OK${result.providerPaymentId ?? ''}`);
+  } catch (e) {
+    next(e);
+  }
+});
+
+paymentsRouter.all('/robokassa/success', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const invId = typeof req.query.InvId === 'string' ? req.query.InvId : '';
+    const payment = invId ? await payments.findPaymentByIdOrProviderId(invId) : null;
+    const status = payment?.status === 'SUCCEEDED' ? 'success' : 'pending';
+    const tokens = status === 'success' && payment?.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';
+    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=${status}${tokens}`);
+  } catch (e) {
+    next(e);
+  }
+});
+
+paymentsRouter.all('/robokassa/fail', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=failed`);
+  } catch (e) {
+    next(e);
+  }
+});
+
 paymentsRouter.post('/webhook', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.from(JSON.stringify(req.body));
-    const signature = String(req.headers['x-payment-signature'] ?? req.body?.signature ?? '');
-    await payments.handlePaymentWebhook(rawBody, signature);
+    await payments.handlePaymentWebhook(rawPaymentBody(req), paymentSignature(req));
     res.json({ ok: true });
   } catch (e) {
     next(e);

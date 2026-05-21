@@ -1,6 +1,7 @@
 import type { PaymentProvider, StorageProvider } from '@allvision/shared';
 import { LocalFileStorage } from './local-file-storage';
 import { MockPaymentProvider } from './mock-payment-provider';
+import { RobokassaPaymentProvider } from './robokassa-payment-provider';
 import { resolveWorkspacePath } from '../utils/paths';
 
 let storageSingleton: StorageProvider | undefined;
@@ -34,6 +35,11 @@ export function getPaymentProvider(): PaymentProvider {
     return paymentSingleton;
   }
 
+  if (provider === 'robokassa') {
+    paymentSingleton = new RobokassaPaymentProvider();
+    return paymentSingleton;
+  }
+
   throw new Error(`Unknown payment provider: ${provider}`);
 }
 
@@ -45,3 +51,4 @@ export function _resetProvidersForTests() {
 
 export { LocalFileStorage } from './local-file-storage';
 export { MockPaymentProvider } from './mock-payment-provider';
+export { RobokassaPaymentProvider } from './robokassa-payment-provider';

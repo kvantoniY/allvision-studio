@@ -344,7 +344,7 @@ publicRouter.get('/settings/public', async (_req: Request, res: Response<PublicS
 
     const settings: PublicSettings = {
       supportTelegram: '@allvision_support',
-      supportEmail: 'hello@allvision.studio',
+      supportEmail: 'allvision_ai@internet.ru',
       companyName: 'Allvision Studio',
       fairyTaleTierBasicPrice: '4990',
       fairyTaleTierExtendedPrice: '7990',

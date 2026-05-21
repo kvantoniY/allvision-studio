@@ -106,7 +106,7 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
               </li>
             </ul>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex-col gap-3">
             {user ? (
               <Button
                 className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400"
@@ -125,6 +125,21 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
                 <Link href={fallbackHref}>Купить</Link>
               </Button>
             )}
+            <p className="text-xs leading-5 text-muted-foreground">
+              Нажимая «Купить», вы соглашаетесь с{' '}
+              <Link href="/offer" className="underline underline-offset-4">
+                офертой
+              </Link>
+              ,{' '}
+              <Link href="/terms" className="underline underline-offset-4">
+                соглашением
+              </Link>{' '}
+              и{' '}
+              <Link href="/pd-consent" className="underline underline-offset-4">
+                обработкой данных
+              </Link>
+              .
+            </p>
           </CardFooter>
         </Card>
       ))}
