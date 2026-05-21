@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useGetMeQuery, useLogoutMutation } from '@/store/api/auth-api';
+import { authApi, useGetMeQuery, useLogoutMutation } from '@/store/api/auth-api';
 import { setUser, clearUser, setAuthLoading } from '@/store/slices/auth-slice';
 import type { RootState, AppDispatch } from '@/store';
 
@@ -30,6 +30,7 @@ export function useAuth() {
   const logout = async () => {
     await logoutMutation().unwrap().catch(() => undefined);
     dispatch(clearUser());
+    dispatch(authApi.util.resetApiState());
   };
 
   return {

@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { DashboardSidebarMobile } from '@/components/dashboard/DashboardSidebarMobile';
+import { Footer } from '@/components/layout/Footer';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -18,11 +20,13 @@ function initialsOf(name: string | null | undefined, email: string) {
 
 export function UserWorkspaceShell({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
+  const pathname = usePathname();
+  const showPublicFooter = pathname === '/' || pathname?.startsWith('/services');
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <DashboardSidebar />
-      <div className="min-w-0 md:pl-64">
+      <div className="flex min-h-screen min-w-0 flex-col md:pl-64">
         {user && (
           <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 backdrop-blur md:hidden">
             <DashboardSidebarMobile />
@@ -43,7 +47,8 @@ export function UserWorkspaceShell({ children }: { children: React.ReactNode }) 
             </div>
           </div>
         )}
-        <main className="min-w-0">{children}</main>
+        <main className="min-w-0 flex-1">{children}</main>
+        {showPublicFooter && <Footer />}
       </div>
     </div>
   );
