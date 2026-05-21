@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ImageIcon, Library, Loader2, Upload, X } from 'lucide-react';
+import { ImageIcon, Library, Loader2, Paperclip, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,6 +26,7 @@ type InputSourcePickerProps = {
   value: SelectedInputSource | null;
   required?: boolean;
   compact?: boolean;
+  iconOnly?: boolean;
   onChange: (value: SelectedInputSource | null) => void;
 };
 
@@ -45,7 +46,7 @@ function isImageAsset(asset: { mimeType?: string | null }) {
   return !asset.mimeType || asset.mimeType.startsWith('image/');
 }
 
-export function InputSourcePicker({ mediaKind, value, required, compact, onChange }: InputSourcePickerProps) {
+export function InputSourcePicker({ mediaKind, value, required, compact, iconOnly, onChange }: InputSourcePickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<PickerTab>('upload');
   const [upload, uploadState] = useUploadChatInputMutation();
@@ -82,18 +83,25 @@ export function InputSourcePicker({ mediaKind, value, required, compact, onChang
     }
   };
 
+  const buttonLabel = compact
+    ? (value ? 'Референс' : required ? 'Нужен реф.' : 'Прикрепить')
+    : value ? 'Заменить референс' : required ? 'Выбрать референс' : 'Прикрепить';
+  const TriggerIcon = compact || iconOnly ? Paperclip : Library;
+
   return (
     <div className={cn('space-y-3', compact && 'space-y-0')}>
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
           variant="outline"
-          size={compact ? 'sm' : 'default'}
-          className={cn('border-slate-700', compact ? 'h-9 bg-slate-950' : 'bg-slate-900')}
+          size={iconOnly ? 'icon' : compact ? 'sm' : 'default'}
+          className={cn('border-slate-700', iconOnly ? 'h-9 w-9 bg-slate-950' : compact ? 'h-9 bg-slate-950' : 'bg-slate-900')}
           onClick={() => setOpen(true)}
+          title={buttonLabel}
+          aria-label={buttonLabel}
         >
-          <Library className="h-4 w-4" />
-          {compact ? (value ? 'Референс' : required ? 'Нужен реф.' : 'Прикрепить') : value ? 'Заменить референс' : required ? 'Выбрать референс' : 'Прикрепить'}
+          <TriggerIcon className="h-4 w-4" />
+          <span className={cn(iconOnly && 'sr-only')}>{buttonLabel}</span>
         </Button>
         {value && !compact && (
           <div className="flex min-w-0 items-center gap-3 rounded-md border border-slate-800 bg-slate-900 p-2">

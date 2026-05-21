@@ -132,6 +132,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [duration, setDuration] = useState(5);
   const [generateAudio, setGenerateAudio] = useState(false);
   const [source, setSource] = useState<SelectedInputSource | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [advancedParams, setAdvancedParams] = useState<ChatAdvancedParams>(() => defaultAdvancedParams(defaultModel('image')));
 
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
@@ -168,6 +169,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     setDuration(next.defaultDurationSec ?? next.durationOptions[0] ?? 5);
     setGenerateAudio(false);
     setSource(null);
+    setSubmitAttempted(false);
     setAdvancedParams(defaultAdvancedParams(next));
   }, [category]);
 
@@ -209,7 +211,10 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      setSubmitAttempted(true);
+      return;
+    }
     try {
       await createMessage({
         chatId,
@@ -228,6 +233,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       }).unwrap();
       toast({ title: 'Генерация запущена' });
       setPrompt('');
+      setSubmitAttempted(false);
       if (!canUseInput) setSource(null);
       onCreated();
     } catch (error) {
@@ -244,7 +250,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         ? missingAdvanced
       : !canPay
         ? 'Недостаточно токенов'
-        : !prompt.trim()
+        : submitAttempted && !prompt.trim()
           ? 'Добавьте промпт для запуска'
           : null;
 
@@ -288,7 +294,10 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
         <Textarea
           value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
+          onChange={(event) => {
+            setPrompt(event.target.value);
+            if (submitAttempted) setSubmitAttempted(false);
+          }}
           rows={2}
           placeholder="Опишите результат: сюжет, стиль, камера, настроение..."
           className="min-h-[76px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -300,8 +309,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           }}
         />
 
-        <div className="flex flex-col gap-3 border-t border-slate-800 px-3 py-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <div className="grid gap-3 border-t border-slate-800 px-3 py-3 lg:grid-cols-[1fr_auto] lg:items-end">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:pr-2">
             <CategoryControl category={category} onChange={setCategory} />
             <ModelFamilyControl
               selectedFamily={selectedFamily}
@@ -333,26 +342,25 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               />
             )}
             {canUseInput ? (
-              <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact />
+              <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact iconOnly />
             ) : (
-              <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950 text-slate-400" disabled>
+              <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-400" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
                 <Paperclip className="h-4 w-4" />
-                Без референса
               </Button>
             )}
             <AdvancedParamsControl model={selectedModel} value={advancedParams} onChange={setAdvancedParams} />
           </div>
 
-          <div className="flex items-center justify-between gap-3 lg:justify-end">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex flex-col gap-2 rounded-md border border-slate-800/70 bg-slate-950/45 p-2 sm:flex-row sm:items-center sm:justify-between lg:w-[260px] lg:shrink-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
               <TokenIcon className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
               <span className={canPay ? 'font-semibold text-amber-200' : 'font-semibold text-red-200'}>{costText}</span>
               {submitHint && (
-                <span className={canPay ? 'text-slate-500' : 'text-red-200'}>· {submitHint}</span>
+                <span className={cn('basis-full sm:basis-auto', canPay ? 'text-slate-500' : 'text-red-200')}>{submitHint}</span>
               )}
               <span className="hidden text-slate-600 sm:inline">Баланс {balance}</span>
             </div>
-            <Button type="submit" disabled={!canSubmit} className="h-10 bg-amber-500 px-4 text-slate-950 hover:bg-amber-400">
+            <Button type="submit" disabled={!canSubmit} className="h-10 w-full shrink-0 bg-amber-500 px-4 text-slate-950 hover:bg-amber-400 sm:w-auto">
               {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Создать
             </Button>
@@ -629,10 +637,8 @@ function AdvancedParamsControl({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950">
+        <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950" title="Расширенные настройки" aria-label="Расширенные настройки">
           <Settings2 className="h-4 w-4 text-slate-400" />
-          Advanced
-          <ChevronDown className="h-4 w-4 text-slate-500" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -817,7 +823,7 @@ function AudioControl({
       onClick={() => onChange(!enabled)}
     >
       <Icon className="h-4 w-4" />
-      {supported ? (enabled ? 'Со звуком' : 'Без звука') : 'Звук недоступен'}
+      <span className="hidden sm:inline">{supported ? (enabled ? 'Со звуком' : 'Без звука') : 'Звук недоступен'}</span>
     </Button>
   );
 }
