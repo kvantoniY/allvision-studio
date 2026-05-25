@@ -8,6 +8,7 @@ export interface PaymentProvider {
   }): Promise<PaymentConfirmation>;
 
   verifyWebhook(rawBody: Buffer, signature: string): Promise<WebhookEvent>;
+  verifySuccessRedirect?(rawBody: Buffer, signature: string): Promise<WebhookEvent>;
 
   getPaymentProviderStatus(paymentId: string): Promise<PaymentProviderStatus>;
 }

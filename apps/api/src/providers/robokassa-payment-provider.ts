@@ -193,18 +193,43 @@ function parseRawPayload(rawBody: Buffer): Record<string, string> {
 function buildResultSignature(params: {
   outSum: string;
   invId: string;
-  password2: string;
+  password: string;
   hashAlgorithm: string;
   shpParams: Record<string, string>;
 }) {
   const parts = [
     params.outSum,
     params.invId,
-    params.password2,
+    params.password,
     ...sortedShpParams(params.shpParams).map(([key, value]) => `${key}=${value}`),
   ];
 
   return hash(parts.join(':'), params.hashAlgorithm);
+}
+
+function webhookEventFromRobokassaPayload(payload: Record<string, string>, password: string, hashAlgorithm: string) {
+  const body = robokassaResultSchema.parse(payload);
+  const shpParams = Object.fromEntries(sortedShpParams(payload));
+  const expectedSignature = buildResultSignature({
+    outSum: body.OutSum,
+    invId: body.InvId,
+    password,
+    hashAlgorithm,
+    shpParams,
+  });
+  const receivedSignature = body.SignatureValue || '';
+
+  if (!timingSafeEqual(receivedSignature, expectedSignature)) {
+    throw new HttpError(401, 'INVALID_ROBOKASSA_SIGNATURE', 'Invalid Robokassa callback signature');
+  }
+
+  return {
+    type: 'payment.succeeded' as const,
+    paymentId: shpParams.Shp_paymentId ?? body.InvId,
+    providerPaymentId: body.InvId,
+    amountRub: Math.round(Number(body.OutSum) * 100),
+    metadata: shpParams,
+  };
 }
 
 export class RobokassaPaymentProvider implements PaymentProvider {
@@ -291,28 +316,15 @@ export class RobokassaPaymentProvider implements PaymentProvider {
   async verifyWebhook(rawBody: Buffer, signature: string): Promise<WebhookEvent> {
     const config = getConfig();
     const payload = parseRawPayload(rawBody);
-    const body = robokassaResultSchema.parse(payload);
-    const shpParams = Object.fromEntries(sortedShpParams(payload));
-    const expectedSignature = buildResultSignature({
-      outSum: body.OutSum,
-      invId: body.InvId,
-      password2: config.password2,
-      hashAlgorithm: config.hashAlgorithm,
-      shpParams,
-    });
-    const receivedSignature = signature || body.SignatureValue || '';
+    if (signature) payload.SignatureValue = signature;
+    return webhookEventFromRobokassaPayload(payload, config.password2, config.hashAlgorithm);
+  }
 
-    if (!timingSafeEqual(receivedSignature, expectedSignature)) {
-      throw new HttpError(401, 'INVALID_ROBOKASSA_SIGNATURE', 'Invalid Robokassa callback signature');
-    }
-
-    return {
-      type: 'payment.succeeded',
-      paymentId: shpParams.Shp_paymentId ?? body.InvId,
-      providerPaymentId: body.InvId,
-      amountRub: Math.round(Number(body.OutSum) * 100),
-      metadata: shpParams,
-    };
+  async verifySuccessRedirect(rawBody: Buffer, signature: string): Promise<WebhookEvent> {
+    const config = getConfig();
+    const payload = parseRawPayload(rawBody);
+    if (signature) payload.SignatureValue = signature;
+    return webhookEventFromRobokassaPayload(payload, config.password1, config.hashAlgorithm);
   }
 
   async getPaymentProviderStatus(_paymentId: string): Promise<PaymentProviderStatus> {

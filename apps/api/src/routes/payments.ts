@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { requireAuth, optionalAuth } from '../middleware/auth';
 import { HttpError } from '../utils/http-error';
+import { logger } from '../utils/logger';
 import * as payments from '../services/payment-service';
 
 export const paymentsRouter = Router();
@@ -76,6 +77,13 @@ paymentsRouter.all('/robokassa/result', async (req: Request, res: Response, next
 paymentsRouter.all('/robokassa/success', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const invId = typeof req.query.InvId === 'string' ? req.query.InvId : '';
+    if (req.query.OutSum && req.query.SignatureValue && invId) {
+      try {
+        await payments.handlePaymentSuccessRedirect(rawPaymentBody(req), paymentSignature(req));
+      } catch (error) {
+        logger.warn(`[payments] Robokassa success fallback rejected for InvId=${invId}: ${(error as Error).message}`);
+      }
+    }
     const payment = invId ? await payments.findPaymentByIdOrProviderId(invId) : null;
     const status = payment?.status === 'SUCCEEDED' ? 'success' : 'pending';
     const tokens = status === 'success' && payment?.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';

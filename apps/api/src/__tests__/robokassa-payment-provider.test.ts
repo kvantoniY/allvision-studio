@@ -125,6 +125,29 @@ describe('RobokassaPaymentProvider', () => {
     });
   });
 
+  it('verifies signed SuccessURL redirects with password #1', async () => {
+    const provider = new RobokassaPaymentProvider();
+    const outSum = '499.00';
+    const invId = '123456';
+    const signature = md5(`${outSum}:${invId}:password-one:Shp_paymentId=payment_1:Shp_purpose=topup`);
+    const body = new URLSearchParams({
+      OutSum: outSum,
+      InvId: invId,
+      SignatureValue: signature,
+      Shp_paymentId: 'payment_1',
+      Shp_purpose: 'topup',
+    });
+
+    const event = await provider.verifySuccessRedirect(Buffer.from(body.toString(), 'utf8'), '');
+
+    expect(event).toMatchObject({
+      type: 'payment.succeeded',
+      paymentId: 'payment_1',
+      providerPaymentId: invId,
+      amountRub: 49900,
+    });
+  });
+
   it('rejects ResultURL callbacks with invalid signatures', async () => {
     const provider = new RobokassaPaymentProvider();
     const body = new URLSearchParams({

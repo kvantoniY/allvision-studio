@@ -1,5 +1,6 @@
 import { prisma } from '@allvision/database';
 import type { Payment } from '@allvision/database';
+import type { WebhookEvent } from '@allvision/shared';
 import crypto from 'node:crypto';
 import { HttpError } from '../utils/http-error';
 import { getPaymentProvider } from './payment-provider';
@@ -235,6 +236,19 @@ export async function getPaymentStatusForUser(userId: string, id: string): Promi
 
 export async function handlePaymentWebhook(rawBody: Buffer, signature: string): Promise<WebhookHandleResult> {
   const event = await getPaymentProvider().verifyWebhook(rawBody, signature);
+  return applyPaymentEvent(event);
+}
+
+export async function handlePaymentSuccessRedirect(rawBody: Buffer, signature: string): Promise<WebhookHandleResult> {
+  const provider = getPaymentProvider();
+  if (!provider.verifySuccessRedirect) {
+    throw new HttpError(400, 'PAYMENT_SUCCESS_REDIRECT_UNSUPPORTED', 'Payment provider does not support success redirect verification');
+  }
+  const event = await provider.verifySuccessRedirect(rawBody, signature);
+  return applyPaymentEvent(event);
+}
+
+async function applyPaymentEvent(event: WebhookEvent): Promise<WebhookHandleResult> {
   const status = providerEventToStatus(event.type);
   const paymentByInternalId = event.paymentId
     ? await prisma.payment.findUnique({ where: { id: event.paymentId } })
