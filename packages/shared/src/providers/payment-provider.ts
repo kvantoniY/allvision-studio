@@ -3,8 +3,9 @@ export interface PaymentProvider {
     amountRub: number;
     userId: string;
     purpose: 'topup' | 'order';
+    providerPaymentId?: string;
     metadata: Record<string, string>;
-  }): Promise<{ paymentId: string; confirmationUrl: string }>;
+  }): Promise<PaymentConfirmation>;
 
   verifyWebhook(rawBody: Buffer, signature: string): Promise<WebhookEvent>;
 
@@ -12,6 +13,14 @@ export interface PaymentProvider {
 }
 
 export type PaymentProviderStatus = 'pending' | 'succeeded' | 'failed' | 'cancelled';
+export type PaymentConfirmationMethod = 'GET' | 'POST';
+
+export type PaymentConfirmation = {
+  paymentId: string;
+  confirmationUrl: string;
+  confirmationMethod?: PaymentConfirmationMethod;
+  confirmationParams?: Record<string, string>;
+};
 
 export interface WebhookEvent {
   type: 'payment.succeeded' | 'payment.failed' | 'payment.cancelled';

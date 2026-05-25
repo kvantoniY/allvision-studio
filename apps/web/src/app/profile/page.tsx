@@ -35,6 +35,7 @@ import { invalidatePaymentSideEffects, useTopupMutation } from '@/store/api/paym
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
 import { clearUser } from '@/store/slices/auth-slice';
 import { formatDate } from '@/components/dashboard/labels';
+import { submitPaymentConfirmation } from '@/lib/payment-confirmation';
 import { cn } from '@/lib/utils';
 
 type ProfileTab = 'personal' | 'billing' | 'transactions' | 'notifications' | 'danger';
@@ -336,7 +337,6 @@ function BillingSection() {
 
 function TransactionsSection() {
   const { toast } = useToast();
-  const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
   const [txFilter, setTxFilter] = useState<TxFilter>('all');
   const [txPage, setTxPage] = useState(1);
@@ -373,7 +373,7 @@ function TransactionsSection() {
     setRepeatingPaymentId(payment.id);
     try {
       const result = await topup({ tokenPackageId }).unwrap();
-      router.push(result.confirmationUrl);
+      submitPaymentConfirmation(result);
     } catch {
       toast({ title: 'Не удалось создать новый платёж', variant: 'destructive' });
     } finally {

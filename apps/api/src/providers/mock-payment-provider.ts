@@ -20,9 +20,10 @@ export class MockPaymentProvider implements PaymentProvider {
     amountRub: number;
     userId: string;
     purpose: 'topup' | 'order';
+    providerPaymentId?: string;
     metadata: Record<string, string>;
   }): Promise<{ paymentId: string; confirmationUrl: string }> {
-    const paymentId = params.metadata.paymentId ?? `mock_${crypto.randomUUID()}`;
+    const paymentId = params.providerPaymentId ?? params.metadata.paymentId ?? `mock_${crypto.randomUUID()}`;
     const webUrl = process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000';
 
     return {

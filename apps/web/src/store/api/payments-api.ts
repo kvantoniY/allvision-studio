@@ -7,6 +7,8 @@ import { authApi } from './auth-api';
 export type CreatePaymentResponse = {
   payment: Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;
   confirmationUrl: string;
+  confirmationMethod?: 'GET' | 'POST';
+  confirmationParams?: Record<string, string>;
 };
 
 export const paymentsApi = createApi({

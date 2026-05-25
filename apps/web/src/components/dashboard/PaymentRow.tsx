@@ -28,10 +28,17 @@ export function PaymentRow({
   isRepeating?: boolean;
 }) {
   const purpose = payment.purpose === 'TOPUP' ? 'Пополнение' : `Заказ #${payment.id.slice(0, 6)}`;
+  const metadata = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
+    ? payment.metadata as Record<string, unknown>
+    : {};
   const confirmationUrl =
-    payment.metadata && typeof payment.metadata === 'object' && 'confirmationUrl' in payment.metadata
-      ? String((payment.metadata as Record<string, unknown>).confirmationUrl)
+    'confirmationUrl' in metadata
+      ? String(metadata.confirmationUrl)
       : undefined;
+  const confirmationMethod = metadata.confirmationMethod === 'POST' ? 'POST' : 'GET';
+  const confirmationParams = metadata.confirmationParams && typeof metadata.confirmationParams === 'object' && !Array.isArray(metadata.confirmationParams)
+    ? metadata.confirmationParams as Record<string, unknown>
+    : undefined;
   const confirmationHref = confirmationUrl ?? `/mock-payment/${payment.providerPaymentId ?? payment.id}`;
 
   return (
@@ -52,7 +59,16 @@ export function PaymentRow({
         </span>
       </td>
       <td className="py-3 px-3">
-        {payment.status === 'PENDING' ? (
+        {payment.status === 'PENDING' && confirmationMethod === 'POST' && confirmationParams ? (
+          <form method="POST" action={confirmationHref}>
+            {Object.entries(confirmationParams).map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={String(value)} />
+            ))}
+            <Button type="submit" size="sm" variant="default">
+              Завершить оплату
+            </Button>
+          </form>
+        ) : payment.status === 'PENDING' ? (
           <Button asChild size="sm" variant="default">
             <Link href={confirmationHref}>Завершить оплату</Link>
           </Button>

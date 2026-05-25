@@ -1,10 +1,17 @@
 import { prisma } from '@allvision/database';
 import type { Payment } from '@allvision/database';
+import crypto from 'node:crypto';
 import { HttpError } from '../utils/http-error';
 import { getPaymentProvider } from './payment-provider';
 
 type PaymentListItem = Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;
 type WebhookHandleResult = { ok: true; providerPaymentId?: string };
+type PaymentCreateResult = {
+  payment: PaymentListItem;
+  confirmationUrl: string;
+  confirmationMethod?: 'GET' | 'POST';
+  confirmationParams?: Record<string, string>;
+};
 
 function paymentProviderName() {
   return process.env.PAYMENT_PROVIDER ?? 'mock';
@@ -17,11 +24,35 @@ function providerEventToStatus(type: string) {
   throw new HttpError(400, 'UNSUPPORTED_PAYMENT_EVENT', 'Unsupported payment event');
 }
 
-function buildConfirmationMetadata(metadata: Record<string, unknown>, confirmationUrl: string) {
+function buildConfirmationMetadata(
+  metadata: Record<string, unknown>,
+  confirmation: {
+    confirmationUrl: string;
+    confirmationMethod?: 'GET' | 'POST';
+    confirmationParams?: Record<string, string>;
+  },
+) {
   return {
     ...metadata,
-    confirmationUrl,
+    confirmationUrl: confirmation.confirmationUrl,
+    ...(confirmation.confirmationMethod ? { confirmationMethod: confirmation.confirmationMethod } : {}),
+    ...(confirmation.confirmationParams ? { confirmationParams: confirmation.confirmationParams } : {}),
   };
+}
+
+async function createProviderPaymentId(provider: string) {
+  if (provider !== 'robokassa') return undefined;
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const candidate = String(crypto.randomInt(1, 2_147_483_648));
+    const existing = await prisma.payment.findFirst({
+      where: { provider, providerPaymentId: candidate },
+      select: { id: true },
+    });
+    if (!existing) return candidate;
+  }
+
+  throw new HttpError(500, 'PAYMENT_ID_GENERATION_FAILED', 'Could not generate payment id');
 }
 
 async function getUserEmail(userId: string) {
@@ -32,7 +63,7 @@ async function getUserEmail(userId: string) {
 export async function createTopupPayment(
   userId: string,
   tokenPackageId: string,
-): Promise<{ payment: PaymentListItem; confirmationUrl: string }> {
+): Promise<PaymentCreateResult> {
   const pkg = await prisma.tokenPackage.findUnique({ where: { id: tokenPackageId } });
   if (!pkg) {
     throw new HttpError(404, 'TOKEN_PACKAGE_NOT_FOUND', 'Token package not found');
@@ -43,6 +74,7 @@ export async function createTopupPayment(
 
   const customerEmail = await getUserEmail(userId);
   const tokensAdded = pkg.tokens + pkg.bonus;
+  const provider = paymentProviderName();
   const metadata = {
     tokenPackageId: pkg.id,
     packageTitle: pkg.title,
@@ -56,16 +88,18 @@ export async function createTopupPayment(
       amountRub: pkg.priceRub * 100,
       tokensAdded,
       status: 'PENDING',
-      provider: paymentProviderName(),
+      provider,
       purpose: 'TOPUP',
       metadata,
     },
   });
 
+  const providerPaymentId = await createProviderPaymentId(provider);
   const providerPayment = await getPaymentProvider().createPayment({
     amountRub: payment.amountRub,
     userId,
     purpose: 'topup',
+    providerPaymentId,
     metadata: {
       paymentId: payment.id,
       tokenPackageId: pkg.id,
@@ -80,7 +114,7 @@ export async function createTopupPayment(
     where: { id: payment.id },
     data: {
       providerPaymentId: providerPayment.paymentId,
-      metadata: buildConfirmationMetadata(metadata, providerPayment.confirmationUrl),
+      metadata: buildConfirmationMetadata(metadata, providerPayment),
     },
   });
 
@@ -91,13 +125,15 @@ export async function createTopupPayment(
       tokensAdded: updated.tokensAdded,
     },
     confirmationUrl: providerPayment.confirmationUrl,
+    confirmationMethod: providerPayment.confirmationMethod,
+    confirmationParams: providerPayment.confirmationParams,
   };
 }
 
 export async function createOrderPayment(
   userId: string,
   orderId: string,
-): Promise<{ payment: PaymentListItem; confirmationUrl: string }> {
+): Promise<PaymentCreateResult> {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) {
     throw new HttpError(404, 'ORDER_NOT_FOUND', 'Order not found');
@@ -120,6 +156,7 @@ export async function createOrderPayment(
     orderType: order.type,
   };
   const customerEmail = await getUserEmail(userId);
+  const provider = paymentProviderName();
 
   const payment = await prisma.payment.create({
     data: {
@@ -127,16 +164,18 @@ export async function createOrderPayment(
       amountRub: order.priceRub * 100,
       tokensAdded: null,
       status: 'PENDING',
-      provider: paymentProviderName(),
+      provider,
       purpose: 'ORDER',
       metadata,
     },
   });
 
+  const providerPaymentId = await createProviderPaymentId(provider);
   const providerPayment = await getPaymentProvider().createPayment({
     amountRub: payment.amountRub,
     userId,
     purpose: 'order',
+    providerPaymentId,
     metadata: {
       paymentId: payment.id,
       orderId: order.id,
@@ -149,7 +188,7 @@ export async function createOrderPayment(
     where: { id: payment.id },
     data: {
       providerPaymentId: providerPayment.paymentId,
-      metadata: buildConfirmationMetadata(metadata, providerPayment.confirmationUrl),
+      metadata: buildConfirmationMetadata(metadata, providerPayment),
     },
   });
 
@@ -165,6 +204,8 @@ export async function createOrderPayment(
       tokensAdded: updated.tokensAdded,
     },
     confirmationUrl: providerPayment.confirmationUrl,
+    confirmationMethod: providerPayment.confirmationMethod,
+    confirmationParams: providerPayment.confirmationParams,
   };
 }
 
@@ -195,12 +236,19 @@ export async function getPaymentStatusForUser(userId: string, id: string): Promi
 export async function handlePaymentWebhook(rawBody: Buffer, signature: string): Promise<WebhookHandleResult> {
   const event = await getPaymentProvider().verifyWebhook(rawBody, signature);
   const status = providerEventToStatus(event.type);
-  const payment = await prisma.payment.findFirst({
+  const paymentByInternalId = event.paymentId
+    ? await prisma.payment.findUnique({ where: { id: event.paymentId } })
+    : null;
+  const payment = paymentByInternalId ?? await prisma.payment.findFirst({
     where: { providerPaymentId: event.providerPaymentId },
   });
 
   if (!payment) {
     throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
+  }
+
+  if (payment.providerPaymentId && payment.providerPaymentId !== event.providerPaymentId) {
+    throw new HttpError(400, 'PAYMENT_PROVIDER_ID_MISMATCH', 'Payment provider id does not match');
   }
 
   if (event.amountRub > 0 && event.amountRub !== payment.amountRub) {

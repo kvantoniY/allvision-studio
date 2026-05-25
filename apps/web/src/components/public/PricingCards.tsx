@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useTopupMutation } from '@/store/api/payments-api';
 import { getPackageTotal } from '@/lib/public-content';
+import { submitPaymentConfirmation } from '@/lib/payment-confirmation';
 import { cn } from '@/lib/utils';
 
 import { TokenIcon } from '@/components/ui/token-icon';
@@ -35,7 +36,7 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
 
     try {
       const result = await topup({ tokenPackageId }).unwrap();
-      router.push(result.confirmationUrl);
+      submitPaymentConfirmation(result);
     } catch {
       toast({
         title: 'Не удалось создать платёж',

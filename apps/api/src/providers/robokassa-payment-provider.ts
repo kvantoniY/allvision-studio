@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
-import type { PaymentProvider, PaymentProviderStatus, WebhookEvent } from '@allvision/shared';
+import type { PaymentConfirmation, PaymentProvider, PaymentProviderStatus, WebhookEvent } from '@allvision/shared';
 import { HttpError } from '../utils/http-error';
 
 const ROBOKASSA_PAY_URL = 'https://auth.robokassa.ru/Merchant/Index.aspx';
@@ -54,7 +54,7 @@ function getConfig(): RobokassaConfig {
     hashAlgorithm: (env('ROBOKASSA_HASH_ALGORITHM') ?? 'md5').toLowerCase(),
     isTest: isTruthy(env('ROBOKASSA_TEST_MODE'), false),
     receiptEnabled: isTruthy(env('ROBOKASSA_RECEIPT_ENABLED'), true),
-    receiptPaymentMethod: env('ROBOKASSA_RECEIPT_PAYMENT_METHOD') ?? 'full_prepayment',
+    receiptPaymentMethod: env('ROBOKASSA_RECEIPT_PAYMENT_METHOD') ?? 'full_payment',
     receiptPaymentObject: env('ROBOKASSA_RECEIPT_PAYMENT_OBJECT') ?? 'service',
     receiptTax: env('ROBOKASSA_RECEIPT_TAX') ?? 'none',
     receiptSno: env('ROBOKASSA_RECEIPT_SNO'),
@@ -73,7 +73,7 @@ function numberRubles(amountRub: number) {
 }
 
 function buildInvId() {
-  return `${Date.now()}${crypto.randomInt(1000, 9999)}`;
+  return String(crypto.randomInt(1, 2_147_483_648));
 }
 
 function hash(value: string, algorithm: string) {
@@ -98,6 +98,11 @@ function clip(value: string, max: number) {
 
 function sanitizeDescription(value: string) {
   return clip(value.replace(/[<>"]/g, '').replace(/\s+/g, ' ').trim(), 100);
+}
+
+function topupDescription(packageTitle?: string) {
+  const suffix = packageTitle ? `, пакет ${packageTitle}` : '';
+  return `Доступ к цифровым услугам Allvision Studio${suffix}`;
 }
 
 function buildReceipt(params: {
@@ -207,10 +212,11 @@ export class RobokassaPaymentProvider implements PaymentProvider {
     amountRub: number;
     userId: string;
     purpose: 'topup' | 'order';
+    providerPaymentId?: string;
     metadata: Record<string, string>;
-  }): Promise<{ paymentId: string; confirmationUrl: string }> {
+  }): Promise<PaymentConfirmation> {
     const config = getConfig();
-    const invId = buildInvId();
+    const invId = params.providerPaymentId ?? buildInvId();
     const outSum = rublesFromKopecks(params.amountRub);
     const successUrl2 = `${config.apiUrl}/api/payments/robokassa/success`;
     const failUrl2 = `${config.apiUrl}/api/payments/robokassa/fail`;
@@ -218,7 +224,7 @@ export class RobokassaPaymentProvider implements PaymentProvider {
     const failUrl2Method = 'GET';
     const description = sanitizeDescription(
       params.purpose === 'topup'
-        ? `Allvision Studio: ${params.metadata.packageTitle ?? 'пополнение баланса'}`
+        ? topupDescription(params.metadata.packageTitle)
         : `Allvision Studio: заказ ${params.metadata.orderId ?? invId}`,
     );
 
@@ -249,7 +255,7 @@ export class RobokassaPaymentProvider implements PaymentProvider {
       shpParams,
     });
 
-    const query = new URLSearchParams({
+    const confirmationParams: Record<string, string> = {
       MerchantLogin: config.merchantLogin,
       OutSum: outSum,
       InvId: invId,
@@ -262,21 +268,23 @@ export class RobokassaPaymentProvider implements PaymentProvider {
       FailUrl2: failUrl2,
       FailUrl2Method: failUrl2Method,
       ...shpParams,
-    });
+    };
 
     if (params.metadata.customerEmail) {
-      query.set('Email', params.metadata.customerEmail);
+      confirmationParams.Email = params.metadata.customerEmail;
     }
     if (config.isTest) {
-      query.set('IsTest', '1');
+      confirmationParams.IsTest = '1';
     }
     if (receipt) {
-      query.set('Receipt', receipt);
+      confirmationParams.Receipt = receipt;
     }
 
     return {
       paymentId: invId,
-      confirmationUrl: `${config.paymentUrl}?${query.toString()}`,
+      confirmationUrl: config.paymentUrl,
+      confirmationMethod: 'POST',
+      confirmationParams,
     };
   }
 
