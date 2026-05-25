@@ -36,7 +36,7 @@ export const paymentsApi = createApi({
       query: (id) => ({ url: `/${id}` }),
       providesTags: (_result, _error, id) => [{ type: 'Payment', id }],
     }),
-    getPaymentStatus: build.query<{ status: PaymentStatus }, string>({
+    getPaymentStatus: build.query<{ status: PaymentStatus; tokensAdded: number | null }, string>({
       query: (id) => ({ url: `/${id}/status` }),
       providesTags: (_result, _error, id) => [{ type: 'Payment', id }],
     }),

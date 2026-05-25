@@ -31,15 +31,15 @@ export function stopPendingPaymentPoller() {
 export function startPendingPaymentPoller() {
   if (timer || !isEnabled()) return;
 
-  const intervalMs = positiveIntEnv('PAYMENT_PENDING_POLL_INTERVAL_MS', 30000);
+  const intervalMs = positiveIntEnv('PAYMENT_PENDING_POLL_INTERVAL_MS', 10000);
 
   const run = async () => {
     if (running) return;
     running = true;
     try {
       const result = await pollPendingPaymentsOnce();
-      if (result.checked > 0) {
-        logger.debug(`[payments] pending poll checked=${result.checked}`);
+      if (result.checked > 0 || result.revived > 0) {
+        logger.info(`[payments] pending poll checked=${result.checked} revived=${result.revived}`);
       }
     } catch (error) {
       logger.warn(`[payments] pending poll failed: ${(error as Error).message}`);
@@ -48,7 +48,7 @@ export function startPendingPaymentPoller() {
     }
   };
 
-  firstRunTimer = setTimeout(run, 3000);
+  firstRunTimer = setTimeout(run, 2000);
   firstRunTimer.unref();
   timer = setInterval(run, intervalMs);
   timer.unref();

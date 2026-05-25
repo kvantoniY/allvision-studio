@@ -13,7 +13,16 @@
       "PowerShell(npx prisma migrate dev --name add_user_soft_delete --schema packages/database/prisma/schema.prisma --skip-seed)",
       "PowerShell(npm run build -w @allvision/shared)",
       "PowerShell(npm run build -w @allvision/api)",
-      "PowerShell(npm test -w @allvision/api)"
+      "PowerShell(npm test -w @allvision/api)",
+      "Bash(xargs grep -l \"robokassa\\\\|yookassa\\\\|payment\\\\|billing\\\\|topup\" -i)",
+      "Bash(xargs grep -l \"payment\\\\|billing\\\\|topup\" -i)",
+      "Bash(xargs grep -l \"payment\\\\|billing\" -i)",
+      "Bash(xargs grep -l \"Payment\\\\|WebhookEvent\")",
+      "Bash(xargs grep -l \"PaymentsResponse\\\\|type Payment\")",
+      "Bash(xargs grep -l \"startPendingPaymentPoller\\\\|payment-poller\")",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(git add *)"
     ]
   }
 }

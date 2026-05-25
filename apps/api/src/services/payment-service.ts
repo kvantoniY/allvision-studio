@@ -15,6 +15,8 @@ type PaymentCreateResult = {
   confirmationParams?: Record<string, string>;
 };
 
+type ProviderStatus = 'pending' | 'succeeded' | 'failed' | 'cancelled';
+
 function paymentProviderName() {
   return process.env.PAYMENT_PROVIDER ?? 'mock';
 }
@@ -42,7 +44,7 @@ function buildConfirmationMetadata(
   };
 }
 
-const providerStatusCache = new Map<string, { status: 'pending' | 'succeeded' | 'failed' | 'cancelled'; checkedAt: number }>();
+const providerStatusCache = new Map<string, { status: ProviderStatus; checkedAt: number }>();
 
 function positiveIntEnv(name: string, fallback: number) {
   const raw = process.env[name]?.trim();
@@ -52,7 +54,29 @@ function positiveIntEnv(name: string, fallback: number) {
 }
 
 function providerStatusCacheMs() {
-  return positiveIntEnv('PAYMENT_PROVIDER_STATUS_CACHE_MS', 15000);
+  return positiveIntEnv('PAYMENT_PROVIDER_STATUS_CACHE_MS', 5000);
+}
+
+function providerStatusCacheMaxEntries() {
+  return positiveIntEnv('PAYMENT_PROVIDER_STATUS_CACHE_MAX', 500);
+}
+
+function pruneProviderStatusCache() {
+  const ttl = providerStatusCacheMs();
+  const now = Date.now();
+  for (const [key, value] of providerStatusCache) {
+    if (now - value.checkedAt >= ttl) {
+      providerStatusCache.delete(key);
+    }
+  }
+  const maxEntries = providerStatusCacheMaxEntries();
+  if (providerStatusCache.size > maxEntries) {
+    const sorted = [...providerStatusCache.entries()].sort((a, b) => a[1].checkedAt - b[1].checkedAt);
+    const toRemove = providerStatusCache.size - maxEntries;
+    for (let i = 0; i < toRemove; i += 1) {
+      providerStatusCache.delete(sorted[i][0]);
+    }
+  }
 }
 
 function providerStatusToEventType(status: 'succeeded' | 'failed' | 'cancelled'): WebhookEvent['type'] {
@@ -61,28 +85,39 @@ function providerStatusToEventType(status: 'succeeded' | 'failed' | 'cancelled')
   return 'payment.cancelled';
 }
 
-async function readProviderStatus(payment: Payment) {
-  if (!payment.providerPaymentId) return 'pending' as const;
-  if (payment.provider !== paymentProviderName()) return 'pending' as const;
+async function readProviderStatus(payment: Payment, options?: { bypassCache?: boolean }): Promise<ProviderStatus> {
+  if (!payment.providerPaymentId) return 'pending';
+  if (payment.provider !== paymentProviderName()) return 'pending';
 
-  const now = Date.now();
   const cacheKey = `${payment.provider}:${payment.providerPaymentId}`;
-  const cached = providerStatusCache.get(cacheKey);
-  if (cached && now - cached.checkedAt < providerStatusCacheMs()) {
-    return cached.status;
+  const now = Date.now();
+
+  if (!options?.bypassCache) {
+    const cached = providerStatusCache.get(cacheKey);
+    if (cached && now - cached.checkedAt < providerStatusCacheMs()) {
+      return cached.status;
+    }
   }
 
-  const status = await getPaymentProvider().getPaymentProviderStatus(payment.providerPaymentId);
+  const status = (await getPaymentProvider().getPaymentProviderStatus(payment.providerPaymentId)) as ProviderStatus;
   providerStatusCache.set(cacheKey, { status, checkedAt: now });
+  pruneProviderStatusCache();
   return status;
 }
 
-export async function reconcilePaymentWithProvider(payment: Payment): Promise<Payment> {
-  if (payment.status !== 'PENDING' || !payment.providerPaymentId) return payment;
+type ReconcileOptions = { bypassCache?: boolean; allowRevive?: boolean };
 
-  let providerStatus: Awaited<ReturnType<typeof readProviderStatus>>;
+export async function reconcilePaymentWithProvider(payment: Payment, options?: ReconcileOptions): Promise<Payment> {
+  if (!payment.providerPaymentId) return payment;
+
+  const allowRevive = options?.allowRevive ?? false;
+  const canReconcile =
+    payment.status === 'PENDING' || (allowRevive && (payment.status === 'CANCELLED' || payment.status === 'FAILED'));
+  if (!canReconcile) return payment;
+
+  let providerStatus: ProviderStatus;
   try {
-    providerStatus = await readProviderStatus(payment);
+    providerStatus = await readProviderStatus(payment, { bypassCache: options?.bypassCache });
   } catch (error) {
     logger.warn(
       `[payments] provider status sync failed paymentId=${payment.id} provider=${payment.provider} providerPaymentId=${payment.providerPaymentId}: ${(error as Error).message}`,
@@ -92,19 +127,31 @@ export async function reconcilePaymentWithProvider(payment: Payment): Promise<Pa
 
   if (providerStatus === 'pending') return payment;
 
+  if (payment.status !== 'PENDING' && providerStatus !== 'succeeded') {
+    return payment;
+  }
+
+  logger.info(
+    `[payments] reconcile applying event paymentId=${payment.id} dbStatus=${payment.status} providerStatus=${providerStatus}`,
+  );
+
   await applyPaymentEvent({
     type: providerStatusToEventType(providerStatus),
     paymentId: payment.id,
     providerPaymentId: payment.providerPaymentId,
     amountRub: payment.amountRub,
-    metadata: {},
+    metadata: { source: 'reconciliation' },
   });
 
   return (await prisma.payment.findUnique({ where: { id: payment.id } })) ?? payment;
 }
 
-export async function reconcilePaymentList(items: Payment[]) {
-  return Promise.all(items.map((payment) => reconcilePaymentWithProvider(payment)));
+export async function reconcilePaymentList(items: Payment[], options?: ReconcileOptions) {
+  const results: Payment[] = [];
+  for (const payment of items) {
+    results.push(await reconcilePaymentWithProvider(payment, options));
+  }
+  return results;
 }
 
 async function createProviderPaymentId(provider: string) {
@@ -161,40 +208,63 @@ export async function createTopupPayment(
     },
   });
 
-  const providerPaymentId = await createProviderPaymentId(provider);
-  const providerPayment = await getPaymentProvider().createPayment({
-    amountRub: payment.amountRub,
-    userId,
-    purpose: 'topup',
-    providerPaymentId,
-    metadata: {
-      paymentId: payment.id,
-      tokenPackageId: pkg.id,
-      packageTitle: pkg.title,
-      baseTokens: String(pkg.tokens),
-      bonusTokens: String(pkg.bonus),
-      ...(customerEmail ? { customerEmail } : {}),
-    },
-  });
+  logger.info(
+    `[payments] created topup payment id=${payment.id} userId=${userId} amountRub=${payment.amountRub} tokensAdded=${tokensAdded} provider=${provider}`,
+  );
 
-  const updated = await prisma.payment.update({
-    where: { id: payment.id },
-    data: {
-      providerPaymentId: providerPayment.paymentId,
-      metadata: buildConfirmationMetadata(metadata, providerPayment),
-    },
-  });
+  try {
+    const providerPaymentId = await createProviderPaymentId(provider);
+    const providerPayment = await getPaymentProvider().createPayment({
+      amountRub: payment.amountRub,
+      userId,
+      purpose: 'topup',
+      providerPaymentId,
+      metadata: {
+        paymentId: payment.id,
+        tokenPackageId: pkg.id,
+        packageTitle: pkg.title,
+        baseTokens: String(pkg.tokens),
+        bonusTokens: String(pkg.bonus),
+        ...(customerEmail ? { customerEmail } : {}),
+      },
+    });
 
-  return {
-    payment: {
-      id: updated.id,
-      amountRub: updated.amountRub,
-      tokensAdded: updated.tokensAdded,
-    },
-    confirmationUrl: providerPayment.confirmationUrl,
-    confirmationMethod: providerPayment.confirmationMethod,
-    confirmationParams: providerPayment.confirmationParams,
-  };
+    const updated = await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        providerPaymentId: providerPayment.paymentId,
+        metadata: buildConfirmationMetadata(metadata, providerPayment),
+      },
+    });
+
+    logger.info(
+      `[payments] topup payment confirmed id=${updated.id} providerPaymentId=${updated.providerPaymentId}`,
+    );
+
+    return {
+      payment: {
+        id: updated.id,
+        amountRub: updated.amountRub,
+        tokensAdded: updated.tokensAdded,
+      },
+      confirmationUrl: providerPayment.confirmationUrl,
+      confirmationMethod: providerPayment.confirmationMethod,
+      confirmationParams: providerPayment.confirmationParams,
+    };
+  } catch (error) {
+    logger.error(
+      `[payments] failed to register topup payment with provider id=${payment.id}: ${(error as Error).message}`,
+    );
+    await prisma.payment
+      .updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: { status: 'FAILED' },
+      })
+      .catch((cleanupError) => {
+        logger.warn(`[payments] failed to mark payment FAILED after provider error id=${payment.id}: ${(cleanupError as Error).message}`);
+      });
+    throw error;
+  }
 }
 
 export async function createOrderPayment(
@@ -237,43 +307,62 @@ export async function createOrderPayment(
     },
   });
 
-  const providerPaymentId = await createProviderPaymentId(provider);
-  const providerPayment = await getPaymentProvider().createPayment({
-    amountRub: payment.amountRub,
-    userId,
-    purpose: 'order',
-    providerPaymentId,
-    metadata: {
-      paymentId: payment.id,
-      orderId: order.id,
-      orderType: order.type,
-      ...(customerEmail ? { customerEmail } : {}),
-    },
-  });
+  try {
+    const providerPaymentId = await createProviderPaymentId(provider);
+    const providerPayment = await getPaymentProvider().createPayment({
+      amountRub: payment.amountRub,
+      userId,
+      purpose: 'order',
+      providerPaymentId,
+      metadata: {
+        paymentId: payment.id,
+        orderId: order.id,
+        orderType: order.type,
+        ...(customerEmail ? { customerEmail } : {}),
+      },
+    });
 
-  const updated = await prisma.payment.update({
-    where: { id: payment.id },
-    data: {
-      providerPaymentId: providerPayment.paymentId,
-      metadata: buildConfirmationMetadata(metadata, providerPayment),
-    },
-  });
+    const updated = await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        providerPaymentId: providerPayment.paymentId,
+        metadata: buildConfirmationMetadata(metadata, providerPayment),
+      },
+    });
 
-  await prisma.order.update({
-    where: { id: order.id },
-    data: { paymentId: updated.id },
-  });
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { paymentId: updated.id },
+    });
 
-  return {
-    payment: {
-      id: updated.id,
-      amountRub: updated.amountRub,
-      tokensAdded: updated.tokensAdded,
-    },
-    confirmationUrl: providerPayment.confirmationUrl,
-    confirmationMethod: providerPayment.confirmationMethod,
-    confirmationParams: providerPayment.confirmationParams,
-  };
+    logger.info(
+      `[payments] order payment confirmed id=${updated.id} orderId=${order.id} providerPaymentId=${updated.providerPaymentId}`,
+    );
+
+    return {
+      payment: {
+        id: updated.id,
+        amountRub: updated.amountRub,
+        tokensAdded: updated.tokensAdded,
+      },
+      confirmationUrl: providerPayment.confirmationUrl,
+      confirmationMethod: providerPayment.confirmationMethod,
+      confirmationParams: providerPayment.confirmationParams,
+    };
+  } catch (error) {
+    logger.error(
+      `[payments] failed to register order payment with provider id=${payment.id}: ${(error as Error).message}`,
+    );
+    await prisma.payment
+      .updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: { status: 'FAILED' },
+      })
+      .catch((cleanupError) => {
+        logger.warn(`[payments] failed to mark order payment FAILED after provider error id=${payment.id}: ${(cleanupError as Error).message}`);
+      });
+    throw error;
+  }
 }
 
 export async function findPaymentByIdOrProviderId(id: string): Promise<Payment | null> {
@@ -295,13 +384,20 @@ export async function getPaymentForUser(userId: string, id: string): Promise<Pay
   return payment;
 }
 
-export async function getPaymentStatusForUser(userId: string, id: string): Promise<{ status: Payment['status'] }> {
-  const payment = await reconcilePaymentWithProvider(await getPaymentForUser(userId, id));
-  return { status: payment.status };
+export async function getPaymentStatusForUser(
+  userId: string,
+  id: string,
+): Promise<{ status: Payment['status']; tokensAdded: number | null }> {
+  const initial = await getPaymentForUser(userId, id);
+  const payment = await reconcilePaymentWithProvider(initial, { bypassCache: true });
+  return { status: payment.status, tokensAdded: payment.tokensAdded };
 }
 
 export async function handlePaymentWebhook(rawBody: Buffer, signature: string): Promise<WebhookHandleResult> {
   const event = await getPaymentProvider().verifyWebhook(rawBody, signature);
+  logger.info(
+    `[payments] webhook verified type=${event.type} providerPaymentId=${event.providerPaymentId} paymentId=${event.paymentId ?? 'none'}`,
+  );
   return applyPaymentEvent(event);
 }
 
@@ -311,93 +407,169 @@ export async function handlePaymentSuccessRedirect(rawBody: Buffer, signature: s
     throw new HttpError(400, 'PAYMENT_SUCCESS_REDIRECT_UNSUPPORTED', 'Payment provider does not support success redirect verification');
   }
   const event = await provider.verifySuccessRedirect(rawBody, signature);
+  logger.info(
+    `[payments] success redirect verified type=${event.type} providerPaymentId=${event.providerPaymentId} paymentId=${event.paymentId ?? 'none'}`,
+  );
   return applyPaymentEvent(event);
+}
+
+const PAYMENT_LOCK_NAMESPACE = 'allvision:payment:';
+
+function advisoryLockKey(paymentId: string): bigint {
+  const hash = crypto.createHash('sha256').update(`${PAYMENT_LOCK_NAMESPACE}${paymentId}`).digest();
+  const high = hash.readBigInt64BE(0);
+  const mask = (1n << 63n) - 1n;
+  return high & mask;
+}
+
+async function withPaymentLock<T>(paymentId: string, fn: () => Promise<T>): Promise<T> {
+  const key = advisoryLockKey(paymentId);
+  let acquired = false;
+  try {
+    await prisma.$executeRawUnsafe(`SELECT pg_advisory_lock(${key.toString()}::bigint)`);
+    acquired = true;
+  } catch (error) {
+    logger.warn(`[payments] advisory lock acquire failed paymentId=${paymentId}: ${(error as Error).message}`);
+  }
+  try {
+    return await fn();
+  } finally {
+    if (acquired) {
+      await prisma
+        .$executeRawUnsafe(`SELECT pg_advisory_unlock(${key.toString()}::bigint)`)
+        .catch((error) => {
+          logger.warn(`[payments] advisory unlock failed paymentId=${paymentId}: ${(error as Error).message}`);
+        });
+    }
+  }
 }
 
 async function applyPaymentEvent(event: WebhookEvent): Promise<WebhookHandleResult> {
   const status = providerEventToStatus(event.type);
+
   const paymentByInternalId = event.paymentId
     ? await prisma.payment.findUnique({ where: { id: event.paymentId } })
     : null;
-  const payment = paymentByInternalId ?? await prisma.payment.findFirst({
+  const initial = paymentByInternalId ?? await prisma.payment.findFirst({
     where: { providerPaymentId: event.providerPaymentId },
   });
 
-  if (!payment) {
+  if (!initial) {
+    logger.warn(
+      `[payments] applyPaymentEvent: payment not found type=${event.type} providerPaymentId=${event.providerPaymentId} paymentId=${event.paymentId ?? 'none'}`,
+    );
     throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
   }
 
-  if (payment.providerPaymentId && payment.providerPaymentId !== event.providerPaymentId) {
+  if (initial.providerPaymentId && initial.providerPaymentId !== event.providerPaymentId) {
+    logger.warn(
+      `[payments] applyPaymentEvent: provider id mismatch paymentId=${initial.id} dbProviderId=${initial.providerPaymentId} eventProviderId=${event.providerPaymentId}`,
+    );
     throw new HttpError(400, 'PAYMENT_PROVIDER_ID_MISMATCH', 'Payment provider id does not match');
   }
 
-  if (event.amountRub > 0 && event.amountRub !== payment.amountRub) {
+  if (event.amountRub > 0 && event.amountRub !== initial.amountRub) {
+    logger.warn(
+      `[payments] applyPaymentEvent: amount mismatch paymentId=${initial.id} dbAmount=${initial.amountRub} eventAmount=${event.amountRub}`,
+    );
     throw new HttpError(400, 'PAYMENT_AMOUNT_MISMATCH', 'Payment amount does not match');
   }
 
-  if (payment.status === 'SUCCEEDED') {
-    return { ok: true, providerPaymentId: event.providerPaymentId };
-  }
-
-  if (status !== 'SUCCEEDED') {
-    await prisma.payment.updateMany({
-      where: { id: payment.id, status: { not: 'SUCCEEDED' } },
-      data: { status },
-    });
-    return { ok: true, providerPaymentId: event.providerPaymentId };
-  }
-
-  await prisma.$transaction(async (tx) => {
-    const claim = await tx.payment.updateMany({
-      where: { id: payment.id, status: { not: 'SUCCEEDED' } },
-      data: {
-        status: 'SUCCEEDED',
-        paidAt: new Date(),
-      },
-    });
-    if (claim.count === 0) {
-      return;
+  return withPaymentLock(initial.id, async () => {
+    const payment = await prisma.payment.findUnique({ where: { id: initial.id } });
+    if (!payment) {
+      throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
     }
 
-    if (payment.purpose === 'TOPUP') {
-      const tokensAdded = payment.tokensAdded ?? 0;
-      const user = await tx.user.update({
-        where: { id: payment.userId },
+    if (payment.status === 'SUCCEEDED') {
+      logger.info(
+        `[payments] applyPaymentEvent: payment already succeeded (idempotent skip) paymentId=${payment.id} eventType=${event.type}`,
+      );
+      return { ok: true, providerPaymentId: event.providerPaymentId };
+    }
+
+    if (status !== 'SUCCEEDED') {
+      const result = await prisma.payment.updateMany({
+        where: { id: payment.id, status: { not: 'SUCCEEDED' } },
+        data: { status },
+      });
+      logger.info(
+        `[payments] applyPaymentEvent: marked non-success paymentId=${payment.id} from=${payment.status} to=${status} matched=${result.count}`,
+      );
+      return { ok: true, providerPaymentId: event.providerPaymentId };
+    }
+
+    let creditedTokens: number | null = null;
+
+    await prisma.$transaction(async (tx) => {
+      const claim = await tx.payment.updateMany({
+        where: { id: payment.id, status: { not: 'SUCCEEDED' } },
         data: {
-          tokenBalance: {
-            increment: tokensAdded,
+          status: 'SUCCEEDED',
+          paidAt: new Date(),
+        },
+      });
+      if (claim.count === 0) {
+        logger.info(
+          `[payments] applyPaymentEvent: payment already succeeded in transaction (race) paymentId=${payment.id}`,
+        );
+        return;
+      }
+
+      if (payment.purpose === 'TOPUP') {
+        const tokensAdded = payment.tokensAdded ?? 0;
+        const user = await tx.user.update({
+          where: { id: payment.userId },
+          data: {
+            tokenBalance: {
+              increment: tokensAdded,
+            },
           },
-        },
-      });
+        });
 
-      await tx.tokenTransaction.create({
-        data: {
-          userId: payment.userId,
-          amount: tokensAdded,
-          reason: 'topup',
-          refId: payment.id,
-          balanceAfter: user.tokenBalance,
-        },
+        await tx.tokenTransaction.create({
+          data: {
+            userId: payment.userId,
+            amount: tokensAdded,
+            reason: 'topup',
+            refId: payment.id,
+            balanceAfter: user.tokenBalance,
+          },
+        });
+
+        creditedTokens = tokensAdded;
+        return;
+      }
+
+      await tx.order.updateMany({
+        where: { paymentId: payment.id },
+        data: { status: 'PAID' },
       });
-      return;
+    });
+
+    if (creditedTokens != null) {
+      logger.info(
+        `[payments] applyPaymentEvent: credited tokens paymentId=${payment.id} userId=${payment.userId} tokens=${creditedTokens}`,
+      );
+    } else if (payment.purpose === 'ORDER') {
+      logger.info(`[payments] applyPaymentEvent: order marked paid paymentId=${payment.id}`);
     }
 
-    await tx.order.updateMany({
-      where: { paymentId: payment.id },
-      data: { status: 'PAID' },
-    });
-  });
+    providerStatusCache.delete(`${payment.provider}:${payment.providerPaymentId}`);
 
-  return { ok: true, providerPaymentId: event.providerPaymentId };
+    return { ok: true, providerPaymentId: event.providerPaymentId };
+  });
 }
 
 export async function pollPendingPaymentsOnce(params?: { batchSize?: number; maxAgeMs?: number }) {
   const provider = paymentProviderName();
   const batchSize = params?.batchSize ?? positiveIntEnv('PAYMENT_PENDING_POLL_BATCH_SIZE', 20);
   const maxAgeMs = params?.maxAgeMs ?? positiveIntEnv('PAYMENT_PENDING_POLL_MAX_AGE_MS', 7 * 24 * 60 * 60 * 1000);
+  const reviveAgeMs = positiveIntEnv('PAYMENT_REVIVE_MAX_AGE_MS', 60 * 60 * 1000);
   const createdAfter = new Date(Date.now() - maxAgeMs);
+  const reviveAfter = new Date(Date.now() - reviveAgeMs);
 
-  const payments = await prisma.payment.findMany({
+  const pendingPayments = await prisma.payment.findMany({
     where: {
       provider,
       status: 'PENDING',
@@ -408,8 +580,30 @@ export async function pollPendingPaymentsOnce(params?: { batchSize?: number; max
     take: batchSize,
   });
 
-  if (payments.length === 0) return { checked: 0 };
+  const revivablePayments = await prisma.payment.findMany({
+    where: {
+      provider,
+      status: { in: ['CANCELLED', 'FAILED'] },
+      providerPaymentId: { not: null },
+      createdAt: { gte: reviveAfter },
+      paidAt: null,
+    },
+    orderBy: { createdAt: 'asc' },
+    take: Math.max(1, Math.floor(batchSize / 2)),
+  });
 
-  await reconcilePaymentList(payments);
-  return { checked: payments.length };
+  if (pendingPayments.length > 0) {
+    await reconcilePaymentList(pendingPayments);
+  }
+  if (revivablePayments.length > 0) {
+    await reconcilePaymentList(revivablePayments, { allowRevive: true, bypassCache: true });
+  }
+
+  return { checked: pendingPayments.length, revived: revivablePayments.length };
 }
+
+export const _testHelpers = {
+  clearProviderStatusCache() {
+    providerStatusCache.clear();
+  },
+};

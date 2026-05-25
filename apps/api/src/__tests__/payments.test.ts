@@ -231,12 +231,26 @@ describe('POST /api/payments/webhook', () => {
 });
 
 describe('GET /api/payments/:id/status', () => {
-  it('returns payment status for owner', async () => {
+  it('returns payment status and tokensAdded for owner', async () => {
     const paymentId = await createPendingTopup();
 
     const res = await agent.get(`/api/payments/${paymentId}/status`);
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('PENDING');
+    expect(res.body.tokensAdded).toBe(550);
+  });
+
+  it('returns SUCCEEDED with tokensAdded after webhook', async () => {
+    const paymentId = await createPendingTopup();
+
+    await request(app)
+      .post('/api/payments/webhook')
+      .send({ paymentId, event: 'succeeded' });
+
+    const res = await agent.get(`/api/payments/${paymentId}/status`);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('SUCCEEDED');
+    expect(res.body.tokensAdded).toBe(550);
   });
 
   it('returns 403 for another user', async () => {
@@ -245,5 +259,57 @@ describe('GET /api/payments/:id/status', () => {
     const res = await otherAgent.get(`/api/payments/${paymentId}/status`);
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FORBIDDEN');
+  });
+});
+
+describe('webhook concurrency and idempotency', () => {
+  it('credits tokens once even when two succeeded webhooks fire in parallel', async () => {
+    const paymentId = await createPendingTopup();
+    const balanceBefore = await getUserBalance();
+
+    const [a, b] = await Promise.all([
+      request(app).post('/api/payments/webhook').send({ paymentId, event: 'succeeded' }),
+      request(app).post('/api/payments/webhook').send({ paymentId, event: 'succeeded' }),
+    ]);
+
+    expect([a.status, b.status].sort()).toEqual([200, 200]);
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    expect(payment.status).toBe('SUCCEEDED');
+
+    const balanceAfter = await getUserBalance();
+    expect(balanceAfter).toBe(balanceBefore + 550);
+
+    const txCount = await prisma.tokenTransaction.count({
+      where: { userId, refId: paymentId, reason: 'topup' },
+    });
+    expect(txCount).toBe(1);
+  });
+
+  it('upgrades CANCELLED payment to SUCCEEDED if late success webhook arrives', async () => {
+    const paymentId = await createPendingTopup();
+    const balanceBefore = await getUserBalance();
+
+    const cancelRes = await request(app)
+      .post('/api/payments/webhook')
+      .send({ paymentId, event: 'cancelled' });
+    expect(cancelRes.status).toBe(200);
+
+    const successRes = await request(app)
+      .post('/api/payments/webhook')
+      .send({ paymentId, event: 'succeeded' });
+    expect(successRes.status).toBe(200);
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    expect(payment.status).toBe('SUCCEEDED');
+    expect(payment.paidAt).not.toBeNull();
+
+    const balanceAfter = await getUserBalance();
+    expect(balanceAfter).toBe(balanceBefore + 550);
+
+    const txCount = await prisma.tokenTransaction.count({
+      where: { userId, refId: paymentId, reason: 'topup' },
+    });
+    expect(txCount).toBe(1);
   });
 });

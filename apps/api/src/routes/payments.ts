@@ -65,41 +65,95 @@ paymentsRouter.post('/order/:orderId', requireAuth, async (req: Request, res: Re
   }
 });
 
+function getInvId(req: Request): string {
+  const fromQuery = typeof req.query.InvId === 'string' ? req.query.InvId : '';
+  if (fromQuery) return fromQuery;
+  const fromBody = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>).InvId : undefined;
+  return typeof fromBody === 'string' ? fromBody : '';
+}
+
+function getOutSum(req: Request): string {
+  const fromQuery = typeof req.query.OutSum === 'string' ? req.query.OutSum : '';
+  if (fromQuery) return fromQuery;
+  const fromBody = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>).OutSum : undefined;
+  return typeof fromBody === 'string' ? fromBody : '';
+}
+
 paymentsRouter.all('/robokassa/result', async (req: Request, res: Response, next: NextFunction) => {
+  const invId = getInvId(req);
+  const outSum = getOutSum(req);
+  logger.info(`[payments] robokassa result webhook received method=${req.method} invId=${invId || 'unknown'} outSum=${outSum || 'unknown'}`);
   try {
     const result = await payments.handlePaymentWebhook(rawPaymentBody(req), paymentSignature(req));
+    logger.info(`[payments] robokassa result webhook applied invId=${result.providerPaymentId ?? invId ?? 'unknown'}`);
     res.type('text/plain').send(`OK${result.providerPaymentId ?? ''}`);
   } catch (e) {
+    logger.warn(`[payments] robokassa result webhook failed invId=${invId || 'unknown'}: ${(e as Error).message}`);
     next(e);
   }
 });
 
 paymentsRouter.all('/robokassa/success', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const invId = typeof req.query.InvId === 'string' ? req.query.InvId : '';
-    if (req.query.OutSum && req.query.SignatureValue && invId) {
+    const invId = getInvId(req);
+    const outSum = getOutSum(req);
+    const hasSignature = Boolean(req.query.SignatureValue || (req.body && (req.body as Record<string, unknown>).SignatureValue));
+    logger.info(`[payments] robokassa success redirect received method=${req.method} invId=${invId || 'unknown'} outSum=${outSum || 'unknown'} hasSignature=${hasSignature}`);
+
+    if (outSum && hasSignature && invId) {
       try {
         await payments.handlePaymentSuccessRedirect(rawPaymentBody(req), paymentSignature(req));
+        logger.info(`[payments] robokassa success redirect applied invId=${invId}`);
       } catch (error) {
-        logger.warn(`[payments] Robokassa success fallback rejected for InvId=${invId}: ${(error as Error).message}`);
+        logger.warn(`[payments] robokassa success redirect verification failed invId=${invId}: ${(error as Error).message}`);
       }
     }
+
     let payment = invId ? await payments.findPaymentByIdOrProviderId(invId) : null;
     if (payment?.status === 'PENDING') {
-      payment = await payments.reconcilePaymentWithProvider(payment);
+      try {
+        payment = await payments.reconcilePaymentWithProvider(payment, { bypassCache: true });
+      } catch (error) {
+        logger.warn(`[payments] robokassa success reconcile failed invId=${invId}: ${(error as Error).message}`);
+      }
     }
-    const status = payment?.status === 'SUCCEEDED' ? 'success' : 'pending';
-    const tokens = status === 'success' && payment?.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';
+
+    const finalStatus = payment?.status;
+    let urlStatus: 'success' | 'failed' | 'cancelled' | 'pending';
+    if (finalStatus === 'SUCCEEDED') urlStatus = 'success';
+    else if (finalStatus === 'CANCELLED') urlStatus = 'cancelled';
+    else if (finalStatus === 'FAILED') urlStatus = 'failed';
+    else urlStatus = 'pending';
+
+    const tokens = urlStatus === 'success' && payment?.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';
     const paymentId = payment ? `&paymentId=${payment.id}` : '';
-    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=${status}${tokens}${paymentId}`);
+
+    logger.info(`[payments] robokassa success redirect resolved invId=${invId} dbStatus=${finalStatus ?? 'unknown'} urlStatus=${urlStatus}`);
+
+    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=${urlStatus}${tokens}${paymentId}`);
   } catch (e) {
     next(e);
   }
 });
 
-paymentsRouter.all('/robokassa/fail', async (_req: Request, res: Response, next: NextFunction) => {
+paymentsRouter.all('/robokassa/fail', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=failed`);
+    const invId = getInvId(req);
+    logger.info(`[payments] robokassa fail redirect received invId=${invId || 'unknown'}`);
+
+    if (invId) {
+      const payment = await payments.findPaymentByIdOrProviderId(invId);
+      if (payment && payment.status === 'PENDING') {
+        try {
+          await payments.reconcilePaymentWithProvider(payment, { bypassCache: true });
+        } catch (error) {
+          logger.warn(`[payments] robokassa fail reconcile failed invId=${invId}: ${(error as Error).message}`);
+        }
+      }
+    }
+
+    const paymentId = invId ? `&paymentId=${invId}` : '';
+    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=failed${paymentId}`);
   } catch (e) {
     next(e);
   }
@@ -107,7 +161,8 @@ paymentsRouter.all('/robokassa/fail', async (_req: Request, res: Response, next:
 
 paymentsRouter.post('/webhook', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await payments.handlePaymentWebhook(rawPaymentBody(req), paymentSignature(req));
+    const result = await payments.handlePaymentWebhook(rawPaymentBody(req), paymentSignature(req));
+    logger.info(`[payments] mock webhook applied providerPaymentId=${result.providerPaymentId ?? 'unknown'}`);
     res.json({ ok: true });
   } catch (e) {
     next(e);

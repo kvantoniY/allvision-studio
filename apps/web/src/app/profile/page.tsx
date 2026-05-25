@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDispatch } from 'react-redux';
 import { Bell, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
-import type { Payment } from '@allvision/shared';
+import type { Payment, PaymentStatus } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { PaymentRow } from '@/components/dashboard/PaymentRow';
 import { TransactionRow } from '@/components/dashboard/TransactionRow';
@@ -134,16 +134,36 @@ function ProfileContent() {
       invalidatePaymentSideEffects(dispatch);
     }
     if (paymentResult === 'failed') {
-      toast({ title: 'Платёж не прошёл', description: 'Платёж отклонён банком', variant: 'destructive' });
+      if (paymentId) {
+        toast({
+          title: 'Платёж не прошёл',
+          description: 'Если деньги были списаны, статус обновится в течение нескольких минут.',
+          variant: 'destructive',
+        });
+        setPendingPaymentId(paymentId);
+      } else {
+        toast({ title: 'Платёж не прошёл', description: 'Платёж отклонён банком.', variant: 'destructive' });
+      }
       invalidatePaymentSideEffects(dispatch);
     }
     if (paymentResult === 'pending') {
-      toast({ title: 'Платёж принят', description: 'Ждём подтверждение от платёжного провайдера.' });
+      toast({
+        title: 'Платёж принят',
+        description: 'Ждём подтверждение от платёжного провайдера. Это может занять до нескольких минут.',
+      });
       if (paymentId) setPendingPaymentId(paymentId);
       invalidatePaymentSideEffects(dispatch);
     }
     if (paymentResult === 'cancelled') {
-      toast({ title: 'Платёж отменён' });
+      if (paymentId) {
+        toast({
+          title: 'Платёж отменён',
+          description: 'Если вы всё-таки оплатили, мы автоматически обновим статус. Это может занять до нескольких минут.',
+        });
+        setPendingPaymentId(paymentId);
+      } else {
+        toast({ title: 'Платёж отменён' });
+      }
       invalidatePaymentSideEffects(dispatch);
     }
 
@@ -159,44 +179,87 @@ function ProfileContent() {
     if (!pendingPaymentId) return;
 
     let stopped = false;
-    let attempts = 0;
+    let timerId: number | undefined;
+    const startedAt = Date.now();
+    const maxWaitMs = 10 * 60 * 1000;
+    let consecutiveErrors = 0;
+    let hintedLongWait = false;
+    let lastStatus: PaymentStatus | null = null;
+
+    const scheduleNext = () => {
+      if (stopped) return;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= maxWaitMs) {
+        toast({
+          title: 'Платёж ещё обрабатывается',
+          description: 'Если деньги списаны, статус обновится автоматически. Откройте список платежей чуть позже.',
+        });
+        setPendingPaymentId(null);
+        return;
+      }
+      if (!hintedLongWait && elapsed >= 60_000) {
+        hintedLongWait = true;
+        toast({
+          title: 'Платёж пока в обработке',
+          description: 'Иногда подтверждение от Робокассы приходит с задержкой. Подождите ещё немного.',
+        });
+      }
+      const intervalMs = elapsed < 30_000 ? 3_000 : elapsed < 120_000 ? 5_000 : elapsed < 300_000 ? 15_000 : 30_000;
+      timerId = window.setTimeout(poll, intervalMs);
+    };
 
     const poll = async () => {
-      attempts += 1;
+      if (stopped) return;
       try {
         const result = await fetchPaymentStatus(dispatch, pendingPaymentId);
-
+        consecutiveErrors = 0;
         if (stopped) return;
+
         if (result.status === 'SUCCEEDED') {
-          toast({ title: 'Оплата подтверждена, токены зачислены' });
+          const credited = result.tokensAdded ?? 0;
+          toast({
+            title: credited > 0 ? `Оплата подтверждена! +${credited} токенов` : 'Оплата подтверждена, токены зачислены.',
+          });
           invalidatePaymentSideEffects(dispatch);
           setPendingPaymentId(null);
           return;
         }
-        if (result.status === 'FAILED' || result.status === 'CANCELLED') {
-          toast({ title: 'Платёж не завершён', variant: 'destructive' });
+
+        if (
+          (result.status === 'FAILED' || result.status === 'CANCELLED') &&
+          lastStatus !== null && lastStatus !== result.status
+        ) {
+          toast({
+            title: result.status === 'CANCELLED' ? 'Платёж отменён' : 'Платёж не прошёл',
+            variant: 'destructive',
+          });
           invalidatePaymentSideEffects(dispatch);
           setPendingPaymentId(null);
+          return;
         }
+
+        lastStatus = result.status;
+        scheduleNext();
       } catch {
-        if (attempts >= 12 && !stopped) {
+        consecutiveErrors += 1;
+        if (consecutiveErrors >= 5 && !stopped) {
+          toast({
+            title: 'Не удаётся проверить статус',
+            description: 'Проверьте интернет-соединение или вернитесь к платежам позже.',
+            variant: 'destructive',
+          });
           setPendingPaymentId(null);
+          return;
         }
+        scheduleNext();
       }
     };
 
     void poll();
-    const timer = window.setInterval(() => {
-      if (attempts >= 24) {
-        setPendingPaymentId(null);
-        return;
-      }
-      void poll();
-    }, 5000);
 
     return () => {
       stopped = true;
-      window.clearInterval(timer);
+      if (timerId !== undefined) window.clearTimeout(timerId);
     };
   }, [dispatch, pendingPaymentId, toast]);
 
@@ -467,7 +530,8 @@ function TransactionsSection() {
       const result = await fetchPaymentStatus(dispatch, payment.id);
 
       if (result.status === 'SUCCEEDED') {
-        toast({ title: payment.tokensAdded ? `Оплата прошла успешно! +${payment.tokensAdded} токенов` : 'Оплата прошла успешно!' });
+        const credited = result.tokensAdded ?? payment.tokensAdded ?? 0;
+        toast({ title: credited > 0 ? `Оплата прошла успешно! +${credited} токенов` : 'Оплата прошла успешно!' });
         invalidatePaymentSideEffects(dispatch);
         return;
       }
