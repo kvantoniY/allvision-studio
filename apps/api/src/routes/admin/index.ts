@@ -12,6 +12,7 @@ import { adminProjectsRouter } from './projects';
 import { adminSupportRouter } from './support';
 import { adminStylePresetsRouter } from './style-presets';
 import { adminHomePageRouter } from './home-page';
+import { adminPaymentsRouter } from './payments';
 
 export const adminRouter = Router();
 
@@ -20,6 +21,7 @@ adminRouter.use('/diagnostics', adminDiagnosticsRouter);
 adminRouter.use('/settings', adminSettingsRouter);
 adminRouter.use('/users', adminUsersRouter);
 adminRouter.use('/projects', adminProjectsRouter);
+adminRouter.use('/payments', adminPaymentsRouter);
 adminRouter.use('/support', adminSupportRouter);
 adminRouter.use('/', adminUsageRouter);
 adminRouter.use('/services', adminServicesRouter);

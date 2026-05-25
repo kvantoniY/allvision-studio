@@ -40,6 +40,13 @@ export const paymentsApi = createApi({
       query: (id) => ({ url: `/${id}/status` }),
       providesTags: (_result, _error, id) => [{ type: 'Payment', id }],
     }),
+    recheckPayment: build.mutation<
+      { status: PaymentStatus; tokensAdded: number | null; providerStatus: string | null },
+      string
+    >({
+      query: (id) => ({ url: `/${id}/recheck`, method: 'POST' }),
+      invalidatesTags: (_result, _error, id) => [{ type: 'Payment', id }],
+    }),
   }),
 });
 
@@ -57,4 +64,5 @@ export const {
   usePayOrderMutation,
   useGetPaymentQuery,
   useGetPaymentStatusQuery,
+  useRecheckPaymentMutation,
 } = paymentsApi;

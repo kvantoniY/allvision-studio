@@ -22,14 +22,18 @@ export function PaymentRow({
   payment,
   onRepeat,
   onResume,
+  onRecheck,
   isRepeating,
   isResuming,
+  isRechecking,
 }: {
   payment: Payment;
   onRepeat?: (payment: Payment) => void;
   onResume?: (payment: Payment) => void;
+  onRecheck?: (payment: Payment) => void;
   isRepeating?: boolean;
   isResuming?: boolean;
+  isRechecking?: boolean;
 }) {
   const purpose = payment.purpose === 'TOPUP' ? 'Пополнение' : `Заказ #${payment.id.slice(0, 6)}`;
   const metadata = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
@@ -64,40 +68,54 @@ export function PaymentRow({
         </span>
       </td>
       <td className="py-3 px-3">
-        {payment.status === 'PENDING' && confirmationMethod === 'POST' && confirmationParams ? (
-          <form
-            method="POST"
-            action={confirmationHref}
-            onSubmit={(event) => {
-              if (!onResume) return;
-              event.preventDefault();
-              onResume(payment);
-            }}
-          >
-            {Object.entries(confirmationParams).map(([name, value]) => (
-              <input key={name} type="hidden" name={name} value={String(value)} />
-            ))}
-            <Button type="submit" size="sm" variant="default" disabled={isResuming}>
-              {resumeLabel}
+        <div className="flex flex-wrap items-center gap-2">
+          {payment.status === 'PENDING' && confirmationMethod === 'POST' && confirmationParams ? (
+            <form
+              method="POST"
+              action={confirmationHref}
+              onSubmit={(event) => {
+                if (!onResume) return;
+                event.preventDefault();
+                onResume(payment);
+              }}
+            >
+              {Object.entries(confirmationParams).map(([name, value]) => (
+                <input key={name} type="hidden" name={name} value={String(value)} />
+              ))}
+              <Button type="submit" size="sm" variant="default" disabled={isResuming}>
+                {resumeLabel}
+              </Button>
+            </form>
+          ) : payment.status === 'PENDING' ? (
+            onResume ? (
+              <Button size="sm" variant="default" disabled={isResuming} onClick={() => onResume(payment)}>
+                {resumeLabel}
+              </Button>
+            ) : (
+              <Button asChild size="sm" variant="default">
+                <Link href={confirmationHref}>Завершить оплату</Link>
+              </Button>
+            )
+          ) : payment.status === 'FAILED' || payment.status === 'CANCELLED' ? (
+            <Button size="sm" variant="outline" disabled={isRepeating} onClick={() => onRepeat?.(payment)}>
+              Повторить покупку
             </Button>
-          </form>
-        ) : payment.status === 'PENDING' ? (
-          onResume ? (
-            <Button size="sm" variant="default" disabled={isResuming} onClick={() => onResume(payment)}>
-              {resumeLabel}
+          ) : null}
+
+          {onRecheck && payment.status !== 'SUCCEEDED' ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={isRechecking}
+              onClick={() => onRecheck(payment)}
+              title="Проверить, не зачислены ли деньги на стороне Робокассы"
+            >
+              {isRechecking ? 'Проверяем...' : 'Проверить оплату'}
             </Button>
-          ) : (
-            <Button asChild size="sm" variant="default">
-              <Link href={confirmationHref}>Завершить оплату</Link>
-            </Button>
-          )
-        ) : payment.status === 'FAILED' ? (
-          <Button size="sm" variant="outline" disabled={isRepeating} onClick={() => onRepeat?.(payment)}>
-            Повторить покупку
-          </Button>
-        ) : (
-          <span className="text-xs text-slate-500">—</span>
-        )}
+          ) : null}
+
+          {payment.status === 'SUCCEEDED' ? <span className="text-xs text-slate-500">—</span> : null}
+        </div>
       </td>
     </tr>
   );

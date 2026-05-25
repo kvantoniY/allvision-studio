@@ -3,6 +3,12 @@ import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
 import type { PaymentConfirmation, PaymentProvider, PaymentProviderStatus, WebhookEvent } from '@allvision/shared';
 import { HttpError } from '../utils/http-error';
+import { logger } from '../utils/logger';
+
+function shortHash(value: string, length = 8): string {
+  if (!value) return '';
+  return crypto.createHash('sha1').update(value, 'utf8').digest('hex').slice(0, length);
+}
 
 const ROBOKASSA_PAY_URL = 'https://auth.robokassa.ru/Merchant/Index.aspx';
 const ROBOKASSA_OP_STATE_URL = 'https://auth.robokassa.ru/Merchant/WebService/Service.asmx/OpStateExt';
@@ -22,6 +28,15 @@ const robokassaResultSchema = z
     SignatureValue: z.string().min(1).optional(),
   })
   .passthrough();
+
+function normalizeOutSum(value: string): number {
+  const trimmed = value.replace(/\s+/g, '').replace(',', '.');
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    throw new HttpError(400, 'INVALID_ROBOKASSA_BODY', `Cannot parse OutSum value: ${value}`);
+  }
+  return Math.round(parsed * 100);
+}
 
 type RobokassaConfig = {
   merchantLogin: string;
@@ -265,17 +280,29 @@ function numberValue(value: unknown): number | undefined {
 }
 
 function providerStatusFromRobokassaState(code: number): PaymentProviderStatus {
-  if (code === 100) return 'succeeded';
+  // По документации Robokassa State.Code:
+  //   5  — заявка инициирована, ожидается оплата
+  //   10 — оплата отменена/просрочена
+  //   50 — деньги получены банком, ожидается зачисление мерчанту
+  //   60 — деньги возвращены покупателю
+  //   80 — оплата приостановлена
+  //   100 — оплата завершена успешно
+  // Code 50 ("получено банком") считаем succeeded — для пользователя деньги списались,
+  // фактическое зачисление мерчанту обычно происходит в течение минут.
+  if (code === 100 || code === 50) return 'succeeded';
   if (code === 10) return 'cancelled';
   if (code === 60) return 'failed';
   return 'pending';
 }
 
-function parseOpStateStatus(xml: string): PaymentProviderStatus {
+function parseOpStateStatus(xml: string, invId: string): PaymentProviderStatus {
   let parsed: unknown;
   try {
     parsed = opStateParser.parse(xml);
-  } catch {
+  } catch (error) {
+    logger.warn(
+      `[robokassa] OpStateExt xml parse failed invId=${invId}: ${(error as Error).message} preview=${xml.slice(0, 200)}`,
+    );
     throw new HttpError(502, 'ROBOKASSA_STATUS_PARSE_FAILED', 'Invalid Robokassa status response');
   }
 
@@ -284,8 +311,25 @@ function parseOpStateStatus(xml: string): PaymentProviderStatus {
   const result = objectValue(response?.Result);
   const resultCode = numberValue(result?.Code);
 
-  if (resultCode === 3) return 'pending';
+  // Robokassa Result.Code:
+  //   0  — success, state присутствует
+  //   1  — InvoiceID не указан
+  //   2  — счёт не найден / некорректный
+  //   3  — счёт не оплачен (но существует)
+  //   5  — некорректная подпись
+  if (resultCode === 3) {
+    logger.info(`[robokassa] OpStateExt invId=${invId} result.code=3 → invoice not paid yet (pending)`);
+    return 'pending';
+  }
+  if (resultCode === 2) {
+    logger.info(`[robokassa] OpStateExt invId=${invId} result.code=2 → invoice unknown yet (pending)`);
+    return 'pending';
+  }
   if (resultCode !== 0) {
+    const resultDescription = typeof result?.Description === 'string' ? result.Description : undefined;
+    logger.warn(
+      `[robokassa] OpStateExt invId=${invId} result.code=${resultCode ?? 'unknown'} description=${resultDescription ?? 'none'}`,
+    );
     throw new HttpError(
       502,
       'ROBOKASSA_STATUS_REJECTED',
@@ -296,10 +340,13 @@ function parseOpStateStatus(xml: string): PaymentProviderStatus {
   const state = objectValue(response?.State);
   const stateCode = numberValue(state?.Code);
   if (stateCode == null) {
+    logger.warn(`[robokassa] OpStateExt invId=${invId} state.code missing preview=${xml.slice(0, 200)}`);
     throw new HttpError(502, 'ROBOKASSA_STATUS_PARSE_FAILED', 'Robokassa status response has no state code');
   }
 
-  return providerStatusFromRobokassaState(stateCode);
+  const status = providerStatusFromRobokassaState(stateCode);
+  logger.info(`[robokassa] OpStateExt invId=${invId} state.code=${stateCode} → ${status}`);
+  return status;
 }
 
 async function fetchTextWithTimeout(url: URL, timeoutMs: number) {
@@ -327,7 +374,12 @@ async function fetchTextWithTimeout(url: URL, timeoutMs: number) {
   }
 }
 
-function webhookEventFromRobokassaPayload(payload: Record<string, string>, password: string, hashAlgorithm: string) {
+function webhookEventFromRobokassaPayload(
+  payload: Record<string, string>,
+  password: string,
+  hashAlgorithm: string,
+  source: 'webhook' | 'success-redirect',
+) {
   const body = robokassaResultSchema.parse(payload);
   const shpParams = Object.fromEntries(sortedShpParams(payload));
   const expectedSignature = buildResultSignature({
@@ -340,15 +392,24 @@ function webhookEventFromRobokassaPayload(payload: Record<string, string>, passw
   const receivedSignature = body.SignatureValue || '';
 
   if (!timingSafeEqual(receivedSignature, expectedSignature)) {
+    logger.warn(
+      `[robokassa] ${source} signature mismatch invId=${body.InvId} outSum=${body.OutSum} algo=${hashAlgorithm} ` +
+        `received=${shortHash(receivedSignature)} expected=${shortHash(expectedSignature)} ` +
+        `shpKeys=${Object.keys(shpParams).join(',') || 'none'}`,
+    );
     throw new HttpError(401, 'INVALID_ROBOKASSA_SIGNATURE', 'Invalid Robokassa callback signature');
   }
+
+  logger.info(
+    `[robokassa] ${source} signature ok invId=${body.InvId} outSum=${body.OutSum} shp_paymentId=${shpParams.Shp_paymentId ?? 'none'}`,
+  );
 
   return {
     type: 'payment.succeeded' as const,
     paymentId: shpParams.Shp_paymentId ?? body.InvId,
     providerPaymentId: body.InvId,
-    amountRub: Math.round(Number(body.OutSum) * 100),
-    metadata: shpParams,
+    amountRub: normalizeOutSum(body.OutSum),
+    metadata: { ...shpParams, source },
   };
 }
 
@@ -437,19 +498,28 @@ export class RobokassaPaymentProvider implements PaymentProvider {
     const config = getConfig();
     const payload = parseRawPayload(rawBody);
     if (signature) payload.SignatureValue = signature;
-    return webhookEventFromRobokassaPayload(payload, config.password2, config.hashAlgorithm);
+    logger.info(
+      `[robokassa] verifyWebhook payload keys=${Object.keys(payload).join(',')} hasSignature=${Boolean(payload.SignatureValue)} algo=${config.hashAlgorithm}`,
+    );
+    return webhookEventFromRobokassaPayload(payload, config.password2, config.hashAlgorithm, 'webhook');
   }
 
   async verifySuccessRedirect(rawBody: Buffer, signature: string): Promise<WebhookEvent> {
     const config = getConfig();
     const payload = parseRawPayload(rawBody);
     if (signature) payload.SignatureValue = signature;
-    return webhookEventFromRobokassaPayload(payload, config.password1, config.hashAlgorithm);
+    logger.info(
+      `[robokassa] verifySuccessRedirect payload keys=${Object.keys(payload).join(',')} hasSignature=${Boolean(payload.SignatureValue)} algo=${config.hashAlgorithm}`,
+    );
+    return webhookEventFromRobokassaPayload(payload, config.password1, config.hashAlgorithm, 'success-redirect');
   }
 
   async getPaymentProviderStatus(paymentId: string): Promise<PaymentProviderStatus> {
     const config = getConfig();
-    if (config.isTest) return 'pending';
+    if (config.isTest) {
+      logger.info(`[robokassa] OpStateExt skipped (TEST mode) invId=${paymentId}`);
+      return 'pending';
+    }
 
     const url = new URL(config.opStateUrl);
     url.searchParams.set('MerchantLogin', config.merchantLogin);
@@ -464,7 +534,8 @@ export class RobokassaPaymentProvider implements PaymentProvider {
       }),
     );
 
+    logger.info(`[robokassa] OpStateExt request invId=${paymentId}`);
     const xml = await fetchTextWithTimeout(url, config.statusTimeoutMs);
-    return parseOpStateStatus(xml);
+    return parseOpStateStatus(xml, paymentId);
   }
 }

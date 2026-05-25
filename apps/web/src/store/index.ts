@@ -18,6 +18,7 @@ import { adminDiagnosticsApi } from './api/admin-diagnostics-api';
 import { adminSettingsApi } from './api/admin-settings-api';
 import { adminUsersApi } from './api/admin-users-api';
 import { adminProjectsApi } from './api/admin-projects-api';
+import { adminPaymentsApi } from './api/admin-payments-api';
 import { adminSupportApi } from './api/admin-support-api';
 import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
@@ -47,6 +48,7 @@ export const store = configureStore({
     [adminSettingsApi.reducerPath]: adminSettingsApi.reducer,
     [adminUsersApi.reducerPath]: adminUsersApi.reducer,
     [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
+    [adminPaymentsApi.reducerPath]: adminPaymentsApi.reducer,
     [adminSupportApi.reducerPath]: adminSupportApi.reducer,
     [servicesApi.reducerPath]: servicesApi.reducer,
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
@@ -74,6 +76,7 @@ export const store = configureStore({
       adminSettingsApi.middleware,
       adminUsersApi.middleware,
       adminProjectsApi.middleware,
+      adminPaymentsApi.middleware,
       adminSupportApi.middleware,
       servicesApi.middleware,
       userMediaAssetsApi.middleware,

@@ -1,4 +1,4 @@
-import { prisma } from '@allvision/database';
+import { prisma, Prisma } from '@allvision/database';
 import type { Payment } from '@allvision/database';
 import type { WebhookEvent } from '@allvision/shared';
 import crypto from 'node:crypto';
@@ -387,21 +387,66 @@ export async function getPaymentForUser(userId: string, id: string): Promise<Pay
 export async function getPaymentStatusForUser(
   userId: string,
   id: string,
+  options?: { force?: boolean },
 ): Promise<{ status: Payment['status']; tokensAdded: number | null }> {
   const initial = await getPaymentForUser(userId, id);
-  const payment = await reconcilePaymentWithProvider(initial, { bypassCache: true });
+  const payment = await reconcilePaymentWithProvider(initial, {
+    bypassCache: true,
+    allowRevive: options?.force === true,
+  });
   return { status: payment.status, tokensAdded: payment.tokensAdded };
 }
 
-export async function handlePaymentWebhook(rawBody: Buffer, signature: string): Promise<WebhookHandleResult> {
+export async function forceRecheckPaymentForUser(
+  userId: string,
+  id: string,
+): Promise<{ status: Payment['status']; tokensAdded: number | null; providerStatus: ProviderStatus | null }> {
+  const initial = await getPaymentForUser(userId, id);
+  let providerStatus: ProviderStatus | null = null;
+  if (initial.providerPaymentId && initial.provider === paymentProviderName()) {
+    try {
+      providerStatus = await readProviderStatus(initial, { bypassCache: true });
+    } catch (error) {
+      logger.warn(`[payments] forceRecheck providerStatus failed paymentId=${initial.id}: ${(error as Error).message}`);
+    }
+  }
+  const payment = await reconcilePaymentWithProvider(initial, { bypassCache: true, allowRevive: true });
+  logger.info(
+    `[payments] forceRecheck paymentId=${payment.id} userId=${userId} providerStatus=${providerStatus ?? 'unknown'} dbStatus=${payment.status}`,
+  );
+  return { status: payment.status, tokensAdded: payment.tokensAdded, providerStatus };
+}
+
+type WebhookHandleOptions = {
+  rawBodyText?: string;
+  source?: string;
+};
+
+export async function handlePaymentWebhook(
+  rawBody: Buffer,
+  signature: string,
+  options?: WebhookHandleOptions,
+): Promise<WebhookHandleResult> {
   const event = await getPaymentProvider().verifyWebhook(rawBody, signature);
   logger.info(
     `[payments] webhook verified type=${event.type} providerPaymentId=${event.providerPaymentId} paymentId=${event.paymentId ?? 'none'}`,
   );
-  return applyPaymentEvent(event);
+  const result = await applyPaymentEvent(event);
+  if (event.providerPaymentId) {
+    await persistWebhookTrace(event.providerPaymentId, {
+      source: options?.source ?? 'webhook',
+      bodyText: options?.rawBodyText ?? rawBody.toString('utf8'),
+      ok: true,
+    }).catch(() => undefined);
+  }
+  return result;
 }
 
-export async function handlePaymentSuccessRedirect(rawBody: Buffer, signature: string): Promise<WebhookHandleResult> {
+export async function handlePaymentSuccessRedirect(
+  rawBody: Buffer,
+  signature: string,
+  options?: WebhookHandleOptions,
+): Promise<WebhookHandleResult> {
   const provider = getPaymentProvider();
   if (!provider.verifySuccessRedirect) {
     throw new HttpError(400, 'PAYMENT_SUCCESS_REDIRECT_UNSUPPORTED', 'Payment provider does not support success redirect verification');
@@ -410,7 +455,108 @@ export async function handlePaymentSuccessRedirect(rawBody: Buffer, signature: s
   logger.info(
     `[payments] success redirect verified type=${event.type} providerPaymentId=${event.providerPaymentId} paymentId=${event.paymentId ?? 'none'}`,
   );
-  return applyPaymentEvent(event);
+  const result = await applyPaymentEvent(event);
+  if (event.providerPaymentId) {
+    await persistWebhookTrace(event.providerPaymentId, {
+      source: options?.source ?? 'success-redirect',
+      bodyText: options?.rawBodyText ?? rawBody.toString('utf8'),
+      ok: true,
+    }).catch(() => undefined);
+  }
+  return result;
+}
+
+export async function recordWebhookFailure(
+  providerPaymentId: string,
+  info: { source: string; bodyText: string; error: string },
+): Promise<void> {
+  await persistWebhookTrace(providerPaymentId, {
+    source: info.source,
+    bodyText: info.bodyText,
+    ok: false,
+    error: info.error,
+  });
+}
+
+async function persistWebhookTrace(
+  providerPaymentId: string,
+  info: { source: string; bodyText: string; ok: boolean; error?: string },
+): Promise<void> {
+  const payment = await prisma.payment.findFirst({
+    where: { OR: [{ id: providerPaymentId }, { providerPaymentId }] },
+    select: { id: true, metadata: true },
+  });
+  if (!payment) return;
+
+  const previous = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
+    ? (payment.metadata as Prisma.JsonObject)
+    : ({} as Prisma.JsonObject);
+  const prevTraces = Array.isArray(previous.webhookTraces) ? (previous.webhookTraces as Prisma.JsonArray) : [];
+  const trace: Prisma.JsonObject = {
+    receivedAt: new Date().toISOString(),
+    source: info.source,
+    ok: info.ok,
+    bodyPreview: info.bodyText.slice(0, 1000),
+    bodyLength: info.bodyText.length,
+    ...(info.error ? { error: info.error.slice(0, 500) } : {}),
+  };
+  const nextTraces: Prisma.JsonArray = [...prevTraces, trace].slice(-10);
+
+  const nextMetadata: Prisma.JsonObject = {
+    ...previous,
+    webhookTraces: nextTraces,
+    lastWebhookAt: trace.receivedAt as string,
+  };
+
+  await prisma.payment.update({
+    where: { id: payment.id },
+    data: { metadata: nextMetadata },
+  });
+}
+
+export async function manualConfirmPayment(paymentId: string, adminUserId: string): Promise<Payment> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) {
+    throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
+  }
+  if (payment.status === 'SUCCEEDED') {
+    return payment;
+  }
+
+  logger.info(
+    `[payments] manualConfirm requested paymentId=${paymentId} byAdmin=${adminUserId} fromStatus=${payment.status}`,
+  );
+
+  await applyPaymentEvent({
+    type: 'payment.succeeded',
+    paymentId: payment.id,
+    providerPaymentId: payment.providerPaymentId ?? payment.id,
+    amountRub: payment.amountRub,
+    metadata: { source: 'manual-confirm', adminUserId },
+  });
+
+  return (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }));
+}
+
+export async function manualMarkPaymentFailed(paymentId: string, adminUserId: string): Promise<Payment> {
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+  if (!payment) {
+    throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
+  }
+  if (payment.status === 'SUCCEEDED') {
+    throw new HttpError(400, 'PAYMENT_ALREADY_SUCCEEDED', 'Cannot mark a succeeded payment as failed');
+  }
+
+  logger.info(
+    `[payments] manualFail requested paymentId=${paymentId} byAdmin=${adminUserId} fromStatus=${payment.status}`,
+  );
+
+  await prisma.payment.updateMany({
+    where: { id: payment.id, status: { not: 'SUCCEEDED' } },
+    data: { status: 'FAILED' },
+  });
+
+  return (await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } }));
 }
 
 const PAYMENT_LOCK_NAMESPACE = 'allvision:payment:';

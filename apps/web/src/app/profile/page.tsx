@@ -31,7 +31,12 @@ import {
   useGetTransactionsQuery,
   useUpdateProfileMutation,
 } from '@/store/api/account-api';
-import { invalidatePaymentSideEffects, paymentsApi, useTopupMutation } from '@/store/api/payments-api';
+import {
+  invalidatePaymentSideEffects,
+  paymentsApi,
+  useRecheckPaymentMutation,
+  useTopupMutation,
+} from '@/store/api/payments-api';
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
 import { clearUser } from '@/store/slices/auth-slice';
 import { formatDate } from '@/components/dashboard/labels';
@@ -486,8 +491,10 @@ function TransactionsSection() {
   const [pollPending, setPollPending] = useState(false);
   const [repeatingPaymentId, setRepeatingPaymentId] = useState<string | null>(null);
   const [resumingPaymentId, setResumingPaymentId] = useState<string | null>(null);
+  const [recheckingPaymentId, setRecheckingPaymentId] = useState<string | null>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
   const [topup, { isLoading: isRepeating }] = useTopupMutation();
+  const [recheckPayment] = useRecheckPaymentMutation();
   const txData = useGetTransactionsQuery({ page: txPage, limit: PAGE, type: txFilter });
   const payData = useGetPaymentsQuery({ page: payPage, limit: PAGE }, { pollingInterval: pollPending ? 5000 : 0 });
 
@@ -521,6 +528,45 @@ function TransactionsSection() {
       toast({ title: 'Не удалось создать новый платёж', variant: 'destructive' });
     } finally {
       setRepeatingPaymentId(null);
+    }
+  };
+
+  const handleRecheck = async (payment: Payment) => {
+    setRecheckingPaymentId(payment.id);
+    try {
+      const result = await recheckPayment(payment.id).unwrap();
+      if (result.status === 'SUCCEEDED') {
+        const credited = result.tokensAdded ?? payment.tokensAdded ?? 0;
+        toast({
+          title: credited > 0 ? `Оплата подтверждена! +${credited} токенов` : 'Оплата подтверждена.',
+        });
+        invalidatePaymentSideEffects(dispatch);
+      } else if (result.status === 'PENDING') {
+        toast({
+          title: 'Платёж ещё в обработке',
+          description: 'Робокасса пока не подтвердила оплату. Подождите 1–2 минуты и попробуйте ещё раз.',
+        });
+      } else if (result.status === 'CANCELLED') {
+        toast({
+          title: 'Платёж отменён',
+          description: 'Со стороны Робокассы платёж помечен как отменённый. Если деньги списались — напишите в поддержку.',
+          variant: 'destructive',
+        });
+      } else if (result.status === 'FAILED') {
+        toast({
+          title: 'Платёж не прошёл',
+          description: 'Если деньги были списаны, напишите в поддержку с номером платежа.',
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Не удалось проверить платёж',
+        description: 'Попробуйте ещё раз через несколько секунд.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRecheckingPaymentId(null);
     }
   };
 
@@ -629,8 +675,10 @@ function TransactionsSection() {
                         payment={payment}
                         onRepeat={repeatPayment}
                         onResume={resumePayment}
+                        onRecheck={handleRecheck}
                         isRepeating={isRepeating && repeatingPaymentId === payment.id}
                         isResuming={resumingPaymentId === payment.id}
+                        isRechecking={recheckingPaymentId === payment.id}
                       />
                     ))}
                   </tbody>
