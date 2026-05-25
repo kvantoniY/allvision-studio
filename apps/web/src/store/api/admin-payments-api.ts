@@ -46,6 +46,45 @@ export type AdminPaymentDetailResponse = {
   } | null;
 };
 
+export type PaymentsHealth = {
+  provider: string;
+  providerConfigured: boolean;
+  merchantLogin: string | null;
+  hashAlgorithm: string;
+  isTestMode: boolean;
+  poller: {
+    enabled: boolean;
+    intervalMs: number;
+    reviveMaxAgeMs: number;
+  };
+  apiUptimeSeconds: number;
+  apiVersion: string | null;
+  pending: {
+    total: number;
+    oldest: { id: string; createdAt: string; providerPaymentId: string | null } | null;
+    recent: Array<{
+      id: string;
+      createdAt: string;
+      amountRub: number;
+      providerPaymentId: string | null;
+      user: { id: string; email: string };
+    }>;
+  };
+  lastSuccess: { id: string; paidAt: string | null; providerPaymentId: string | null } | null;
+  publicApiUrl: string | null;
+  expectedResultUrl: string;
+  expectedSuccessUrl: string;
+};
+
+export type RobokassaProbeResult = {
+  ok: boolean;
+  invId: string;
+  providerStatus?: string;
+  elapsedMs: number;
+  error?: string;
+  errorCode?: string;
+};
+
 export const adminPaymentsApi = createApi({
   reducerPath: 'adminPaymentsApi',
   baseQuery: createBaseQueryWithReauth('/api/admin/payments'),

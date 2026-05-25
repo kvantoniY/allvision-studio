@@ -6,6 +6,7 @@ import { QUEUE_NAMES } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { getQueue } from '../../queues';
+import { getPaymentProvider } from '../../services/payment-provider';
 import { PiAPIAccountClient } from '../../services/piapi-client';
 import { HttpError } from '../../utils/http-error';
 import { resolveWorkspacePath } from '../../utils/paths';
@@ -80,6 +81,100 @@ adminDiagnosticsRouter.post('/reload-services-catalog', async (_req: Request, re
     reloadedAt: new Date().toISOString(),
     note: 'BLOCK_CATALOG is static in this process; no mutable cache was found.',
   });
+});
+
+adminDiagnosticsRouter.get('/payments-health', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const provider = process.env.PAYMENT_PROVIDER ?? 'mock';
+    const merchantLogin = process.env.ROBOKASSA_MERCHANT_LOGIN ?? null;
+    const hashAlgorithm = (process.env.ROBOKASSA_HASH_ALGORITHM ?? 'md5').toLowerCase();
+    const pollerEnabledExplicit = process.env.PAYMENT_PENDING_POLL_ENABLED?.trim().toLowerCase();
+    const pollerEnabled = !(pollerEnabledExplicit && ['0', 'false', 'no', 'off'].includes(pollerEnabledExplicit))
+      && provider === 'robokassa';
+
+    const ageCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [pendingTotal, pendingRecent, lastSuccess, oldestPending] = await Promise.all([
+      prisma.payment.count({ where: { status: 'PENDING' } }),
+      prisma.payment.findMany({
+        where: { status: 'PENDING', createdAt: { gte: ageCutoff } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        select: {
+          id: true,
+          createdAt: true,
+          amountRub: true,
+          provider: true,
+          providerPaymentId: true,
+          purpose: true,
+          user: { select: { id: true, email: true } },
+        },
+      }),
+      prisma.payment.findFirst({
+        where: { status: 'SUCCEEDED' },
+        orderBy: { paidAt: 'desc' },
+        select: { id: true, paidAt: true, providerPaymentId: true },
+      }),
+      prisma.payment.findFirst({
+        where: { status: 'PENDING' },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, createdAt: true, providerPaymentId: true },
+      }),
+    ]);
+
+    res.json({
+      provider,
+      providerConfigured: provider === 'robokassa' ? Boolean(merchantLogin && process.env.ROBOKASSA_PASSWORD1 && process.env.ROBOKASSA_PASSWORD2) : true,
+      merchantLogin,
+      hashAlgorithm,
+      isTestMode: ['1', 'true', 'yes', 'on'].includes((process.env.ROBOKASSA_TEST_MODE ?? '').toLowerCase()),
+      poller: {
+        enabled: pollerEnabled,
+        intervalMs: Number(process.env.PAYMENT_PENDING_POLL_INTERVAL_MS ?? 10000),
+        reviveMaxAgeMs: Number(process.env.PAYMENT_REVIVE_MAX_AGE_MS ?? 60 * 60 * 1000),
+      },
+      apiUptimeSeconds: Math.round(process.uptime()),
+      apiVersion: process.env.GIT_SHA ?? process.env.APP_VERSION ?? null,
+      pending: {
+        total: pendingTotal,
+        recent: pendingRecent,
+        oldest: oldestPending,
+      },
+      lastSuccess,
+      publicApiUrl: process.env.PUBLIC_API_URL ?? null,
+      expectedResultUrl: `${(process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')}/api/payments/robokassa/result`,
+      expectedSuccessUrl: `${(process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, '')}/api/payments/robokassa/success`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminDiagnosticsRouter.get('/robokassa-probe/:invId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const invId = req.params.invId;
+    if (!invId) throw new HttpError(400, 'INVALID_INV_ID', 'invId required');
+    const provider = getPaymentProvider();
+    const startedAt = Date.now();
+    try {
+      const status = await provider.getPaymentProviderStatus(invId);
+      res.json({
+        ok: true,
+        invId,
+        providerStatus: status,
+        elapsedMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      res.json({
+        ok: false,
+        invId,
+        elapsedMs: Date.now() - startedAt,
+        error: (error as Error).message,
+        errorCode: error instanceof HttpError ? error.code : 'UNKNOWN',
+      });
+    }
+  } catch (err) {
+    next(err);
+  }
 });
 
 async function readPiapiBalance() {

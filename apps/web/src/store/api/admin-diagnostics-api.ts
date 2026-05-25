@@ -45,10 +45,12 @@ export type AdminDiagnosticsState = {
   };
 };
 
+import type { PaymentsHealth, RobokassaProbeResult } from './admin-payments-api';
+
 export const adminDiagnosticsApi = createApi({
   reducerPath: 'adminDiagnosticsApi',
   baseQuery: createBaseQueryWithReauth('/api/admin'),
-  tagTypes: ['AdminDiagnostics'],
+  tagTypes: ['AdminDiagnostics', 'PaymentsHealth'],
   endpoints: (build) => ({
     getAdminDiagnosticsState: build.query<AdminDiagnosticsState, void>({
       query: () => ({ url: '/diagnostics/state' }),
@@ -62,6 +64,13 @@ export const adminDiagnosticsApi = createApi({
       query: () => ({ url: '/diagnostics/reload-services-catalog', method: 'POST' }),
       invalidatesTags: ['AdminDiagnostics'],
     }),
+    getPaymentsHealth: build.query<PaymentsHealth, void>({
+      query: () => ({ url: '/diagnostics/payments-health' }),
+      providesTags: ['PaymentsHealth'],
+    }),
+    probeRobokassa: build.mutation<RobokassaProbeResult, string>({
+      query: (invId) => ({ url: `/diagnostics/robokassa-probe/${encodeURIComponent(invId)}` }),
+    }),
   }),
 });
 
@@ -69,4 +78,6 @@ export const {
   useGetAdminDiagnosticsStateQuery,
   useRefreshPiAPIBalanceMutation,
   useReloadServicesCatalogMutation,
+  useGetPaymentsHealthQuery,
+  useProbeRobokassaMutation,
 } = adminDiagnosticsApi;
