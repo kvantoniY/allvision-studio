@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
 import sharp from 'sharp';
 import { HttpError } from '../utils/http-error';
 import { getStorageProvider } from '../providers';
@@ -17,6 +18,15 @@ const MIME_TO_EXT: Record<string, string> = {
   'audio/wav': 'wav',
   'audio/x-wav': 'wav',
   'audio/ogg': 'ogg',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'text/csv': 'csv',
+  'application/zip': 'zip',
+  'application/x-zip-compressed': 'zip',
+  'application/msword': 'doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.ms-excel': 'xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
 };
 
 const ALLOWED_TREND_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
@@ -35,6 +45,18 @@ const MAX_SERVICE_PREVIEW_VIDEO_SIZE = 50 * 1024 * 1024;
 const MAX_SERVICE_PREVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_USER_INPUT_IMAGE_SIZE = 25 * 1024 * 1024;
 const MAX_CHAT_INPUT_SIZE = 25 * 1024 * 1024;
+const MAX_SUPPORT_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+const ALLOWED_SUPPORT_FILE_MIME = new Set([
+  'application/pdf',
+  'text/plain',
+  'text/csv',
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
 
 export interface ProcessedImage {
   buffer: Buffer;
@@ -84,6 +106,12 @@ export async function validateAndProcessImage(buffer: Buffer): Promise<Processed
 
 function ext(contentType: string): string {
   return MIME_TO_EXT[contentType] ?? 'bin';
+}
+
+function safeFileName(value: string) {
+  const fallback = 'attachment';
+  const parsed = path.basename(value || fallback).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim();
+  return parsed || fallback;
 }
 
 function yyyymm(): string {
@@ -330,6 +358,49 @@ export async function uploadChatInput(
   }
 
   throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются JPEG, PNG, WebP, MP4, MOV и audio');
+}
+
+export async function uploadSupportAttachment(
+  userId: string,
+  ticketId: string,
+  file: Express.Multer.File,
+): Promise<{ url: string; key: string; fileName: string; mimeType: string; fileSize: number; kind: 'IMAGE' | 'FILE' }> {
+  if (file.size > MAX_SUPPORT_ATTACHMENT_SIZE) {
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Файл должен быть не тяжелее 25 МБ');
+  }
+
+  const fileName = safeFileName(file.originalname);
+  const safeTicketId = ticketId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  if (ALLOWED_V3_IMAGE_MIME.has(file.mimetype)) {
+    const processed = await validateAndProcessImage(file.buffer);
+    const key = `support/${userId}/${safeTicketId}/${crypto.randomUUID()}.${ext(processed.contentType)}`;
+    const { url } = await getStorageProvider().upload({
+      key,
+      body: processed.buffer,
+      contentType: processed.contentType,
+    });
+    return {
+      url,
+      key,
+      fileName,
+      mimeType: processed.contentType,
+      fileSize: processed.buffer.length,
+      kind: 'IMAGE',
+    };
+  }
+
+  if (ALLOWED_SUPPORT_FILE_MIME.has(file.mimetype)) {
+    const key = `support/${userId}/${safeTicketId}/${crypto.randomUUID()}.${ext(file.mimetype)}`;
+    const { url } = await getStorageProvider().upload({
+      key,
+      body: file.buffer,
+      contentType: file.mimetype,
+    });
+    return { url, key, fileName, mimeType: file.mimetype, fileSize: file.size, kind: 'FILE' };
+  }
+
+  throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются изображения, PDF, TXT, CSV, DOCX, XLSX и ZIP');
 }
 
 export async function deleteFile(key: string): Promise<void> {

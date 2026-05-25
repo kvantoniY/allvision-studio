@@ -4,6 +4,7 @@ import type { WebhookEvent } from '@allvision/shared';
 import crypto from 'node:crypto';
 import { HttpError } from '../utils/http-error';
 import { getPaymentProvider } from './payment-provider';
+import { logger } from '../utils/logger';
 
 type PaymentListItem = Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;
 type WebhookHandleResult = { ok: true; providerPaymentId?: string };
@@ -39,6 +40,71 @@ function buildConfirmationMetadata(
     ...(confirmation.confirmationMethod ? { confirmationMethod: confirmation.confirmationMethod } : {}),
     ...(confirmation.confirmationParams ? { confirmationParams: confirmation.confirmationParams } : {}),
   };
+}
+
+const providerStatusCache = new Map<string, { status: 'pending' | 'succeeded' | 'failed' | 'cancelled'; checkedAt: number }>();
+
+function positiveIntEnv(name: string, fallback: number) {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
+function providerStatusCacheMs() {
+  return positiveIntEnv('PAYMENT_PROVIDER_STATUS_CACHE_MS', 15000);
+}
+
+function providerStatusToEventType(status: 'succeeded' | 'failed' | 'cancelled'): WebhookEvent['type'] {
+  if (status === 'succeeded') return 'payment.succeeded';
+  if (status === 'failed') return 'payment.failed';
+  return 'payment.cancelled';
+}
+
+async function readProviderStatus(payment: Payment) {
+  if (!payment.providerPaymentId) return 'pending' as const;
+  if (payment.provider !== paymentProviderName()) return 'pending' as const;
+
+  const now = Date.now();
+  const cacheKey = `${payment.provider}:${payment.providerPaymentId}`;
+  const cached = providerStatusCache.get(cacheKey);
+  if (cached && now - cached.checkedAt < providerStatusCacheMs()) {
+    return cached.status;
+  }
+
+  const status = await getPaymentProvider().getPaymentProviderStatus(payment.providerPaymentId);
+  providerStatusCache.set(cacheKey, { status, checkedAt: now });
+  return status;
+}
+
+export async function reconcilePaymentWithProvider(payment: Payment): Promise<Payment> {
+  if (payment.status !== 'PENDING' || !payment.providerPaymentId) return payment;
+
+  let providerStatus: Awaited<ReturnType<typeof readProviderStatus>>;
+  try {
+    providerStatus = await readProviderStatus(payment);
+  } catch (error) {
+    logger.warn(
+      `[payments] provider status sync failed paymentId=${payment.id} provider=${payment.provider} providerPaymentId=${payment.providerPaymentId}: ${(error as Error).message}`,
+    );
+    return payment;
+  }
+
+  if (providerStatus === 'pending') return payment;
+
+  await applyPaymentEvent({
+    type: providerStatusToEventType(providerStatus),
+    paymentId: payment.id,
+    providerPaymentId: payment.providerPaymentId,
+    amountRub: payment.amountRub,
+    metadata: {},
+  });
+
+  return (await prisma.payment.findUnique({ where: { id: payment.id } })) ?? payment;
+}
+
+export async function reconcilePaymentList(items: Payment[]) {
+  return Promise.all(items.map((payment) => reconcilePaymentWithProvider(payment)));
 }
 
 async function createProviderPaymentId(provider: string) {
@@ -230,7 +296,7 @@ export async function getPaymentForUser(userId: string, id: string): Promise<Pay
 }
 
 export async function getPaymentStatusForUser(userId: string, id: string): Promise<{ status: Payment['status'] }> {
-  const payment = await getPaymentForUser(userId, id);
+  const payment = await reconcilePaymentWithProvider(await getPaymentForUser(userId, id));
   return { status: payment.status };
 }
 
@@ -274,26 +340,24 @@ async function applyPaymentEvent(event: WebhookEvent): Promise<WebhookHandleResu
   }
 
   if (status !== 'SUCCEEDED') {
-    await prisma.payment.update({
-      where: { id: payment.id },
+    await prisma.payment.updateMany({
+      where: { id: payment.id, status: { not: 'SUCCEEDED' } },
       data: { status },
     });
     return { ok: true, providerPaymentId: event.providerPaymentId };
   }
 
   await prisma.$transaction(async (tx) => {
-    const currentPayment = await tx.payment.findUnique({ where: { id: payment.id } });
-    if (!currentPayment || currentPayment.status === 'SUCCEEDED') {
-      return;
-    }
-
-    await tx.payment.update({
-      where: { id: payment.id },
+    const claim = await tx.payment.updateMany({
+      where: { id: payment.id, status: { not: 'SUCCEEDED' } },
       data: {
         status: 'SUCCEEDED',
         paidAt: new Date(),
       },
     });
+    if (claim.count === 0) {
+      return;
+    }
 
     if (payment.purpose === 'TOPUP') {
       const tokensAdded = payment.tokensAdded ?? 0;
@@ -325,4 +389,27 @@ async function applyPaymentEvent(event: WebhookEvent): Promise<WebhookHandleResu
   });
 
   return { ok: true, providerPaymentId: event.providerPaymentId };
+}
+
+export async function pollPendingPaymentsOnce(params?: { batchSize?: number; maxAgeMs?: number }) {
+  const provider = paymentProviderName();
+  const batchSize = params?.batchSize ?? positiveIntEnv('PAYMENT_PENDING_POLL_BATCH_SIZE', 20);
+  const maxAgeMs = params?.maxAgeMs ?? positiveIntEnv('PAYMENT_PENDING_POLL_MAX_AGE_MS', 7 * 24 * 60 * 60 * 1000);
+  const createdAfter = new Date(Date.now() - maxAgeMs);
+
+  const payments = await prisma.payment.findMany({
+    where: {
+      provider,
+      status: 'PENDING',
+      providerPaymentId: { not: null },
+      createdAt: { gte: createdAfter },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: batchSize,
+  });
+
+  if (payments.length === 0) return { checked: 0 };
+
+  await reconcilePaymentList(payments);
+  return { checked: payments.length };
 }

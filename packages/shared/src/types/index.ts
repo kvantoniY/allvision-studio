@@ -16,6 +16,8 @@ export {
   EpisodeStatus,
   AbuseReason,
   ReportStatus,
+  SupportTicketStatus,
+  SupportAttachmentKind,
 } from '@allvision/database';
 
 export type {
@@ -36,6 +38,9 @@ export type {
   EpisodeCharacter,
   ScenarioTemplate,
   AbuseReport,
+  SupportTicket,
+  SupportMessage,
+  SupportAttachment,
 } from '@allvision/database';
 
 export * from './public';

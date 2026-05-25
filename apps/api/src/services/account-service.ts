@@ -9,6 +9,7 @@ import type {
 } from '@allvision/shared';
 import { HttpError } from '../utils/http-error';
 import { signAccessToken, signRefreshToken } from '../utils/jwt';
+import { reconcilePaymentList } from './payment-service';
 
 const BCRYPT_COST = 12;
 
@@ -125,7 +126,7 @@ export async function listPayments(
     }),
     prisma.payment.count({ where: { userId } }),
   ]);
-  return { items, total, page, totalPages: Math.max(1, Math.ceil(total / limit)) };
+  return { items: await reconcilePaymentList(items), total, page, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput): Promise<AccountUser> {

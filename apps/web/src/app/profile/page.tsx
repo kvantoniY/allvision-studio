@@ -31,11 +31,11 @@ import {
   useGetTransactionsQuery,
   useUpdateProfileMutation,
 } from '@/store/api/account-api';
-import { invalidatePaymentSideEffects, useTopupMutation } from '@/store/api/payments-api';
+import { invalidatePaymentSideEffects, paymentsApi, useTopupMutation } from '@/store/api/payments-api';
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
 import { clearUser } from '@/store/slices/auth-slice';
 import { formatDate } from '@/components/dashboard/labels';
-import { submitPaymentConfirmation } from '@/lib/payment-confirmation';
+import { submitPaymentConfirmation, type PaymentConfirmationPayload } from '@/lib/payment-confirmation';
 import { cn } from '@/lib/utils';
 
 type ProfileTab = 'personal' | 'billing' | 'transactions' | 'notifications' | 'danger';
@@ -64,6 +64,35 @@ function apiErrorMessage(error: unknown) {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Операция не выполнена';
 }
 
+function confirmationPayloadFromPayment(payment: Payment): PaymentConfirmationPayload {
+  const metadata = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
+    ? payment.metadata as Record<string, unknown>
+    : {};
+  const confirmationUrl = typeof metadata.confirmationUrl === 'string'
+    ? metadata.confirmationUrl
+    : `/mock-payment/${payment.providerPaymentId ?? payment.id}`;
+  const confirmationMethod = metadata.confirmationMethod === 'POST' ? 'POST' : 'GET';
+  const rawParams = metadata.confirmationParams && typeof metadata.confirmationParams === 'object' && !Array.isArray(metadata.confirmationParams)
+    ? metadata.confirmationParams as Record<string, unknown>
+    : undefined;
+  const confirmationParams = rawParams
+    ? Object.fromEntries(Object.entries(rawParams).map(([key, value]) => [key, String(value)]))
+    : undefined;
+
+  return { confirmationUrl, confirmationMethod, confirmationParams };
+}
+
+async function fetchPaymentStatus(dispatch: AppDispatch, paymentId: string) {
+  const statusRequest = dispatch(
+    paymentsApi.endpoints.getPaymentStatus.initiate(paymentId, { forceRefetch: true }),
+  );
+  try {
+    return await statusRequest.unwrap();
+  } finally {
+    statusRequest.unsubscribe();
+  }
+}
+
 export default function ProfilePage() {
   return (
     <AuthGuard>
@@ -82,6 +111,7 @@ function ProfileContent() {
   const dispatch = useDispatch<AppDispatch>();
   const { toast } = useToast();
   const [tab, setTab] = useState<ProfileTab>((searchParams.get('tab') as ProfileTab) || 'personal');
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
   const handledPaymentQueryRef = useRef('');
 
   useEffect(() => {
@@ -96,9 +126,11 @@ function ProfileContent() {
     if (handledPaymentQueryRef.current === currentQuery) return;
     handledPaymentQueryRef.current = currentQuery;
     const tokens = Number(searchParams.get('tokens') ?? 0);
+    const paymentId = searchParams.get('paymentId');
 
     if (paymentResult === 'success') {
       toast({ title: tokens > 0 ? `Оплата прошла успешно! +${tokens} токенов` : 'Оплата прошла успешно!' });
+      setPendingPaymentId(null);
       invalidatePaymentSideEffects(dispatch);
     }
     if (paymentResult === 'failed') {
@@ -107,6 +139,7 @@ function ProfileContent() {
     }
     if (paymentResult === 'pending') {
       toast({ title: 'Платёж принят', description: 'Ждём подтверждение от платёжного провайдера.' });
+      if (paymentId) setPendingPaymentId(paymentId);
       invalidatePaymentSideEffects(dispatch);
     }
     if (paymentResult === 'cancelled') {
@@ -117,9 +150,55 @@ function ProfileContent() {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('payment');
     params.delete('tokens');
+    params.delete('paymentId');
     params.set('tab', 'billing');
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   }, [dispatch, pathname, router, searchParams, toast]);
+
+  useEffect(() => {
+    if (!pendingPaymentId) return;
+
+    let stopped = false;
+    let attempts = 0;
+
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const result = await fetchPaymentStatus(dispatch, pendingPaymentId);
+
+        if (stopped) return;
+        if (result.status === 'SUCCEEDED') {
+          toast({ title: 'Оплата подтверждена, токены зачислены' });
+          invalidatePaymentSideEffects(dispatch);
+          setPendingPaymentId(null);
+          return;
+        }
+        if (result.status === 'FAILED' || result.status === 'CANCELLED') {
+          toast({ title: 'Платёж не завершён', variant: 'destructive' });
+          invalidatePaymentSideEffects(dispatch);
+          setPendingPaymentId(null);
+        }
+      } catch {
+        if (attempts >= 12 && !stopped) {
+          setPendingPaymentId(null);
+        }
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => {
+      if (attempts >= 24) {
+        setPendingPaymentId(null);
+        return;
+      }
+      void poll();
+    }, 5000);
+
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [dispatch, pendingPaymentId, toast]);
 
   if (!user) return null;
 
@@ -343,6 +422,7 @@ function TransactionsSection() {
   const [payPage, setPayPage] = useState(1);
   const [pollPending, setPollPending] = useState(false);
   const [repeatingPaymentId, setRepeatingPaymentId] = useState<string | null>(null);
+  const [resumingPaymentId, setResumingPaymentId] = useState<string | null>(null);
   const pendingIdsRef = useRef<Set<string>>(new Set());
   const [topup, { isLoading: isRepeating }] = useTopupMutation();
   const txData = useGetTransactionsQuery({ page: txPage, limit: PAGE, type: txFilter });
@@ -378,6 +458,30 @@ function TransactionsSection() {
       toast({ title: 'Не удалось создать новый платёж', variant: 'destructive' });
     } finally {
       setRepeatingPaymentId(null);
+    }
+  };
+
+  const resumePayment = async (payment: Payment) => {
+    setResumingPaymentId(payment.id);
+    try {
+      const result = await fetchPaymentStatus(dispatch, payment.id);
+
+      if (result.status === 'SUCCEEDED') {
+        toast({ title: payment.tokensAdded ? `Оплата прошла успешно! +${payment.tokensAdded} токенов` : 'Оплата прошла успешно!' });
+        invalidatePaymentSideEffects(dispatch);
+        return;
+      }
+      if (result.status === 'FAILED' || result.status === 'CANCELLED') {
+        toast({ title: 'Платёж уже не активен', description: 'Создайте новое пополнение.', variant: 'destructive' });
+        invalidatePaymentSideEffects(dispatch);
+        return;
+      }
+
+      submitPaymentConfirmation(confirmationPayloadFromPayment(payment));
+    } catch {
+      toast({ title: 'Не удалось проверить платёж', description: 'Попробуйте ещё раз через несколько секунд.', variant: 'destructive' });
+    } finally {
+      setResumingPaymentId(null);
     }
   };
 
@@ -460,7 +564,9 @@ function TransactionsSection() {
                         key={payment.id}
                         payment={payment}
                         onRepeat={repeatPayment}
+                        onResume={resumePayment}
                         isRepeating={isRepeating && repeatingPaymentId === payment.id}
+                        isResuming={resumingPaymentId === payment.id}
                       />
                     ))}
                   </tbody>

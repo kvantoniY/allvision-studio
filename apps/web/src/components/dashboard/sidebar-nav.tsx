@@ -1,4 +1,4 @@
-import { Grid3X3, Home, Palette, Sparkles, User } from 'lucide-react';
+import { Grid3X3, Home, LifeBuoy, Palette, Sparkles, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -19,6 +19,7 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
       { href: '/ai', label: 'Allvision AI', icon: Sparkles },
       { href: '/services', label: 'Услуги', icon: Grid3X3 },
       { href: '/studio', label: 'Студия', icon: Palette },
+      { href: '/support', label: 'Поддержка', icon: LifeBuoy },
       { href: '/profile', label: 'Профиль', icon: User },
     ],
   },

@@ -18,9 +18,11 @@ import { adminDiagnosticsApi } from './api/admin-diagnostics-api';
 import { adminSettingsApi } from './api/admin-settings-api';
 import { adminUsersApi } from './api/admin-users-api';
 import { adminProjectsApi } from './api/admin-projects-api';
+import { adminSupportApi } from './api/admin-support-api';
 import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
 import { userChatApi } from './api/user-chat-api';
+import { supportApi } from './api/support-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -45,9 +47,11 @@ export const store = configureStore({
     [adminSettingsApi.reducerPath]: adminSettingsApi.reducer,
     [adminUsersApi.reducerPath]: adminUsersApi.reducer,
     [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
+    [adminSupportApi.reducerPath]: adminSupportApi.reducer,
     [servicesApi.reducerPath]: servicesApi.reducer,
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
     [userChatApi.reducerPath]: userChatApi.reducer,
+    [supportApi.reducerPath]: supportApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -70,9 +74,11 @@ export const store = configureStore({
       adminSettingsApi.middleware,
       adminUsersApi.middleware,
       adminProjectsApi.middleware,
+      adminSupportApi.middleware,
       servicesApi.middleware,
       userMediaAssetsApi.middleware,
       userChatApi.middleware,
+      supportApi.middleware,
     ),
 });
 

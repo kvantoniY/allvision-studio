@@ -26,13 +26,33 @@ ROBOKASSA_PASSWORD1=""
 ROBOKASSA_PASSWORD2=""
 ROBOKASSA_HASH_ALGORITHM="md5"
 ROBOKASSA_TEST_MODE="0"
+ROBOKASSA_OP_STATE_URL="https://auth.robokassa.ru/Merchant/WebService/Service.asmx/OpStateExt"
+ROBOKASSA_STATUS_TIMEOUT_MS="5000"
 ROBOKASSA_RECEIPT_ENABLED="true"
 ROBOKASSA_RECEIPT_PAYMENT_METHOD="full_prepayment"
 ROBOKASSA_RECEIPT_PAYMENT_OBJECT="service"
 ROBOKASSA_RECEIPT_TAX="none"
+PAYMENT_PENDING_POLL_ENABLED="true"
+PAYMENT_PENDING_POLL_INTERVAL_MS="30000"
+PAYMENT_PENDING_POLL_BATCH_SIZE="20"
+PAYMENT_PENDING_POLL_MAX_AGE_MS="604800000"
+PAYMENT_PROVIDER_STATUS_CACHE_MS="15000"
 ```
 
 `ROBOKASSA_HASH_ALGORITHM` должен совпадать с алгоритмом, выбранным в настройках магазина Робокассы.
+
+## Сверка зависших платежей
+
+API теперь не полагается только на ResultURL/SuccessURL. Для `PENDING` платежей включена сверка через XML-интерфейс Robokassa `OpStateExt`: статус `State.Code=100` переводит платёж в `SUCCEEDED` и начисляет токены, `10/60` переводят платёж в неуспешный финальный статус, остальные состояния остаются `PENDING`.
+
+Сверка запускается:
+
+- фоновым poller'ом API раз в `PAYMENT_PENDING_POLL_INTERVAL_MS`;
+- при открытии списка платежей;
+- при запросе `/api/payments/:id/status`;
+- при возврате пользователя на SuccessURL.
+
+`PAYMENT_PENDING_POLL_MAX_AGE_MS` ограничивает только активный фоновый polling. Старые платежи всё равно можно сверить вручную через статус/список, чтобы не потерять успешно оплаченные пополнения.
 
 ## Фискализация и самозанятый
 

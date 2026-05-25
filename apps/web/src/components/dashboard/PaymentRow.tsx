@@ -21,11 +21,15 @@ const STATUS_COLOR: Record<PaymentStatus, string> = {
 export function PaymentRow({
   payment,
   onRepeat,
+  onResume,
   isRepeating,
+  isResuming,
 }: {
   payment: Payment;
   onRepeat?: (payment: Payment) => void;
+  onResume?: (payment: Payment) => void;
   isRepeating?: boolean;
+  isResuming?: boolean;
 }) {
   const purpose = payment.purpose === 'TOPUP' ? 'Пополнение' : `Заказ #${payment.id.slice(0, 6)}`;
   const metadata = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
@@ -40,6 +44,7 @@ export function PaymentRow({
     ? metadata.confirmationParams as Record<string, unknown>
     : undefined;
   const confirmationHref = confirmationUrl ?? `/mock-payment/${payment.providerPaymentId ?? payment.id}`;
+  const resumeLabel = isResuming ? 'Проверяем...' : 'Завершить оплату';
 
   return (
     <tr className="border-b border-slate-800">
@@ -60,18 +65,32 @@ export function PaymentRow({
       </td>
       <td className="py-3 px-3">
         {payment.status === 'PENDING' && confirmationMethod === 'POST' && confirmationParams ? (
-          <form method="POST" action={confirmationHref}>
+          <form
+            method="POST"
+            action={confirmationHref}
+            onSubmit={(event) => {
+              if (!onResume) return;
+              event.preventDefault();
+              onResume(payment);
+            }}
+          >
             {Object.entries(confirmationParams).map(([name, value]) => (
               <input key={name} type="hidden" name={name} value={String(value)} />
             ))}
-            <Button type="submit" size="sm" variant="default">
-              Завершить оплату
+            <Button type="submit" size="sm" variant="default" disabled={isResuming}>
+              {resumeLabel}
             </Button>
           </form>
         ) : payment.status === 'PENDING' ? (
-          <Button asChild size="sm" variant="default">
-            <Link href={confirmationHref}>Завершить оплату</Link>
-          </Button>
+          onResume ? (
+            <Button size="sm" variant="default" disabled={isResuming} onClick={() => onResume(payment)}>
+              {resumeLabel}
+            </Button>
+          ) : (
+            <Button asChild size="sm" variant="default">
+              <Link href={confirmationHref}>Завершить оплату</Link>
+            </Button>
+          )
         ) : payment.status === 'FAILED' ? (
           <Button size="sm" variant="outline" disabled={isRepeating} onClick={() => onRepeat?.(payment)}>
             Повторить покупку

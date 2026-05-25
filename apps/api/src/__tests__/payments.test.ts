@@ -182,6 +182,25 @@ describe('POST /api/payments/webhook', () => {
     expect(txCount).toBe(1);
   });
 
+  it('does not downgrade succeeded payment after a late failed webhook', async () => {
+    const paymentId = await createPendingTopup();
+
+    const success = await request(app)
+      .post('/api/payments/webhook')
+      .send({ paymentId, event: 'succeeded' });
+    expect(success.status).toBe(200);
+    const balanceAfterSuccess = await getUserBalance();
+
+    const failed = await request(app)
+      .post('/api/payments/webhook')
+      .send({ paymentId, event: 'failed' });
+    expect(failed.status).toBe(200);
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    expect(payment.status).toBe('SUCCEEDED');
+    expect(await getUserBalance()).toBe(balanceAfterSuccess);
+  });
+
   it('marks canceled payment without changing balance', async () => {
     const paymentId = await createPendingTopup();
     const balanceBefore = await getUserBalance();

@@ -13,11 +13,14 @@ const ENV_KEYS = [
   'ROBOKASSA_RECEIPT_TAX',
   'ROBOKASSA_RECEIPT_SNO',
   'ROBOKASSA_PAYMENT_URL',
+  'ROBOKASSA_OP_STATE_URL',
+  'ROBOKASSA_STATUS_TIMEOUT_MS',
   'PUBLIC_API_URL',
   'PUBLIC_WEB_URL',
 ] as const;
 
 const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
+const originalFetch = global.fetch;
 
 function md5(value: string) {
   return crypto.createHash('md5').update(value, 'utf8').digest('hex');
@@ -35,11 +38,15 @@ beforeEach(() => {
   process.env.ROBOKASSA_RECEIPT_TAX = 'none';
   delete process.env.ROBOKASSA_RECEIPT_SNO;
   process.env.ROBOKASSA_PAYMENT_URL = 'https://auth.robokassa.ru/Merchant/Index.aspx';
+  process.env.ROBOKASSA_OP_STATE_URL = 'https://auth.robokassa.ru/Merchant/WebService/Service.asmx/OpStateExt';
+  process.env.ROBOKASSA_STATUS_TIMEOUT_MS = '5000';
   process.env.PUBLIC_API_URL = 'https://allvision-pulse.ru';
   process.env.PUBLIC_WEB_URL = 'https://allvision-pulse.ru';
+  global.fetch = originalFetch;
 });
 
 afterAll(() => {
+  global.fetch = originalFetch;
   for (const key of ENV_KEYS) {
     const value = originalEnv[key];
     if (value === undefined) {
@@ -162,5 +169,31 @@ describe('RobokassaPaymentProvider', () => {
       status: 401,
       code: 'INVALID_ROBOKASSA_SIGNATURE',
     });
+  });
+
+  it('checks final payment status through OpStateExt', async () => {
+    const provider = new RobokassaPaymentProvider();
+    const invId = '123456';
+    const expectedSignature = md5(`allvision-studio:${invId}:password-two`);
+    const fetchMock = jest.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      expect(url.searchParams.get('MerchantLogin')).toBe('allvision-studio');
+      expect(url.searchParams.get('InvoiceID')).toBe(invId);
+      expect(url.searchParams.get('Signature')).toBe(expectedSignature);
+
+      return new Response(
+        [
+          '<OperationStateResponse>',
+          '<Result><Code>0</Code></Result>',
+          '<State><Code>100</Code></State>',
+          '</OperationStateResponse>',
+        ].join(''),
+        { status: 200 },
+      );
+    });
+    global.fetch = fetchMock as typeof fetch;
+
+    await expect(provider.getPaymentProviderStatus(invId)).resolves.toBe('succeeded');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

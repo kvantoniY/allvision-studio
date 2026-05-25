@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, BarChart3, Clapperboard, FolderKanban, Images, LineChart, Palette, Sparkles, Users } from 'lucide-react';
+import { Activity, BarChart3, Clapperboard, FolderKanban, Images, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -15,6 +15,7 @@ const navItems = [
   { href: '/admin/scenario-templates', label: 'Сценарии', icon: Clapperboard, disabled: false },
   { href: '/admin/users', label: 'Пользователи', icon: Users, disabled: false },
   { href: '/admin/projects', label: 'Проекты', icon: FolderKanban, disabled: false },
+  { href: '/admin/support', label: 'Поддержка', icon: LifeBuoy, disabled: false },
 ];
 
 export function AdminSidebarNav() {

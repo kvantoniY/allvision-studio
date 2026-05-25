@@ -84,10 +84,14 @@ paymentsRouter.all('/robokassa/success', async (req: Request, res: Response, nex
         logger.warn(`[payments] Robokassa success fallback rejected for InvId=${invId}: ${(error as Error).message}`);
       }
     }
-    const payment = invId ? await payments.findPaymentByIdOrProviderId(invId) : null;
+    let payment = invId ? await payments.findPaymentByIdOrProviderId(invId) : null;
+    if (payment?.status === 'PENDING') {
+      payment = await payments.reconcilePaymentWithProvider(payment);
+    }
     const status = payment?.status === 'SUCCEEDED' ? 'success' : 'pending';
     const tokens = status === 'success' && payment?.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';
-    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=${status}${tokens}`);
+    const paymentId = payment ? `&paymentId=${payment.id}` : '';
+    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=${status}${tokens}${paymentId}`);
   } catch (e) {
     next(e);
   }

@@ -1,9 +1,19 @@
 import crypto from 'node:crypto';
+import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
 import type { PaymentConfirmation, PaymentProvider, PaymentProviderStatus, WebhookEvent } from '@allvision/shared';
 import { HttpError } from '../utils/http-error';
 
 const ROBOKASSA_PAY_URL = 'https://auth.robokassa.ru/Merchant/Index.aspx';
+const ROBOKASSA_OP_STATE_URL = 'https://auth.robokassa.ru/Merchant/WebService/Service.asmx/OpStateExt';
+const ROBOKASSA_STATUS_TIMEOUT_MS = 5000;
+
+const opStateParser = new XMLParser({
+  ignoreAttributes: false,
+  removeNSPrefix: true,
+  parseTagValue: false,
+  trimValues: true,
+});
 
 const robokassaResultSchema = z
   .object({
@@ -25,6 +35,8 @@ type RobokassaConfig = {
   receiptTax: string;
   receiptSno?: string;
   paymentUrl: string;
+  opStateUrl: string;
+  statusTimeoutMs: number;
   apiUrl: string;
   webUrl: string;
 };
@@ -46,6 +58,13 @@ function isTruthy(value: string | undefined, fallback = false) {
   return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
+function positiveIntEnv(name: string, fallback: number) {
+  const raw = env(name);
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+}
+
 function getConfig(): RobokassaConfig {
   return {
     merchantLogin: requiredEnv('ROBOKASSA_MERCHANT_LOGIN'),
@@ -59,6 +78,8 @@ function getConfig(): RobokassaConfig {
     receiptTax: env('ROBOKASSA_RECEIPT_TAX') ?? 'none',
     receiptSno: env('ROBOKASSA_RECEIPT_SNO'),
     paymentUrl: env('ROBOKASSA_PAYMENT_URL') ?? ROBOKASSA_PAY_URL,
+    opStateUrl: env('ROBOKASSA_OP_STATE_URL') ?? ROBOKASSA_OP_STATE_URL,
+    statusTimeoutMs: positiveIntEnv('ROBOKASSA_STATUS_TIMEOUT_MS', ROBOKASSA_STATUS_TIMEOUT_MS),
     apiUrl: (process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, ''),
     webUrl: (process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000').replace(/\/+$/, ''),
   };
@@ -207,6 +228,105 @@ function buildResultSignature(params: {
   return hash(parts.join(':'), params.hashAlgorithm);
 }
 
+function buildOpStateSignature(params: {
+  merchantLogin: string;
+  invoiceId: string;
+  password2: string;
+  hashAlgorithm: string;
+}) {
+  return hash([params.merchantLogin, params.invoiceId, params.password2].join(':'), params.hashAlgorithm);
+}
+
+function firstItem<T>(value: T | T[] | undefined): T | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  const item = firstItem(value as Record<string, unknown> | Record<string, unknown>[] | undefined);
+  return item && typeof item === 'object' && !Array.isArray(item) ? item : undefined;
+}
+
+function textValue(value: unknown): string | undefined {
+  const item = firstItem(value as unknown[] | undefined) ?? value;
+  if (item == null) return undefined;
+  if (typeof item === 'string' || typeof item === 'number') return String(item);
+  if (typeof item === 'object' && !Array.isArray(item)) {
+    const text = (item as Record<string, unknown>)['#text'];
+    if (text != null) return String(text);
+  }
+  return undefined;
+}
+
+function numberValue(value: unknown): number | undefined {
+  const raw = textValue(value);
+  if (!raw) return undefined;
+  const number = Number(raw);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function providerStatusFromRobokassaState(code: number): PaymentProviderStatus {
+  if (code === 100) return 'succeeded';
+  if (code === 10) return 'cancelled';
+  if (code === 60) return 'failed';
+  return 'pending';
+}
+
+function parseOpStateStatus(xml: string): PaymentProviderStatus {
+  let parsed: unknown;
+  try {
+    parsed = opStateParser.parse(xml);
+  } catch {
+    throw new HttpError(502, 'ROBOKASSA_STATUS_PARSE_FAILED', 'Invalid Robokassa status response');
+  }
+
+  const root = objectValue(parsed);
+  const response = objectValue(root?.OperationStateResponse ?? root?.OperationStateExtResponse ?? root);
+  const result = objectValue(response?.Result);
+  const resultCode = numberValue(result?.Code);
+
+  if (resultCode === 3) return 'pending';
+  if (resultCode !== 0) {
+    throw new HttpError(
+      502,
+      'ROBOKASSA_STATUS_REJECTED',
+      `Robokassa status request rejected with code ${resultCode ?? 'unknown'}`,
+    );
+  }
+
+  const state = objectValue(response?.State);
+  const stateCode = numberValue(state?.Code);
+  if (stateCode == null) {
+    throw new HttpError(502, 'ROBOKASSA_STATUS_PARSE_FAILED', 'Robokassa status response has no state code');
+  }
+
+  return providerStatusFromRobokassaState(stateCode);
+}
+
+async function fetchTextWithTimeout(url: URL, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { Accept: 'application/xml,text/xml;q=0.9,*/*;q=0.1' },
+    });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new HttpError(502, 'ROBOKASSA_STATUS_HTTP_ERROR', `Robokassa status request failed with HTTP ${response.status}`);
+    }
+    return text;
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if ((error as Error).name === 'AbortError') {
+      throw new HttpError(504, 'ROBOKASSA_STATUS_TIMEOUT', 'Robokassa status request timed out');
+    }
+    throw new HttpError(502, 'ROBOKASSA_STATUS_UNAVAILABLE', `Robokassa status request failed: ${(error as Error).message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function webhookEventFromRobokassaPayload(payload: Record<string, string>, password: string, hashAlgorithm: string) {
   const body = robokassaResultSchema.parse(payload);
   const shpParams = Object.fromEntries(sortedShpParams(payload));
@@ -327,7 +447,24 @@ export class RobokassaPaymentProvider implements PaymentProvider {
     return webhookEventFromRobokassaPayload(payload, config.password1, config.hashAlgorithm);
   }
 
-  async getPaymentProviderStatus(_paymentId: string): Promise<PaymentProviderStatus> {
-    return 'pending';
+  async getPaymentProviderStatus(paymentId: string): Promise<PaymentProviderStatus> {
+    const config = getConfig();
+    if (config.isTest) return 'pending';
+
+    const url = new URL(config.opStateUrl);
+    url.searchParams.set('MerchantLogin', config.merchantLogin);
+    url.searchParams.set('InvoiceID', paymentId);
+    url.searchParams.set(
+      'Signature',
+      buildOpStateSignature({
+        merchantLogin: config.merchantLogin,
+        invoiceId: paymentId,
+        password2: config.password2,
+        hashAlgorithm: config.hashAlgorithm,
+      }),
+    );
+
+    const xml = await fetchTextWithTimeout(url, config.statusTimeoutMs);
+    return parseOpStateStatus(xml);
   }
 }

@@ -9,6 +9,7 @@ import { adminDiagnosticsRouter } from './diagnostics';
 import { adminSettingsRouter } from './settings';
 import { adminUsersRouter } from './users';
 import { adminProjectsRouter } from './projects';
+import { adminSupportRouter } from './support';
 import { adminStylePresetsRouter } from './style-presets';
 import { adminHomePageRouter } from './home-page';
 
@@ -19,6 +20,7 @@ adminRouter.use('/diagnostics', adminDiagnosticsRouter);
 adminRouter.use('/settings', adminSettingsRouter);
 adminRouter.use('/users', adminUsersRouter);
 adminRouter.use('/projects', adminProjectsRouter);
+adminRouter.use('/support', adminSupportRouter);
 adminRouter.use('/', adminUsageRouter);
 adminRouter.use('/services', adminServicesRouter);
 adminRouter.use('/media-assets', adminMediaAssetsRouter);
