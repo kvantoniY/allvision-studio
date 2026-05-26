@@ -1,7 +1,16 @@
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import type { Request } from 'express';
+import rateLimit, { ipKeyGenerator, type Options } from 'express-rate-limit';
+import type { Request, Response, NextFunction } from 'express';
 
 const skipInTest = () => process.env.NODE_ENV === 'test';
+
+type RateLimitedRequest = Request & {
+  rateLimit?: {
+    limit?: number;
+    used?: number;
+    remaining?: number;
+    resetTime?: Date;
+  };
+};
 
 function envInt(name: string, fallback: number) {
   const raw = process.env[name];
@@ -10,69 +19,104 @@ function envInt(name: string, fallback: number) {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
+function seconds(ms: number) {
+  return Math.ceil(ms / 1000);
+}
+
+function retryMeta(req: RateLimitedRequest, windowMs: number) {
+  const resetAt = req.rateLimit?.resetTime?.getTime() ?? Date.now() + windowMs;
+  const retryAfterSeconds = Math.max(1, seconds(resetAt - Date.now()));
+  return {
+    retryAfterSeconds,
+    retryAt: new Date(Date.now() + retryAfterSeconds * 1000).toISOString(),
+    limit: req.rateLimit?.limit,
+    used: req.rateLimit?.used,
+    remaining: req.rateLimit?.remaining,
+    windowSeconds: seconds(windowMs),
+  };
+}
+
+function rateLimitHandler(message: string, windowMs: number) {
+  return (req: Request, res: Response, _next: NextFunction, options: Options) => {
+    const meta = retryMeta(req as RateLimitedRequest, windowMs);
+    res.setHeader('Retry-After', String(meta.retryAfterSeconds));
+    res.status(options.statusCode).json({
+      error: {
+        code: 'RATE_LIMITED',
+        message,
+        ...meta,
+      },
+    });
+  };
+}
+
 const authWindowMs = envInt('AUTH_RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
-const authLimitMessage = { error: { code: 'RATE_LIMITED', message: 'Слишком много попыток. Попробуйте позже.' } };
+const passwordResetWindowMs = 60 * 60 * 1000;
+const emailVerificationWindowMs = 60 * 60 * 1000;
+const projectWindowMs = 60 * 1000;
 
 /** Попытки регистрации с одного IP. */
 export const registerLimiter = rateLimit({
   windowMs: authWindowMs,
-  limit: envInt('AUTH_REGISTER_RATE_LIMIT', 20),
+  limit: envInt('AUTH_REGISTER_RATE_LIMIT', 10),
   skip: skipInTest,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  message: authLimitMessage,
+  handler: rateLimitHandler('Слишком много попыток регистрации. Подождите перед новой попыткой.', authWindowMs),
 });
 
-/** Попытки логина с одного IP. */
+/** Неудачные попытки входа с одного IP. Успешный вход не расходует лимит. */
 export const loginLimiter = rateLimit({
   windowMs: authWindowMs,
-  limit: envInt('AUTH_LOGIN_RATE_LIMIT', 20),
+  limit: envInt('AUTH_LOGIN_RATE_LIMIT', 5),
   skip: skipInTest,
   skipSuccessfulRequests: true,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  message: authLimitMessage,
+  handler: rateLimitHandler('Слишком много неверных попыток входа. Подождите перед повтором.', authWindowMs),
 });
 
-/** 3 запроса сброса пароля на email в час. */
+/** Запросы восстановления пароля на email в час. */
 export const passwordResetLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 3,
+  windowMs: passwordResetWindowMs,
+  limit: envInt('PASSWORD_RESET_RATE_LIMIT', 3),
+  skip: skipInTest,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
     const email = (req.body?.email ?? '').toString().toLowerCase().trim();
     return email || ipKeyGenerator(req.ip ?? '');
   },
-  message: { error: { code: 'RATE_LIMITED', message: 'Слишком много запросов. Попробуйте через час.' } },
+  handler: rateLimitHandler('Слишком много запросов восстановления пароля. Подождите перед новым письмом.', passwordResetWindowMs),
 });
 
-/** 3 письма подтверждения email на пользователя или IP в час. */
+/** Письма подтверждения email на пользователя или IP в час. */
 export const emailVerificationLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  limit: 3,
+  windowMs: emailVerificationWindowMs,
+  limit: envInt('EMAIL_VERIFICATION_RATE_LIMIT', 3),
+  skip: skipInTest,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req: Request) => req.user?.id ?? ipKeyGenerator(req.ip ?? ''),
-  message: { error: { code: 'RATE_LIMITED', message: 'Слишком много писем. Попробуйте через час.' } },
+  handler: rateLimitHandler('Слишком много писем подтверждения. Подождите перед новой отправкой.', emailVerificationWindowMs),
 });
 
-/** 10 созданий проекта на пользователя за минуту. */
+/** Создания проекта на пользователя за минуту. */
 export const projectCreateLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: projectWindowMs,
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req: Request) => req.user?.id ?? ipKeyGenerator(req.ip ?? ''),
-  message: { error: { code: 'RATE_LIMITED', message: 'Слишком много проектов. Попробуйте через минуту.' } },
+  handler: rateLimitHandler('Слишком много проектов. Попробуйте через минуту.', projectWindowMs),
 });
 
-/** 10 созданий эпизода на пользователя за минуту. */
+/** Создания эпизода на пользователя за минуту. */
 export const episodeCreateLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: projectWindowMs,
   limit: 10,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   keyGenerator: (req: Request) => req.user?.id ?? ipKeyGenerator(req.ip ?? ''),
-  message: { error: { code: 'RATE_LIMITED', message: 'Слишком много эпизодов. Попробуйте через минуту.' } },
+  handler: rateLimitHandler('Слишком много эпизодов. Попробуйте через минуту.', projectWindowMs),
 });

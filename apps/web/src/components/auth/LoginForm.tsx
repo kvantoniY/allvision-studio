@@ -9,7 +9,8 @@ import { useDispatch } from 'react-redux';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { useApiErrorState } from '@/hooks/use-api-error-state';
 import { useLoginMutation } from '@/store/api/auth-api';
 import { setUser } from '@/store/slices/auth-slice';
 
@@ -24,6 +25,7 @@ export function LoginForm() {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<LoginInput>({ resolver: zodResolver(loginSchema) });
+  const apiError = useApiErrorState(error, 'Не удалось войти');
 
   const onSubmit = async (values: LoginInput) => {
     try {
@@ -34,9 +36,6 @@ export function LoginForm() {
       // ошибка в apiError
     }
   };
-
-  const apiError = (error as { data?: { error?: { message?: string } } } | undefined)?.data?.error
-    ?.message;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -52,14 +51,10 @@ export function LoginForm() {
         {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
       </div>
 
-      {apiError && (
-        <Alert variant="destructive">
-          <AlertDescription>{apiError}</AlertDescription>
-        </Alert>
-      )}
+      <ApiRequestAlert state={apiError} title="Не удалось войти" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting}>
-        Войти
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+        {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Войти'}
       </Button>
     </form>
   );

@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { useApiErrorState } from '@/hooks/use-api-error-state';
 import { useForgotPasswordMutation } from '@/store/api/auth-api';
 
 export function ForgotPasswordForm() {
@@ -18,11 +20,9 @@ export function ForgotPasswordForm() {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) });
+  const apiError = useApiErrorState(error, 'Не удалось отправить письмо');
 
   const onSubmit = (values: ForgotPasswordInput) => forgotMutation(values);
-
-  const apiError = (error as { data?: { error?: { message?: string } } } | undefined)?.data?.error
-    ?.message;
 
   if (isSuccess) {
     return (
@@ -42,14 +42,10 @@ export function ForgotPasswordForm() {
         {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
       </div>
 
-      {apiError && (
-        <Alert variant="destructive">
-          <AlertDescription>{apiError}</AlertDescription>
-        </Alert>
-      )}
+      <ApiRequestAlert state={apiError} title="Не удалось отправить письмо" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting}>
-        Отправить ссылку
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+        {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Отправить ссылку'}
       </Button>
     </form>
   );

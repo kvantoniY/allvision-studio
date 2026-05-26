@@ -11,7 +11,8 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { useApiErrorState } from '@/hooks/use-api-error-state';
 import { useRegisterMutation } from '@/store/api/auth-api';
 import { setUser } from '@/store/slices/auth-slice';
 import { useToast } from '@/hooks/use-toast';
@@ -38,6 +39,7 @@ export function RegisterForm() {
       consent: false,
     },
   });
+  const apiError = useApiErrorState(error, 'Не удалось зарегистрироваться');
 
   const onSubmit = async (values: FormValues) => {
     try {
@@ -56,15 +58,6 @@ export function RegisterForm() {
       // ошибка покажется через error ниже
     }
   };
-
-  const mutationError = error as
-    | { data?: { error?: { message?: string } }; error?: string }
-    | undefined;
-  const apiError =
-    mutationError?.data?.error?.message ??
-    (mutationError?.error
-      ? 'Не удалось подключиться к серверу. Проверьте, что API запущен.'
-      : undefined);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -110,14 +103,10 @@ export function RegisterForm() {
       </label>
       {errors.consent && <p className="text-sm text-destructive">Нужно согласие</p>}
 
-      {apiError && (
-        <Alert variant="destructive">
-          <AlertDescription>{apiError}</AlertDescription>
-        </Alert>
-      )}
+      <ApiRequestAlert state={apiError} title="Не удалось зарегистрироваться" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting}>
-        Зарегистрироваться
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+        {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Зарегистрироваться'}
       </Button>
     </form>
   );

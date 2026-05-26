@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { useApiErrorState } from '@/hooks/use-api-error-state';
 import { useResetPasswordMutation } from '@/store/api/auth-api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -27,6 +29,7 @@ export function ResetPasswordForm() {
     resolver: zodResolver(resetPasswordSchema),
     defaultValues: { token, newPassword: '' },
   });
+  const apiError = useApiErrorState(error, 'Не удалось сохранить пароль');
 
   const onSubmit = async (values: ResetPasswordInput) => {
     try {
@@ -37,9 +40,6 @@ export function ResetPasswordForm() {
       // ошибка в apiError
     }
   };
-
-  const apiError = (error as { data?: { error?: { message?: string } } } | undefined)?.data?.error
-    ?.message;
 
   if (!token) {
     return (
@@ -65,14 +65,10 @@ export function ResetPasswordForm() {
         )}
       </div>
 
-      {apiError && (
-        <Alert variant="destructive">
-          <AlertDescription>{apiError}</AlertDescription>
-        </Alert>
-      )}
+      <ApiRequestAlert state={apiError} title="Не удалось сохранить пароль" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting}>
-        Сохранить пароль
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+        {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Сохранить пароль'}
       </Button>
     </form>
   );

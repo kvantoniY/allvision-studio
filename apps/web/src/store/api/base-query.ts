@@ -27,6 +27,23 @@ function isAuthEndpoint(url: string) {
   ].some((path) => url === path || url.startsWith(`${path}?`));
 }
 
+function enrichRateLimitError(result: { error?: FetchBaseQueryError; meta?: { response?: Response } }) {
+  if (result.error?.status !== 429) return result;
+
+  const retryAfter = Number(result.meta?.response?.headers.get('Retry-After'));
+  if (!Number.isFinite(retryAfter) || retryAfter <= 0) return result;
+
+  const data = result.error.data;
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const body = data as { error?: Record<string, unknown> };
+    body.error ??= { code: 'RATE_LIMITED', message: 'Слишком много запросов. Попробуйте позже.' };
+    body.error.retryAfterSeconds ??= retryAfter;
+    body.error.retryAt ??= new Date(Date.now() + retryAfter * 1000).toISOString();
+  }
+
+  return result;
+}
+
 export function createBaseQueryWithReauth(apiPrefix: string): BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> {
   const rawBaseQuery = fetchBaseQuery({
     baseUrl: API_URL,
@@ -38,6 +55,7 @@ export function createBaseQueryWithReauth(apiPrefix: string): BaseQueryFn<string
       ? joinUrl(apiPrefix, args)
       : { ...args, url: joinUrl(apiPrefix, args.url) };
     let result = await rawBaseQuery(normalizedArgs, api, extraOptions);
+    enrichRateLimitError(result);
 
     const requestUrl = typeof normalizedArgs === 'string' ? normalizedArgs : normalizedArgs.url;
     if (result.error?.status !== 401 || isAuthEndpoint(requestUrl)) {
@@ -52,6 +70,7 @@ export function createBaseQueryWithReauth(apiPrefix: string): BaseQueryFn<string
     const refreshResult = await refreshPromise as { error?: FetchBaseQueryError };
     if (!refreshResult.error) {
       result = await rawBaseQuery(normalizedArgs, api, extraOptions);
+      enrichRateLimitError(result);
     }
 
     return result;

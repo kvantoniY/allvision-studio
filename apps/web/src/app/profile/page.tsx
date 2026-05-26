@@ -7,6 +7,7 @@ import { useDispatch } from 'react-redux';
 import { Bell, MailCheck, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
 import type { Payment, PaymentStatus } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
 import { PaymentRow } from '@/components/dashboard/PaymentRow';
 import { TransactionRow } from '@/components/dashboard/TransactionRow';
 import { EmptyState } from '@/components/dashboard/EmptyState';
@@ -20,6 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useApiErrorState } from '@/hooks/use-api-error-state';
 import { useAuth } from '@/hooks/use-auth';
 import type { AppDispatch } from '@/store';
 import { authApi, useRequestEmailVerificationMutation } from '@/store/api/auth-api';
@@ -316,6 +318,7 @@ function PersonalSection() {
   const [updateProfile, { isLoading: savingProfile }] = useUpdateProfileMutation();
   const [changePassword, { isLoading: changingPwd }] = useChangePasswordMutation();
   const [requestEmailVerification, emailVerificationState] = useRequestEmailVerificationMutation();
+  const emailVerificationError = useApiErrorState(emailVerificationState.error, 'Не удалось отправить письмо');
   const [name, setName] = useState('');
   const [messenger, setMessenger] = useState('');
   const [messengerType, setMessengerType] = useState<MType | ''>('');
@@ -410,6 +413,7 @@ function PersonalSection() {
           <EmailVerificationPanel
             verifiedAt={user.emailVerifiedAt as string | Date | null}
             loading={emailVerificationState.isLoading}
+            errorState={emailVerificationError}
             onRequest={onRequestEmailVerification}
           />
           <Button onClick={() => saveProfile({ name: name.trim() })} disabled={!personalDirty || savingProfile}>
@@ -471,10 +475,12 @@ function PersonalSection() {
 function EmailVerificationPanel({
   verifiedAt,
   loading,
+  errorState,
   onRequest,
 }: {
   verifiedAt: string | Date | null;
   loading: boolean;
+  errorState: ReturnType<typeof useApiErrorState>;
   onRequest: () => void;
 }) {
   const verified = Boolean(verifiedAt);
@@ -496,11 +502,16 @@ function EmailVerificationPanel({
           </div>
         </div>
         {!verified && (
-          <Button type="button" variant="outline" onClick={onRequest} disabled={loading}>
-            {loading ? 'Отправляем...' : 'Подтвердить email'}
+          <Button type="button" variant="outline" onClick={onRequest} disabled={loading || errorState.locked}>
+            {loading
+              ? 'Отправляем...'
+              : errorState.locked && errorState.retryText
+                ? `Повтор через ${errorState.retryText}`
+                : 'Подтвердить email'}
           </Button>
         )}
       </div>
+      {!verified && <div className="mt-4"><ApiRequestAlert state={errorState} title="Не удалось отправить письмо" /></div>}
     </div>
   );
 }
