@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { HttpError } from '../utils/http-error';
 
 type SendMailInput = {
   to: string;
@@ -9,28 +10,32 @@ type SendMailInput = {
 
 const DEFAULT_UNISENDER_BASE_URL = 'https://goapi.unisender.ru/ru/transactional/api/v1';
 
+function envText(name: string, fallback = '') {
+  return (process.env[name] ?? fallback).trim();
+}
+
 function mailFromEmail() {
-  return process.env.MAIL_FROM_EMAIL ?? 'noreply@allvision-pulse.ru';
+  return envText('MAIL_FROM_EMAIL', 'noreply@allvision-pulse.ru');
 }
 
 function mailFromName() {
-  return process.env.MAIL_FROM_NAME ?? 'Allvision Studio';
+  return envText('MAIL_FROM_NAME', 'Allvision Studio');
 }
 
 function unisenderBaseUrl() {
-  return (process.env.UNISENDER_BASE_URL ?? DEFAULT_UNISENDER_BASE_URL).replace(/\/+$/, '');
+  return envText('UNISENDER_BASE_URL', DEFAULT_UNISENDER_BASE_URL).replace(/\/+$/, '');
 }
 
 function isUnisenderEnabled() {
-  return (process.env.MAIL_PROVIDER ?? '').toLowerCase() === 'unisender' || Boolean(process.env.UNISENDER_API_KEY);
+  return envText('MAIL_PROVIDER').toLowerCase() === 'unisender' || Boolean(envText('UNISENDER_API_KEY'));
 }
 
 export function transactionalMailConfigured() {
-  return isUnisenderEnabled() && Boolean(process.env.UNISENDER_API_KEY);
+  return isUnisenderEnabled() && Boolean(envText('UNISENDER_API_KEY'));
 }
 
 export async function sendTransactionalEmail(input: SendMailInput): Promise<{ sent: boolean }> {
-  const apiKey = process.env.UNISENDER_API_KEY;
+  const apiKey = envText('UNISENDER_API_KEY');
 
   if (!isUnisenderEnabled() || !apiKey) {
     logger.warn(`[mail] transactional mail is not configured; skipped email to=${input.to} subject="${input.subject}"`);
@@ -44,6 +49,7 @@ export async function sendTransactionalEmail(input: SendMailInput): Promise<{ se
       'X-API-KEY': apiKey,
     },
     body: JSON.stringify({
+      api_key: apiKey,
       message: {
         recipients: [{ email: input.to }],
         from_email: mailFromEmail(),
@@ -60,7 +66,7 @@ export async function sendTransactionalEmail(input: SendMailInput): Promise<{ se
   const bodyText = await response.text();
   if (!response.ok) {
     logger.error(`[mail] Unisender send failed status=${response.status} body=${bodyText.slice(0, 500)}`);
-    throw new Error(`Unisender send failed: ${response.status}`);
+    throw new HttpError(502, 'MAIL_PROVIDER_REJECTED', 'Email provider rejected the request');
   }
 
   logger.info(`[mail] sent email to=${input.to} subject="${input.subject}"`);
