@@ -39,6 +39,7 @@ services:
       - ${ALLVISION_ENV_FILE:-.env}
     environment:
       PORT: 4000
+      GIT_SHA: ${GIT_SHA:-local}
     volumes:
       - /opt/allvision-studio/shared/uploads:/app/uploads
     healthcheck:
@@ -62,6 +63,8 @@ services:
         condition: service_healthy
     env_file:
       - ${ALLVISION_ENV_FILE:-.env}
+    environment:
+      GIT_SHA: ${GIT_SHA:-local}
     volumes:
       - /opt/allvision-studio/shared/uploads:/app/uploads
 
@@ -84,6 +87,7 @@ services:
     environment:
       PORT: 3000
       HOSTNAME: 0.0.0.0
+      GIT_SHA: ${GIT_SHA:-local}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/ || exit 1"]
       interval: 30s

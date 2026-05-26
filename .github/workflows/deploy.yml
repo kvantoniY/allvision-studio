@@ -73,11 +73,19 @@ jobs:
             exit 1
           fi
 
+          chmod +x "$RELEASE_DIR/scripts/sync-prod-env.sh"
+          "$RELEASE_DIR/scripts/sync-prod-env.sh" "$RELEASE_DIR/infra/prod/.env.example" "$ENV_FILE"
+
           ln -sfn "$ENV_FILE" "$RELEASE_DIR/infra/prod/.env"
-          printf 'IMAGE_TAG=%s\n' "$GIT_SHA" > "$RELEASE_DIR/infra/prod/.deploy.env"
+          {
+            printf 'IMAGE_TAG=%s\n' "$GIT_SHA"
+            printf 'GIT_SHA=%s\n' "$GIT_SHA"
+          } > "$RELEASE_DIR/infra/prod/.deploy.env"
           mkdir -p "$BASE/scripts"
           cp "$RELEASE_DIR/scripts/rollback.sh" "$BASE/scripts/rollback.sh"
+          cp "$RELEASE_DIR/scripts/sync-prod-env.sh" "$BASE/scripts/sync-prod-env.sh"
           chmod +x "$BASE/scripts/rollback.sh"
+          chmod +x "$BASE/scripts/sync-prod-env.sh"
 
           compose_for_release() {
             local release="$1"
@@ -89,25 +97,39 @@ jobs:
             docker compose "${args[@]}" "$@"
           }
 
+          wait_for_container_healthy() {
+            local container="$1"
+            local status=""
+            for attempt in $(seq 1 60); do
+              status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null || true)"
+              if [ "$status" = "healthy" ] || [ "$status" = "none" ]; then
+                return 0
+              fi
+              sleep 2
+            done
+            echo "Container $container did not become healthy; last status: ${status:-missing}" >&2
+            return 1
+          }
+
           cd "$RELEASE_DIR"
           export BUILDKIT_PROGRESS=plain
-          for service in api worker web; do
-            echo "Building $service image for $GIT_SHA"
-            compose_for_release "$RELEASE_DIR" build "$service"
-          done
+          echo "Ensuring stateful services are running"
+          compose_for_release "$RELEASE_DIR" up -d postgres redis
+          wait_for_container_healthy allvision-studio-postgres
+          wait_for_container_healthy allvision-studio-redis
+
+          echo "Building runtime images for $GIT_SHA"
+          compose_for_release "$RELEASE_DIR" build api worker web
 
           OLD_RELEASE=""
           if [ -L "$BASE/current" ]; then
             OLD_RELEASE="$(readlink -f "$BASE/current")"
           fi
 
-          if [ -n "$OLD_RELEASE" ] && [ -f "$OLD_RELEASE/infra/prod/docker-compose.prod.yml" ]; then
-            compose_for_release "$OLD_RELEASE" down || true
-          fi
-
           ln -sfn "$RELEASE_DIR" "$BASE/current"
           cd "$BASE/current"
-          compose_for_release "$RELEASE_DIR" up -d
+          echo "Recreating runtime containers for $GIT_SHA"
+          compose_for_release "$RELEASE_DIR" up -d --force-recreate --no-deps --remove-orphans api worker web nginx
 
           healthy=0
           for attempt in $(seq 1 60); do
@@ -121,11 +143,10 @@ jobs:
 
           if [ "$healthy" != "1" ]; then
             echo "New release failed healthcheck; rolling back." >&2
-            compose_for_release "$RELEASE_DIR" down || true
             if [ -n "$OLD_RELEASE" ] && [ -f "$OLD_RELEASE/infra/prod/docker-compose.prod.yml" ]; then
               ln -sfn "$OLD_RELEASE" "$BASE/current"
               cd "$OLD_RELEASE"
-              compose_for_release "$OLD_RELEASE" up -d
+              compose_for_release "$OLD_RELEASE" up -d --force-recreate --no-deps --remove-orphans api worker web nginx
             fi
             exit 1
           fi

@@ -36,14 +36,27 @@ compose_for_release() {
   fi
 }
 
-if [ -n "$CURRENT_RELEASE" ] && [ -f "$CURRENT_RELEASE/infra/prod/docker-compose.prod.yml" ]; then
-  compose_for_release "$CURRENT_RELEASE" down || true
-fi
+wait_for_container_healthy() {
+  container="$1"
+  status=""
+  for _attempt in $(seq 1 60); do
+    status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null || true)"
+    if [ "$status" = "healthy" ] || [ "$status" = "none" ]; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Container $container did not become healthy; last status: ${status:-missing}" >&2
+  return 1
+}
 
 ln -sfn "$PREVIOUS_RELEASE" "$CURRENT_LINK"
 if [ -n "$CURRENT_RELEASE" ]; then
   ln -sfn "$CURRENT_RELEASE" "$PREVIOUS_LINK"
 fi
 
-compose_for_release "$PREVIOUS_RELEASE" up -d
+compose_for_release "$PREVIOUS_RELEASE" up -d postgres redis
+wait_for_container_healthy allvision-studio-postgres
+wait_for_container_healthy allvision-studio-redis
+compose_for_release "$PREVIOUS_RELEASE" up -d --force-recreate --no-deps --remove-orphans api worker web nginx
 echo "Rolled back to $PREVIOUS_RELEASE"

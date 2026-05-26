@@ -15,9 +15,20 @@ DNS Рег.ру для `allvision-pulse.ru` и `www.allvision-pulse.ru` указ
 4. Проверить, что уже есть `/opt/allvision-studio/shared/public-trends/trend-1.mp4`, `trend-2.mp4`, `trend-3.mp4`.
 5. Запустить workflow `Deploy to production` через `workflow_dispatch` или push в `main`.
 
-Workflow создаёт релиз в `/opt/allvision-studio/releases/{sha}`, линкует общий `.env`, собирает images, переключает `current`, ждёт `/healthz` и `/api/ready`, затем хранит предыдущий релиз в `previous`.
+Workflow создаёт релиз в `/opt/allvision-studio/releases/{sha}`, синхронизирует общий `/opt/allvision-studio/shared/.env` с актуальным `infra/prod/.env.example`, линкует `.env`, собирает images, переключает `current`, пересоздаёт runtime-контейнеры `api`, `worker`, `web`, `nginx`, ждёт `/healthz` и `/api/ready`, затем хранит предыдущий релиз в `previous`.
 
 ## Env
+
+`/opt/allvision-studio/shared/.env` является постоянным prod-файлом и не хранится в git. На каждом GitHub deploy запускается `scripts/sync-prod-env.sh`:
+
+- новые ключи из `infra/prod/.env.example` добавляются в shared `.env`;
+- существующие secrets и ручные значения не перетираются;
+- deploy-managed operational keys обновляются до актуальных дефолтов из репозитория:
+  `AUTH_RATE_LIMIT_WINDOW_MS`, `AUTH_REGISTER_RATE_LIMIT`, `AUTH_LOGIN_RATE_LIMIT`,
+  `PASSWORD_RESET_RATE_LIMIT`, `EMAIL_VERIFICATION_RATE_LIMIT`;
+- перед изменением создаётся backup рядом с файлом: `.env.bak.YYYYMMDDHHMMSS`.
+
+После изменения env workflow пересоздаёт runtime-контейнеры через `--force-recreate`, поэтому отдельно выполнять `docker compose restart` не нужно.
 
 ## Shared volume ownership
 
@@ -30,7 +41,7 @@ sudo chown -R 1000:1000 /opt/allvision-studio/shared/{uploads,postgres_data,publ
 sudo chmod -R 755 /opt/allvision-studio/shared/{uploads,public-trends}
 ```
 
-`PROVIDER_MODE=mock` - безопасный прод-режим P6.5: все AI-блоки идут через `MockAIProvider`, PiAPI и publisher не вызываются.
+`PROVIDER_MODE=mock` - режим локальной/ручной проверки через `MockAIProvider`; PiAPI и publisher не вызываются.
 
 `PROVIDER_MODE=piapi` - реальные PiAPI-вызовы для `image-to-video` и `face-swap-video`; mock-only блоки остаются на mock. Требует `PIAPI_API_KEY`.
 
@@ -43,6 +54,8 @@ sudo chmod -R 755 /opt/allvision-studio/shared/{uploads,public-trends}
 `STORAGE_PUBLISHER=noop` - возвращает входной путь/URL как есть, полезно только для ручных mock-проверок.
 
 Валидные prod-комбинации сейчас: `mock + local`, `mock + noop`, `piapi + local`, `piapi + r2`.
+
+Production worker image больше не скачивает demo placeholder video/image во время build. В image попадают только файлы из репозитория, включая JSON-шаблоны сказок. Для локального `MockAIProvider` медиа-заглушки по-прежнему можно подготовить вручную командой `npm run demo:download`.
 
 ## Включение PiAPI
 
@@ -64,7 +77,10 @@ PIAPI_API_KEY=...
 
 ```bash
 cd /opt/allvision-studio/current
-docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env up -d
+docker compose -f infra/prod/docker-compose.prod.yml \
+  --env-file infra/prod/.env \
+  --env-file infra/prod/.deploy.env \
+  up -d --force-recreate --no-deps api worker web nginx
 ```
 
 ## Rollback
@@ -79,7 +95,10 @@ docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env 
 
 ```bash
 cd /opt/allvision-studio/current
-docker compose -f infra/prod/docker-compose.prod.yml --env-file infra/prod/.env logs -f
+docker compose -f infra/prod/docker-compose.prod.yml \
+  --env-file infra/prod/.env \
+  --env-file infra/prod/.deploy.env \
+  logs -f
 ```
 
 Точечно:

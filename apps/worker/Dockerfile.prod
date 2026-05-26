@@ -20,8 +20,7 @@ WORKDIR /app
 COPY . .
 RUN npm run build -w @allvision/database \
   && npm run build -w @allvision/shared \
-  && npm run build -w @allvision/worker \
-  && npm run demo:download
+  && npm run build -w @allvision/worker
 
 FROM node:22-alpine AS runner
 WORKDIR /app
