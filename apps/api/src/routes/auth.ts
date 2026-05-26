@@ -8,7 +8,7 @@ import {
 import * as authService from '../services/auth-service';
 import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
 import { requireAuth } from '../middleware/auth';
-import { authLimiter, passwordResetLimiter } from '../middleware/rate-limit';
+import { loginLimiter, passwordResetLimiter, registerLimiter } from '../middleware/rate-limit';
 import { HttpError } from '../utils/http-error';
 
 export const authRouter = Router();
@@ -22,7 +22,7 @@ function loginBody(user: { role: string }, accessToken: string) {
   return user.role === 'READONLY_ADMIN' ? { user, accessToken } : { user };
 }
 
-authRouter.post('/register', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/register', registerLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = registerSchema.parse(req.body);
     const { user, accessToken, refreshToken } = await authService.register(data);
@@ -33,7 +33,7 @@ authRouter.post('/register', authLimiter, async (req: Request, res: Response, ne
   }
 });
 
-authRouter.post('/login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/login', loginLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = loginSchema.parse(req.body);
     const { user, accessToken, refreshToken } = await authService.login(data);

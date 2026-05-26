@@ -10,7 +10,16 @@ import { resolveWorkspacePath } from './utils/paths';
 
 export const app = express();
 
-app.set('trust proxy', 1);
+function trustProxySetting(): boolean | number | string {
+  const raw = process.env.TRUST_PROXY_HOPS ?? process.env.TRUST_PROXY;
+  if (!raw) return process.env.NODE_ENV === 'production' ? 2 : 1;
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  const numeric = Number(raw);
+  return Number.isFinite(numeric) ? numeric : raw;
+}
+
+app.set('trust proxy', trustProxySetting());
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(
