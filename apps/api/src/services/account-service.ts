@@ -32,6 +32,7 @@ function toAccountUser(user: User): AccountUser {
     role: user.role,
     messenger: user.messenger,
     messengerType: user.messengerType,
+    emailVerifiedAt: user.emailVerifiedAt,
     createdAt: user.createdAt,
   };
 }

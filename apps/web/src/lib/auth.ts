@@ -4,7 +4,10 @@ import type { User } from '@allvision/shared';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
-export type ServerUser = Omit<User, 'passwordHash' | 'passwordResetToken' | 'passwordResetExpiresAt'>;
+export type ServerUser = Omit<
+  User,
+  'passwordHash' | 'passwordResetToken' | 'passwordResetExpiresAt' | 'emailVerifyToken' | 'emailVerifyExpiresAt'
+>;
 
 export async function getServerMe(): Promise<ServerUser | null> {
   const res = await fetch(`${API_URL}/api/auth/me`, {

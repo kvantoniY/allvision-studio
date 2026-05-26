@@ -6,7 +6,7 @@ import { Footer } from '@/components/layout/Footer';
 import { UserWorkspaceShell } from '@/components/layout/UserWorkspaceShell';
 import { useAuth } from '@/hooks/use-auth';
 
-const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password'];
+const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

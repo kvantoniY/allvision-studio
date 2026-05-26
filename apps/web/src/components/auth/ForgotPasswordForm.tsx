@@ -28,8 +28,7 @@ export function ForgotPasswordForm() {
     return (
       <Alert>
         <AlertDescription>
-          Если email зарегистрирован — проверьте почту. На этапе разработки ссылка появляется в
-          консоли API-сервера.
+          Если email зарегистрирован и подтверждён — мы отправили ссылку для восстановления пароля.
         </AlertDescription>
       </Alert>
     );

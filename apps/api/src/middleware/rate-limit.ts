@@ -47,6 +47,16 @@ export const passwordResetLimiter = rateLimit({
   message: { error: { code: 'RATE_LIMITED', message: 'Слишком много запросов. Попробуйте через час.' } },
 });
 
+/** 3 письма подтверждения email на пользователя или IP в час. */
+export const emailVerificationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req: Request) => req.user?.id ?? ipKeyGenerator(req.ip ?? ''),
+  message: { error: { code: 'RATE_LIMITED', message: 'Слишком много писем. Попробуйте через час.' } },
+});
+
 /** 10 созданий проекта на пользователя за минуту. */
 export const projectCreateLimiter = rateLimit({
   windowMs: 60 * 1000,

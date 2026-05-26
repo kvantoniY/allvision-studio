@@ -8,7 +8,7 @@ import {
 import * as authService from '../services/auth-service';
 import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
 import { requireAuth } from '../middleware/auth';
-import { loginLimiter, passwordResetLimiter, registerLimiter } from '../middleware/rate-limit';
+import { emailVerificationLimiter, loginLimiter, passwordResetLimiter, registerLimiter } from '../middleware/rate-limit';
 import { HttpError } from '../utils/http-error';
 
 export const authRouter = Router();
@@ -84,6 +84,26 @@ authRouter.post('/forgot-password', passwordResetLimiter, async (req: Request, r
     const { email } = forgotPasswordSchema.parse(req.body);
     await authService.requestPasswordReset(email);
     // Всегда 200, даже если email не существует — чтобы не раскрывать базу.
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+});
+
+authRouter.post('/email-verification/request', requireAuth, emailVerificationLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await authService.requestEmailVerification(req.user!.id);
+    res.json({ ok: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+});
+
+authRouter.post('/email-verification/confirm', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = String(req.body?.token ?? '');
+    if (!token) throw new HttpError(400, 'TOKEN_REQUIRED', 'Отсутствует токен подтверждения');
+    await authService.confirmEmailVerification(token);
     res.json({ ok: true });
   } catch (e) {
     next(e);

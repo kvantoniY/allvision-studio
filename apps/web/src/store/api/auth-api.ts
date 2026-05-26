@@ -8,7 +8,10 @@ import type {
   ResetPasswordInput,
 } from '@allvision/shared';
 
-export type SafeUser = Omit<User, 'passwordHash' | 'passwordResetToken' | 'passwordResetExpiresAt'>;
+export type SafeUser = Omit<
+  User,
+  'passwordHash' | 'passwordResetToken' | 'passwordResetExpiresAt' | 'emailVerifyToken' | 'emailVerifyExpiresAt'
+>;
 
 export const authApi = createApi({
   reducerPath: 'authApi',
@@ -37,6 +40,14 @@ export const authApi = createApi({
     resetPassword: build.mutation<{ ok: true }, ResetPasswordInput>({
       query: (body) => ({ url: '/reset-password', method: 'POST', body }),
     }),
+    requestEmailVerification: build.mutation<{ ok: true; alreadyVerified?: boolean }, void>({
+      query: () => ({ url: '/email-verification/request', method: 'POST' }),
+      invalidatesTags: ['Me', 'User'],
+    }),
+    confirmEmailVerification: build.mutation<{ ok: true }, string>({
+      query: (token) => ({ url: '/email-verification/confirm', method: 'POST', body: { token } }),
+      invalidatesTags: ['Me', 'User'],
+    }),
   }),
 });
 
@@ -47,4 +58,6 @@ export const {
   useGetMeQuery,
   useForgotPasswordMutation,
   useResetPasswordMutation,
+  useRequestEmailVerificationMutation,
+  useConfirmEmailVerificationMutation,
 } = authApi;

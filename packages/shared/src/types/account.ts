@@ -16,6 +16,7 @@ export type AccountUser = {
   role: Role;
   messenger: string | null;
   messengerType: MessengerType | null;
+  emailVerifiedAt: Date | string | null;
   createdAt: Date | string;
 };
 

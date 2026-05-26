@@ -19,6 +19,9 @@ model User {
   role                   Role           @default(USER)
   messenger              String?
   messengerType          MessengerType?
+  emailVerifiedAt        DateTime?
+  emailVerifyToken       String?
+  emailVerifyExpiresAt   DateTime?
   passwordResetToken     String?
   passwordResetExpiresAt DateTime?
   deletedAt              DateTime?

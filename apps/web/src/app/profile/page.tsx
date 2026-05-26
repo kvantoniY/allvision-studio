@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDispatch } from 'react-redux';
-import { Bell, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
+import { Bell, MailCheck, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
 import type { Payment, PaymentStatus } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { PaymentRow } from '@/components/dashboard/PaymentRow';
@@ -22,7 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import type { AppDispatch } from '@/store';
-import { authApi } from '@/store/api/auth-api';
+import { authApi, useRequestEmailVerificationMutation } from '@/store/api/auth-api';
 import { TokenIcon } from '@/components/ui/token-icon';
 import {
   useChangePasswordMutation,
@@ -315,6 +315,7 @@ function PersonalSection() {
   const { toast } = useToast();
   const [updateProfile, { isLoading: savingProfile }] = useUpdateProfileMutation();
   const [changePassword, { isLoading: changingPwd }] = useChangePasswordMutation();
+  const [requestEmailVerification, emailVerificationState] = useRequestEmailVerificationMutation();
   const [name, setName] = useState('');
   const [messenger, setMessenger] = useState('');
   const [messengerType, setMessengerType] = useState<MType | ''>('');
@@ -367,6 +368,19 @@ function PersonalSection() {
     }
   };
 
+  const onRequestEmailVerification = async () => {
+    try {
+      const result = await requestEmailVerification().unwrap();
+      dispatch(authApi.util.invalidateTags(['Me']));
+      toast({
+        title: result.alreadyVerified ? 'Email уже подтверждён' : 'Письмо отправлено',
+        description: result.alreadyVerified ? undefined : 'Проверьте почту и перейдите по ссылке подтверждения.',
+      });
+    } catch (error) {
+      toast({ title: 'Не удалось отправить письмо', description: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_0.8fr]">
       <Card className="border-slate-800 bg-slate-900">
@@ -393,6 +407,11 @@ function PersonalSection() {
               <Input id="email" value={user.email} readOnly disabled />
             </div>
           </div>
+          <EmailVerificationPanel
+            verifiedAt={user.emailVerifiedAt as string | Date | null}
+            loading={emailVerificationState.isLoading}
+            onRequest={onRequestEmailVerification}
+          />
           <Button onClick={() => saveProfile({ name: name.trim() })} disabled={!personalDirty || savingProfile}>
             {savingProfile ? 'Сохранение...' : 'Сохранить'}
           </Button>
@@ -445,6 +464,43 @@ function PersonalSection() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function EmailVerificationPanel({
+  verifiedAt,
+  loading,
+  onRequest,
+}: {
+  verifiedAt: string | Date | null;
+  loading: boolean;
+  onRequest: () => void;
+}) {
+  const verified = Boolean(verifiedAt);
+  return (
+    <div className={cn(
+      'rounded-lg border p-4',
+      verified ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/10',
+    )}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex gap-3">
+          <MailCheck className={cn('mt-0.5 h-5 w-5', verified ? 'text-emerald-300' : 'text-amber-300')} />
+          <div>
+            <div className="font-semibold text-white">{verified ? 'Email подтверждён' : 'Email не подтверждён'}</div>
+            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-300">
+              {verified
+                ? 'Вы сможете восстановить доступ к аккаунту через электронную почту.'
+                : 'Подтвердите электронную почту, чтобы восстановить пароль при потере доступа.'}
+            </p>
+          </div>
+        </div>
+        {!verified && (
+          <Button type="button" variant="outline" onClick={onRequest} disabled={loading}>
+            {loading ? 'Отправляем...' : 'Подтвердить email'}
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
