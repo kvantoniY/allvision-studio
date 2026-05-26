@@ -49,7 +49,6 @@ export async function sendTransactionalEmail(input: SendMailInput): Promise<{ se
       'X-API-KEY': apiKey,
     },
     body: JSON.stringify({
-      api_key: apiKey,
       message: {
         recipients: [{ email: input.to }],
         from_email: mailFromEmail(),
