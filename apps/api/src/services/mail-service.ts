@@ -54,6 +54,8 @@ export async function sendTransactionalEmail(input: SendMailInput): Promise<{ se
         from_email: mailFromEmail(),
         from_name: mailFromName(),
         subject: input.subject,
+        bypass_global: 1,
+        bypass_unavailable: 1,
         body: {
           html: input.html,
           plaintext: input.text,
