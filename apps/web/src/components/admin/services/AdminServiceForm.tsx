@@ -107,7 +107,11 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
   select: 'Select',
   'media-select': 'Media select',
   avatar: 'Avatar',
-  tier: 'Quality tier',
+  tier: 'Quality tier (legacy)',
+  audio: 'Аудио (mp3/wav)',
+  duration: 'Длительность (секунды)',
+  aspect_ratio: 'Формат кадра',
+  'music-select': 'Музыка из библиотеки',
 };
 
 type AdminServiceFormProps = {
@@ -144,15 +148,7 @@ type SortableFrameProps = {
 };
 
 function defaultUserInputForm(): UserInputField[] {
-  return [
-    {
-      id: 'tier',
-      type: 'tier',
-      label: 'Качество',
-      required: true,
-      hint: 'Стандарт или Pro',
-    },
-  ];
+  return [];
 }
 
 function normaliseCategory(category?: ServiceCategory | null): ServiceCategory {
@@ -171,9 +167,8 @@ function normalisePipeline(value: AdminService['pipelineConfig'] | undefined): P
 
 function normaliseUserInputForm(value: AdminService['userInputForm'] | undefined): UserInputField[] {
   if (!Array.isArray(value) || value.length === 0) return defaultUserInputForm();
-  const withoutExtraTier = value.filter((field, index) => field.type !== 'tier' || value.findIndex((item) => item.type === 'tier') === index);
-  const hasTier = withoutExtraTier.some((field) => field.type === 'tier');
-  return hasTier ? withoutExtraTier : [...withoutExtraTier, ...defaultUserInputForm()];
+  // Keep at most one tier field (legacy compatibility). New services don't need tier; Pro is default.
+  return value.filter((field, index) => field.type !== 'tier' || value.findIndex((item) => item.type === 'tier') === index);
 }
 
 function initialDraft(service?: AdminService): FormDraft {
@@ -1231,6 +1226,10 @@ function UserInputFormBuilder({
       label: fieldTypeLabels[type],
       required: type === 'tier' || type === 'photo',
       ...(type === 'media-select' ? { mediaKind: 'trend-video' } : {}),
+      ...(type === 'music-select' ? { mediaKind: 'background-music', allowUserUpload: false, allowLibrary: true } : {}),
+      ...(type === 'audio' ? { maxSizeMb: 25, allowedFormats: ['mp3', 'wav', 'ogg', 'm4a'], allowUserUpload: true, allowLibrary: false } : {}),
+      ...(type === 'duration' ? { durationOptions: [5, 8, 10], defaultDuration: 5 } : {}),
+      ...(type === 'aspect_ratio' ? { aspectOptions: ['auto', '9:16', '16:9', '1:1'], defaultAspect: 'auto' } : {}),
       ...(type === 'select' ? { options: [{ label: 'Вариант 1', value: 'option_1' }] } : {}),
       ...(type === 'photo'
         ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'], allowStudioAvatars: true, allowSystemLibrary: false }
@@ -1381,6 +1380,71 @@ function UserInputFormBuilder({
                                 />
                               </label>
                             )}
+                            {field.type === 'music-select' && (
+                              <label className="flex items-center gap-2">
+                                mediaKind
+                                <Input
+                                  value={field.mediaKind ?? 'background-music'}
+                                  onChange={(event) => updateField(index, { mediaKind: event.target.value || undefined })}
+                                  className="h-8 w-44"
+                                />
+                              </label>
+                            )}
+                            {field.type === 'audio' && (
+                              <>
+                                <label className="flex items-center gap-2">
+                                  max MB
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={field.maxSizeMb ?? ''}
+                                    onChange={(event) => updateField(index, { maxSizeMb: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-24"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={field.allowLibrary === true}
+                                    onChange={(event) => updateField(index, { allowLibrary: event.target.checked })}
+                                  />
+                                  + библиотека
+                                </label>
+                              </>
+                            )}
+                            {field.type === 'duration' && (
+                              <label className="flex items-center gap-2">
+                                Опции (через запятую)
+                                <Input
+                                  value={(field.durationOptions ?? [5, 8, 10]).join(',')}
+                                  onChange={(event) => {
+                                    const parts = event.target.value
+                                      .split(',')
+                                      .map((item) => Number(item.trim()))
+                                      .filter((n) => Number.isFinite(n) && n > 0);
+                                    updateField(index, { durationOptions: parts.length > 0 ? parts : undefined });
+                                  }}
+                                  className="h-8 w-40"
+                                />
+                              </label>
+                            )}
+                            {field.type === 'aspect_ratio' && (
+                              <label className="flex items-center gap-2">
+                                Опции (через запятую)
+                                <Input
+                                  value={(field.aspectOptions ?? ['auto', '9:16', '16:9', '1:1']).join(',')}
+                                  onChange={(event) => {
+                                    const allowed = new Set(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']);
+                                    const parts = event.target.value
+                                      .split(',')
+                                      .map((item) => item.trim())
+                                      .filter((item): item is 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4' => allowed.has(item));
+                                    updateField(index, { aspectOptions: parts.length > 0 ? parts : undefined });
+                                  }}
+                                  className="h-8 w-56"
+                                />
+                              </label>
+                            )}
                           </div>
                           {field.type === 'select' && (
                             <div className="space-y-2">
@@ -1414,7 +1478,7 @@ function UserInputFormBuilder({
         </DndContext>
 
         <div className="flex flex-wrap gap-2">
-          {(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar'] as const).map((type) => (
+          {(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
             <Button key={type} type="button" variant="outline" size="sm" onClick={() => addField(type)}>
               <Plus className="h-4 w-4" />
               {fieldTypeLabels[type]}
@@ -1795,7 +1859,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="grid gap-5 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="priceStandard">Цена Стандарт, токены</Label>
+              <Label htmlFor="priceStandard">Цена Стандарт, коины (legacy)</Label>
               <Input
                 id="priceStandard"
                 type="number"
@@ -1805,7 +1869,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="pricePro">Цена Pro, токены</Label>
+              <Label htmlFor="pricePro">Цена Pro, коины (используется фронтом)</Label>
               <Input
                 id="pricePro"
                 type="number"

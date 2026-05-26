@@ -76,4 +76,16 @@ export class StubAIProvider implements AIProvider {
   }): Promise<ProviderResult> {
     return result('stub://motion-transfer.mp4', { type: 'video' });
   }
+
+  async videoEffect(_input: {
+    imageUrl: string;
+    effectId?: string;
+    prompt?: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://video-effect.mp4', { type: 'video' });
+  }
 }

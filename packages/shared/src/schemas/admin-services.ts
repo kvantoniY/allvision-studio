@@ -36,7 +36,19 @@ export const pipelineConfigSchema = z.array(pipelineStepSchema).min(1);
 
 export const userInputFieldSchema = z.object({
   id: z.string().trim().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/),
-  type: z.enum(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'tier']),
+  type: z.enum([
+    'text',
+    'textarea',
+    'photo',
+    'select',
+    'media-select',
+    'avatar',
+    'tier',
+    'audio',
+    'duration',
+    'aspect_ratio',
+    'music-select',
+  ]),
   label: z.string().trim().min(1).max(120),
   required: z.boolean(),
   hint: z.string().trim().max(240).optional(),
@@ -52,6 +64,12 @@ export const userInputFieldSchema = z.object({
     label: z.string().trim().min(1).max(120),
     value: z.string().trim().min(1).max(500),
   })).optional(),
+  durationOptions: z.array(z.number().int().min(1).max(60)).optional(),
+  defaultDuration: z.number().int().min(1).max(60).optional(),
+  aspectOptions: z.array(z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4'])).optional(),
+  defaultAspect: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
+  allowUserUpload: z.boolean().optional(),
+  allowLibrary: z.boolean().optional(),
 });
 
 export const userInputFormSchema = z.array(userInputFieldSchema).min(1);
@@ -174,7 +192,7 @@ export function validateUserInputForm(form: unknown): UserInputFieldInput[] {
     }
   }
 
-  if (tierCount !== 1) throw new Error('TIER_FIELD_REQUIRED');
+  if (tierCount > 1) throw new Error('TIER_FIELD_DUPLICATE');
   return fields;
 }
 
@@ -284,6 +302,7 @@ export function formatAdminServiceValidationError(error: string): string {
   if (code === 'SELECT_OPTIONS_REQUIRED') return `Поле выбора "${path}" должно содержать варианты.`;
   if (code === 'MEDIA_KIND_REQUIRED') return `Media-select поле "${path}" должно содержать mediaKind.`;
   if (error === 'TIER_FIELD_REQUIRED') return 'В форме должно быть ровно одно поле выбора тарифа.';
+  if (error === 'TIER_FIELD_DUPLICATE') return 'В форме не должно быть больше одного поля выбора тарифа.';
   if (error.trim().startsWith('[') || error.includes('"code"')) return 'Пайплайн содержит ошибку в данных. Откройте шаг для подробностей.';
   return error || 'Пайплайн содержит ошибку в данных. Откройте шаг для подробностей.';
 }

@@ -328,14 +328,18 @@ servicesRouter.post(
       const steps = pipelineSteps(service.pipelineConfig);
       const data = parseDataField(req.body.data ?? req.body);
       const photoFields = fields.filter((field) => field.type === 'photo');
-      const fileMap = filesByField(req, new Set(photoFields.map((field) => field.id)));
+      const audioFields = fields.filter((field) => field.type === 'audio');
+      const fileMap = filesByField(
+        req,
+        new Set([...photoFields.map((field) => field.id), ...audioFields.map((field) => field.id)]),
+      );
       const tierField = fields.find((field) => field.type === 'tier');
       const userId = req.user!.id;
-      if (!tierField) throw new HttpError(400, 'TIER_FIELD_REQUIRED', 'Tier field is required');
 
-      const tierValue = data[tierField.id];
-      if (tierValue !== 'standard' && tierValue !== 'pro') {
-        throw new HttpError(400, 'INVALID_TIER', 'Tier must be standard or pro');
+      // Always run services in Pro mode. Tier field, if present, is ignored from user input.
+      const tierValue: 'pro' = 'pro';
+      if (tierField) {
+        data[tierField.id] = 'pro';
       }
 
       const assetInputs = new Map<string, UserInputAsset>();
@@ -368,8 +372,24 @@ servicesRouter.post(
         if (field.type === 'select') {
           validateSelectField(field, value);
         }
-        if (field.type === 'media-select') {
+        if (field.type === 'media-select' || field.type === 'music-select') {
           await validateMediaSelectField(field, value);
+        }
+        if (field.type === 'duration') {
+          if (typeof value !== 'string' && typeof value !== 'number') {
+            throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} must be a number`);
+          }
+          const num = Number(value);
+          if (!Number.isFinite(num) || num <= 0 || num > 60) {
+            throw new HttpError(400, 'INVALID_DURATION', `${field.id} duration is invalid`);
+          }
+          data[field.id] = num;
+        }
+        if (field.type === 'aspect_ratio') {
+          const allowed = new Set(field.aspectOptions ?? ['auto', '9:16', '16:9', '1:1']);
+          if (typeof value !== 'string' || !allowed.has(value as never)) {
+            throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} aspect ratio is invalid`);
+          }
         }
       }
 
@@ -382,7 +402,7 @@ servicesRouter.post(
         userInputs[fieldId] = asset.ref;
       }
 
-      for (const field of photoFields) {
+      for (const field of [...photoFields, ...audioFields]) {
         const file = fileMap.get(field.id);
         if (!file) continue;
         if (field.maxSizeMb && file.size > field.maxSizeMb * 1024 * 1024) {
@@ -405,10 +425,22 @@ servicesRouter.post(
         userInputs[field.id] = uploaded.url;
       }
 
-      const tokensCost =
-        tierValue === 'pro'
-          ? service.priceCoinsPro ?? service.priceTokens
-          : service.priceCoinsStandard ?? service.priceTokens;
+      // music-select: convert asset:<id> placeholder to public URL of background-music MediaAsset
+      for (const field of fields) {
+        if (field.type !== 'music-select') continue;
+        const value = userInputs[field.id];
+        if (typeof value !== 'string' || value.trim().length === 0) continue;
+        const asset = await prisma.mediaAsset.findFirst({
+          where: { id: value, kind: field.mediaKind ?? 'background-music', isActive: true, ownerUserId: null },
+          select: { publicUrl: true },
+        });
+        if (asset) {
+          userInputs[field.id] = asset.publicUrl;
+        }
+      }
+
+      // All services run in Pro mode by default; price is taken from priceCoinsPro.
+      const tokensCost = service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
       const inputImages = photoFields
         .map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id])
         .filter((value): value is string => typeof value === 'string');

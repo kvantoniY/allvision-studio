@@ -7,6 +7,7 @@ import { faceSwapVideoBlock } from './face-swap-video';
 import { motionTransferBlock } from './motion-transfer';
 import { videoComposeBlock } from './video-compose';
 import { textToVideoBlock } from './text-to-video';
+import { videoEffectBlock } from './video-effect';
 
 export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'image-restore': imageRestoreBlock,
@@ -17,6 +18,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'face-swap-video': faceSwapVideoBlock,
   'video-compose': videoComposeBlock,
   'text-to-video': textToVideoBlock,
+  'video-effect': videoEffectBlock,
 };
 
 export function getBlock(slug: string): BlockDefinition {

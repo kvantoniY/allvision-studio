@@ -1,7 +1,11 @@
 'use client';
 
-import { ImageIcon, Plus, Search } from 'lucide-react';
+import { ImageIcon, Plus, Search, Video as VideoIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
+function isVideoUrl(url: string) {
+  return /\.(mp4|webm|mov|m4v)(?:[?#].*)?$/i.test(url);
+}
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -72,13 +76,24 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
                     : 'border-slate-800 bg-slate-900 hover:border-slate-700 hover:bg-slate-800',
                 )}
               >
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-950">
-                  {item.lastResultPreview ? (
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-900">
+                  {item.lastResultPreview && !isVideoUrl(item.lastResultPreview) ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.lastResultPreview} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={item.lastResultPreview}
+                      alt=""
+                      className="h-full w-full object-cover"
+                      onError={(event) => {
+                        event.currentTarget.style.display = 'none';
+                      }}
+                    />
                   ) : (
                     <div className="grid h-full place-items-center text-slate-500">
-                      <ImageIcon className="h-5 w-5" />
+                      {item.lastResultPreview && isVideoUrl(item.lastResultPreview) ? (
+                        <VideoIcon className="h-5 w-5" />
+                      ) : (
+                        <ImageIcon className="h-5 w-5" />
+                      )}
                     </div>
                   )}
                 </div>

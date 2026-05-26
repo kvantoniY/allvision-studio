@@ -887,3 +887,71 @@ Technical debt:
 
 - Multi-input generation через Kling Elements не делали.
 - Email/SMTP, ЮKassa sandbox, cleanup временных chat-upload файлов, NSFW-фильтр, voice messages и streaming остались за рамками P8.4.
+
+## Этап P9 ✅
+
+Pro-default, цены = себестоимость, audio overlay, новые image модели в чате, video effects.
+
+Tier UI и цены (Pro по умолчанию):
+
+- `ServiceDetail.tsx` больше не показывает селектор Standard/Pro и две цены — рендерит одну цену из `priceCoinsPro` ("Стоимость подарка: X коинов"). Поле tier в форме скрыто.
+- API `POST /api/services/:slug/launch` всегда выставляет `selectedTier = 'pro'` и списывает по `priceCoinsPro ?? priceCoinsStandard ?? priceTokens`; tier-field в `userInputForm` остаётся опциональным для обратной совместимости.
+- Shared schema: `validateUserInputForm` больше не требует ровно одного tier-field; `TIER_FIELD_REQUIRED` заменён на `TIER_FIELD_DUPLICATE` (запрет более одного).
+- Admin form: лейблы цен — "Цена Pro, коины (используется фронтом)" и "Цена Стандарт, коины (legacy)". `defaultUserInputForm()` теперь возвращает пустой массив (tier не нужен).
+
+Цены = себестоимость PiAPI (обновлённые seed-услуги):
+
+- `revive-old-photo`: nano-banana@2K + kling-3-pro 5s @720p + ffmpeg compose = $1.38 → **110 коинов**.
+- `face-in-trend`: Qubico face-swap (~120 frames) + compose = $0.48 → **40 коинов**.
+- `kid-cartoon-hero`: nano-banana@1K стилизация + veo-3.1 8s @1080p + compose = $1.02 → **90 коинов**.
+- `anniversary-card`: nano-banana@1K + kling-3-pro 5s @720p + compose = $1.36 → **110 коинов**.
+- `priceCoinsStandard === priceCoinsPro` во всех 4 услугах, чтобы UI показывал одну цену.
+- `seedPilotServices()` упрощён: вместо custom patch-функций (`needsFaceInTrendP7aPatch`, `needsReviveOldPhotoP7aPatch`, `needsPhotoSourceDefaultsPatch`) используется diff-based update — при изменении seed услуги канонически обновляются на проде.
+
+Audio overlay через video-compose (реальный ffmpeg):
+
+- `apps/worker/src/blocks/video-compose.ts` переписан с pass-through на реальный ffmpeg pipeline:
+  - Скачивает input video и `audio_source` URL во временные файлы.
+  - `filter_complex` строит цепочку `aloop` (если `audio_loop`), `adelay` (offset), `volume`, `afade` (in/out).
+  - При `keep_original_audio=true` микшируется с оригинальным звуком через `amix`; иначе аудио заменяет.
+  - `-c:v copy`, `-c:a aac 192k`, `-shortest`, `-movflags +faststart` → результат сохраняется в `outputs/{userId}/{projectId}/{stepId}/result.mp4`.
+  - При ошибке скачивания или ffmpeg возвращает оригинальное видео без аудио (fallback) и логирует.
+- Catalog `video-compose.paramsSchema` расширен: `audio_source` (sourceSelect:audio), `audio_volume` (0-2), `audio_offset_sec`, `audio_fade_in_sec`, `audio_fade_out_sec`, `audio_loop`, `keep_original_audio`. Старый `music` оставлен legacy.
+
+Новые типы userInputForm:
+
+- `audio` — загрузка mp3/wav/ogg/m4a, до 25 MB. В seed `revive-old-photo` и `anniversary-card` имеют комбинированный режим (upload + library).
+- `music-select` — выбор из MediaAsset `kind='background-music'`. API резолвит `asset:<id>` в публичный URL перед запуском pipeline.
+- `duration` — кнопки выбора (5/8/10 сек по умолчанию), `durationOptions[]` и `defaultDuration`.
+- `aspect_ratio` — кнопки выбора (`auto | 9:16 | 16:9 | 1:1 | 4:3 | 3:4`), `aspectOptions[]` и `defaultAspect`.
+- Поддержаны в `ServiceDetail.tsx` (FieldControl + ServiceAudioInput), `AdminServiceForm.tsx` (form builder + кнопки добавления + admin options), shared zod schema, API `services launch`.
+- Upload middleware: `uploadServiceLaunchInputs` переведён на отдельный `serviceLaunchMulter` с фильтром image+audio MIME.
+
+Новые image модели в чате (Allvision AI):
+
+- В каталог добавлены: `flux-schnell` (~$0.003), `flux-dev` (~$0.025), `flux-pro-ultra` (~$0.06), `flux-kontext-pro` (~$0.04, image-to-image), `midjourney-v6` (~$0.05, experimental), `hidream-i1-full` (~$0.03), `hunyuan-image-3` (~$0.04). Все с описаниями, docs URLs и limits.
+- `PiAPIProvider.imageEdit` рефакторен на `IMAGE_EDIT_MODELS_BY_PROVIDER` mapping + новая функция `buildImageEditPayload`. Поддерживает Nano Banana, Flux txt2img/img2img, Midjourney imagine, HiDream, Hunyuan.
+- `CHAT_MODELS` расширен 7 новыми image моделями. Тест `chat-models.test.ts` зелёный — все модели существуют в `BLOCK_CATALOG`.
+
+Video-effect блок и Kling AI Effects:
+
+- Новый блок `video-effect` в catalog с моделями `kling-effects` (~$0.35) и `ai-hugs` (~$0.40). Params: `image_url` (sourceSelect:image), `effect_id`, `prompt`, `duration`, `aspect_ratio`.
+- Worker: `apps/worker/src/blocks/video-effect.ts`. Зарегистрирован в `BLOCK_REGISTRY` и `PIAPI_BLOCKS`.
+- `AIProvider.videoEffect()` добавлен в interface; реализован в `MockAIProvider`, `StubAIProvider`, `PiAPIProvider`. PiAPI payload: `model: 'kling' | 'Qubico/ai-hugs'`, `task_type: 'effects'`, `input.effect = effect_id`.
+- Блок доступен в admin pipeline-конструкторе; конкретные `effect_id` админ задаёт вручную (из PiAPI docs).
+
+Тесты/проверки P9:
+
+- `npm.cmd run build` (root) — зелёный (shared, database, api, worker, web).
+- `npm.cmd test -w @allvision/shared -- --runInBand` — 20 passed, 5 suites.
+- `npm.cmd test -w @allvision/worker -- --runInBand --testPathIgnorePatterns="pipeline-runner|piapi-provider"` — 32 passed, 10 suites.
+- `blocks-registry.test.ts` обновлён под 9 блоков (добавлен video-effect).
+- DB-backed pipeline-runner и piapi-provider тесты блокируются Postgres `localhost:5433`, как и в предыдущих этапах.
+
+Технические долги P9:
+
+- Реальные `task_type` и payload format для Flux Schnell/Dev/Pro, Midjourney v6, HiDream, Hunyuan Image 3 нужно smoke-протестировать перед публичным запуском новых image моделей в чате — публичные PiAPI docs не всегда точно отражают runtime API.
+- PiAPI templates (`video-effect`) добавлены как infrastructure, но конкретные `effect_id` (hug, kiss, dance, balloon explosion и т.п.) не зашиты в каталог. Следующий этап — UI выбора из списка эффектов в admin form и chat.
+- Audio файлы пользователей оседают в `user-uploads/user-inputs/...` без TTL-cleanup; нужен периодический job.
+- В Studio (`/studio`) не добавлена возможность сохранения пользовательских audio-треков как MediaAsset — пока user audio только разовый upload на услугу.
+- ServiceDetail.tsx: `description` `Недостаточно токенов` toast и пара legacy строк всё ещё используют «токены» вместо «коинов»; косметика без функциональной разницы.

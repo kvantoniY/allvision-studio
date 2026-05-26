@@ -35,7 +35,7 @@ type UserInputOption = {
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'select' | 'media-select' | 'avatar' | 'tier';
+  type: 'text' | 'textarea' | 'photo' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select';
   label?: string;
   required?: boolean;
   hint?: string;
@@ -45,6 +45,12 @@ type UserInputField = {
   mediaKind?: string;
   allowStudioAvatars?: boolean;
   allowSystemLibrary?: boolean;
+  durationOptions?: number[];
+  defaultDuration?: number;
+  aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
+  defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
+  allowUserUpload?: boolean;
+  allowLibrary?: boolean;
 };
 
 type FormValues = Record<string, string>;
@@ -102,6 +108,16 @@ function parseFields(value: unknown): UserInputField[] {
       mediaKind: typeof item.mediaKind === 'string' ? item.mediaKind : undefined,
       allowStudioAvatars: typeof item.allowStudioAvatars === 'boolean' ? item.allowStudioAvatars : undefined,
       allowSystemLibrary: typeof item.allowSystemLibrary === 'boolean' ? item.allowSystemLibrary : undefined,
+      durationOptions: Array.isArray(item.durationOptions)
+        ? item.durationOptions.filter((v): v is number => typeof v === 'number')
+        : undefined,
+      defaultDuration: typeof item.defaultDuration === 'number' ? item.defaultDuration : undefined,
+      aspectOptions: Array.isArray(item.aspectOptions)
+        ? (item.aspectOptions.filter((v) => typeof v === 'string') as UserInputField['aspectOptions'])
+        : undefined,
+      defaultAspect: typeof item.defaultAspect === 'string' ? (item.defaultAspect as UserInputField['defaultAspect']) : undefined,
+      allowUserUpload: typeof item.allowUserUpload === 'boolean' ? item.allowUserUpload : undefined,
+      allowLibrary: typeof item.allowLibrary === 'boolean' ? item.allowLibrary : undefined,
       options: Array.isArray(item.options)
         ? item.options
             .filter((option): option is Record<string, unknown> => !!option && typeof option === 'object' && !Array.isArray(option))
@@ -111,12 +127,11 @@ function parseFields(value: unknown): UserInputField[] {
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'tier'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select'].includes(item.type));
 }
 
-function priceFor(service: PublicService, tier: 'standard' | 'pro') {
-  if (tier === 'pro') return service.priceCoinsPro ?? service.priceTokens;
-  return service.priceCoinsStandard ?? service.priceTokens;
+function servicePrice(service: PublicService) {
+  return service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
 }
 
 function getErrorCode(error: unknown): string | undefined {
@@ -127,14 +142,13 @@ function getErrorMessage(error: unknown): string | undefined {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
 }
 
-function validateClient(fields: UserInputField[], values: FormValues, files: FileValues, tier: 'standard' | 'pro') {
+function validateClient(fields: UserInputField[], values: FormValues, files: FileValues) {
   const errors: string[] = [];
-  if (tier !== 'standard' && tier !== 'pro') errors.push('Выберите качество');
   for (const field of fields) {
     if (field.type === 'tier') continue;
-    if (field.type === 'photo') {
+    if (field.type === 'photo' || field.type === 'audio') {
       if (field.required && !files[field.id] && !values[field.id]?.trim()) {
-        errors.push(`Загрузите файл или выберите аватар: ${field.label ?? field.id}`);
+        errors.push(`Загрузите файл или выберите вариант: ${field.label ?? field.id}`);
       }
       continue;
     }
@@ -353,6 +367,94 @@ function AssetChoiceGrid({
   );
 }
 
+function ServiceAudioInput({
+  field,
+  label,
+  required,
+  value,
+  file,
+  onValueChange,
+  onFileChange,
+}: {
+  field: UserInputField;
+  label: string;
+  required: ReactNode;
+  value?: string;
+  file?: File;
+  onValueChange: (id: string, value: string) => void;
+  onFileChange: (id: string, file?: File) => void;
+}) {
+  const uploadEnabled = field.allowUserUpload !== false;
+  const libraryEnabled = field.allowLibrary === true;
+  const defaultTab: 'upload' | 'library' = uploadEnabled ? 'upload' : 'library';
+  const [tab, setTab] = useState<'upload' | 'library'>(defaultTab);
+  const library = useGetPublicMediaAssetsQuery(
+    { kind: field.mediaKind ?? 'background-music', active: true },
+    { skip: !libraryEnabled },
+  );
+  const tracks = library.data?.assets ?? [];
+
+  return (
+    <div className="space-y-3">
+      <Label htmlFor={field.id}>{label} {required}</Label>
+      {uploadEnabled && libraryEnabled && (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button type="button" variant={tab === 'upload' ? 'default' : 'outline'} size="sm" onClick={() => setTab('upload')}>
+            Загрузить свой
+          </Button>
+          <Button type="button" variant={tab === 'library' ? 'default' : 'outline'} size="sm" onClick={() => setTab('library')}>
+            Из библиотеки
+          </Button>
+        </div>
+      )}
+
+      {tab === 'upload' && uploadEnabled && (
+        <label
+          htmlFor={field.id}
+          className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-4 text-center transition hover:border-amber-400"
+        >
+          <span className="text-sm font-medium text-slate-200">
+            {file ? file.name : 'Выбрать mp3 / wav / ogg'}
+          </span>
+          {field.hint && <span className="mt-1 text-xs text-slate-500">{field.hint}</span>}
+          <Input
+            id={field.id}
+            type="file"
+            accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg"
+            className="hidden"
+            onChange={(event) => {
+              const next = event.target.files?.[0];
+              onValueChange(field.id, '');
+              onFileChange(field.id, next);
+            }}
+          />
+        </label>
+      )}
+
+      {tab === 'library' && libraryEnabled && (
+        <div className="space-y-2">
+          <select
+            value={value ?? ''}
+            onChange={(event) => {
+              onFileChange(field.id, undefined);
+              onValueChange(field.id, event.target.value);
+            }}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">— без музыки —</option>
+            {tracks.map((track) => (
+              <option key={track.id} value={track.id}>
+                {track.title}
+              </option>
+            ))}
+          </select>
+          {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FieldControl({
   field,
   value,
@@ -461,6 +563,92 @@ function FieldControl({
     );
   }
 
+  if (field.type === 'audio') {
+    return (
+      <ServiceAudioInput
+        field={field}
+        label={label}
+        required={required}
+        value={value}
+        file={file}
+        onValueChange={onValueChange}
+        onFileChange={onFileChange}
+      />
+    );
+  }
+
+  if (field.type === 'music-select') {
+    return (
+      <ServiceAudioInput
+        field={{ ...field, allowUserUpload: false, allowLibrary: true, mediaKind: field.mediaKind ?? 'background-music' }}
+        label={label}
+        required={required}
+        value={value}
+        file={file}
+        onValueChange={onValueChange}
+        onFileChange={onFileChange}
+      />
+    );
+  }
+
+  if (field.type === 'duration') {
+    const options = field.durationOptions && field.durationOptions.length > 0 ? field.durationOptions : [5, 8, 10];
+    const current = value ?? String(field.defaultDuration ?? options[0]);
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={field.id}>{label} {required}</Label>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(options.length, 4)}, minmax(0, 1fr))` }}>
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onValueChange(field.id, String(option))}
+              className={cn(
+                'rounded-md border px-3 py-2 text-sm font-semibold transition',
+                String(option) === current
+                  ? 'border-amber-400 bg-amber-400 text-slate-950'
+                  : 'border-slate-700 bg-slate-950 text-slate-100 hover:border-slate-500',
+              )}
+            >
+              {option} сек
+            </button>
+          ))}
+        </div>
+        {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+      </div>
+    );
+  }
+
+  if (field.type === 'aspect_ratio') {
+    const options = field.aspectOptions && field.aspectOptions.length > 0
+      ? field.aspectOptions
+      : (['auto', '9:16', '16:9', '1:1'] as const);
+    const current = value ?? field.defaultAspect ?? options[0];
+    return (
+      <div className="space-y-2">
+        <Label htmlFor={field.id}>{label} {required}</Label>
+        <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(options.length, 4)}, minmax(0, 1fr))` }}>
+          {options.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onValueChange(field.id, option)}
+              className={cn(
+                'rounded-md border px-3 py-2 text-xs font-semibold transition',
+                option === current
+                  ? 'border-amber-400 bg-amber-400 text-slate-950'
+                  : 'border-slate-700 bg-slate-950 text-slate-100 hover:border-slate-500',
+              )}
+            >
+              {option === 'auto' ? 'Авто' : option}
+            </button>
+          ))}
+        </div>
+        {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <Label htmlFor={field.id}>{label} {required}</Label>
@@ -482,7 +670,6 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const { toast } = useToast();
   const { data, isLoading, isError } = useGetServiceQuery(slug);
   const [launchService, launchState] = useLaunchServiceMutation();
-  const [tier, setTier] = useState<'standard' | 'pro'>('standard');
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
   const [mediaByKind, setMediaByKind] = useState<Record<string, MediaAssetOption[]>>({});
@@ -533,7 +720,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     );
   }
 
-  const price = priceFor(service, tier);
+  const price = servicePrice(service);
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);
@@ -563,7 +750,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       return;
     }
 
-    const errors = validateClient(fields, values, files, tier);
+    const errors = validateClient(fields, values, files);
     if (errors.length > 0) {
       toast({
         title: 'Проверьте форму',
@@ -575,12 +762,24 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
     const dataPayload: FormValues = { ...values };
     const tierField = fields.find((field) => field.type === 'tier');
-    dataPayload[tierField?.id ?? 'tier'] = tier;
+    if (tierField) dataPayload[tierField.id] = 'pro';
+
+    // Fill defaults for duration/aspect_ratio if user did not touch the buttons
+    for (const field of fields) {
+      if (field.type === 'duration' && (!dataPayload[field.id] || dataPayload[field.id] === '')) {
+        const options = field.durationOptions && field.durationOptions.length > 0 ? field.durationOptions : [5];
+        dataPayload[field.id] = String(field.defaultDuration ?? options[0]);
+      }
+      if (field.type === 'aspect_ratio' && (!dataPayload[field.id] || dataPayload[field.id] === '')) {
+        const options = field.aspectOptions ?? ['auto'];
+        dataPayload[field.id] = field.defaultAspect ?? options[0];
+      }
+    }
 
     const formData = new FormData();
     formData.append('data', JSON.stringify(dataPayload));
     for (const field of fields) {
-      if (field.type !== 'photo') continue;
+      if (field.type !== 'photo' && field.type !== 'audio') continue;
       const file = files[field.id];
       if (file) formData.append(field.id, file);
     }
@@ -674,25 +873,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
             <CardTitle className="text-xl">Создать подарок</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="grid grid-cols-2 gap-3">
-              {(['standard', 'pro'] as const).map((item) => {
-                const active = tier === item;
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setTier(item)}
-                    className={cn(
-                      'rounded-lg border p-4 text-left transition',
-                      active ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-700 bg-slate-950 text-slate-100 hover:border-slate-500',
-                    )}
-                  >
-                    <div className="text-sm font-semibold">{item === 'standard' ? 'Standard' : 'Pro'}</div>
-                    <div className="mt-1 text-xl font-black">{priceFor(service, item)}</div>
-                    <div className={cn('mt-1 text-xs', active ? 'text-slate-800' : 'text-slate-500')}>токенов</div>
-                  </button>
-                );
-              })}
+            <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
+              <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость подарка</div>
+              <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
             </div>
 
             {!user && !isAuthLoading ? (
@@ -727,13 +910,13 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   <div className="flex items-center justify-between gap-3 text-sm">
                     <span className="text-slate-400">Ваш баланс</span>
                     <span className={cn('font-bold', hasEnoughCoins ? 'text-emerald-300' : 'text-amber-300')}>
-                      {balance} токенов
+                      {balance} коинов
                     </span>
                   </div>
                   {!hasEnoughCoins && (
                     <div className="mt-3 flex items-start gap-2 text-sm text-amber-200">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>Недостаточно токенов для запуска выбранного качества.</span>
+                      <span>Недостаточно коинов для запуска услуги.</span>
                     </div>
                   )}
                 </div>
@@ -746,7 +929,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   size="lg"
                 >
                   {launchState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TokenIcon className="h-4 w-4" />}
-                  Создать за {price} токенов
+                  Создать за {price} коинов
                 </Button>
                 {!hasEnoughCoins && user && (
                   <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">

@@ -194,21 +194,22 @@ const giftFactoryServices = [
   {
     slug: 'revive-old-photo',
     title: 'Оживить старое фото',
-    shortDesc: 'Восстановим качество и добавим лёгкую анимацию',
+    shortDesc: 'Восстановим качество, добавим движение и музыку',
     description:
-      'Загрузите старое фото из семейного архива. Мы аккуратно восстановим детали, улучшим качество и превратим снимок в короткое тёплое видео с мягким движением.',
+      'Загрузите старое фото из семейного архива. Мы аккуратно восстановим детали, превратим снимок в короткое тёплое видео и при желании наложим вашу аудио-дорожку для атмосферы.',
     category: ServiceCategory.NOSTALGIA,
-    priceTokens: 20,
-    priceCoinsStandard: 20,
-    priceCoinsPro: 30,
-    costUsd: 0,
+    // Себестоимость Pro: nano-banana@2K ($0.08) + kling-3-pro 5s @720p ($1.30) + ffmpeg compose ($0) = ~$1.38 ≈ 110 коинов
+    priceTokens: 110,
+    priceCoinsStandard: 110,
+    priceCoinsPro: 110,
+    costUsd: 1.38,
     coverImage: image('gift-revive-old-photo'),
     galleryImages: [image('gift-revive-gallery-1'), image('gift-revive-gallery-2')],
     previewImage: image('gift-revive-old-photo-preview'),
     previewVideo: null,
     processingType: ProcessingType.AUTO,
-    aiProvider: 'mock',
-    aiModel: 'mock-data-driven-pipeline',
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
     aiConfig: {},
     isActive: true,
     isFeatured: true,
@@ -225,7 +226,34 @@ const giftFactoryServices = [
         allowStudioAvatars: true,
         allowSystemLibrary: false,
       },
-      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+      {
+        id: 'duration',
+        type: 'duration',
+        label: 'Длительность видео',
+        required: false,
+        durationOptions: [5, 8, 10],
+        defaultDuration: 5,
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['auto', '9:16', '16:9', '1:1'],
+        defaultAspect: 'auto',
+      },
+      {
+        id: 'music',
+        type: 'audio',
+        label: 'Своя музыка (необязательно)',
+        required: false,
+        hint: 'MP3, WAV или OGG до 25MB. Будет наложена с плавным появлением и затуханием.',
+        maxSizeMb: 25,
+        allowedFormats: ['mp3', 'wav', 'ogg', 'm4a'],
+        allowUserUpload: true,
+        allowLibrary: true,
+        mediaKind: 'background-music',
+      },
     ],
     pipelineConfig: [
       {
@@ -237,7 +265,7 @@ const giftFactoryServices = [
           prompt: 'PLACEHOLDER: восстановить старое фото, убрать царапины, выцветание и шум, восстановить цвета и детали лица. Сохранить идентичность людей и композицию. Фото должно выглядеть как качественный современный снимок того же момента.',
           output_format: 'jpg',
           aspect_ratio: 'auto',
-          resolution: '1K',
+          resolution: '2K',
         },
       },
       {
@@ -245,16 +273,27 @@ const giftFactoryServices = [
         blockSlug: 'image-to-video',
         input: '{{step_1.output}}',
         params: {
-          duration: 5,
-          model: { standard: 'kling-std', pro: 'kling-pro' },
-          prompt: 'Subject moves naturally, slight head turn, gentle smile, slow camera movement',
+          duration: '{{user.duration}}',
+          aspect_ratio: '{{user.aspect}}',
+          model: { standard: 'kling-3-pro', pro: 'kling-3-pro' },
+          prompt: 'Subject moves naturally, slight head turn, gentle smile, slow cinematic camera push-in, soft warm light, photorealistic',
+          resolution: '720p',
         },
       },
       {
         id: 'step_3',
         blockSlug: 'video-compose',
         input: '{{step_2.output}}',
-        params: { watermark: true, title: 'Allvision' },
+        params: {
+          watermark: false,
+          title: 'Allvision',
+          audio_source: '{{user.music}}',
+          audio_volume: 0.5,
+          audio_fade_in_sec: 2,
+          audio_fade_out_sec: 2,
+          audio_loop: true,
+          keep_original_audio: false,
+        },
       },
     ],
   },
@@ -263,19 +302,20 @@ const giftFactoryServices = [
     title: 'Я в трендовом видео',
     shortDesc: 'Подставим ваше лицо в короткий трендовый ролик',
     description:
-      'Выберите тренд и загрузите фото лица. Сервис соберёт вертикальное видео: face swap, финальная сборка и watermark для демо-версии.',
+      'Выберите тренд и загрузите фото лица. Сервис соберёт вертикальное видео: face swap и финальная сборка с опциональной музыкой.',
     category: ServiceCategory.TRENDS_MEMES,
-    priceTokens: 25,
-    priceCoinsStandard: 25,
-    priceCoinsPro: 25,
-    costUsd: 0,
+    // Себестоимость: Qubico face-swap ~$0.48 (5s * 24fps * $0.004) + compose = $0.48 ≈ 40 коинов
+    priceTokens: 40,
+    priceCoinsStandard: 40,
+    priceCoinsPro: 40,
+    costUsd: 0.48,
     coverImage: image('gift-face-in-trend'),
     galleryImages: [image('gift-face-trend-gallery-1'), image('gift-face-trend-gallery-2')],
     previewImage: image('gift-face-in-trend-preview'),
     previewVideo: trendVideo(1),
     processingType: ProcessingType.AUTO,
-    aiProvider: 'mock',
-    aiModel: 'mock-data-driven-pipeline',
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
     aiConfig: {},
     isActive: true,
     isFeatured: true,
@@ -297,7 +337,15 @@ const giftFactoryServices = [
         label: 'Какой тренд',
         required: true,
       },
-      { id: 'tier', type: 'tier', label: 'Качество', required: true, hint: 'В P6 Standard и Pro используют одну модель PiAPI' },
+      {
+        id: 'music',
+        type: 'music-select',
+        label: 'Музыка (необязательно)',
+        required: false,
+        mediaKind: 'background-music',
+        allowLibrary: true,
+        allowUserUpload: false,
+      },
     ],
     pipelineConfig: [
       {
@@ -316,7 +364,16 @@ const giftFactoryServices = [
         id: 'step_2',
         blockSlug: 'video-compose',
         input: '{{step_1.output}}',
-        params: { watermark: true, title: 'Allvision trend' },
+        params: {
+          watermark: false,
+          title: 'Allvision trend',
+          audio_source: '{{user.music}}',
+          audio_volume: 0.6,
+          audio_fade_in_sec: 0.5,
+          audio_fade_out_sec: 0.5,
+          audio_loop: true,
+          keep_original_audio: true,
+        },
       },
     ],
   },
@@ -327,17 +384,18 @@ const giftFactoryServices = [
     description:
       'Загрузите фото ребёнка, напишите имя и выберите оригинальный стилизованный мир. Pipeline создаёт короткое видео в добром мульт-настроении без использования чужих IP.',
     category: ServiceCategory.KIDS_HEROES,
-    priceTokens: 350,
-    priceCoinsStandard: 350,
-    priceCoinsPro: 700,
-    costUsd: 0,
+    // Себестоимость: nano-banana@1K стилизация ($0.06) + veo-3.1 8s ($0.96) + compose = $1.02 ≈ 90 коинов
+    priceTokens: 90,
+    priceCoinsStandard: 90,
+    priceCoinsPro: 90,
+    costUsd: 1.02,
     coverImage: image('gift-kid-cartoon-hero'),
     galleryImages: [image('gift-kid-cartoon-gallery-1'), image('gift-kid-cartoon-gallery-2')],
     previewImage: image('gift-kid-cartoon-hero-preview'),
     previewVideo: null,
     processingType: ProcessingType.AUTO,
-    aiProvider: 'mock',
-    aiModel: 'mock-data-driven-pipeline',
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
     aiConfig: {},
     isActive: true,
     isFeatured: true,
@@ -362,24 +420,62 @@ const giftFactoryServices = [
           { value: 'forest-girl', label: 'Лесная девочка и большой друг' },
         ],
       },
-      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['9:16', '16:9', '1:1'],
+        defaultAspect: '9:16',
+      },
+      {
+        id: 'music',
+        type: 'music-select',
+        label: 'Музыка (необязательно)',
+        required: false,
+        mediaKind: 'background-music',
+        allowLibrary: true,
+      },
     ],
     pipelineConfig: [
       {
         id: 'step_1',
-        blockSlug: 'text-to-video',
+        blockSlug: 'image-edit',
         input: '{{user.child_photo}}',
         params: {
-          duration: 8,
-          model: { standard: 'veo-3.1', pro: 'seedance-2.0-text' },
-          prompt: 'child {{user.child_name}} as hero in {{user.world}} cartoon style',
+          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          prompt: 'Stylize this child photo as a friendly hand-drawn cartoon hero in the world of "{{user.world}}". Preserve recognizable face features. Soft pastel colors, family-friendly, no IP characters.',
+          output_format: 'jpg',
+          aspect_ratio: '{{user.aspect}}',
+          resolution: '1K',
         },
       },
       {
         id: 'step_2',
-        blockSlug: 'video-compose',
+        blockSlug: 'image-to-video',
         input: '{{step_1.output}}',
-        params: { watermark: true, title: '{{user.child_name}}' },
+        params: {
+          duration: 8,
+          aspect_ratio: '{{user.aspect}}',
+          model: { standard: 'veo-3.1-i2v', pro: 'veo-3.1-i2v' },
+          prompt: 'Cartoon child hero {{user.child_name}} in {{user.world}} scene, gentle motion, cinematic, warm family-friendly mood',
+          resolution: '1080p',
+        },
+      },
+      {
+        id: 'step_3',
+        blockSlug: 'video-compose',
+        input: '{{step_2.output}}',
+        params: {
+          watermark: false,
+          title: '{{user.child_name}}',
+          audio_source: '{{user.music}}',
+          audio_volume: 0.6,
+          audio_fade_in_sec: 1,
+          audio_fade_out_sec: 1,
+          audio_loop: true,
+          keep_original_audio: false,
+        },
       },
     ],
   },
@@ -388,19 +484,20 @@ const giftFactoryServices = [
     title: 'Юбилейная видео-открытка',
     shortDesc: 'Соберём тёплую видео-открытку из фотографии',
     description:
-      'Подойдёт для дня рождения, юбилея или годовщины. Загрузите фотографию, выберите повод, а pipeline восстановит фото, добавит праздничное движение и финальную сборку.',
+      'Подойдёт для дня рождения, юбилея или годовщины. Загрузите фотографию, выберите повод, а pipeline восстановит фото, добавит праздничное движение и музыку.',
     category: ServiceCategory.SPECIAL_OCCASIONS,
-    priceTokens: 300,
-    priceCoinsStandard: 300,
-    priceCoinsPro: 650,
-    costUsd: 0,
+    // Себестоимость: nano-banana@1K ($0.06) + kling-3-pro 5s @720p ($1.30) + compose = $1.36 ≈ 110 коинов
+    priceTokens: 110,
+    priceCoinsStandard: 110,
+    priceCoinsPro: 110,
+    costUsd: 1.36,
     coverImage: image('gift-anniversary-card'),
     galleryImages: [image('gift-anniversary-gallery-1'), image('gift-anniversary-gallery-2')],
     previewImage: image('gift-anniversary-card-preview'),
     previewVideo: null,
     processingType: ProcessingType.AUTO,
-    aiProvider: 'mock',
-    aiModel: 'mock-data-driven-pipeline',
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
     aiConfig: {},
     isActive: true,
     isFeatured: false,
@@ -425,30 +522,56 @@ const giftFactoryServices = [
           { value: 'jubilee', label: 'Юбилей' },
         ],
       },
-      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+      {
+        id: 'music',
+        type: 'audio',
+        label: 'Музыка для открытки',
+        required: false,
+        hint: 'MP3, WAV или OGG до 25MB',
+        maxSizeMb: 25,
+        allowedFormats: ['mp3', 'wav', 'ogg', 'm4a'],
+        allowUserUpload: true,
+        allowLibrary: true,
+        mediaKind: 'background-music',
+      },
     ],
     pipelineConfig: [
       {
         id: 'step_1',
-        blockSlug: 'image-restore',
+        blockSlug: 'image-edit',
         input: '{{user.photos}}',
-        params: { model: { standard: 'mock-restore', pro: 'mock-restore' }, strength: 0.8 },
+        params: {
+          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          prompt: 'Festive {{user.occasion}} celebration mood: subtle colorful confetti, soft warm light. Preserve identity and composition.',
+          output_format: 'jpg',
+          resolution: '1K',
+        },
       },
       {
         id: 'step_2',
-        blockSlug: 'text-to-video',
+        blockSlug: 'image-to-video',
         input: '{{step_1.output}}',
         params: {
-          duration: 6,
-          model: { standard: 'veo-3.1', pro: 'seedance-2.0-text' },
-          prompt: 'festive {{user.occasion}} celebration mood',
+          duration: 5,
+          model: { standard: 'kling-3-pro', pro: 'kling-3-pro' },
+          prompt: 'Festive {{user.occasion}} atmosphere, warm celebratory motion, gentle camera, joyful mood',
+          resolution: '720p',
         },
       },
       {
         id: 'step_3',
         blockSlug: 'video-compose',
         input: '{{step_2.output}}',
-        params: { watermark: true, title: 'Allvision celebration' },
+        params: {
+          watermark: false,
+          title: 'Allvision celebration',
+          audio_source: '{{user.music}}',
+          audio_volume: 0.7,
+          audio_fade_in_sec: 1,
+          audio_fade_out_sec: 1,
+          audio_loop: true,
+          keep_original_audio: false,
+        },
       },
     ],
   },
@@ -1035,9 +1158,18 @@ async function seedPilotServices() {
   for (const service of giftFactoryServices) {
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
     if (existing) {
-      if ((service.slug === 'face-in-trend' && needsFaceInTrendP7aPatch(existing))
-        || (service.slug === 'revive-old-photo' && needsReviveOldPhotoP7aPatch(existing))
-        || needsPhotoSourceDefaultsPatch(existing.userInputForm)) {
+      // Always refresh seed services to canonical seed config (Pro-default, current prices, latest userInputForm).
+      // Admin can override later through /admin/services UI; seed only runs at deploy time on system upgrades.
+      const needsUpdate =
+        existing.priceCoinsStandard !== service.priceCoinsStandard ||
+        existing.priceCoinsPro !== service.priceCoinsPro ||
+        existing.priceTokens !== service.priceTokens ||
+        JSON.stringify(existing.userInputForm) !== JSON.stringify(service.userInputForm) ||
+        JSON.stringify(existing.pipelineConfig) !== JSON.stringify(service.pipelineConfig) ||
+        existing.isActive !== service.isActive ||
+        existing.isFeatured !== service.isFeatured;
+
+      if (needsUpdate) {
         await prisma.service.update({
           where: { slug: service.slug },
           data: {
@@ -1049,6 +1181,8 @@ async function seedPilotServices() {
             pipelineConfig: service.pipelineConfig,
             isFeatured: service.isFeatured,
             isActive: service.isActive,
+            aiProvider: service.aiProvider,
+            aiModel: service.aiModel,
           },
         });
         patched += 1;
@@ -1061,78 +1195,6 @@ async function seedPilotServices() {
   return { created, patched };
 }
 
-function needsFaceInTrendP7aPatch(service: {
-  priceTokens: number;
-  priceCoinsStandard: number | null;
-  priceCoinsPro: number | null;
-  previewVideo: string | null;
-  userInputForm: unknown;
-  pipelineConfig: unknown;
-  isFeatured: boolean;
-}) {
-  const hasTrendVideoField =
-    Array.isArray(service.userInputForm) &&
-    service.userInputForm.some((field) => {
-      if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
-      const raw = field as { id?: unknown; type?: unknown; mediaKind?: unknown };
-      return raw.id === 'trendVideo' && raw.type === 'media-select' && raw.mediaKind === 'trend-video';
-    });
-
-  const pipelineJson = JSON.stringify(service.pipelineConfig ?? {});
-  return (
-    service.priceTokens > 25 ||
-    (service.priceCoinsStandard ?? service.priceTokens) > 25 ||
-    (service.priceCoinsPro ?? service.priceTokens) > 25 ||
-    !hasTrendVideoField ||
-    !pipelineJson.includes('{{user.trendVideo}}') ||
-    !service.isFeatured
-  );
-}
-
-function needsReviveOldPhotoP7aPatch(service: {
-  priceTokens: number;
-  priceCoinsStandard: number | null;
-  priceCoinsPro: number | null;
-  userInputForm: unknown;
-  pipelineConfig: unknown;
-  isActive: boolean;
-  isFeatured: boolean;
-}) {
-  const pipelineJson = JSON.stringify(service.pipelineConfig ?? {});
-  const hasPhotoLimits =
-    Array.isArray(service.userInputForm) &&
-    service.userInputForm.some((field) => {
-      if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
-      const raw = field as { id?: unknown; type?: unknown; maxSizeMb?: unknown; allowedFormats?: unknown };
-      return raw.id === 'photo'
-        && raw.type === 'photo'
-        && raw.maxSizeMb === 10
-        && Array.isArray(raw.allowedFormats)
-        && raw.allowedFormats.includes('webp');
-    });
-  return (
-    service.priceTokens !== 20 ||
-    (service.priceCoinsStandard ?? service.priceTokens) !== 20 ||
-    (service.priceCoinsPro ?? service.priceTokens) !== 30 ||
-    !service.isActive ||
-    !service.isFeatured ||
-    !hasPhotoLimits ||
-    !pipelineJson.includes('"blockSlug":"image-edit"') ||
-    !pipelineJson.includes('nano-banana') ||
-    !pipelineJson.includes('PLACEHOLDER:')
-  );
-}
-
-function needsPhotoSourceDefaultsPatch(userInputForm: unknown) {
-  return (
-    Array.isArray(userInputForm) &&
-    userInputForm.some((field) => {
-      if (!field || typeof field !== 'object' || Array.isArray(field)) return false;
-      const raw = field as { type?: unknown; allowStudioAvatars?: unknown; allowSystemLibrary?: unknown };
-      return raw.type === 'photo' && (raw.allowStudioAvatars !== true || raw.allowSystemLibrary !== false);
-    })
-  );
-}
 
 async function seedDevCatalog() {
   const createdServices = new Map<string, string>();

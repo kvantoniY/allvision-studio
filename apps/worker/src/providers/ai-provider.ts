@@ -69,4 +69,14 @@ export interface AIProvider {
     params?: Record<string, unknown>;
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
+
+  videoEffect(input: {
+    imageUrl: string;
+    effectId?: string;
+    prompt?: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
 }

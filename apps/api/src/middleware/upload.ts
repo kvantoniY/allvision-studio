@@ -118,6 +118,24 @@ const baseMulter = multer({
   fileFilter: imageFileFilter,
 });
 
+function serviceLaunchFileFilter(
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+) {
+  if (ALLOWED_IMAGE_MIME.has(file.mimetype) || ALLOWED_AUDIO_MIME.has(file.mimetype)) {
+    cb(null, true);
+    return;
+  }
+  cb(new Error(`INVALID_MIME: ${file.mimetype}`));
+}
+
+const serviceLaunchMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: serviceLaunchFileFilter,
+});
+
 const videoMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_VIDEO_SIZE },
@@ -186,4 +204,4 @@ export const uploadServiceAssets = serviceAssetsMulter.fields([
 export const uploadMediaAsset = mediaAssetMulter.single('file');
 export const uploadChatInput = chatInputMulter.single('file');
 export const uploadSupportAttachments = supportAttachmentMulter.array('files', 5);
-export const uploadServiceLaunchInputs = baseMulter.any();
+export const uploadServiceLaunchInputs = serviceLaunchMulter.any();

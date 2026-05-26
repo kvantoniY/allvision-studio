@@ -24,7 +24,18 @@ export type PipelineStep = {
 
 export type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'select' | 'media-select' | 'avatar' | 'tier';
+  type:
+    | 'text'
+    | 'textarea'
+    | 'photo'
+    | 'select'
+    | 'media-select'
+    | 'avatar'
+    | 'tier'
+    | 'audio'
+    | 'duration'
+    | 'aspect_ratio'
+    | 'music-select';
   label: string;
   required: boolean;
   hint?: string;
@@ -37,6 +48,12 @@ export type UserInputField = {
   allowSystemLibrary?: boolean;
   avatarTypes?: string[];
   options?: Array<{ label: string; value: string }>;
+  durationOptions?: number[];
+  defaultDuration?: number;
+  aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
+  defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
+  allowUserUpload?: boolean;
+  allowLibrary?: boolean;
 };
 
 export type AdminService = {

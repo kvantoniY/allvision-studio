@@ -70,6 +70,22 @@ const MOTION_TRANSFER_MODELS = new Set([
   'kling-motion-3.0-pro',
 ]);
 
+const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; taskType: string; supportsImageInput: boolean; estimatedCostUsd: number }> = {
+  'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06 },
+  'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
+  'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
+  'flux-pro-ultra': { providerModel: 'Qubico/flux1-pro', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.06 },
+  'flux-kontext-pro': { providerModel: 'Qubico/flux1-dev-redux', taskType: 'img2img', supportsImageInput: true, estimatedCostUsd: 0.04 },
+  'midjourney-v6': { providerModel: 'Qubico/midjourney', taskType: 'imagine', supportsImageInput: false, estimatedCostUsd: 0.05 },
+  'hidream-i1-full': { providerModel: 'Qubico/hidream', taskType: 'txt2img-i1-full', supportsImageInput: false, estimatedCostUsd: 0.03 },
+  'hunyuan-image-3': { providerModel: 'Tencent/hunyuan-image-3', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.04 },
+};
+
+const VIDEO_EFFECT_MODELS: Record<string, { providerModel: string; taskType: string; estimatedCostUsd: number }> = {
+  'kling-effects': { providerModel: 'kling', taskType: 'effects', estimatedCostUsd: 0.35 },
+  'ai-hugs': { providerModel: 'Qubico/ai-hugs', taskType: 'effects', estimatedCostUsd: 0.4 },
+};
+
 export class PiAPIProvider implements AIProvider {
   name = 'piapi' as const;
 
@@ -119,11 +135,14 @@ export class PiAPIProvider implements AIProvider {
     params?: Record<string, unknown>;
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
-    if (input.model !== 'nano-banana') {
+    const modelConfig = IMAGE_EDIT_MODELS_BY_PROVIDER[input.model];
+    if (!modelConfig) {
       throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported image-edit model: ${input.model}`);
     }
     const resolution = readString(input.params, 'resolution') ?? '1K';
-    const estimatedCost = NANO_BANANA_COST_USD[resolution] ?? NANO_BANANA_COST_USD['1K'];
+    const estimatedCost = input.model === 'nano-banana'
+      ? (NANO_BANANA_COST_USD[resolution] ?? NANO_BANANA_COST_USD['1K'])
+      : modelConfig.estimatedCostUsd;
     await this.ensureCanCall(estimatedCost);
 
     const startedAt = Date.now();
@@ -133,17 +152,18 @@ export class PiAPIProvider implements AIProvider {
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
       const published = input.imageUrl ? await this.publisher.publishImageUrl(input.imageUrl, 1) : undefined;
       const extraImageUrls = readStringList(input.params, 'image_urls');
-      const payload = {
-        model: 'gemini',
-        task_type: 'nano-banana-2',
-        input: {
-          prompt: input.prompt,
-          output_format: readString(input.params, 'output_format') ?? 'jpg',
-          resolution,
-          ...(published || extraImageUrls.length > 0 ? { image_urls: [...(published ? [published.publicUrl] : []), ...extraImageUrls] } : {}),
-          ...(aspectRatio && aspectRatio !== 'auto' ? { aspect_ratio: aspectRatio } : {}),
-        },
-      };
+      const payload = buildImageEditPayload({
+        modelSlug: input.model,
+        modelConfig,
+        prompt: input.prompt,
+        publishedUrl: published?.publicUrl,
+        extraImageUrls,
+        resolution,
+        aspectRatio,
+        negativePrompt: input.negativePrompt,
+        strength: input.strength,
+        params: input.params,
+      });
       const created = await this.client.createTask(payload);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
@@ -368,6 +388,74 @@ export class PiAPIProvider implements AIProvider {
           model: input.model,
           provider: 'piapi',
           estimatedFrames: frames,
+          aspectRatio: aspectRatio ?? 'auto',
+        },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      throw err;
+    }
+  }
+
+  async videoEffect(input: {
+    imageUrl: string;
+    effectId?: string;
+    prompt?: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    const modelConfig = VIDEO_EFFECT_MODELS[input.model];
+    if (!modelConfig) {
+      throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported video-effect model: ${input.model}`);
+    }
+    const estimatedCost = modelConfig.estimatedCostUsd;
+    await this.ensureCanCall(estimatedCost);
+
+    const startedAt = Date.now();
+    let taskId: string | undefined;
+    let completedTask: PiAPITaskStatus | undefined;
+    try {
+      const published = await this.publisher.publishImageUrl(input.imageUrl, 1);
+      const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
+      const payload = {
+        model: modelConfig.providerModel,
+        task_type: modelConfig.taskType,
+        input: {
+          image_url: published.publicUrl,
+          ...(input.effectId ? { effect: input.effectId } : {}),
+          ...(input.prompt ? { prompt: input.prompt } : {}),
+          duration: input.durationSec,
+          ...(aspectRatio && aspectRatio !== 'auto' ? { aspect_ratio: aspectRatio } : {}),
+        },
+      };
+      const created = await this.client.createTask(payload);
+      taskId = created.taskId;
+      const completed = await this.client.pollUntilDone(taskId, {
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
+        expectedDurationMs: 8 * 60 * 1000,
+        onProgress: input.context.reportProgress,
+      });
+      completedTask = completed;
+      if (!completed.outputUrl) {
+        throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI video-effect task completed without video URL');
+      }
+      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
+      const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      return {
+        outputUrl: local.url,
+        costUsd,
+        durationMs,
+        meta: {
+          piapiTaskId: taskId,
+          piapiUrl: completed.outputUrl,
+          model: input.model,
+          provider: 'piapi',
+          effectId: input.effectId,
           aspectRatio: aspectRatio ?? 'auto',
         },
       };
@@ -926,9 +1014,82 @@ function buildTextToVideoPayload(
   };
 }
 
+function buildImageEditPayload(input: {
+  modelSlug: string;
+  modelConfig: { providerModel: string; taskType: string; supportsImageInput: boolean; estimatedCostUsd: number };
+  prompt: string;
+  publishedUrl?: string;
+  extraImageUrls: string[];
+  resolution: string;
+  aspectRatio?: string;
+  negativePrompt?: string;
+  strength?: number;
+  params?: Record<string, unknown>;
+}) {
+  const { modelSlug, modelConfig } = input;
+  const ar = input.aspectRatio && input.aspectRatio !== 'auto' ? input.aspectRatio : undefined;
+  const outputFormat = readString(input.params, 'output_format') ?? 'jpg';
+
+  if (modelSlug === 'nano-banana') {
+    const imageUrls = [...(input.publishedUrl ? [input.publishedUrl] : []), ...input.extraImageUrls];
+    return {
+      model: modelConfig.providerModel,
+      task_type: modelConfig.taskType,
+      input: {
+        prompt: input.prompt,
+        output_format: outputFormat,
+        resolution: input.resolution,
+        ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
+        ...(ar ? { aspect_ratio: ar } : {}),
+      },
+    };
+  }
+
+  if (modelSlug.startsWith('flux-') && modelConfig.taskType === 'img2img') {
+    return {
+      model: modelConfig.providerModel,
+      task_type: modelConfig.taskType,
+      input: {
+        prompt: input.prompt,
+        ...(input.publishedUrl ? { image_url: input.publishedUrl } : {}),
+        ...(typeof input.strength === 'number' ? { strength: input.strength } : {}),
+        ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
+        ...(ar ? { aspect_ratio: ar } : {}),
+        output_format: outputFormat,
+      },
+    };
+  }
+
+  if (modelSlug === 'midjourney-v6') {
+    return {
+      model: modelConfig.providerModel,
+      task_type: modelConfig.taskType,
+      input: {
+        prompt: input.prompt,
+        ...(ar ? { aspect_ratio: ar } : {}),
+        process_mode: readString(input.params, 'process_mode') ?? 'fast',
+      },
+    };
+  }
+
+  return {
+    model: modelConfig.providerModel,
+    task_type: modelConfig.taskType,
+    input: {
+      prompt: input.prompt,
+      ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
+      ...(ar ? { aspect_ratio: ar } : {}),
+      output_format: outputFormat,
+      ...(readNumber(input.params, 'guidance_scale') !== undefined ? { guidance_scale: readNumber(input.params, 'guidance_scale') } : {}),
+      ...(readNumber(input.params, 'steps') !== undefined ? { steps: readNumber(input.params, 'steps') } : {}),
+    },
+  };
+}
+
 export const __piapiPayloadBuildersForTests = {
   buildImageToVideoPayload,
   buildTextToVideoPayload,
+  buildImageEditPayload,
 };
 
 function aspectRatioFromDimensions(width: number, height: number): '9:16' | '16:9' | '1:1' {
