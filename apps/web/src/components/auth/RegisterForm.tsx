@@ -12,7 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { useApiErrorState } from '@/hooks/use-api-error-state';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import { useRegisterMutation } from '@/store/api/auth-api';
 import { setUser } from '@/store/slices/auth-slice';
 import { useToast } from '@/hooks/use-toast';
@@ -28,6 +30,7 @@ export function RegisterForm() {
   const dispatch = useDispatch();
   const { toast } = useToast();
   const [registerMutation, { isLoading, error }] = useRegisterMutation();
+  const captcha = useCaptchaToken();
 
   const {
     register,
@@ -47,6 +50,7 @@ export function RegisterForm() {
         email: values.email,
         password: values.password,
         name: values.name,
+        captchaToken: captcha.token || undefined,
       }).unwrap();
       dispatch(setUser(user));
       toast({
@@ -55,6 +59,7 @@ export function RegisterForm() {
       });
       router.push('/dashboard');
     } catch {
+      captcha.reset();
       // ошибка покажется через error ниже
     }
   };
@@ -105,7 +110,9 @@ export function RegisterForm() {
 
       <ApiRequestAlert state={apiError} title="Не удалось зарегистрироваться" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+      <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
+
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked || !captcha.solved}>
         {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Зарегистрироваться'}
       </Button>
     </form>

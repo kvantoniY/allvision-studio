@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { useToast } from '@/hooks/use-toast';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import { useSendContactMutation } from '@/store/api/public-api';
 
 const initialForm: ContactInput = {
@@ -21,6 +23,7 @@ export function ContactForm() {
   const [form, setForm] = useState<ContactInput>(initialForm);
   const [sendContact, { isLoading }] = useSendContactMutation();
   const { toast } = useToast();
+  const captcha = useCaptchaToken();
 
   const update = (field: keyof ContactInput, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -29,13 +32,15 @@ export function ContactForm() {
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      await sendContact(form).unwrap();
+      await sendContact({ ...form, captchaToken: captcha.token || undefined }).unwrap();
       setForm(initialForm);
+      captcha.reset();
       toast({
         title: 'Мы получили ваше сообщение',
         description: 'Ответим в течение 24 часов.',
       });
     } catch {
+      captcha.reset();
       toast({
         title: 'Не удалось отправить сообщение',
         description: 'Проверьте поля формы или напишите напрямую в Telegram.',
@@ -64,7 +69,8 @@ export function ContactForm() {
         <Label htmlFor="message">Сообщение</Label>
         <Textarea id="message" value={form.message} onChange={(e) => update('message', e.target.value)} required minLength={10} rows={7} />
       </div>
-      <Button type="submit" disabled={isLoading} className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+      <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
+      <Button type="submit" disabled={isLoading || !captcha.solved} className="bg-amber-500 text-slate-950 hover:bg-amber-400">
         <Send className="h-4 w-4" />
         {isLoading ? 'Отправляем...' : 'Отправить'}
       </Button>

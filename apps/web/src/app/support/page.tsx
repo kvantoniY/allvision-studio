@@ -8,8 +8,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import {
   type SupportTicket,
   type SupportTicketStatus,
@@ -86,9 +88,9 @@ function SupportContent() {
 
   const ticket = selectedTicket.data?.ticket ?? items.find((item) => item.id === selectedId) ?? null;
 
-  const onCreate = async (formData: FormData) => {
+  const onCreate = async (formData: FormData, captchaToken?: string) => {
     try {
-      const result = await createTicket(formData).unwrap();
+      const result = await createTicket({ body: formData, captchaToken }).unwrap();
       setSelectedId(result.ticket.id);
       toast({ title: 'Тикет создан' });
     } catch (error) {
@@ -101,13 +103,13 @@ function SupportContent() {
     }
   };
 
-  const onSend = async (body: string, files: File[]) => {
+  const onSend = async (body: string, files: File[], captchaToken?: string) => {
     if (!selectedId) return;
     const formData = new FormData();
     formData.set('body', body);
     appendFiles(formData, files);
     try {
-      await addMessage({ id: selectedId, body: formData }).unwrap();
+      await addMessage({ id: selectedId, body: formData, captchaToken }).unwrap();
       toast({ title: 'Сообщение отправлено' });
     } catch (error) {
       toast({
@@ -223,14 +225,15 @@ function NewTicketForm({
   onCreate,
 }: {
   loading?: boolean;
-  onCreate: (formData: FormData) => Promise<void>;
+  onCreate: (formData: FormData, captchaToken?: string) => Promise<void>;
 }) {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const captcha = useCaptchaToken();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const canSubmit = subject.trim().length >= 3 && (!!body.trim() || files.length > 0) && !loading;
+  const canSubmit = subject.trim().length >= 3 && (!!body.trim() || files.length > 0) && !loading && captcha.solved;
   const fileLabel = useMemo(() => files.map((file) => file.name).join(', '), [files]);
 
   const submit = async () => {
@@ -240,12 +243,14 @@ function NewTicketForm({
     formData.set('body', body.trim());
     appendFiles(formData, files);
     try {
-      await onCreate(formData);
+      await onCreate(formData, captcha.token || undefined);
       setSubject('');
       setBody('');
       setFiles([]);
       setFileInputKey((value) => value + 1);
+      captcha.reset();
     } catch {
+      captcha.reset();
       // Parent shows the error toast.
     }
   };
@@ -269,6 +274,7 @@ function NewTicketForm({
           placeholder="Опишите проблему"
           className="min-h-[112px] resize-none border-slate-700 bg-slate-950"
         />
+        <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
         <input
           key={fileInputKey}
           ref={fileInputRef}

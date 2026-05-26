@@ -61,6 +61,11 @@ export type SupportTicketsQuery = {
   status?: SupportTicketStatus;
 };
 
+type CaptchaFormData = {
+  body: FormData;
+  captchaToken?: string;
+};
+
 export const supportApi = createApi({
   reducerPath: 'supportApi',
   baseQuery: createBaseQueryWithReauth('/api/support'),
@@ -83,12 +88,22 @@ export const supportApi = createApi({
       query: (id) => ({ url: `/tickets/${id}` }),
       providesTags: (_result, _error, id) => [{ type: 'SupportTicket', id }],
     }),
-    createSupportTicket: build.mutation<{ ticket: SupportTicket }, FormData>({
-      query: (body) => ({ url: '/tickets', method: 'POST', body }),
+    createSupportTicket: build.mutation<{ ticket: SupportTicket }, CaptchaFormData>({
+      query: ({ body, captchaToken }) => ({
+        url: '/tickets',
+        method: 'POST',
+        body,
+        headers: captchaToken ? { 'x-captcha-token': captchaToken } : undefined,
+      }),
       invalidatesTags: ['SupportTickets'],
     }),
-    addSupportMessage: build.mutation<{ ticket: SupportTicket }, { id: string; body: FormData }>({
-      query: ({ id, body }) => ({ url: `/tickets/${id}/messages`, method: 'POST', body }),
+    addSupportMessage: build.mutation<{ ticket: SupportTicket }, { id: string } & CaptchaFormData>({
+      query: ({ id, body, captchaToken }) => ({
+        url: `/tickets/${id}/messages`,
+        method: 'POST',
+        body,
+        headers: captchaToken ? { 'x-captcha-token': captchaToken } : undefined,
+      }),
       invalidatesTags: (_result, _error, { id }) => ['SupportTickets', { type: 'SupportTicket', id }],
     }),
     resolveSupportTicket: build.mutation<{ ticket: SupportTicket }, string>({

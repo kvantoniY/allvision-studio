@@ -1,6 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
+import { requireCaptcha } from '../middleware/captcha';
 import { uploadSupportAttachments } from '../middleware/upload';
 import * as support from '../services/support-service';
 
@@ -23,7 +24,7 @@ supportRouter.get('/tickets', async (req: Request, res: Response, next: NextFunc
   }
 });
 
-supportRouter.post('/tickets', uploadSupportAttachments, async (req: Request, res: Response, next: NextFunction) => {
+supportRouter.post('/tickets', requireCaptcha(), uploadSupportAttachments, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ticket = await support.createTicket(req.user!.id, {
       subject: req.body?.subject,
@@ -45,7 +46,7 @@ supportRouter.get('/tickets/:id', async (req: Request, res: Response, next: Next
   }
 });
 
-supportRouter.post('/tickets/:id/messages', uploadSupportAttachments, async (req: Request, res: Response, next: NextFunction) => {
+supportRouter.post('/tickets/:id/messages', requireCaptcha(), uploadSupportAttachments, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ticket = await support.addMessage(
       { id: req.user!.id, role: req.user!.role },

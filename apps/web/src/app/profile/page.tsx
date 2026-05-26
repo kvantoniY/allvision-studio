@@ -8,6 +8,7 @@ import { Bell, MailCheck, ShieldAlert, User as UserIcon, Wallet } from 'lucide-r
 import type { Payment, PaymentStatus } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { PaymentRow } from '@/components/dashboard/PaymentRow';
 import { TransactionRow } from '@/components/dashboard/TransactionRow';
 import { EmptyState } from '@/components/dashboard/EmptyState';
@@ -22,6 +23,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useApiErrorState } from '@/hooks/use-api-error-state';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import { useAuth } from '@/hooks/use-auth';
 import type { AppDispatch } from '@/store';
 import { authApi, useRequestEmailVerificationMutation } from '@/store/api/auth-api';
@@ -319,6 +321,7 @@ function PersonalSection() {
   const [changePassword, { isLoading: changingPwd }] = useChangePasswordMutation();
   const [requestEmailVerification, emailVerificationState] = useRequestEmailVerificationMutation();
   const emailVerificationError = useApiErrorState(emailVerificationState.error, 'Не удалось отправить письмо');
+  const emailCaptcha = useCaptchaToken();
   const [name, setName] = useState('');
   const [messenger, setMessenger] = useState('');
   const [messengerType, setMessengerType] = useState<MType | ''>('');
@@ -373,13 +376,15 @@ function PersonalSection() {
 
   const onRequestEmailVerification = async () => {
     try {
-      const result = await requestEmailVerification().unwrap();
+      const result = await requestEmailVerification({ captchaToken: emailCaptcha.token || undefined }).unwrap();
       dispatch(authApi.util.invalidateTags(['Me']));
       toast({
         title: result.alreadyVerified ? 'Email уже подтверждён' : 'Письмо отправлено',
         description: result.alreadyVerified ? undefined : 'Проверьте почту и перейдите по ссылке подтверждения.',
       });
+      emailCaptcha.reset();
     } catch (error) {
+      emailCaptcha.reset();
       toast({ title: 'Не удалось отправить письмо', description: apiErrorMessage(error), variant: 'destructive' });
     }
   };
@@ -414,6 +419,7 @@ function PersonalSection() {
             verifiedAt={user.emailVerifiedAt as string | Date | null}
             loading={emailVerificationState.isLoading}
             errorState={emailVerificationError}
+            captcha={emailCaptcha}
             onRequest={onRequestEmailVerification}
           />
           <Button onClick={() => saveProfile({ name: name.trim() })} disabled={!personalDirty || savingProfile}>
@@ -476,11 +482,13 @@ function EmailVerificationPanel({
   verifiedAt,
   loading,
   errorState,
+  captcha,
   onRequest,
 }: {
   verifiedAt: string | Date | null;
   loading: boolean;
   errorState: ReturnType<typeof useApiErrorState>;
+  captcha: ReturnType<typeof useCaptchaToken>;
   onRequest: () => void;
 }) {
   const verified = Boolean(verifiedAt);
@@ -502,7 +510,12 @@ function EmailVerificationPanel({
           </div>
         </div>
         {!verified && (
-          <Button type="button" variant="outline" onClick={onRequest} disabled={loading || errorState.locked}>
+          <div className="w-full max-w-sm">
+            <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
+          </div>
+        )}
+        {!verified && (
+          <Button type="button" variant="outline" onClick={onRequest} disabled={loading || errorState.locked || !captcha.solved}>
             {loading
               ? 'Отправляем...'
               : errorState.locked && errorState.retryText

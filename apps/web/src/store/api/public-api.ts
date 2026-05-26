@@ -14,6 +14,8 @@ import type {
   PublicTrendsResponse,
 } from '@allvision/shared';
 
+type CaptchaBody = { captchaToken?: string };
+
 export type PublicHomePageResponse = {
   content: Partial<HomeLandingContent> | null;
 };
@@ -73,7 +75,7 @@ export const publicApi = createApi({
       },
       providesTags: ['StylePresets'],
     }),
-    sendContact: build.mutation<ContactResponse, ContactInput>({
+    sendContact: build.mutation<ContactResponse, ContactInput & CaptchaBody>({
       query: (body) => ({ url: '/contact', method: 'POST', body }),
     }),
   }),

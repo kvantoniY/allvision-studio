@@ -77,6 +77,8 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://allvision-pulse.ru}
         PUBLIC_API_URL: ${PUBLIC_API_URL:-https://allvision-pulse.ru}
         PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-https://allvision-pulse.ru}
+        NEXT_PUBLIC_YANDEX_SMARTCAPTCHA_SITE_KEY: ${NEXT_PUBLIC_YANDEX_SMARTCAPTCHA_SITE_KEY:-}
+        NEXT_PUBLIC_CAPTCHA_ENABLED: ${NEXT_PUBLIC_CAPTCHA_ENABLED:-}
     container_name: allvision-studio-web
     restart: unless-stopped
     depends_on:

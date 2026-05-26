@@ -4,7 +4,9 @@ import { useMemo, useRef, useState } from 'react';
 import { CheckCircle2, FileText, ImageIcon, Paperclip, SendHorizontal } from 'lucide-react';
 import type { SupportAttachment, SupportTicket } from '@/store/api/support-api';
 import { Button } from '@/components/ui/button';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { Textarea } from '@/components/ui/textarea';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import { cn } from '@/lib/utils';
 
 function formatBytes(value: number) {
@@ -67,7 +69,7 @@ export function SupportConversation({
 }: {
   ticket: SupportTicket | null;
   currentUserId?: string;
-  onSend: (body: string, files: File[]) => Promise<void>;
+  onSend: (body: string, files: File[], captchaToken?: string) => Promise<void>;
   onResolve: () => Promise<void>;
   sending?: boolean;
   resolving?: boolean;
@@ -76,19 +78,23 @@ export function SupportConversation({
   const [body, setBody] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const captcha = useCaptchaToken();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const isResolved = ticket?.status === 'RESOLVED';
-  const canSend = !!ticket && !isResolved && (!!body.trim() || files.length > 0) && !sending;
+  const needsCaptcha = !adminView;
+  const canSend = !!ticket && !isResolved && (!!body.trim() || files.length > 0) && !sending && (!needsCaptcha || captcha.solved);
   const fileSummary = useMemo(() => files.map((file) => `${file.name} (${formatBytes(file.size)})`).join(', '), [files]);
 
   const submit = async () => {
     if (!canSend) return;
     try {
-      await onSend(body.trim(), files);
+      await onSend(body.trim(), files, needsCaptcha ? captcha.token || undefined : undefined);
       setBody('');
       setFiles([]);
       setFileInputKey((value) => value + 1);
+      captcha.reset();
     } catch {
+      captcha.reset();
       // Parent surfaces the error with a toast.
     }
   };
@@ -183,6 +189,9 @@ export function SupportConversation({
               placeholder="Напишите ответ..."
               className="min-h-[96px] resize-none border-slate-700 bg-slate-950"
             />
+            {needsCaptcha && (
+              <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
+            )}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <input

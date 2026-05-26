@@ -176,3 +176,23 @@ New env variables:
 PRICING_MARGIN_DEFAULT=0.8
 PRICING_USD_TO_RUB=80
 ```
+
+## Yandex SmartCaptcha
+
+SmartCaptcha включается автоматически после заполнения ключей в `/opt/allvision-studio/shared/.env`.
+До заполнения ключей виджет скрыт, а серверная проверка пропускается, чтобы deploy не ломал сайт.
+
+1. В Yandex Cloud создайте SmartCaptcha для домена `allvision-pulse.ru`.
+2. Внесите ключи на ВМ:
+
+```env
+NEXT_PUBLIC_YANDEX_SMARTCAPTCHA_SITE_KEY=sitekey-from-yandex
+YANDEX_SMARTCAPTCHA_SECRET_KEY=server-key-from-yandex
+CAPTCHA_ENABLED=true
+NEXT_PUBLIC_CAPTCHA_ENABLED=true
+YANDEX_SMARTCAPTCHA_VERIFY_URL=https://smartcaptcha.cloud.yandex.ru/validate
+```
+
+3. Запустите GitHub workflow `Deploy to production` или сделайте push в `main`.
+
+Капча стоит на регистрации, входе, восстановлении и сбросе пароля, отправке письма подтверждения email, публичной контактной форме, создании тикета поддержки и ответах пользователя в тикете. Админские операции не требуют капчу.

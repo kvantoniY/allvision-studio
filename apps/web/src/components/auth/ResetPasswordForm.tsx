@@ -10,7 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { useApiErrorState } from '@/hooks/use-api-error-state';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import { useResetPasswordMutation } from '@/store/api/auth-api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,6 +22,7 @@ export function ResetPasswordForm() {
   const token = params.get('token') ?? '';
   const { toast } = useToast();
   const [resetMutation, { isLoading, error }] = useResetPasswordMutation();
+  const captcha = useCaptchaToken();
 
   const {
     register,
@@ -33,10 +36,11 @@ export function ResetPasswordForm() {
 
   const onSubmit = async (values: ResetPasswordInput) => {
     try {
-      await resetMutation({ ...values, token }).unwrap();
+      await resetMutation({ ...values, token, captchaToken: captcha.token || undefined }).unwrap();
       toast({ title: 'Пароль обновлён', description: 'Войдите с новым паролем.' });
       router.push('/login');
     } catch {
+      captcha.reset();
       // ошибка в apiError
     }
   };
@@ -67,7 +71,9 @@ export function ResetPasswordForm() {
 
       <ApiRequestAlert state={apiError} title="Не удалось сохранить пароль" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+      <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
+
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked || !captcha.solved}>
         {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Сохранить пароль'}
       </Button>
     </form>

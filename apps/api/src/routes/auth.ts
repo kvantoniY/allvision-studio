@@ -8,6 +8,7 @@ import {
 import * as authService from '../services/auth-service';
 import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
 import { requireAuth } from '../middleware/auth';
+import { requireCaptcha } from '../middleware/captcha';
 import { emailVerificationLimiter, loginLimiter, passwordResetLimiter, registerLimiter } from '../middleware/rate-limit';
 import { HttpError } from '../utils/http-error';
 
@@ -22,7 +23,7 @@ function loginBody(user: { role: string }, accessToken: string) {
   return user.role === 'READONLY_ADMIN' ? { user, accessToken } : { user };
 }
 
-authRouter.post('/register', registerLimiter, async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/register', registerLimiter, requireCaptcha(), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = registerSchema.parse(req.body);
     const { user, accessToken, refreshToken } = await authService.register(data);
@@ -33,7 +34,7 @@ authRouter.post('/register', registerLimiter, async (req: Request, res: Response
   }
 });
 
-authRouter.post('/login', loginLimiter, async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/login', loginLimiter, requireCaptcha(), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = loginSchema.parse(req.body);
     const { user, accessToken, refreshToken } = await authService.login(data);
@@ -79,7 +80,7 @@ authRouter.get('/me', requireAuth, async (req: Request, res: Response, next: Nex
   }
 });
 
-authRouter.post('/forgot-password', passwordResetLimiter, async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/forgot-password', passwordResetLimiter, requireCaptcha(), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email } = forgotPasswordSchema.parse(req.body);
     await authService.requestPasswordReset(email);
@@ -90,7 +91,7 @@ authRouter.post('/forgot-password', passwordResetLimiter, async (req: Request, r
   }
 });
 
-authRouter.post('/email-verification/request', requireAuth, emailVerificationLimiter, async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/email-verification/request', requireAuth, emailVerificationLimiter, requireCaptcha(), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await authService.requestEmailVerification(req.user!.id);
     res.json({ ok: true, ...result });
@@ -110,7 +111,7 @@ authRouter.post('/email-verification/confirm', async (req: Request, res: Respons
   }
 });
 
-authRouter.post('/reset-password', async (req: Request, res: Response, next: NextFunction) => {
+authRouter.post('/reset-password', requireCaptcha(), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { token, newPassword } = resetPasswordSchema.parse(req.body);
     await authService.resetPassword(token, newPassword);

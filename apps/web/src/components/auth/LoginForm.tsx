@@ -10,7 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { useApiErrorState } from '@/hooks/use-api-error-state';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import { useLoginMutation } from '@/store/api/auth-api';
 import { setUser } from '@/store/slices/auth-slice';
 
@@ -19,6 +21,7 @@ export function LoginForm() {
   const params = useSearchParams();
   const dispatch = useDispatch();
   const [loginMutation, { isLoading, error }] = useLoginMutation();
+  const captcha = useCaptchaToken();
 
   const {
     register,
@@ -29,10 +32,11 @@ export function LoginForm() {
 
   const onSubmit = async (values: LoginInput) => {
     try {
-      const { user } = await loginMutation(values).unwrap();
+      const { user } = await loginMutation({ ...values, captchaToken: captcha.token || undefined }).unwrap();
       dispatch(setUser(user));
       router.push(params.get('redirect') ?? '/dashboard');
     } catch {
+      captcha.reset();
       // ошибка в apiError
     }
   };
@@ -53,7 +57,9 @@ export function LoginForm() {
 
       <ApiRequestAlert state={apiError} title="Не удалось войти" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+      <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
+
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked || !captcha.solved}>
         {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Войти'}
       </Button>
     </form>

@@ -18,6 +18,7 @@ import type {
 import { prisma } from '@allvision/database';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
+import { requireCaptcha } from '../middleware/captcha';
 
 export const publicRouter = Router();
 
@@ -367,7 +368,7 @@ publicRouter.get('/settings/public', async (_req: Request, res: Response<PublicS
   }
 });
 
-publicRouter.post('/contact', async (req: Request, res: Response<ContactResponse>, next: NextFunction) => {
+publicRouter.post('/contact', requireCaptcha(), async (req: Request, res: Response<ContactResponse>, next: NextFunction) => {
   try {
     const data = contactSchema.parse(req.body);
     logger.info('Public contact request received', data);

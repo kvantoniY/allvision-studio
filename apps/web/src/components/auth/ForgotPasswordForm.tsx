@@ -9,11 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
+import { CaptchaField } from '@/components/security/CaptchaField';
 import { useApiErrorState } from '@/hooks/use-api-error-state';
+import { useCaptchaToken } from '@/hooks/use-captcha-token';
 import { useForgotPasswordMutation } from '@/store/api/auth-api';
 
 export function ForgotPasswordForm() {
   const [forgotMutation, { isLoading, isSuccess, error }] = useForgotPasswordMutation();
+  const captcha = useCaptchaToken();
 
   const {
     register,
@@ -22,7 +25,13 @@ export function ForgotPasswordForm() {
   } = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) });
   const apiError = useApiErrorState(error, 'Не удалось отправить письмо');
 
-  const onSubmit = (values: ForgotPasswordInput) => forgotMutation(values);
+  const onSubmit = async (values: ForgotPasswordInput) => {
+    try {
+      await forgotMutation({ ...values, captchaToken: captcha.token || undefined }).unwrap();
+    } catch {
+      captcha.reset();
+    }
+  };
 
   if (isSuccess) {
     return (
@@ -44,7 +53,9 @@ export function ForgotPasswordForm() {
 
       <ApiRequestAlert state={apiError} title="Не удалось отправить письмо" />
 
-      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked}>
+      <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
+
+      <Button type="submit" className="w-full" disabled={isLoading || isSubmitting || apiError.locked || !captcha.solved}>
         {apiError.locked && apiError.retryText ? `Повтор через ${apiError.retryText}` : 'Отправить ссылку'}
       </Button>
     </form>
