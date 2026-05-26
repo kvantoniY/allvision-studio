@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import {
   type AdminPaymentStatus,
+  useConfirmAdminPaymentMutation,
   useListAdminPaymentsQuery,
   useRecheckAdminPaymentMutation,
 } from '@/store/api/admin-payments-api';
@@ -43,6 +44,9 @@ export default function AdminPaymentsPage() {
   const [probeResult, setProbeResult] = useState<{ ok: boolean; text: string } | null>(null);
   const { toast } = useToast();
 
+  const [rowBusyId, setRowBusyId] = useState<string | null>(null);
+  const [rowBusyAction, setRowBusyAction] = useState<'recheck' | 'confirm' | null>(null);
+
   const health = useGetPaymentsHealthQuery();
   const payments = useListAdminPaymentsQuery({
     page,
@@ -51,7 +55,43 @@ export default function AdminPaymentsPage() {
     search: search.trim() || undefined,
   });
   const [recheckAdmin] = useRecheckAdminPaymentMutation();
+  const [confirmAdmin] = useConfirmAdminPaymentMutation();
   const [probeRobokassa, probeState] = useProbeRobokassaMutation();
+
+  const handleRowRecheck = async (paymentId: string) => {
+    setRowBusyId(paymentId);
+    setRowBusyAction('recheck');
+    try {
+      const result = await recheckAdmin(paymentId).unwrap();
+      toast({
+        title: `Статус: ${result.status}`,
+        description: result.tokensAdded ? `Зачислено: ${result.tokensAdded}` : undefined,
+      });
+    } catch (e) {
+      toast({ title: 'Не удалось проверить', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setRowBusyId(null);
+      setRowBusyAction(null);
+    }
+  };
+
+  const handleRowConfirm = async (paymentId: string, amountRub: number, email: string) => {
+    if (!window.confirm(`Подтвердить платёж на ${(amountRub / 100).toLocaleString('ru-RU')} ₽ от ${email} и зачислить токены?`)) return;
+    setRowBusyId(paymentId);
+    setRowBusyAction('confirm');
+    try {
+      const result = await confirmAdmin(paymentId).unwrap();
+      toast({
+        title: 'Платёж подтверждён',
+        description: result.tokensAdded ? `Зачислено токенов: ${result.tokensAdded}` : undefined,
+      });
+    } catch (e) {
+      toast({ title: 'Не удалось подтвердить', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setRowBusyId(null);
+      setRowBusyAction(null);
+    }
+  };
 
   const totalPages = Math.max(1, Math.ceil((payments.data?.total ?? 0) / (payments.data?.limit ?? 50)));
 
@@ -181,6 +221,7 @@ export default function AdminPaymentsPage() {
               <th className="px-4 py-3">InvId</th>
               <th className="px-4 py-3">Статус</th>
               <th className="px-4 py-3">Зачислено</th>
+              <th className="px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800 bg-zinc-900/60">
@@ -214,11 +255,40 @@ export default function AdminPaymentsPage() {
                   <Badge className={STATUS_COLOR[payment.status]}>{STATUS_LABEL[payment.status]}</Badge>
                 </td>
                 <td className="px-4 py-3 text-slate-400">{payment.tokensAdded ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {payment.status !== 'SUCCEEDED' ? (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={rowBusyId === payment.id}
+                          onClick={() => handleRowRecheck(payment.id)}
+                          title="Сходить в Robokassa OpStateExt и применить ответ"
+                        >
+                          {rowBusyId === payment.id && rowBusyAction === 'recheck' ? '...' : 'Проверить'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 hover:bg-emerald-500"
+                          disabled={rowBusyId === payment.id}
+                          onClick={() => handleRowConfirm(payment.id, payment.amountRub, payment.user.email)}
+                          title="Подтвердить вручную и зачислить токены"
+                        >
+                          {rowBusyId === payment.id && rowBusyAction === 'confirm' ? '...' : 'Зачислить'}
+                        </Button>
+                      </>
+                    ) : null}
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={`/admin/payments/${payment.id}`}>Открыть</Link>
+                    </Button>
+                  </div>
+                </td>
               </tr>
             ))}
             {!payments.isLoading && (payments.data?.items.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                   Платежи не найдены
                 </td>
               </tr>

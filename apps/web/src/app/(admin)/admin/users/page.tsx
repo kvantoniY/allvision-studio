@@ -75,10 +75,11 @@ export default function AdminUsersPage() {
               <th className="px-4 py-3">Проектов</th>
               <th className="px-4 py-3">Последняя активность</th>
               <th className="px-4 py-3">Статус</th>
+              <th className="px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800 bg-zinc-900/60">
-            {users.isLoading && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">Загрузка...</td></tr>}
+            {users.isLoading && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">Загрузка...</td></tr>}
             {(users.data?.items ?? []).map((user) => (
               <tr key={user.id}>
                 <td className="px-4 py-3 font-medium text-white"><Link href={`/admin/users/${user.id}`} className="hover:text-rose-200">{user.email}</Link></td>
@@ -88,9 +89,14 @@ export default function AdminUsersPage() {
                 <td className="px-4 py-3">{user._count.projects}</td>
                 <td className="px-4 py-3">{new Date(user.lastActivityAt).toLocaleString()}</td>
                 <td className="px-4 py-3"><Badge className={user.deletedAt ? 'bg-zinc-700' : 'bg-emerald-600'}>{statusLabel(user)}</Badge></td>
+                <td className="px-4 py-3 text-right">
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href={`/admin/users/${user.id}`}>Управление</Link>
+                  </Button>
+                </td>
               </tr>
             ))}
-            {!users.isLoading && (users.data?.items.length ?? 0) === 0 && <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Пользователи не найдены</td></tr>}
+            {!users.isLoading && (users.data?.items.length ?? 0) === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Пользователи не найдены</td></tr>}
           </tbody>
         </table>
       </div>

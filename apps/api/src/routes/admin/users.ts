@@ -17,9 +17,17 @@ const usersQuerySchema = z.object({
   search: z.string().trim().min(1).optional(),
 });
 
-const updateUserSchema = z.object({
-  tokenBalance: z.coerce.number().int().min(0).optional(),
-});
+const updateUserSchema = z
+  .object({
+    tokenBalance: z.coerce.number().int().min(0).optional(),
+    tokenBalanceDelta: z.coerce.number().int().optional(),
+    role: z.enum(['USER', 'ADMIN', 'READONLY_ADMIN']).optional(),
+    reason: z.string().trim().min(1).max(200).optional(),
+  })
+  .refine(
+    (data) => data.tokenBalance !== undefined || data.tokenBalanceDelta !== undefined || data.role !== undefined,
+    { message: 'Укажите tokenBalance, tokenBalanceDelta или role' },
+  );
 
 adminUsersRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -80,30 +88,61 @@ adminUsersRouter.get('/:id', async (req: Request, res: Response, next: NextFunct
 adminUsersRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = updateUserSchema.parse(req.body);
-    if (body.tokenBalance === undefined) throw new HttpError(400, 'BALANCE_REQUIRED', 'Укажите новый баланс токенов');
 
-    const current = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true, tokenBalance: true } });
+    const current = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, tokenBalance: true, role: true, email: true },
+    });
     if (!current) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
-    const delta = body.tokenBalance - current.tokenBalance;
+
+    let nextBalance: number;
+    if (body.tokenBalance !== undefined) {
+      nextBalance = body.tokenBalance;
+    } else if (body.tokenBalanceDelta !== undefined) {
+      const candidate = current.tokenBalance + body.tokenBalanceDelta;
+      if (candidate < 0) {
+        throw new HttpError(400, 'BALANCE_NEGATIVE', `Итоговый баланс не может быть отрицательным (текущий ${current.tokenBalance}, попытка изменить на ${body.tokenBalanceDelta})`);
+      }
+      nextBalance = candidate;
+    } else {
+      nextBalance = current.tokenBalance;
+    }
+
+    const delta = nextBalance - current.tokenBalance;
+    const nextRole = body.role ?? current.role;
+
+    // Защита: нельзя снимать роль ADMIN с самого себя — иначе можно случайно потерять доступ.
+    if (nextRole !== 'ADMIN' && current.id === req.user?.id && current.role === 'ADMIN') {
+      throw new HttpError(400, 'CANNOT_DEMOTE_SELF', 'Нельзя снимать роль ADMIN с собственного аккаунта');
+    }
+
+    const reasonText = body.reason?.trim() || 'admin_adjust';
+
     const user = await prisma.$transaction(async (tx) => {
       const updated = await tx.user.update({
         where: { id: current.id },
-        data: { tokenBalance: body.tokenBalance },
+        data: {
+          ...(delta !== 0 ? { tokenBalance: nextBalance } : {}),
+          ...(nextRole !== current.role ? { role: nextRole } : {}),
+        },
         select: userListSelect,
       });
+
       if (delta !== 0) {
         await tx.tokenTransaction.create({
           data: {
             userId: current.id,
             amount: delta,
-            reason: 'ADMIN_BALANCE_ADJUSTMENT',
-            refId: req.user?.id,
-            balanceAfter: body.tokenBalance!,
+            reason: reasonText.slice(0, 64),
+            refId: req.user?.id ?? null,
+            balanceAfter: nextBalance,
           },
         });
       }
+
       return updated;
     });
+
     res.json({ user: await enrichUserListItem(user) });
   } catch (err) {
     next(err);

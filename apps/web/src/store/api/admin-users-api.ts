@@ -54,8 +54,17 @@ export const adminUsersApi = createApi({
       query: (id) => ({ url: `/users/${id}` }),
       providesTags: (_result, _error, id) => [{ type: 'AdminUser', id }],
     }),
-    updateAdminUser: build.mutation<{ user: AdminUser }, { id: string; tokenBalance: number }>({
-      query: ({ id, tokenBalance }) => ({ url: `/users/${id}`, method: 'PATCH', body: { tokenBalance } }),
+    updateAdminUser: build.mutation<
+      { user: AdminUser },
+      {
+        id: string;
+        tokenBalance?: number;
+        tokenBalanceDelta?: number;
+        role?: AdminUser['role'];
+        reason?: string;
+      }
+    >({
+      query: ({ id, ...body }) => ({ url: `/users/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _error, { id }) => ['AdminUser', { type: 'AdminUser', id }],
     }),
   }),

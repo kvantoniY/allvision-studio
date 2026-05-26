@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
-import { useGetAdminUserQuery, useUpdateAdminUserMutation } from '@/store/api/admin-users-api';
+import { type AdminUser, useGetAdminUserQuery, useUpdateAdminUserMutation } from '@/store/api/admin-users-api';
 
 function roleLabel(role: string) {
   if (role === 'ADMIN') return 'Админ';
@@ -26,25 +27,86 @@ function projectStatusLabel(status: string) {
   return status;
 }
 
+function apiErrorMessage(error: unknown) {
+  return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Не удалось выполнить операцию';
+}
+
 export default function AdminUserDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const auth = useAuth();
   const user = useGetAdminUserQuery(params.id);
   const settings = useGetAdminSettingsQuery();
   const [updateUser, updateState] = useUpdateAdminUserMutation();
   const [balance, setBalance] = useState('');
+  const [delta, setDelta] = useState('');
+  const [reason, setReason] = useState('');
+  const [role, setRole] = useState<AdminUser['role']>('USER');
   const rate = settings.data?.settings.usdToRub ?? 80;
 
   useEffect(() => {
-    if (user.data?.user) setBalance(String(user.data.user.tokenBalance));
+    if (user.data?.user) {
+      setBalance(String(user.data.user.tokenBalance));
+      setRole(user.data.user.role);
+    }
   }, [user.data?.user]);
 
   const saveBalance = async () => {
     try {
-      await updateUser({ id: params.id, tokenBalance: Number(balance) }).unwrap();
-      toast({ title: 'Баланс обновлён' });
-    } catch {
-      toast({ title: 'Не удалось обновить баланс', variant: 'destructive' });
+      await updateUser({
+        id: params.id,
+        tokenBalance: Number(balance),
+        reason: reason.trim() || 'admin_set_balance',
+      }).unwrap();
+      toast({ title: 'Баланс сохранён' });
+      setReason('');
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const applyDelta = async (sign: 1 | -1) => {
+    const value = Number(delta);
+    if (!Number.isFinite(value) || value <= 0) {
+      toast({ title: 'Укажите положительное число токенов', variant: 'destructive' });
+      return;
+    }
+    const signed = sign * Math.floor(value);
+    try {
+      await updateUser({
+        id: params.id,
+        tokenBalanceDelta: signed,
+        reason: reason.trim() || (sign > 0 ? 'admin_grant' : 'admin_deduct'),
+      }).unwrap();
+      toast({ title: `${sign > 0 ? 'Начислено' : 'Списано'} ${Math.abs(signed)} токенов` });
+      setDelta('');
+      setReason('');
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const saveRole = async () => {
+    if (user.data?.user && role === user.data.user.role) {
+      toast({ title: 'Роль не изменилась' });
+      return;
+    }
+    if (
+      !window.confirm(
+        role === 'ADMIN'
+          ? 'Выдать пользователю права администратора?'
+          : role === 'READONLY_ADMIN'
+            ? 'Выдать роль READONLY_ADMIN (только чтение админки)?'
+            : 'Снять роль администратора?',
+      )
+    ) {
+      return;
+    }
+    try {
+      await updateUser({ id: params.id, role }).unwrap();
+      toast({ title: `Роль обновлена: ${roleLabel(role)}` });
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
     }
   };
 
@@ -79,14 +141,113 @@ export default function AdminUserDetailPage() {
       </section>
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
-        <h2 className="font-semibold text-white">Изменить баланс</h2>
+        <h2 className="font-semibold text-white">Управление балансом</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Все изменения записываются в историю токенов с указанной причиной. Текущий баланс: <b>{item.tokenBalance}</b>.
+        </p>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_auto]">
+          <div className="space-y-2">
+            <Label htmlFor="reason">Причина (необязательно)</Label>
+            <Input
+              id="reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Например: компенсация / тест / промо"
+            />
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
+            <Label htmlFor="delta" className="text-xs uppercase text-slate-400">
+              Начислить / списать
+            </Label>
+            <div className="mt-2 flex items-end gap-2">
+              <Input
+                id="delta"
+                type="number"
+                min={1}
+                value={delta}
+                onChange={(event) => setDelta(event.target.value)}
+                placeholder="100"
+              />
+              <Button
+                type="button"
+                disabled={updateState.isLoading || !delta}
+                onClick={() => applyDelta(1)}
+                className="bg-emerald-600 hover:bg-emerald-500"
+              >
+                + Начислить
+              </Button>
+              <Button
+                type="button"
+                disabled={updateState.isLoading || !delta}
+                onClick={() => applyDelta(-1)}
+                variant="outline"
+                className="border-red-500/40 text-red-300"
+              >
+                − Списать
+              </Button>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
+            <Label htmlFor="tokenBalance" className="text-xs uppercase text-slate-400">
+              Установить точное значение
+            </Label>
+            <div className="mt-2 flex items-end gap-2">
+              <Input
+                id="tokenBalance"
+                type="number"
+                min={0}
+                value={balance}
+                onChange={(event) => setBalance(event.target.value)}
+              />
+              <Button
+                type="button"
+                disabled={updateState.isLoading}
+                onClick={saveBalance}
+                className="bg-rose-500 hover:bg-rose-400"
+              >
+                Сохранить
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
+        <h2 className="font-semibold text-white">Роль</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          ADMIN — полный доступ к админке. READONLY_ADMIN — только просмотр. USER — обычный пользователь.
+        </p>
         <div className="mt-4 flex max-w-md items-end gap-3">
           <div className="flex-1 space-y-2">
-            <Label htmlFor="tokenBalance">Новый баланс, токены</Label>
-            <Input id="tokenBalance" type="number" min={0} value={balance} onChange={(event) => setBalance(event.target.value)} />
+            <Label htmlFor="role">Роль пользователя</Label>
+            <select
+              id="role"
+              value={role}
+              onChange={(event) => setRole(event.target.value as AdminUser['role'])}
+              className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+            >
+              <option value="USER">Пользователь</option>
+              <option value="ADMIN">Админ</option>
+              <option value="READONLY_ADMIN">Readonly-админ</option>
+            </select>
           </div>
-          <Button type="button" disabled={updateState.isLoading} onClick={saveBalance} className="bg-rose-500 hover:bg-rose-400">Сохранить</Button>
+          <Button
+            type="button"
+            disabled={updateState.isLoading || role === item.role || (item.id === auth.user?.id && item.role === 'ADMIN' && role !== 'ADMIN')}
+            onClick={saveRole}
+            className="bg-rose-500 hover:bg-rose-400"
+          >
+            Сохранить роль
+          </Button>
         </div>
+        {item.id === auth.user?.id && item.role === 'ADMIN' ? (
+          <p className="mt-2 text-xs text-yellow-300">Нельзя снять роль ADMIN с собственного аккаунта.</p>
+        ) : null}
       </section>
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
