@@ -374,6 +374,53 @@ async function fetchTextWithTimeout(url: URL, timeoutMs: number) {
   }
 }
 
+function outSumVariations(outSum: string): string[] {
+  const set = new Set<string>();
+  set.add(outSum);
+  const trimmed = outSum.replace(/\s+/g, '').replace(',', '.');
+  set.add(trimmed);
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)) {
+    set.add(numeric.toFixed(2));
+    set.add(numeric.toFixed(4));
+    set.add(numeric.toFixed(6));
+    set.add(String(numeric));
+    if (Number.isInteger(numeric)) set.add(String(numeric));
+  }
+  return [...set];
+}
+
+function tryAllSignatureVariations(params: {
+  body: { OutSum: string; InvId: string };
+  receivedSignature: string;
+  shpParams: Record<string, string>;
+  passwords: Array<{ label: string; value: string }>;
+  hashAlgorithm: string;
+}): { ok: true; label: string; outSum: string } | { ok: false; expectedDefault: string } {
+  for (const { label, value: password } of params.passwords) {
+    for (const outSumCandidate of outSumVariations(params.body.OutSum)) {
+      const expected = buildResultSignature({
+        outSum: outSumCandidate,
+        invId: params.body.InvId,
+        password,
+        hashAlgorithm: params.hashAlgorithm,
+        shpParams: params.shpParams,
+      });
+      if (timingSafeEqual(params.receivedSignature, expected)) {
+        return { ok: true, label, outSum: outSumCandidate };
+      }
+    }
+  }
+  const expectedDefault = buildResultSignature({
+    outSum: params.body.OutSum,
+    invId: params.body.InvId,
+    password: params.passwords[0]?.value ?? '',
+    hashAlgorithm: params.hashAlgorithm,
+    shpParams: params.shpParams,
+  });
+  return { ok: false, expectedDefault };
+}
+
 function webhookEventFromRobokassaPayload(
   payload: Record<string, string>,
   password: string,
@@ -382,34 +429,55 @@ function webhookEventFromRobokassaPayload(
 ) {
   const body = robokassaResultSchema.parse(payload);
   const shpParams = Object.fromEntries(sortedShpParams(payload));
-  const expectedSignature = buildResultSignature({
-    outSum: body.OutSum,
-    invId: body.InvId,
-    password,
-    hashAlgorithm,
-    shpParams,
-  });
   const receivedSignature = body.SignatureValue || '';
 
-  if (!timingSafeEqual(receivedSignature, expectedSignature)) {
+  const passwords: Array<{ label: string; value: string }> = [{ label: source === 'webhook' ? 'password2' : 'password1', value: password }];
+  // Fallback: пробуем оба пароля, на случай если в ЛК Робокассы перепутаны
+  // настройки Result/Success URL и для конкретного метода оплаты подпись
+  // считается другим паролем.
+  const config = getConfig();
+  if (source === 'webhook' && config.password1 && config.password1 !== password) {
+    passwords.push({ label: 'password1-fallback', value: config.password1 });
+  }
+  if (source === 'success-redirect' && config.password2 && config.password2 !== password) {
+    passwords.push({ label: 'password2-fallback', value: config.password2 });
+  }
+
+  const verification = tryAllSignatureVariations({
+    body: { OutSum: body.OutSum, InvId: body.InvId },
+    receivedSignature,
+    shpParams,
+    passwords,
+    hashAlgorithm,
+  });
+
+  if (!verification.ok) {
     logger.warn(
       `[robokassa] ${source} signature mismatch invId=${body.InvId} outSum=${body.OutSum} algo=${hashAlgorithm} ` +
-        `received=${shortHash(receivedSignature)} expected=${shortHash(expectedSignature)} ` +
-        `shpKeys=${Object.keys(shpParams).join(',') || 'none'}`,
+        `received=${shortHash(receivedSignature)} expected=${shortHash(verification.expectedDefault)} ` +
+        `shpKeys=${Object.keys(shpParams).join(',') || 'none'} ` +
+        `triedPasswords=${passwords.map((p) => p.label).join('+')}`,
     );
     throw new HttpError(401, 'INVALID_ROBOKASSA_SIGNATURE', 'Invalid Robokassa callback signature');
   }
 
-  logger.info(
-    `[robokassa] ${source} signature ok invId=${body.InvId} outSum=${body.OutSum} shp_paymentId=${shpParams.Shp_paymentId ?? 'none'}`,
-  );
+  if (verification.label !== passwords[0].label || verification.outSum !== body.OutSum) {
+    logger.warn(
+      `[robokassa] ${source} signature matched via FALLBACK invId=${body.InvId} ` +
+        `password=${verification.label} outSumUsed=${verification.outSum} (received=${body.OutSum})`,
+    );
+  } else {
+    logger.info(
+      `[robokassa] ${source} signature ok invId=${body.InvId} outSum=${body.OutSum} shp_paymentId=${shpParams.Shp_paymentId ?? 'none'}`,
+    );
+  }
 
   return {
     type: 'payment.succeeded' as const,
     paymentId: shpParams.Shp_paymentId ?? body.InvId,
     providerPaymentId: body.InvId,
     amountRub: normalizeOutSum(body.OutSum),
-    metadata: { ...shpParams, source },
+    metadata: { ...shpParams, source, signatureMatch: verification.label },
   };
 }
 
