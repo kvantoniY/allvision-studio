@@ -65,9 +65,13 @@ export type PublicScenarioTemplate = {
 export type PublicTokenPackage = {
   id: string;
   title: string;
+  subtitle: string | null;
   tokens: number;
   priceRub: number;
+  originalPriceRub: number | null;
   bonus: number;
+  badgeText: string | null;
+  features: string[];
   isPopular: boolean;
   sortOrder: number;
 };

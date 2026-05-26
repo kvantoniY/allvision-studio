@@ -21,7 +21,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { formatMoney, serviceMargin, summarizePipelinePricing } from '@allvision/shared';
+import { serviceMargin, summarizePipelinePricing, type ServiceMargin } from '@allvision/shared';
 import {
   buildMockUserInputs,
   PipelineTestPanel,
@@ -91,13 +91,87 @@ function patchData(value: Record<string, unknown>) {
 
 function marginRowClass(marginPercent: number | null) {
   if (marginPercent === null) return '';
-  if (marginPercent < 0) return 'bg-red-950/30';
-  if (marginPercent < 50) return 'bg-amber-950/20';
-  return 'bg-emerald-950/20';
+  if (marginPercent < 0) return 'bg-red-950/10';
+  if (marginPercent < 50) return 'bg-amber-950/10';
+  return 'bg-emerald-950/5';
 }
 
 function formatMargin(value: number | null) {
   return value === null ? 'н/д' : `${value.toFixed(0)}%`;
+}
+
+function formatUsd(value: number) {
+  return `$${value.toFixed(2)}`;
+}
+
+function formatRub(value: number) {
+  return `~${Math.round(value).toLocaleString('ru-RU')} ₽`;
+}
+
+function marginBadgeClass(marginPercent: number | null) {
+  if (marginPercent === null) return 'bg-zinc-800 text-slate-300';
+  if (marginPercent < 0) return 'bg-red-500/15 text-red-200 ring-1 ring-red-500/30';
+  if (marginPercent < 50) return 'bg-amber-500/15 text-amber-200 ring-1 ring-amber-500/30';
+  return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30';
+}
+
+function PricingMetric({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="min-w-0 rounded-md bg-zinc-900/70 px-2.5 py-2">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 truncate text-sm font-semibold text-slate-100">{value}</div>
+      {sub && <div className="mt-0.5 truncate text-[11px] text-slate-500">{sub}</div>}
+    </div>
+  );
+}
+
+function PricingTierCard({
+  label,
+  margin,
+  usdToRub,
+}: {
+  label: string;
+  margin: ServiceMargin;
+  usdToRub: number;
+}) {
+  return (
+    <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/80 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+        <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', marginBadgeClass(margin.marginPercent))}>
+          {formatMargin(margin.marginPercent)}
+        </span>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        <PricingMetric label="Себест." value={formatUsd(margin.costUsd)} sub={formatRub(margin.costUsd * usdToRub)} />
+        <PricingMetric label="Цена" value={`${margin.priceCoins} ток.`} sub={`~${margin.priceCoins.toLocaleString('ru-RU')} ₽`} />
+        <PricingMetric label="Прибыль" value={formatUsd(margin.profitUsd)} sub={formatRub(margin.profitCoins)} />
+      </div>
+    </div>
+  );
+}
+
+function PricingSummaryCell({
+  standardMargin,
+  proMargin,
+  usdToRub,
+}: {
+  standardMargin: ServiceMargin;
+  proMargin: ServiceMargin | null;
+  usdToRub: number;
+}) {
+  return (
+    <div className="w-[320px] space-y-2">
+      <PricingTierCard label="Стандарт" margin={standardMargin} usdToRub={usdToRub} />
+      {proMargin ? (
+        <PricingTierCard label="Pro" margin={proMargin} usdToRub={usdToRub} />
+      ) : (
+        <div className="rounded-lg border border-dashed border-zinc-800 px-3 py-2 text-xs text-slate-500">
+          Pro-цена не задана
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AdminServicesPage() {
@@ -240,17 +314,17 @@ export default function AdminServicesPage() {
       )}
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-800">
-        <table className="min-w-full divide-y divide-zinc-800 text-sm">
+        <table className="min-w-[1280px] divide-y divide-zinc-800 text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th className="px-4 py-3">Превью</th>
-              <th className="px-4 py-3">Название</th>
-              <th className="px-4 py-3">Категория</th>
-              <th className="px-4 py-3">Себестоимость / цена / маржа</th>
-              <th className="px-4 py-3">Рекомендуемая</th>
-              <th className="px-4 py-3">Статус</th>
-              <th className="px-4 py-3">Порядок</th>
-              <th className="px-4 py-3 text-right">Действия</th>
+              <th className="w-[92px] px-4 py-3">Превью</th>
+              <th className="w-[280px] px-4 py-3">Название</th>
+              <th className="w-[150px] px-4 py-3">Категория</th>
+              <th className="w-[360px] px-4 py-3">Экономика</th>
+              <th className="w-[120px] px-4 py-3">Реком.</th>
+              <th className="w-[120px] px-4 py-3">Статус</th>
+              <th className="w-[90px] px-4 py-3">Порядок</th>
+              <th className="w-[300px] px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800 bg-zinc-950">
@@ -273,11 +347,19 @@ export default function AdminServicesPage() {
             )}
             {items.map((service) => {
               const pricing = summarizePipelinePricing(service.pipelineConfig, blocks, usdToRub);
-              const standardMargin = serviceMargin(service.priceCoinsStandard ?? service.priceTokens, pricing.standard.costUsd, usdToRub);
-              const proMargin = serviceMargin(service.priceCoinsPro ?? service.priceTokens, pricing.pro.costUsd, usdToRub);
-              const minMargin = Math.min(standardMargin.marginPercent ?? 0, proMargin.marginPercent ?? 0);
+              const standardMargin = serviceMargin(
+                service.priceCoinsStandard ?? service.priceTokens,
+                pricing.standard.costUsd,
+                usdToRub,
+              );
+              const proMargin = service.priceCoinsPro
+                ? serviceMargin(service.priceCoinsPro, pricing.pro.costUsd, usdToRub)
+                : null;
+              const marginValues = [standardMargin.marginPercent, proMargin?.marginPercent]
+                .filter((value): value is number => value !== null && value !== undefined);
+              const minMargin = marginValues.length ? Math.min(...marginValues) : null;
               return (
-              <tr key={service.id} className={cn('align-middle', marginRowClass(minMargin))}>
+              <tr key={service.id} className={cn('align-middle transition-colors hover:bg-zinc-900/70', marginRowClass(minMargin))}>
                 <td className="px-4 py-3">
                   {previewUrl(service) ? (
                     <img src={previewUrl(service)!} alt="" className="h-[60px] w-[60px] rounded-md object-cover" />
@@ -293,10 +375,7 @@ export default function AdminServicesPage() {
                   <Badge className="bg-zinc-800 text-slate-200">{categoryLabels[service.category] ?? service.category}</Badge>
                 </td>
                 <td className="px-4 py-3">
-                  <div>Стандарт: {formatMoney({ usd: pricing.standard.costUsd }, { primary: 'usd', showAll: true, usdToRub })} / {formatMoney({ coins: service.priceCoinsStandard ?? service.priceTokens }, { primary: 'coins', showAll: true, usdToRub })} / {formatMargin(standardMargin.marginPercent)} · {formatMoney({ usd: standardMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
-                  <div className="text-xs text-slate-500">
-                    Pro: {formatMoney({ usd: pricing.pro.costUsd }, { primary: 'usd', showAll: true, usdToRub })} / {service.priceCoinsPro ? formatMoney({ coins: service.priceCoinsPro }, { primary: 'coins', showAll: true, usdToRub }) : '—'} / {formatMargin(proMargin.marginPercent)} · {formatMoney({ usd: proMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}
-                  </div>
+                  <PricingSummaryCell standardMargin={standardMargin} proMargin={proMargin} usdToRub={usdToRub} />
                 </td>
                 <td className="px-4 py-3">
                   <button type="button" onClick={() => toggleFeatured(service)} aria-label="Рекомендуемая">

@@ -323,9 +323,13 @@ publicRouter.get('/token-packages', async (_req: Request, res: Response<PublicTo
       select: {
         id: true,
         title: true,
+        subtitle: true,
         tokens: true,
         priceRub: true,
+        originalPriceRub: true,
         bonus: true,
+        badgeText: true,
+        features: true,
         isPopular: true,
         sortOrder: true,
       },

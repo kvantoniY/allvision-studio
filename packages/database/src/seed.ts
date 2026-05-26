@@ -685,10 +685,40 @@ type EnsureUserOptions = {
 };
 
 const tokenPackages = [
-  { title: 'Старт', tokens: 100, priceRub: 99, bonus: 0, sortOrder: 10 },
-  { title: 'Базовый', tokens: 500, priceRub: 499, bonus: 50, sortOrder: 20 },
-  { title: 'Популярный', tokens: 1000, priceRub: 999, bonus: 150, isPopular: true, sortOrder: 30 },
-  { title: 'Максимум', tokens: 3000, priceRub: 2999, bonus: 600, sortOrder: 40 },
+  {
+    title: 'Старт',
+    tokens: 100,
+    priceRub: 99,
+    bonus: 0,
+    features: ['1 токен = 1 ₽ для автоматических услуг', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
+    sortOrder: 10,
+  },
+  {
+    title: 'Базовый',
+    tokens: 500,
+    priceRub: 499,
+    bonus: 50,
+    features: ['1 токен = 1 ₽ для автоматических услуг', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
+    sortOrder: 20,
+  },
+  {
+    title: 'Популярный',
+    tokens: 1000,
+    priceRub: 999,
+    bonus: 150,
+    badgeText: 'Выбирают чаще всего',
+    features: ['1 токен = 1 ₽ для автоматических услуг', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
+    isPopular: true,
+    sortOrder: 30,
+  },
+  {
+    title: 'Максимум',
+    tokens: 3000,
+    priceRub: 2999,
+    bonus: 600,
+    features: ['1 токен = 1 ₽ для автоматических услуг', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
+    sortOrder: 40,
+  },
 ];
 
 const stylePresets = [

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Sparkles } from 'lucide-react';
+import { ArrowLeft, Sparkles } from 'lucide-react';
 import { requireAdminPage } from '@/lib/auth';
 import { AdminSidebarNav } from '@/components/admin/AdminSidebarNav';
 
@@ -17,10 +17,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <div className="flex items-center gap-4 text-sm">
             <span className="hidden text-slate-400 sm:inline">{me.email}</span>
             <Link
-              href="/dashboard"
-              className="rounded-md border border-slate-700 px-3 py-2 text-slate-200 transition hover:border-rose-400 hover:text-white"
+              href="/"
+              className="inline-flex items-center gap-2 rounded-md border border-slate-700 px-3 py-2 text-slate-200 transition hover:border-rose-400 hover:text-white"
             >
-              Выйти из админки
+              <ArrowLeft className="h-4 w-4" />
+              Вернуться на сайт
             </Link>
           </div>
         </div>

@@ -698,14 +698,18 @@ model StylePreset {
 }
 
 model TokenPackage {
-  id        String  @id @default(cuid())
-  title     String
-  tokens    Int
-  priceRub  Int
-  bonus     Int     @default(0)
-  isPopular Boolean @default(false)
-  isActive  Boolean @default(true)
-  sortOrder Int     @default(0)
+  id               String   @id @default(cuid())
+  title            String
+  subtitle         String?
+  tokens           Int
+  priceRub         Int
+  originalPriceRub Int?
+  bonus            Int      @default(0)
+  badgeText        String?
+  features         String[] @default([])
+  isPopular        Boolean  @default(false)
+  isActive         Boolean  @default(true)
+  sortOrder        Int      @default(0)
 }
 
 // === Настройки (key-value) ===

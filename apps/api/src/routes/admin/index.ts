@@ -13,6 +13,7 @@ import { adminSupportRouter } from './support';
 import { adminStylePresetsRouter } from './style-presets';
 import { adminHomePageRouter } from './home-page';
 import { adminPaymentsRouter } from './payments';
+import { adminTokenPackagesRouter } from './token-packages';
 
 export const adminRouter = Router();
 
@@ -22,6 +23,7 @@ adminRouter.use('/settings', adminSettingsRouter);
 adminRouter.use('/users', adminUsersRouter);
 adminRouter.use('/projects', adminProjectsRouter);
 adminRouter.use('/payments', adminPaymentsRouter);
+adminRouter.use('/token-packages', adminTokenPackagesRouter);
 adminRouter.use('/support', adminSupportRouter);
 adminRouter.use('/', adminUsageRouter);
 adminRouter.use('/services', adminServicesRouter);

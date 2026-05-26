@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut, Sparkles } from 'lucide-react';
+import { LogOut, ShieldCheck, Sparkles } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,16 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
 
   if (!user) return null;
 
+  const sidebarSections = user.role === 'ADMIN'
+    ? [
+        ...SIDEBAR_SECTIONS,
+        {
+          label: 'Администрирование',
+          items: [{ href: '/admin', label: 'Админ панель', icon: ShieldCheck }],
+        },
+      ]
+    : SIDEBAR_SECTIONS;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-6 p-4">
       <Link href="/" onClick={onNavigate} className="flex items-center gap-2 px-2 py-1 font-semibold text-white">
@@ -32,7 +42,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
       </Link>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
-        {SIDEBAR_SECTIONS.map((section, sectionIndex) => (
+        {sidebarSections.map((section, sectionIndex) => (
           <div key={section.label ?? sectionIndex} className={cn(sectionIndex > 0 && 'mt-3 border-t border-slate-800 pt-3')}>
             {section.label && (
               <div className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
