@@ -36,8 +36,8 @@ export const metadata: Metadata = {
     images: [
       {
         url: '/logo_socialnetwork.png',
-        width: 1731,
-        height: 909,
+        width: 1672,
+        height: 941,
         alt: 'Allvision Studio',
       },
     ],
