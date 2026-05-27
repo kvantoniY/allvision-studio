@@ -2,46 +2,28 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, Baby, Clapperboard, Gift, Heart, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowRight, Baby, Cake, Clapperboard, Flame, Gift, Heart, LayoutGrid, Sparkles } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListServicesQuery } from '@/store/api/services-api';
-import { GIFT_CATEGORIES, giftServicePriceFrom } from '@/lib/gift-factory';
+import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
+import { categoryHref, giftServicePriceFrom } from '@/lib/gift-factory';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
-const categoryIcons: Record<ServiceCategory, typeof Heart> = {
-  NOSTALGIA: Heart,
-  TRENDS_MEMES: Clapperboard,
-  KIDS_HEROES: Baby,
-  SPECIAL_OCCASIONS: Gift,
-  PHOTO_RESTORE: Heart,
-  PHOTO_ANIMATE: Sparkles,
-  TREND: Clapperboard,
-  CARTOON_CUSTOM: Baby,
-  REALISTIC_CUSTOM: Gift,
-  FAIRY_TALE: Baby,
+const iconMap: Record<string, LucideIcon> = {
+  Heart, Sparkles, Clapperboard, Baby, Gift, Flame, Cake, LayoutGrid,
 };
 
-const categories = GIFT_CATEGORIES.map((category) => ({
-  ...category,
-  icon: categoryIcons[category.value],
-  anchor:
-    category.value === 'NOSTALGIA'
-      ? 'nostalgia'
-      : category.value === 'TRENDS_MEMES'
-        ? 'trends'
-        : category.value === 'KIDS_HEROES'
-          ? 'kids'
-          : 'occasions',
-}));
-
-const validCategories = new Set<ServiceCategory>(GIFT_CATEGORIES.map((category) => category.value));
+function iconForCategory(iconName: string | null | undefined): LucideIcon {
+  if (iconName && iconMap[iconName]) return iconMap[iconName];
+  return LayoutGrid;
+}
 
 function mediaUrl(value?: string | null) {
   if (!value) return null;
@@ -97,7 +79,7 @@ function ServiceTile({ service, featured = false }: { service: PublicService; fe
           <div className="mt-5 flex items-center justify-between gap-3">
             <div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Цена</div>
-              <div className="text-lg font-bold text-amber-400">от {priceFrom(service)} токенов</div>
+              <div className="text-lg font-bold text-amber-400">от {priceFrom(service)} коинов</div>
             </div>
             <span className="grid h-10 w-10 place-items-center rounded-md border border-slate-700 bg-slate-800 text-slate-100 transition group-hover:border-amber-400 group-hover:text-amber-300">
               <ArrowRight className="h-4 w-4" />
@@ -115,11 +97,22 @@ type ServicesCatalogProps = {
 
 export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
   const requestedCategory = initialCategory;
+  const { data: categoriesData } = useGetServiceCategoriesQuery();
+  const dynamicCategories = (categoriesData?.categories ?? []).map((category) => ({
+    value: category.code,
+    label: category.title,
+    description: category.description ?? category.title,
+    href: categoryHref(category.code),
+    icon: iconForCategory(category.iconName),
+    anchor: category.code.toLowerCase().replace(/_/g, '-'),
+  }));
+  const validCategories = new Set(dynamicCategories.map((category) => category.value));
   const selectedCategory = requestedCategory && validCategories.has(requestedCategory) ? requestedCategory : undefined;
   const { data, isLoading, isError } = useListServicesQuery(selectedCategory ? { category: selectedCategory } : undefined);
   const services = data?.services ?? [];
   const featured = services.filter((service) => service.isFeatured);
-  const activeCategory = categories.find((category) => category.value === selectedCategory);
+  const activeCategory = dynamicCategories.find((category) => category.value === selectedCategory);
+  const categories = dynamicCategories;
 
   return (
     <div className="pb-16">
@@ -136,26 +129,38 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
               Выберите повод, загрузите фото или пару деталей, а Allvision соберёт готовый ролик, открытку или мем за несколько минут.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 lg:justify-end">
-            {categories.map((category) => (
-              <Button
-                key={category.value}
-                asChild
-                variant="outline"
-                className={cn(
-                  'border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800',
-                  selectedCategory === category.value && 'border-amber-400 bg-amber-400/10 text-amber-200',
-                )}
-              >
-                <Link href={`/services?category=${category.value}`}>{category.label}</Link>
-              </Button>
-            ))}
-            {selectedCategory && (
-              <Button asChild variant="ghost" className="text-slate-300 hover:bg-slate-800 hover:text-white">
-                <Link href="/services">Все</Link>
-              </Button>
-            )}
-          </div>
+          <nav aria-label="Категории услуг" className="min-w-0 lg:justify-self-end">
+            <div className="rounded-lg border border-slate-800 bg-slate-900/85 p-1 shadow-lg shadow-black/15">
+              <div className="flex max-w-full gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <Link
+                  href="/services"
+                  className={cn(
+                    'inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white',
+                    !selectedCategory && 'bg-amber-400 text-slate-950 hover:bg-amber-300 hover:text-slate-950',
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                  <span>Все</span>
+                </Link>
+                {categories.map((category) => {
+                  const Icon = category.icon;
+                  return (
+                    <Link
+                      key={category.value}
+                      href={`/services?category=${category.value}`}
+                      className={cn(
+                        'inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white',
+                        selectedCategory === category.value && 'bg-amber-400 text-slate-950 hover:bg-amber-300 hover:text-slate-950',
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{category.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          </nav>
         </div>
       </section>
 

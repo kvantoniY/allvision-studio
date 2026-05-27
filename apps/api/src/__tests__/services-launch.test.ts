@@ -6,7 +6,6 @@ import sharp from 'sharp';
 import {
   prisma,
   ProcessingType,
-  ServiceCategory,
   type Service,
 } from '@allvision/database';
 import { app } from '../app';
@@ -40,7 +39,7 @@ function serviceData(slug = `launch-service-${RUN_ID}-${Math.random().toString(1
     title: `Launch service ${RUN_ID}`,
     shortDesc: 'Short launch description',
     description: 'Long launch description',
-    category: ServiceCategory.NOSTALGIA,
+    category: "NOSTALGIA",
     priceTokens: 100,
     priceCoinsStandard: 100,
     priceCoinsPro: 250,

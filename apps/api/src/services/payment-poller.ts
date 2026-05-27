@@ -38,8 +38,8 @@ export function startPendingPaymentPoller() {
     running = true;
     try {
       const result = await pollPendingPaymentsOnce();
-      if (result.checked > 0 || result.revived > 0) {
-        logger.info(`[payments] pending poll checked=${result.checked} revived=${result.revived}`);
+      if (result.checked > 0 || result.revived > 0 || result.expired > 0) {
+        logger.info(`[payments] pending poll checked=${result.checked} revived=${result.revived} expired=${result.expired}`);
       }
     } catch (error) {
       logger.warn(`[payments] pending poll failed: ${(error as Error).message}`);

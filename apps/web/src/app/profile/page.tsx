@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDispatch } from 'react-redux';
-import { Bell, MailCheck, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
+import { Bell, LogOut, MailCheck, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
 import type { Payment, PaymentStatus } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
@@ -105,7 +105,7 @@ async function fetchPaymentStatus(dispatch: AppDispatch, paymentId: string) {
 export default function ProfilePage() {
   return (
     <AuthGuard>
-      <div className="container py-8">
+      <div className="container max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <ProfileContent />
       </div>
     </AuthGuard>
@@ -113,7 +113,7 @@ export default function ProfilePage() {
 }
 
 function ProfileContent() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -275,23 +275,34 @@ function ProfileContent() {
   if (!user) return null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="flex items-center gap-2 text-sm text-violet-300">
-          <UserIcon className="h-4 w-4" />
-          Профиль
+    <div className="w-full max-w-full space-y-5 sm:space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sm text-violet-300">
+            <UserIcon className="h-4 w-4" />
+            Профиль
+          </div>
+          <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Профиль и баланс</h1>
+          <p className="mt-2 text-sm text-slate-400">Личные данные, пополнение, операции и настройки аккаунта.</p>
         </div>
-        <h1 className="mt-2 text-3xl font-bold text-white">Профиль и баланс</h1>
-        <p className="mt-2 text-sm text-slate-400">Личные данные, пополнение, операции и настройки аккаунта.</p>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => { void logout(); }}
+          className="border-slate-700 bg-slate-900 text-slate-200 hover:border-rose-400 hover:text-rose-300"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Выйти
+        </Button>
       </div>
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as ProfileTab)}>
-        <TabsList className="flex h-auto flex-wrap justify-start">
-          <TabsTrigger value="personal">Личные данные</TabsTrigger>
-          <TabsTrigger value="billing">Баланс</TabsTrigger>
-          <TabsTrigger value="transactions">История</TabsTrigger>
-          <TabsTrigger value="notifications">Уведомления</TabsTrigger>
-          <TabsTrigger value="danger">Удаление</TabsTrigger>
+      <Tabs value={tab} onValueChange={(value) => setTab(value as ProfileTab)} className="min-w-0">
+        <TabsList className="h-auto w-full max-w-full justify-start overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/80 p-1 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto">
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="personal">Личные данные</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="billing">Баланс</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="transactions">История</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="notifications">Уведомления</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="danger">Удаление</TabsTrigger>
         </TabsList>
         <TabsContent value="personal" className="mt-5">
           <PersonalSection />
@@ -390,18 +401,18 @@ function PersonalSection() {
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1fr_0.8fr]">
-      <Card className="border-slate-800 bg-slate-900">
-        <CardHeader>
-          <CardTitle>Личные данные</CardTitle>
+    <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+          <CardTitle className="text-xl sm:text-2xl">Личные данные</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="flex items-center gap-4">
-            <Avatar className="h-16 w-16">
+        <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:space-y-5 sm:px-6 sm:pb-6">
+          <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+            <Avatar className="h-14 w-14 shrink-0 sm:h-16 sm:w-16">
               {user.avatar && <AvatarImage src={user.avatar} alt={user.name ?? user.email} />}
               <AvatarFallback className="text-lg">{initialsOf(user.name, user.email)}</AvatarFallback>
             </Avatar>
-            <div className="text-sm text-slate-400">
+            <div className="min-w-0 text-sm leading-5 text-slate-400">
               Дата регистрации: {formatDate(user.createdAt as unknown as string)}
             </div>
           </div>
@@ -428,11 +439,11 @@ function PersonalSection() {
         </CardContent>
       </Card>
 
-      <Card className="border-slate-800 bg-slate-900">
-        <CardHeader>
-          <CardTitle>Контакт и пароль</CardTitle>
+      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+          <CardTitle className="text-xl sm:text-2xl">Контакт и пароль</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-5">
+        <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:space-y-5 sm:px-6 sm:pb-6">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
             <div className="space-y-2">
               <Label htmlFor="messengerType">Тип мессенджера</Label>
@@ -462,11 +473,11 @@ function PersonalSection() {
           {!showPasswordForm ? (
             <Button variant="outline" onClick={() => setShowPasswordForm(true)}>Сменить пароль</Button>
           ) : (
-            <div className="space-y-3 rounded-md border border-slate-800 bg-slate-950 p-4">
+            <div className="space-y-3 rounded-md border border-slate-800 bg-slate-950 p-3 sm:p-4">
               <Input type="password" value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} placeholder="Текущий пароль" />
               <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Новый пароль" />
               <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите новый пароль" />
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button onClick={onChangePassword} disabled={changingPwd}>{changingPwd ? 'Меняем...' : 'Сменить'}</Button>
                 <Button variant="outline" onClick={() => setShowPasswordForm(false)}>Отмена</Button>
               </div>
@@ -494,15 +505,15 @@ function EmailVerificationPanel({
   const verified = Boolean(verifiedAt);
   return (
     <div className={cn(
-      'rounded-lg border p-4',
+      'min-w-0 rounded-lg border p-3 sm:p-4',
       verified ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/10',
     )}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex gap-3">
-          <MailCheck className={cn('mt-0.5 h-5 w-5', verified ? 'text-emerald-300' : 'text-amber-300')} />
-          <div>
+        <div className="flex min-w-0 gap-3">
+          <MailCheck className={cn('mt-0.5 h-5 w-5 shrink-0', verified ? 'text-emerald-300' : 'text-amber-300')} />
+          <div className="min-w-0">
             <div className="font-semibold text-white">{verified ? 'Email подтверждён' : 'Email не подтверждён'}</div>
-            <p className="mt-1 max-w-xl text-sm leading-6 text-slate-300">
+            <p className="mt-1 max-w-xl text-sm leading-5 text-slate-300 sm:leading-6">
               {verified
                 ? 'Вы сможете восстановить доступ к аккаунту через электронную почту.'
                 : 'Подтвердите электронную почту, чтобы восстановить пароль при потере доступа.'}
@@ -510,12 +521,12 @@ function EmailVerificationPanel({
           </div>
         </div>
         {!verified && (
-          <div className="w-full max-w-sm">
+          <div className="w-full min-w-0 max-w-sm">
             <CaptchaField token={captcha.token} onTokenChange={captcha.setToken} resetKey={captcha.resetKey} />
           </div>
         )}
         {!verified && (
-          <Button type="button" variant="outline" onClick={onRequest} disabled={loading || errorState.locked || !captcha.solved}>
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onRequest} disabled={loading || errorState.locked || !captcha.solved}>
             {loading
               ? 'Отправляем...'
               : errorState.locked && errorState.retryText
@@ -536,16 +547,16 @@ function BillingSection() {
   if (!user) return null;
 
   return (
-    <div className="space-y-5">
-      <Card className="border-amber-500/30 bg-amber-500/10">
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-6">
+    <div className="min-w-0 space-y-5">
+      <Card className="min-w-0 overflow-hidden border-amber-500/30 bg-amber-500/10">
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6">
           <div className="flex items-center gap-4">
             <span className="grid h-12 w-12 place-items-center rounded-md bg-amber-500/20 text-amber-300">
               <TokenIcon className="h-6 w-6" />
             </span>
             <div>
               <div className="text-sm text-slate-300">Ваш баланс</div>
-              <div className="text-3xl font-bold text-amber-300">{user.tokenBalance} <span className="text-base font-normal text-slate-300">токенов</span></div>
+              <div className="text-2xl font-bold text-amber-300 sm:text-3xl">{user.tokenBalance} <span className="text-base font-normal text-slate-300">токенов</span></div>
             </div>
           </div>
           <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
@@ -676,18 +687,23 @@ function TransactionsSection() {
   };
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-      <Card className="border-slate-800 bg-slate-900">
-        <CardHeader>
+    <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle>История транзакций</CardTitle>
-            <div className="flex flex-wrap gap-2">
+            <CardTitle className="text-xl sm:text-2xl">История транзакций</CardTitle>
+            <div className="flex max-w-full gap-1 overflow-x-auto rounded-md border border-slate-800 bg-slate-950/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {(['all', 'topup', 'spending'] as TxFilter[]).map((filter) => (
                 <Button
                   key={filter}
                   size="sm"
                   variant={txFilter === filter ? 'default' : 'outline'}
-                  className={cn(txFilter === filter && 'bg-violet-600 hover:bg-violet-500')}
+                  className={cn(
+                    'shrink-0 border-0 px-3',
+                    txFilter === filter
+                      ? 'bg-violet-600 hover:bg-violet-500'
+                      : 'bg-transparent text-slate-300 hover:bg-slate-800',
+                  )}
                   onClick={() => {
                     setTxFilter(filter);
                     setTxPage(1);
@@ -699,7 +715,7 @@ function TransactionsSection() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
           {txData.isLoading ? (
             <Skeleton className="h-36" />
           ) : !txData.data || txData.data.items.length === 0 ? (
@@ -707,7 +723,7 @@ function TransactionsSection() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="min-w-[680px] w-full text-left">
                   <thead className="text-xs uppercase tracking-wide text-slate-400">
                     <tr className="border-b border-slate-800">
                       <th className="px-3 py-2">Дата</th>
@@ -726,11 +742,11 @@ function TransactionsSection() {
         </CardContent>
       </Card>
 
-      <Card className="border-slate-800 bg-slate-900">
-        <CardHeader>
-          <CardTitle>Рублёвые платежи</CardTitle>
+      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+          <CardTitle className="text-xl sm:text-2xl">Рублёвые платежи</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
           {payData.isLoading ? (
             <Skeleton className="h-36" />
           ) : !payData.data || payData.data.items.length === 0 ? (
@@ -738,7 +754,7 @@ function TransactionsSection() {
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
+                <table className="min-w-[720px] w-full text-left">
                   <thead className="text-xs uppercase tracking-wide text-slate-400">
                     <tr className="border-b border-slate-800">
                       <th className="px-3 py-2">Дата</th>
@@ -775,14 +791,14 @@ function TransactionsSection() {
 
 function NotificationsSection() {
   return (
-    <Card className="border-slate-800 bg-slate-900">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+      <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+        <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
           <Bell className="h-5 w-5 text-violet-300" />
           Настройки уведомлений
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
         <p className="text-sm leading-6 text-slate-400">
           Email-уведомления о готовых проектах, платежах и важных изменениях появятся в P7c.
         </p>
@@ -813,14 +829,14 @@ function DangerSection() {
   };
 
   return (
-    <Card className="border-red-500/40 bg-slate-900">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-red-300">
+    <Card className="min-w-0 overflow-hidden border-red-500/40 bg-slate-900">
+      <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+        <CardTitle className="flex items-center gap-2 text-xl text-red-300 sm:text-2xl">
           <ShieldAlert className="h-5 w-5" />
           Удалить аккаунт
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
         <Alert variant="destructive">
           <AlertDescription>
             Удаление аккаунта необратимо. Все ваши данные, проекты и заказы будут удалены через 30 дней.
@@ -855,7 +871,7 @@ function Pagination({
 }) {
   if (totalPages <= 1) return null;
   return (
-    <div className="mt-4 flex items-center justify-end gap-2">
+    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
       <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onChange(page - 1)}>
         Назад
       </Button>

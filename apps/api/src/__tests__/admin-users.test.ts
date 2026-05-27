@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { prisma, ProjectStatus, ServiceCategory, ProcessingType } from '@allvision/database';
+import { prisma, ProjectStatus, ProcessingType } from '@allvision/database';
 import { signAccessToken } from '../utils/jwt';
 
 const { app } = require('../app') as typeof import('../app');
@@ -34,7 +34,7 @@ beforeAll(async () => {
       title: `Users ${RUN_ID} Service`,
       shortDesc: 'Users test service',
       description: 'Users test service',
-      category: ServiceCategory.NOSTALGIA,
+      category: "NOSTALGIA",
       priceTokens: 10,
       costUsd: 0,
       galleryImages: [],

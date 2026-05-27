@@ -176,6 +176,11 @@ adminServicesRouter.post('/', uploadServiceAssets, async (req: Request, res: Res
       : undefined;
     if (video) uploaded.push(video);
 
+    const categoryDef = await prisma.serviceCategoryDef.findUnique({ where: { code: body.category } });
+    if (!categoryDef) {
+      throw new HttpError(400, 'CATEGORY_NOT_FOUND', `Категория "${body.category}" не существует`);
+    }
+
     const aggregate = await prisma.service.aggregate({ _max: { sortOrder: true } });
     const sortOrder = body.sortOrder ?? (aggregate._max.sortOrder ?? 0) + 1;
 
@@ -238,7 +243,13 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
     if (body.title !== undefined) data.title = body.title;
     if (body.shortDesc !== undefined) data.shortDesc = body.shortDesc;
     if (body.description !== undefined) data.description = body.description;
-    if (body.category !== undefined) data.category = body.category;
+    if (body.category !== undefined) {
+      const categoryDef = await prisma.serviceCategoryDef.findUnique({ where: { code: body.category } });
+      if (!categoryDef) {
+        throw new HttpError(400, 'CATEGORY_NOT_FOUND', `Категория "${body.category}" не существует`);
+      }
+      data.category = body.category;
+    }
     if (body.priceCoinsStandard !== undefined) {
       data.priceCoinsStandard = body.priceCoinsStandard;
       data.priceTokens = body.priceCoinsStandard;

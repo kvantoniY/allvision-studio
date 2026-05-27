@@ -21,6 +21,7 @@ export class MockPaymentProvider implements PaymentProvider {
     userId: string;
     purpose: 'topup' | 'order';
     providerPaymentId?: string;
+    expiresAt?: Date;
     metadata: Record<string, string>;
   }): Promise<{ paymentId: string; confirmationUrl: string }> {
     const paymentId = params.providerPaymentId ?? params.metadata.paymentId ?? `mock_${crypto.randomUUID()}`;

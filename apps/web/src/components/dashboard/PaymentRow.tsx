@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import type { Payment, PaymentStatus } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -17,6 +20,21 @@ const STATUS_COLOR: Record<PaymentStatus, string> = {
   FAILED: 'bg-red-500/20 text-red-300',
   CANCELLED: 'bg-slate-600 text-slate-300',
 };
+
+function paymentExpiresAt(payment: Payment) {
+  if (!payment.expiresAt) return null;
+  const value = new Date(payment.expiresAt as Date | string);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function formatRemaining(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+}
 
 export function PaymentRow({
   payment,
@@ -48,7 +66,18 @@ export function PaymentRow({
     ? metadata.confirmationParams as Record<string, unknown>
     : undefined;
   const confirmationHref = confirmationUrl ?? `/mock-payment/${payment.providerPaymentId ?? payment.id}`;
-  const resumeLabel = isResuming ? 'Проверяем...' : 'Завершить оплату';
+  const expiresAt = useMemo(() => paymentExpiresAt(payment), [payment]);
+  const [now, setNow] = useState(() => Date.now());
+  const remainingMs = expiresAt ? expiresAt.getTime() - now : null;
+  const paymentExpired = payment.status === 'PENDING' && remainingMs !== null && remainingMs <= 0;
+  const canContinuePayment = payment.status === 'PENDING' && !paymentExpired;
+  const resumeLabel = isResuming ? 'Проверяем...' : 'Продолжить оплату';
+
+  useEffect(() => {
+    if (payment.status !== 'PENDING' || !expiresAt) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt, payment.status]);
 
   return (
     <tr className="border-b border-slate-800">
@@ -58,18 +87,25 @@ export function PaymentRow({
       </td>
       <td className="py-3 px-3 text-sm">{purpose}</td>
       <td className="py-3 px-3">
-        <span
-          className={cn(
-            'inline-block rounded-md px-2 py-1 text-xs font-medium',
-            STATUS_COLOR[payment.status],
-          )}
-        >
-          {STATUS_LABEL[payment.status]}
-        </span>
+        <div className="space-y-1">
+          <span
+            className={cn(
+              'inline-block rounded-md px-2 py-1 text-xs font-medium',
+              paymentExpired ? 'bg-slate-600 text-slate-300' : STATUS_COLOR[payment.status],
+            )}
+          >
+            {paymentExpired ? 'Время истекло' : STATUS_LABEL[payment.status]}
+          </span>
+          {payment.status === 'PENDING' && expiresAt ? (
+            <div className={cn('text-xs', paymentExpired ? 'text-slate-500' : 'text-amber-200')}>
+              {paymentExpired ? 'Срок оплаты истёк' : `Осталось ${formatRemaining(remainingMs ?? 0)}`}
+            </div>
+          ) : null}
+        </div>
       </td>
       <td className="py-3 px-3">
         <div className="flex flex-wrap items-center gap-2">
-          {payment.status === 'PENDING' && confirmationMethod === 'POST' && confirmationParams ? (
+          {canContinuePayment && confirmationMethod === 'POST' && confirmationParams ? (
             <form
               method="POST"
               action={confirmationHref}
@@ -86,16 +122,20 @@ export function PaymentRow({
                 {resumeLabel}
               </Button>
             </form>
-          ) : payment.status === 'PENDING' ? (
+          ) : canContinuePayment ? (
             onResume ? (
               <Button size="sm" variant="default" disabled={isResuming} onClick={() => onResume(payment)}>
                 {resumeLabel}
               </Button>
             ) : (
               <Button asChild size="sm" variant="default">
-                <Link href={confirmationHref}>Завершить оплату</Link>
+                <Link href={confirmationHref}>Продолжить оплату</Link>
               </Button>
             )
+          ) : paymentExpired ? (
+            <Button size="sm" variant="outline" disabled>
+              Время истекло
+            </Button>
           ) : payment.status === 'FAILED' || payment.status === 'CANCELLED' ? (
             <Button size="sm" variant="outline" disabled={isRepeating} onClick={() => onRepeat?.(payment)}>
               Повторить покупку

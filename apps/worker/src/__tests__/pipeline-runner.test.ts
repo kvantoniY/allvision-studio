@@ -7,7 +7,6 @@ import {
   prisma,
   ProcessingType,
   ProjectStatus,
-  ServiceCategory,
   type Service,
   type User,
 } from '@allvision/database';
@@ -95,7 +94,7 @@ async function createService(): Promise<Service> {
       title: 'Worker Pipeline Service',
       shortDesc: 'Pipeline test',
       description: 'Pipeline test',
-      category: ServiceCategory.NOSTALGIA,
+      category: "NOSTALGIA",
       priceTokens: 0,
       costUsd: 0,
       galleryImages: [],

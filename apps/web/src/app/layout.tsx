@@ -35,12 +35,19 @@ export const metadata: Metadata = {
     type: 'website',
     images: [
       {
-        url: 'https://picsum.photos/seed/allvision-og/1200/630',
-        width: 1200,
-        height: 630,
+        url: '/logo_socialnetwork.png',
+        width: 1731,
+        height: 909,
         alt: 'Allvision Studio',
       },
     ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Allvision Studio',
+    description:
+      'AI-сервис для создания и обработки медиа. Улучшение старых фото, оживление, трендовые видео, персональные мультики и сказки для детей.',
+    images: ['/logo_socialnetwork.png'],
   },
   robots: {
     index: true,

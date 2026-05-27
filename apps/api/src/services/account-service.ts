@@ -9,7 +9,7 @@ import type {
 } from '@allvision/shared';
 import { HttpError } from '../utils/http-error';
 import { signAccessToken, signRefreshToken } from '../utils/jwt';
-import { reconcilePaymentList } from './payment-service';
+import { expirePendingPayments, reconcilePaymentList } from './payment-service';
 
 const BCRYPT_COST = 12;
 
@@ -118,6 +118,7 @@ export async function listPayments(
   params: { page: number; limit: number },
 ): Promise<Paginated<any>> {
   const { page, limit } = params;
+  await expirePendingPayments();
   const [items, total] = await Promise.all([
     prisma.payment.findMany({
       where: { userId },

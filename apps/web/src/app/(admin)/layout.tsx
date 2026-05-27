@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/brand-logo';
 import { requireAdminPage } from '@/lib/auth';
 import { AdminSidebarNav } from '@/components/admin/AdminSidebarNav';
 
@@ -11,7 +12,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <header className="border-b border-rose-500/20 bg-zinc-950/95">
         <div className="flex h-16 items-center justify-between px-5 lg:px-8">
           <Link href="/admin/services" className="flex items-center gap-2 font-semibold">
-            <Sparkles className="h-5 w-5 text-rose-400" />
+            <BrandLogo className="h-6 w-auto" />
             <span>Allvision Admin</span>
           </Link>
           <div className="flex items-center gap-4 text-sm">
@@ -28,7 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </header>
 
       <div className="flex min-h-[calc(100vh-64px)]">
-        <aside className="hidden w-64 shrink-0 border-r border-zinc-800 bg-zinc-950 p-4 lg:block">
+        <aside className="sticky top-16 hidden h-[calc(100vh-64px)] w-60 shrink-0 overflow-y-auto border-r border-zinc-800 bg-zinc-950 p-4 lg:block">
           <AdminSidebarNav />
         </aside>
         <main className="min-w-0 flex-1 bg-zinc-950">

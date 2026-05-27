@@ -1,4 +1,6 @@
-import type { ProcessingType, ServiceCategory } from '@allvision/database';
+import type { ProcessingType } from '@allvision/database';
+
+export type ServiceCategory = string;
 
 export type PublicService = {
   id: string;
@@ -101,6 +103,19 @@ export type PublicMediaAsset = {
   mimeType: string;
   sortOrder: number;
 };
+
+export type PublicServiceCategory = {
+  code: string;
+  title: string;
+  description: string | null;
+  shortDescription: string | null;
+  iconName: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  isFeatured: boolean;
+};
+
+export type PublicServiceCategoriesResponse = { categories: PublicServiceCategory[] };
 
 export type PublicStylePreset = {
   id: string;

@@ -3,7 +3,6 @@ import {
   prisma,
   ProcessingType,
   ProjectStatus,
-  ServiceCategory,
 } from '@allvision/database';
 import { signAccessToken } from '../utils/jwt';
 
@@ -56,7 +55,7 @@ beforeAll(async () => {
       title: `Readonly ${RUN_ID} Service`,
       shortDesc: 'Readonly test service',
       description: 'Readonly test service',
-      category: ServiceCategory.NOSTALGIA,
+      category: "NOSTALGIA",
       priceTokens: 10,
       costUsd: 0,
       galleryImages: [],

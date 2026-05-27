@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Grid3X3, Home, LogOut, Menu, Palette, Sparkles, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { BrandLogo } from '@/components/ui/brand-logo';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { DashboardSidebarMobile } from '@/components/dashboard/DashboardSidebarMobile';
@@ -61,7 +62,7 @@ export function Header() {
         <div className="flex items-center gap-2">
           {userWorkspaceRoute && <DashboardSidebarMobile />}
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <Sparkles className="h-5 w-5 text-primary" />
+            <BrandLogo className="h-6 w-auto" />
             <span>Allvision Studio</span>
           </Link>
         </div>

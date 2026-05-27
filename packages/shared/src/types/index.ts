@@ -2,7 +2,6 @@
 export {
   Role,
   MessengerType,
-  ServiceCategory,
   ProcessingType,
   ProjectStatus,
   OrderType,
@@ -23,6 +22,7 @@ export {
 export type {
   User,
   Service,
+  ServiceCategoryDef,
   Trend,
   Project,
   Order,

@@ -77,28 +77,11 @@ import {
   useUpdateAdminServiceMutation,
 } from '@/store/api/admin-services-api';
 import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '@/store/api/admin-settings-api';
+import { useListAdminServiceCategoriesQuery } from '@/store/api/admin-service-categories-api';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { SourceSelector, type AvailableSourceStep } from './SourceSelector';
 
-const editableCategories: ServiceCategory[] = [
-  'NOSTALGIA',
-  'TRENDS_MEMES',
-  'KIDS_HEROES',
-  'SPECIAL_OCCASIONS',
-];
-
-const categoryLabels: Record<string, string> = {
-  NOSTALGIA: 'Ностальгия',
-  TRENDS_MEMES: 'Тренды и мемы',
-  KIDS_HEROES: 'Дети-герои',
-  SPECIAL_OCCASIONS: 'Особые поводы',
-  PHOTO_RESTORE: 'Фото: восстановление',
-  PHOTO_ANIMATE: 'Фото: анимация',
-  TREND: 'Тренды Studio v1',
-  CARTOON_CUSTOM: 'Мульт на заказ',
-  REALISTIC_CUSTOM: 'Реалистичное видео',
-  FAIRY_TALE: 'Сказки',
-};
+// Categories are now loaded dynamically from API (ServiceCategoryDef). Form fetches the list at render time.
 
 const fieldTypeLabels: Record<UserInputField['type'], string> = {
   text: 'Текст',
@@ -152,7 +135,7 @@ function defaultUserInputForm(): UserInputField[] {
 }
 
 function normaliseCategory(category?: ServiceCategory | null): ServiceCategory {
-  return category && editableCategories.includes(category) ? category : 'NOSTALGIA';
+  return category ?? '';
 }
 
 function normalisePipeline(value: AdminService['pipelineConfig'] | undefined): PipelineStep[] {
@@ -172,14 +155,15 @@ function normaliseUserInputForm(value: AdminService['userInputForm'] | undefined
 }
 
 function initialDraft(service?: AdminService): FormDraft {
+  const pro = service?.priceCoinsPro ?? service?.priceCoinsStandard ?? service?.priceTokens ?? 200;
   return {
     slug: service?.slug ?? '',
     title: service?.title ?? '',
     shortDesc: service?.shortDesc ?? '',
     description: service?.description ?? '',
     category: normaliseCategory(service?.category),
-    priceCoinsStandard: service?.priceCoinsStandard ?? service?.priceTokens ?? 200,
-    priceCoinsPro: service?.priceCoinsPro ?? Math.max((service?.priceTokens ?? 200) * 2, 400),
+    priceCoinsStandard: pro,
+    priceCoinsPro: pro,
     isActive: service?.isActive ?? true,
     isFeatured: service?.isFeatured ?? false,
     pipelineConfig: normalisePipeline(service?.pipelineConfig),
@@ -870,29 +854,27 @@ function BlockParamsForm({
         const description = sourceMeta?.description ?? schema.description;
 
         if (key === 'model' || isTierModelSchema(schema)) {
-          const current = isRecord(value[key]) ? value[key] : defaultValueForSchema(schema, block, key);
-          const record = isRecord(current) ? current : {};
+          // Single-tier: Pro is the only tier shipped. Mirror selection into { standard, pro } for backend compat.
+          const current = value[key];
+          let modelSlug = '';
+          if (typeof current === 'string') modelSlug = current;
+          else if (isRecord(current) && typeof current.pro === 'string') modelSlug = current.pro;
+          else if (isRecord(current) && typeof current.standard === 'string') modelSlug = current.standard;
+          if (!modelSlug) modelSlug = preferredModel(block.supportedModels, 'pro');
           return (
             <div key={key} className="md:col-span-2">
               <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
-              <div className="mt-2 grid gap-3 md:grid-cols-2">
-                {(['standard', 'pro'] as const).map((tier) => (
-                  <div key={tier} className="space-y-1">
-                    <span className="text-xs uppercase text-slate-500">{tier === 'standard' ? 'Стандарт' : 'Pro'}</span>
-                    <select
-                      value={selectValue(record[tier]) || preferredModel(block.supportedModels, tier)}
-                      onChange={(event) => update(key, { ...record, [tier]: event.target.value })}
-                      className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
-                    >
-                      {block.supportedModels.map((model) => (
-                        <option key={model.slug} value={model.slug}>
-                          {model.title} · {effectiveModelPriceCoins(model, modelPriceOverrides)} токенов
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              <select
+                value={modelSlug}
+                onChange={(event) => update(key, { standard: event.target.value, pro: event.target.value })}
+                className="mt-2 h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+              >
+                {block.supportedModels.map((model) => (
+                  <option key={model.slug} value={model.slug}>
+                    {model.title} · {effectiveModelPriceCoins(model, modelPriceOverrides)} коинов
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
           );
         }
@@ -1294,11 +1276,13 @@ function UserInputFormBuilder({
                                 disabled={field.type === 'tier'}
                                 className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
                               >
-                                {Object.entries(fieldTypeLabels).map(([type, label]) => (
-                                  <option key={type} value={type}>
-                                    {label}
-                                  </option>
-                                ))}
+                                {Object.entries(fieldTypeLabels)
+                                  .filter(([type]) => type !== 'tier' || field.type === 'tier')
+                                  .map(([type, label]) => (
+                                    <option key={type} value={type}>
+                                      {label}
+                                    </option>
+                                  ))}
                               </select>
                             </div>
                             <div className="space-y-2">
@@ -1601,6 +1585,14 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const [updateService, updateState] = useUpdateAdminServiceMutation();
   const [testRun, testRunState] = useTestRunAdminServiceMutation();
   const settings = useGetAdminSettingsQuery();
+  const categoriesQuery = useListAdminServiceCategoriesQuery();
+  const availableCategories = categoriesQuery.data?.items ?? [];
+  const categoriesLoading = categoriesQuery.isLoading;
+  useEffect(() => {
+    if (draft.category) return;
+    if (availableCategories.length === 0) return;
+    setDraft((current) => (current.category ? current : { ...current, category: availableCategories[0].code }));
+  }, [availableCategories, draft.category]);
   const [updateSettings, updateSettingsState] = useUpdateAdminSettingsMutation();
   const blocks = blocksData?.blocks;
   const usdToRub = settings.data?.settings.usdToRub ?? 80;
@@ -1760,15 +1752,19 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
             <select
               id="category"
               value={draft.category}
-              onChange={(event) => updateDraft({ category: event.target.value as ServiceCategory })}
+              onChange={(event) => updateDraft({ category: event.target.value })}
               className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
             >
-              {editableCategories.map((category) => (
-                <option key={category} value={category}>
-                  {categoryLabels[category]}
+              <option value="" disabled>{categoriesLoading ? 'Загрузка...' : 'Выберите категорию'}</option>
+              {availableCategories.map((category) => (
+                <option key={category.code} value={category.code}>
+                  {category.title}
                 </option>
               ))}
             </select>
+            {!categoriesLoading && availableCategories.length === 0 && (
+              <p className="text-xs text-amber-300">Сначала создайте хотя бы одну категорию в разделе «Категории».</p>
+            )}
           </div>
           <div className="space-y-2 lg:col-span-2">
             <Label htmlFor="title">Название</Label>
@@ -1793,27 +1789,18 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
       </Section>
 
-      <details className={cn('rounded-lg border p-5', marginTone(Math.min(standardMargin.marginPercent ?? 0, proMargin.marginPercent ?? 0)))}>
+      <details className={cn('rounded-lg border p-5', marginTone(proMargin.marginPercent ?? 0))}>
         <summary className="cursor-pointer font-semibold text-white">Как работает эта услуга</summary>
         <div className="mt-4 space-y-3 text-sm">
           <p className="text-slate-200">{pipelineSentence(draft.pipelineConfig, blocks)}</p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div>
-              <div className="text-slate-400">Стандарт</div>
-              <div>Себестоимость {formatMoney({ usd: pricingSummary.standard.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
-              <div>Цена {formatMoney({ coins: draft.priceCoinsStandard }, { primary: 'coins', showAll: true, usdToRub })}</div>
-              <div>Маржа {standardMargin.marginPercent === null ? 'н/д' : `${standardMargin.marginPercent.toFixed(1)}%`} · {formatMoney({ usd: standardMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
-            </div>
-            <div>
-              <div className="text-slate-400">Pro</div>
-              <div>Себестоимость {formatMoney({ usd: pricingSummary.pro.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
-              <div>Цена {formatMoney({ coins: draft.priceCoinsPro }, { primary: 'coins', showAll: true, usdToRub })}</div>
-              <div>Маржа {proMargin.marginPercent === null ? 'н/д' : `${proMargin.marginPercent.toFixed(1)}%`} · {formatMoney({ usd: proMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
-            </div>
+          <div>
+            <div>Себестоимость {formatMoney({ usd: pricingSummary.pro.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
+            <div>Цена {formatMoney({ coins: draft.priceCoinsPro }, { primary: 'coins', showAll: true, usdToRub })}</div>
+            <div>Маржа {proMargin.marginPercent === null ? 'н/д' : `${proMargin.marginPercent.toFixed(1)}%`} · {formatMoney({ usd: proMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
           </div>
-          {(standardMargin.profitCoins < 0 || proMargin.profitCoins < 0) && (
+          {proMargin.profitCoins < 0 && (
             <div className="rounded-md border border-red-700 bg-red-950/60 p-3 font-medium text-red-100">
-              Услуга убыточна на {formatMoney({ rub: Math.abs(Math.min(standardMargin.profitCoins, proMargin.profitCoins)) }, { primary: 'rub' })} за каждую генерацию. Поднимите цену.
+              Услуга убыточна на {formatMoney({ rub: Math.abs(proMargin.profitCoins) }, { primary: 'rub' })} за каждую генерацию. Поднимите цену.
             </div>
           )}
         </div>
@@ -1855,33 +1842,24 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
       </Section>
 
-      <Section title="Цены" description="Себестоимость считается по блокам и выбранным моделям.">
+      <Section title="Цена" description="Себестоимость считается по блокам и выбранным моделям.">
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-          <div className="grid gap-5 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="priceStandard">Цена Стандарт, коины (legacy)</Label>
-              <Input
-                id="priceStandard"
-                type="number"
-                min={1}
-                value={draft.priceCoinsStandard}
-                onChange={(event) => updateDraft({ priceCoinsStandard: Number(event.target.value) })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="pricePro">Цена Pro, коины (используется фронтом)</Label>
-              <Input
-                id="pricePro"
-                type="number"
-                min={1}
-                value={draft.priceCoinsPro}
-                onChange={(event) => updateDraft({ priceCoinsPro: Number(event.target.value) })}
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="pricePro">Цена услуги, коины</Label>
+            <Input
+              id="pricePro"
+              type="number"
+              min={1}
+              value={draft.priceCoinsPro}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                updateDraft({ priceCoinsPro: next, priceCoinsStandard: next });
+              }}
+            />
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
             <div className="text-sm text-slate-400">Себестоимость</div>
-            <div className="mt-2 text-lg font-semibold text-white">Стандарт: ~{costStandard} токенов · Pro: ~{costPro} токенов</div>
+            <div className="mt-2 text-lg font-semibold text-white">~{costPro} коинов</div>
             <p className="mt-2 text-xs text-slate-500">Рекомендуем минимум 3-4× себестоимости.</p>
           </div>
         </div>

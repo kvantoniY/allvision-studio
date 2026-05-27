@@ -7,4 +7,5 @@ export * from './characters';
 export * from './scenes';
 export * from './admin-scenario-templates';
 export * from './admin-services';
+export * from './admin-service-categories';
 export * from './episodes';

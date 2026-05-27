@@ -54,6 +54,7 @@ type RobokassaConfig = {
   statusTimeoutMs: number;
   apiUrl: string;
   webUrl: string;
+  expirationTimeZone: string;
 };
 
 function env(name: string) {
@@ -97,7 +98,23 @@ function getConfig(): RobokassaConfig {
     statusTimeoutMs: positiveIntEnv('ROBOKASSA_STATUS_TIMEOUT_MS', ROBOKASSA_STATUS_TIMEOUT_MS),
     apiUrl: (process.env.PUBLIC_API_URL ?? 'http://localhost:4000').replace(/\/+$/, ''),
     webUrl: (process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000').replace(/\/+$/, ''),
+    expirationTimeZone: env('ROBOKASSA_EXPIRATION_TIME_ZONE') ?? 'Europe/Moscow',
   };
+}
+
+function formatRobokassaExpirationDate(value: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    hourCycle: 'h23',
+  }).formatToParts(value);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}T${byType.hour}:${byType.minute}`;
 }
 
 function rublesFromKopecks(amountRub: number) {
@@ -487,6 +504,7 @@ export class RobokassaPaymentProvider implements PaymentProvider {
     userId: string;
     purpose: 'topup' | 'order';
     providerPaymentId?: string;
+    expiresAt?: Date;
     metadata: Record<string, string>;
   }): Promise<PaymentConfirmation> {
     const config = getConfig();
@@ -543,6 +561,10 @@ export class RobokassaPaymentProvider implements PaymentProvider {
       FailUrl2Method: failUrl2Method,
       ...shpParams,
     };
+
+    if (params.expiresAt) {
+      confirmationParams.ExpirationDate = formatRobokassaExpirationDate(params.expiresAt, config.expirationTimeZone);
+    }
 
     if (params.metadata.customerEmail) {
       confirmationParams.Email = params.metadata.customerEmail;

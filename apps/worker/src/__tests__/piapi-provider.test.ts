@@ -1,4 +1,4 @@
-import { prisma, ProcessingType, ProjectStatus, ServiceCategory } from '@allvision/database';
+import { prisma, ProcessingType, ProjectStatus } from '@allvision/database';
 import { QUEUE_NAMES } from '@allvision/shared';
 import { queueConcurrencyFor } from '../index';
 import { PiAPIProvider } from '../providers/piapi-provider';
@@ -83,7 +83,7 @@ describe('PiAPI provider safety', () => {
         title: 'PiAPI timeout test service',
         shortDesc: 'PiAPI timeout test',
         description: 'PiAPI timeout test',
-        category: ServiceCategory.NOSTALGIA,
+        category: "NOSTALGIA",
         priceTokens: 0,
         costUsd: 0,
         galleryImages: [],

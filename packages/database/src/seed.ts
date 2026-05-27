@@ -1,6 +1,21 @@
 import 'dotenv/config';
 import bcrypt from 'bcrypt';
-import { prisma, ProcessingType, ServiceCategory } from './index';
+import { prisma, ProcessingType } from './index';
+
+// Category codes used by the seed. The category metadata (title, sortOrder, ...) lives in ServiceCategoryDef
+// and is seeded by SQL migration 20260527150000_service_categories_table. Code stays as a plain string here.
+const ServiceCategory = {
+  PHOTO_RESTORE: 'PHOTO_RESTORE',
+  PHOTO_ANIMATE: 'PHOTO_ANIMATE',
+  TREND: 'TREND',
+  CARTOON_CUSTOM: 'CARTOON_CUSTOM',
+  REALISTIC_CUSTOM: 'REALISTIC_CUSTOM',
+  FAIRY_TALE: 'FAIRY_TALE',
+  NOSTALGIA: 'NOSTALGIA',
+  TRENDS_MEMES: 'TRENDS_MEMES',
+  KIDS_HEROES: 'KIDS_HEROES',
+  SPECIAL_OCCASIONS: 'SPECIAL_OCCASIONS',
+} as const;
 import { migrateMediaAssets } from './migrate-media-assets';
 
 const BCRYPT_COST = 12;

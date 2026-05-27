@@ -81,7 +81,7 @@ function assetRefsFromInputs(value: unknown): string[] {
 export default function StudioPage() {
   return (
     <AuthGuard>
-      <div className="container py-8">
+      <div className="container max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <StudioContent />
       </div>
     </AuthGuard>
@@ -100,35 +100,43 @@ function StudioContent() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-full space-y-5 sm:space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2 text-sm text-violet-300">
             <Palette className="h-4 w-4" />
             Личная библиотека
           </div>
-          <h1 className="mt-2 text-3xl font-bold text-white">Студия</h1>
+          <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Студия</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">
             Сохраняйте аватары и локации, чтобы потом использовать их как референсы в чате и услугах.
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div
+        role="tablist"
+        aria-label="Разделы студии"
+        className="inline-flex w-full max-w-full gap-1 overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/80 p-1 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto"
+      >
         {[
           { id: 'avatars' as const, label: 'Аватары' },
           { id: 'locations' as const, label: 'Локации' },
           { id: 'history' as const, label: 'История генераций' },
         ].map((item) => (
-          <Button
+          <button
             key={item.id}
             type="button"
-            variant={tab === item.id ? 'default' : 'outline'}
+            role="tab"
+            aria-selected={tab === item.id}
             onClick={() => setTab(item.id)}
-            className={cn(tab === item.id && 'bg-violet-600 hover:bg-violet-500')}
+            className={cn(
+              'shrink-0 rounded-md px-3.5 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white',
+              tab === item.id && 'bg-violet-600 text-white shadow-sm hover:bg-violet-500',
+            )}
           >
             {item.label}
-          </Button>
+          </button>
         ))}
       </div>
 
@@ -153,7 +161,7 @@ function StudioContent() {
         />
       )}
       {tab === 'history' && (
-        <Card className="border-slate-800 bg-slate-900">
+        <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
           <CardContent className="p-0">
             <div className="divide-y divide-slate-800">
               {(projects.data?.items ?? []).map((project) => (
@@ -162,7 +170,7 @@ function StudioContent() {
                   href={`/dashboard/projects/${project.id}`}
                   className="flex flex-wrap items-center justify-between gap-3 p-4 transition hover:bg-slate-800/70"
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-medium text-white">{project.title}</div>
                     <div className="mt-1 text-xs text-slate-500">
                       {formatDate(project.createdAt)} · {project.mode === 'library-generation' ? 'Генерация для библиотеки' : project.mode === 'free-chat' ? 'Allvision AI' : 'Услуга'}
@@ -205,18 +213,18 @@ function AssetSection({
   const meta = kindLabels[kind];
   const Icon = meta.icon;
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+    <div className="min-w-0 space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h2 className="text-xl font-semibold text-white">{meta.title}</h2>
           <p className="mt-1 text-sm text-slate-400">{meta.empty}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={onUpload}>
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <Button type="button" variant="outline" className="flex-1 sm:flex-none" onClick={onUpload}>
             <Upload className="h-4 w-4" />
             Загрузить фото
           </Button>
-          <Button type="button" onClick={onGenerate} className="bg-violet-600 hover:bg-violet-500">
+          <Button type="button" onClick={onGenerate} className="flex-1 bg-violet-600 hover:bg-violet-500 sm:flex-none">
             <Wand2 className="h-4 w-4" />
             Создать образ
           </Button>
@@ -224,21 +232,21 @@ function AssetSection({
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, index) => (
-            <Card key={index} className="h-64 border-slate-800 bg-slate-900" />
+            <Card key={index} className="h-64 min-w-0 border-slate-800 bg-slate-900" />
           ))}
         </div>
       ) : items.length === 0 ? (
-        <Card className="border-dashed border-slate-800 bg-slate-900">
-          <CardContent className="flex min-h-56 flex-col items-center justify-center p-8 text-center">
+        <Card className="min-w-0 overflow-hidden border-dashed border-slate-800 bg-slate-900">
+          <CardContent className="flex min-h-56 flex-col items-center justify-center p-5 text-center sm:p-8">
             <Icon className="h-10 w-10 text-slate-500" />
             <div className="mt-3 font-medium text-white">Здесь пока пусто</div>
             <p className="mt-1 max-w-sm text-sm text-slate-500">{meta.empty}</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {items.map((asset) => <AssetCard key={asset.id} asset={asset} onVariation={() => onVariation(asset)} />)}
         </div>
       )}
@@ -274,7 +282,7 @@ function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation:
   };
 
   return (
-    <Card className="group overflow-hidden border-slate-800 bg-slate-900">
+    <Card className="group min-w-0 overflow-hidden border-slate-800 bg-slate-900">
       <div className="relative aspect-square bg-slate-950">
         {isVideo ? (
           <video src={asset.publicUrl} className="h-full w-full object-cover" muted playsInline />
@@ -301,7 +309,7 @@ function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation:
           </div>
         ) : (
           <div>
-            <div className="font-semibold text-white">{asset.title}</div>
+            <div className="truncate font-semibold text-white">{asset.title}</div>
             <div className="mt-1 text-xs text-slate-500">{formatDate(asset.createdAt)} · {originLabel(asset)}</div>
           </div>
         )}

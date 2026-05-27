@@ -4,6 +4,7 @@ import type { HomeLandingContent } from '@/lib/home-landing-content';
 import type {
   ContactInput,
   ContactResponse,
+  PublicServiceCategoriesResponse,
   PublicServiceResponse,
   PublicServicesResponse,
   PublicSettingsResponse,
@@ -23,7 +24,7 @@ export type PublicHomePageResponse = {
 export const publicApi = createApi({
   reducerPath: 'publicApi',
   baseQuery: createBaseQueryWithReauth('/api/public'),
-  tagTypes: ['Services', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets', 'StylePresets', 'HomePage'],
+  tagTypes: ['Services', 'ServiceCategories', 'Trends', 'ScenarioTemplates', 'TokenPackages', 'PublicSettings', 'MediaAssets', 'StylePresets', 'HomePage'],
   endpoints: (build) => ({
     getHomePageContent: build.query<PublicHomePageResponse, void>({
       query: () => ({ url: '/home-page' }),
@@ -32,6 +33,10 @@ export const publicApi = createApi({
     getServices: build.query<PublicServicesResponse, void>({
       query: () => ({ url: '/services' }),
       providesTags: ['Services'],
+    }),
+    getServiceCategories: build.query<PublicServiceCategoriesResponse, void>({
+      query: () => ({ url: '/service-categories' }),
+      providesTags: ['ServiceCategories'],
     }),
     getService: build.query<PublicServiceResponse, string>({
       query: (slug) => ({ url: `/services/${slug}` }),
@@ -83,6 +88,7 @@ export const publicApi = createApi({
 
 export const {
   useGetServicesQuery,
+  useGetServiceCategoriesQuery,
   useGetHomePageContentQuery,
   useGetServiceQuery,
   useGetTrendsQuery,

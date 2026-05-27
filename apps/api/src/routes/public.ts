@@ -14,6 +14,7 @@ import type {
   ContactResponse,
   PublicSettings,
   PublicMediaAssetsResponse,
+  PublicServiceCategoriesResponse,
 } from '@allvision/shared';
 import { prisma } from '@allvision/database';
 import { HttpError } from '../utils/http-error';
@@ -137,6 +138,28 @@ function parseHomePageContent(value: string | null | undefined) {
     return null;
   }
 }
+
+publicRouter.get('/service-categories', async (_req: Request, res: Response<PublicServiceCategoriesResponse>, next: NextFunction) => {
+  try {
+    const categories = await prisma.serviceCategoryDef.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+      select: {
+        code: true,
+        title: true,
+        description: true,
+        shortDescription: true,
+        iconName: true,
+        sortOrder: true,
+        isActive: true,
+        isFeatured: true,
+      },
+    });
+    res.json({ categories });
+  } catch (e) {
+    next(e);
+  }
+});
 
 publicRouter.get('/services', async (_req: Request, res: Response<PublicServicesResponse>, next: NextFunction) => {
   try {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, CreditCard, Loader2, LockKeyhole, WalletCards } from 'lucide-react';
 import type { Payment } from '@allvision/shared';
@@ -37,16 +37,47 @@ function paymentDescription(payment: Payment) {
   return `Оплата заказа #${payment.id.slice(0, 8)}`;
 }
 
+function paymentExpiresAt(payment: Payment | undefined) {
+  if (!payment?.expiresAt) return null;
+  const value = new Date(payment.expiresAt as Date | string);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function formatRemaining(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
 export default function MockPaymentPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { toast } = useToast();
   const paymentId = params.id;
-  const { data: payment, isLoading, isError } = useGetPaymentQuery(paymentId, { skip: !paymentId });
+  const { data: payment, isLoading, isError } = useGetPaymentQuery(paymentId, { skip: !paymentId, pollingInterval: 5000 });
   const [scenario, setScenario] = useState<'succeeded' | 'failed' | null>(null);
+  const expiresAt = useMemo(() => paymentExpiresAt(payment), [payment]);
+  const [now, setNow] = useState(() => Date.now());
+  const remainingMs = expiresAt ? expiresAt.getTime() - now : null;
+  const isExpired = payment?.status === 'PENDING' && remainingMs !== null && remainingMs <= 0;
+
+  useEffect(() => {
+    if (payment?.status !== 'PENDING' || !expiresAt) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt, payment?.status]);
 
   const simulate = async (event: 'succeeded' | 'failed') => {
     if (!payment) return;
+    if (isExpired) {
+      toast({
+        title: 'Срок оплаты истёк',
+        description: 'Создайте новый платёж и попробуйте ещё раз.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setScenario(event);
 
     try {
@@ -78,8 +109,18 @@ export default function MockPaymentPage() {
     }
   };
 
-  const simulateTimeout = () => {
-    router.replace('/profile?tab=billing');
+  const simulateTimeout = async () => {
+    if (!payment) return;
+    setScenario('failed');
+    try {
+      await fetch(`${API_URL}/api/payments/webhook`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId, event: 'cancelled' }),
+      });
+    } finally {
+      router.replace('/profile?tab=billing&payment=cancelled');
+    }
   };
 
   return (
@@ -126,6 +167,14 @@ export default function MockPaymentPage() {
                 href="/profile?tab=billing"
                 label="В личный кабинет"
               />
+            ) : isExpired ? (
+              <StateMessage
+                icon={<AlertCircle className="h-8 w-8" />}
+                title="Срок оплаты истёк"
+                description="Этот платёж больше нельзя продолжить. Создайте новую покупку или повторите её из истории."
+                href="/profile?tab=billing"
+                label="В биллинг"
+              />
             ) : payment.status !== 'PENDING' ? (
               <StateMessage
                 icon={<AlertCircle className="h-8 w-8" />}
@@ -152,6 +201,12 @@ export default function MockPaymentPage() {
                       <span>ID платежа</span>
                       <span className="font-mono text-xs text-slate-500">{payment.providerPaymentId ?? payment.id}</span>
                     </div>
+                    {expiresAt ? (
+                      <div className="flex justify-between gap-4">
+                        <span>Осталось</span>
+                        <span className="font-semibold text-orange-600">{formatRemaining(remainingMs ?? 0)}</span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -189,7 +244,7 @@ export default function MockPaymentPage() {
                   <Button
                     size="lg"
                     className="h-14 w-full bg-sky-600 text-base text-white hover:bg-sky-500"
-                    disabled={scenario !== null}
+                    disabled={scenario !== null || isExpired}
                     onClick={() => simulate('succeeded')}
                   >
                     {scenario === 'succeeded' ? (
@@ -206,12 +261,12 @@ export default function MockPaymentPage() {
                     <Button
                       type="button"
                       className="bg-emerald-600 text-white hover:bg-emerald-500"
-                      disabled={scenario !== null}
+                      disabled={scenario !== null || isExpired}
                       onClick={() => simulate('succeeded')}
                     >
                       ✅ Симулировать успех
                     </Button>
-                    <Button type="button" variant="outline" disabled={scenario !== null} onClick={() => simulate('failed')}>
+                    <Button type="button" variant="outline" disabled={scenario !== null || isExpired} onClick={() => simulate('failed')}>
                       ❌ Симулировать отказ
                     </Button>
                     <Button

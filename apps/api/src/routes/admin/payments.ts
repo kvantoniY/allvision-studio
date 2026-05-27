@@ -20,6 +20,7 @@ const listQuerySchema = z.object({
 adminPaymentsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const query = listQuerySchema.parse(req.query);
+    await payments.expirePendingPayments();
     const where: Prisma.PaymentWhereInput = {
       ...(query.status ? { status: query.status } : {}),
       ...(query.search
@@ -63,11 +64,18 @@ adminPaymentsRouter.get('/', async (req: Request, res: Response, next: NextFunct
 
 adminPaymentsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const payment = await prisma.payment.findUnique({
+    let payment = await prisma.payment.findUnique({
       where: { id: req.params.id },
       include: { user: { select: { id: true, email: true, tokenBalance: true } } },
     });
     if (!payment) throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
+    const normalizedPayment = await payments.expirePaymentIfNeeded(payment);
+    if (normalizedPayment.status !== payment.status) {
+      payment = await prisma.payment.findUniqueOrThrow({
+        where: { id: req.params.id },
+        include: { user: { select: { id: true, email: true, tokenBalance: true } } },
+      });
+    }
 
     const tokenTx = await prisma.tokenTransaction.findFirst({
       where: { refId: payment.id, reason: 'topup' },
@@ -85,10 +93,13 @@ adminPaymentsRouter.post('/:id/recheck', async (req: Request, res: Response, nex
     const payment = await prisma.payment.findUnique({ where: { id: req.params.id } });
     if (!payment) throw new HttpError(404, 'PAYMENT_NOT_FOUND', 'Payment not found');
 
-    const reconciled = await payments.reconcilePaymentWithProvider(payment, {
+    let reconciled = await payments.reconcilePaymentWithProvider(payment, {
       bypassCache: true,
       allowRevive: true,
     });
+    if (reconciled.status === 'PENDING') {
+      reconciled = await payments.expirePaymentIfNeeded(reconciled);
+    }
     res.json({ status: reconciled.status, tokensAdded: reconciled.tokensAdded });
   } catch (err) {
     next(err);

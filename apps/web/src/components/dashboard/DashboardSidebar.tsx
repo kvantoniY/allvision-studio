@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LogOut, ShieldCheck, Sparkles } from 'lucide-react';
+import { LogOut, ShieldCheck } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { BrandLogo } from '@/components/ui/brand-logo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
@@ -37,7 +38,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
   return (
     <div className="flex h-full min-h-0 flex-col gap-6 p-4">
       <Link href="/" onClick={onNavigate} className="flex items-center gap-2 px-2 py-1 font-semibold text-white">
-        <Sparkles className="h-5 w-5 text-violet-300" />
+        <BrandLogo className="h-6 w-auto" />
         <span>Allvision Studio</span>
       </Link>
 

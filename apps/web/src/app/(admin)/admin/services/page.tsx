@@ -38,30 +38,12 @@ import {
   useUpdateAdminServiceMutation,
 } from '@/store/api/admin-services-api';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
+import { useListAdminServiceCategoriesQuery } from '@/store/api/admin-service-categories-api';
 
 type StatusFilter = 'all' | 'active' | 'hidden';
 type FeaturedFilter = 'all' | 'featured';
 
-const categoryLabels: Record<string, string> = {
-  NOSTALGIA: 'Ностальгия',
-  TRENDS_MEMES: 'Тренды и мемы',
-  KIDS_HEROES: 'Дети-герои',
-  SPECIAL_OCCASIONS: 'Особые поводы',
-  PHOTO_RESTORE: 'Фото restore',
-  PHOTO_ANIMATE: 'Фото animate',
-  TREND: 'Studio trends',
-  CARTOON_CUSTOM: 'Мульт на заказ',
-  REALISTIC_CUSTOM: 'Реалистичное видео',
-  FAIRY_TALE: 'Сказки',
-};
-
-const filterCategories: Array<ServiceCategory | 'all'> = [
-  'all',
-  'NOSTALGIA',
-  'TRENDS_MEMES',
-  'KIDS_HEROES',
-  'SPECIAL_OCCASIONS',
-];
+// Categories are loaded dynamically from API.
 
 type ApiError = {
   data?: {
@@ -183,6 +165,13 @@ export default function AdminServicesPage() {
   const [testGenerationId, setTestGenerationId] = useState<string | null>(null);
   const { data: blocksData } = useGetAdminBlocksQuery();
   const settings = useGetAdminSettingsQuery();
+  const categoriesQuery = useListAdminServiceCategoriesQuery();
+  const availableCategories = categoriesQuery.data?.items ?? [];
+  const categoryTitleByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const item of availableCategories) map.set(item.code, item.title);
+    return map;
+  }, [availableCategories]);
   const usdToRub = settings.data?.settings.usdToRub ?? 80;
   const { data, isLoading } = useListAdminServicesQuery({
     page: 1,
@@ -278,9 +267,10 @@ export default function AdminServicesPage() {
           onChange={(event) => setCategory(event.target.value as ServiceCategory | 'all')}
           className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
         >
-          {filterCategories.map((item) => (
-            <option key={item} value={item}>
-              {item === 'all' ? 'Все категории' : categoryLabels[item]}
+          <option value="all">Все категории</option>
+          {availableCategories.map((item) => (
+            <option key={item.code} value={item.code}>
+              {item.title}
             </option>
           ))}
         </select>
@@ -372,7 +362,7 @@ export default function AdminServicesPage() {
                   <div className="mt-1 truncate text-xs text-slate-500">{service.slug}</div>
                 </td>
                 <td className="px-4 py-3">
-                  <Badge className="bg-zinc-800 text-slate-200">{categoryLabels[service.category] ?? service.category}</Badge>
+                  <Badge className="bg-zinc-800 text-slate-200">{categoryTitleByCode.get(service.category) ?? service.category}</Badge>
                 </td>
                 <td className="px-4 py-3">
                   <PricingSummaryCell standardMargin={standardMargin} proMargin={proMargin} usdToRub={usdToRub} />

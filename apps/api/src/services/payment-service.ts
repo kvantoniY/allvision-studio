@@ -6,7 +6,7 @@ import { HttpError } from '../utils/http-error';
 import { getPaymentProvider } from './payment-provider';
 import { logger } from '../utils/logger';
 
-type PaymentListItem = Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;
+type PaymentListItem = Pick<Payment, 'id' | 'amountRub' | 'tokensAdded' | 'expiresAt'>;
 type WebhookHandleResult = { ok: true; providerPaymentId?: string };
 type PaymentCreateResult = {
   payment: PaymentListItem;
@@ -61,6 +61,48 @@ function providerStatusCacheMaxEntries() {
   return positiveIntEnv('PAYMENT_PROVIDER_STATUS_CACHE_MAX', 500);
 }
 
+function paymentExpiresInMs() {
+  return positiveIntEnv('PAYMENT_EXPIRES_IN_MS', 15 * 60 * 1000);
+}
+
+function paymentExpiresAt() {
+  return new Date(Date.now() + paymentExpiresInMs());
+}
+
+export async function expirePendingPayments(now = new Date()): Promise<number> {
+  const result = await prisma.payment.updateMany({
+    where: {
+      status: 'PENDING',
+      expiresAt: { lte: now },
+    },
+    data: { status: 'CANCELLED' },
+  });
+  if (result.count > 0) {
+    logger.info(`[payments] expired pending payments count=${result.count}`);
+  }
+  return result.count;
+}
+
+export async function expirePaymentIfNeeded(payment: Payment): Promise<Payment> {
+  if (payment.status !== 'PENDING' || !payment.expiresAt || payment.expiresAt > new Date()) {
+    return payment;
+  }
+
+  const result = await prisma.payment.updateMany({
+    where: { id: payment.id, status: 'PENDING' },
+    data: { status: 'CANCELLED' },
+  });
+  if (result.count === 0) {
+    return (await prisma.payment.findUnique({ where: { id: payment.id } })) ?? payment;
+  }
+
+  logger.info(`[payments] expired payment id=${payment.id} expiresAt=${payment.expiresAt.toISOString()}`);
+  return {
+    ...payment,
+    status: 'CANCELLED',
+  };
+}
+
 function pruneProviderStatusCache() {
   const ttl = providerStatusCacheMs();
   const now = Date.now();
@@ -108,42 +150,44 @@ async function readProviderStatus(payment: Payment, options?: { bypassCache?: bo
 type ReconcileOptions = { bypassCache?: boolean; allowRevive?: boolean };
 
 export async function reconcilePaymentWithProvider(payment: Payment, options?: ReconcileOptions): Promise<Payment> {
-  if (!payment.providerPaymentId) return payment;
+  const normalizedPayment = options?.allowRevive ? payment : await expirePaymentIfNeeded(payment);
+  if (!normalizedPayment.providerPaymentId) return normalizedPayment;
 
   const allowRevive = options?.allowRevive ?? false;
   const canReconcile =
-    payment.status === 'PENDING' || (allowRevive && (payment.status === 'CANCELLED' || payment.status === 'FAILED'));
-  if (!canReconcile) return payment;
+    normalizedPayment.status === 'PENDING' ||
+    (allowRevive && (normalizedPayment.status === 'CANCELLED' || normalizedPayment.status === 'FAILED'));
+  if (!canReconcile) return normalizedPayment;
 
   let providerStatus: ProviderStatus;
   try {
-    providerStatus = await readProviderStatus(payment, { bypassCache: options?.bypassCache });
+    providerStatus = await readProviderStatus(normalizedPayment, { bypassCache: options?.bypassCache });
   } catch (error) {
     logger.warn(
-      `[payments] provider status sync failed paymentId=${payment.id} provider=${payment.provider} providerPaymentId=${payment.providerPaymentId}: ${(error as Error).message}`,
+      `[payments] provider status sync failed paymentId=${normalizedPayment.id} provider=${normalizedPayment.provider} providerPaymentId=${normalizedPayment.providerPaymentId}: ${(error as Error).message}`,
     );
-    return payment;
+    return normalizedPayment;
   }
 
-  if (providerStatus === 'pending') return payment;
+  if (providerStatus === 'pending') return normalizedPayment;
 
-  if (payment.status !== 'PENDING' && providerStatus !== 'succeeded') {
-    return payment;
+  if (normalizedPayment.status !== 'PENDING' && providerStatus !== 'succeeded') {
+    return normalizedPayment;
   }
 
   logger.info(
-    `[payments] reconcile applying event paymentId=${payment.id} dbStatus=${payment.status} providerStatus=${providerStatus}`,
+    `[payments] reconcile applying event paymentId=${normalizedPayment.id} dbStatus=${normalizedPayment.status} providerStatus=${providerStatus}`,
   );
 
   await applyPaymentEvent({
     type: providerStatusToEventType(providerStatus),
-    paymentId: payment.id,
-    providerPaymentId: payment.providerPaymentId,
-    amountRub: payment.amountRub,
+    paymentId: normalizedPayment.id,
+    providerPaymentId: normalizedPayment.providerPaymentId,
+    amountRub: normalizedPayment.amountRub,
     metadata: { source: 'reconciliation' },
   });
 
-  return (await prisma.payment.findUnique({ where: { id: payment.id } })) ?? payment;
+  return (await prisma.payment.findUnique({ where: { id: normalizedPayment.id } })) ?? normalizedPayment;
 }
 
 export async function reconcilePaymentList(items: Payment[], options?: ReconcileOptions) {
@@ -189,6 +233,7 @@ export async function createTopupPayment(
   const customerEmail = await getUserEmail(userId);
   const tokensAdded = pkg.tokens + pkg.bonus;
   const provider = paymentProviderName();
+  const expiresAt = paymentExpiresAt();
   const metadata = {
     tokenPackageId: pkg.id,
     packageTitle: pkg.title,
@@ -205,6 +250,7 @@ export async function createTopupPayment(
       provider,
       purpose: 'TOPUP',
       metadata,
+      expiresAt,
     },
   });
 
@@ -219,6 +265,7 @@ export async function createTopupPayment(
       userId,
       purpose: 'topup',
       providerPaymentId,
+      expiresAt,
       metadata: {
         paymentId: payment.id,
         tokenPackageId: pkg.id,
@@ -246,6 +293,7 @@ export async function createTopupPayment(
         id: updated.id,
         amountRub: updated.amountRub,
         tokensAdded: updated.tokensAdded,
+        expiresAt: updated.expiresAt,
       },
       confirmationUrl: providerPayment.confirmationUrl,
       confirmationMethod: providerPayment.confirmationMethod,
@@ -294,6 +342,7 @@ export async function createOrderPayment(
   };
   const customerEmail = await getUserEmail(userId);
   const provider = paymentProviderName();
+  const expiresAt = paymentExpiresAt();
 
   const payment = await prisma.payment.create({
     data: {
@@ -304,6 +353,7 @@ export async function createOrderPayment(
       provider,
       purpose: 'ORDER',
       metadata,
+      expiresAt,
     },
   });
 
@@ -314,6 +364,7 @@ export async function createOrderPayment(
       userId,
       purpose: 'order',
       providerPaymentId,
+      expiresAt,
       metadata: {
         paymentId: payment.id,
         orderId: order.id,
@@ -344,6 +395,7 @@ export async function createOrderPayment(
         id: updated.id,
         amountRub: updated.amountRub,
         tokensAdded: updated.tokensAdded,
+        expiresAt: updated.expiresAt,
       },
       confirmationUrl: providerPayment.confirmationUrl,
       confirmationMethod: providerPayment.confirmationMethod,
@@ -381,26 +433,26 @@ export async function getPaymentForUser(userId: string, id: string): Promise<Pay
   if (payment.userId !== userId) {
     throw new HttpError(403, 'FORBIDDEN', 'Payment belongs to another user');
   }
-  return payment;
+  return expirePaymentIfNeeded(payment);
 }
 
 export async function getPaymentStatusForUser(
   userId: string,
   id: string,
   options?: { force?: boolean },
-): Promise<{ status: Payment['status']; tokensAdded: number | null }> {
+): Promise<{ status: Payment['status']; tokensAdded: number | null; expiresAt: Date | null }> {
   const initial = await getPaymentForUser(userId, id);
   const payment = await reconcilePaymentWithProvider(initial, {
     bypassCache: true,
     allowRevive: options?.force === true,
   });
-  return { status: payment.status, tokensAdded: payment.tokensAdded };
+  return { status: payment.status, tokensAdded: payment.tokensAdded, expiresAt: payment.expiresAt };
 }
 
 export async function forceRecheckPaymentForUser(
   userId: string,
   id: string,
-): Promise<{ status: Payment['status']; tokensAdded: number | null; providerStatus: ProviderStatus | null }> {
+): Promise<{ status: Payment['status']; tokensAdded: number | null; expiresAt: Date | null; providerStatus: ProviderStatus | null }> {
   const initial = await getPaymentForUser(userId, id);
   let providerStatus: ProviderStatus | null = null;
   if (initial.providerPaymentId && initial.provider === paymentProviderName()) {
@@ -414,7 +466,7 @@ export async function forceRecheckPaymentForUser(
   logger.info(
     `[payments] forceRecheck paymentId=${payment.id} userId=${userId} providerStatus=${providerStatus ?? 'unknown'} dbStatus=${payment.status}`,
   );
-  return { status: payment.status, tokensAdded: payment.tokensAdded, providerStatus };
+  return { status: payment.status, tokensAdded: payment.tokensAdded, expiresAt: payment.expiresAt, providerStatus };
 }
 
 type WebhookHandleOptions = {
@@ -708,6 +760,7 @@ async function applyPaymentEvent(event: WebhookEvent): Promise<WebhookHandleResu
 }
 
 export async function pollPendingPaymentsOnce(params?: { batchSize?: number; maxAgeMs?: number }) {
+  const expired = await expirePendingPayments();
   const provider = paymentProviderName();
   const batchSize = params?.batchSize ?? positiveIntEnv('PAYMENT_PENDING_POLL_BATCH_SIZE', 20);
   const maxAgeMs = params?.maxAgeMs ?? positiveIntEnv('PAYMENT_PENDING_POLL_MAX_AGE_MS', 7 * 24 * 60 * 60 * 1000);
@@ -745,7 +798,7 @@ export async function pollPendingPaymentsOnce(params?: { batchSize?: number; max
     await reconcilePaymentList(revivablePayments, { allowRevive: true, bypassCache: true });
   }
 
-  return { checked: pendingPayments.length, revived: revivablePayments.length };
+  return { checked: pendingPayments.length, revived: revivablePayments.length, expired };
 }
 
 export const _testHelpers = {

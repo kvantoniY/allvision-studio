@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, ImagePlus, Library, Loader2, Lock, Sparkles, Star, X } from 'lucide-react';
-import type { PublicService, ServiceCategory } from '@allvision/shared';
+import type { PublicService } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useGetServiceQuery, useLaunchServiceMutation } from '@/store/api/services-api';
+import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import { useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { cn } from '@/lib/utils';
@@ -57,12 +58,7 @@ type FormValues = Record<string, string>;
 type FileValues = Record<string, File | undefined>;
 type MediaAssetOption = { id: string; title: string; publicUrl: string; thumbnailUrl?: string | null; kind?: string; mimeType?: string };
 
-const categoryLabels: Record<string, string> = {
-  NOSTALGIA: 'Ностальгия',
-  TRENDS_MEMES: 'Тренды и мемы',
-  KIDS_HEROES: 'Дети-герои',
-  SPECIAL_OCCASIONS: 'Особые поводы',
-};
+// Category labels loaded from /api/public/service-categories via useGetServiceCategoriesQuery.
 
 function mediaUrl(value?: string | null) {
   if (!value) return null;
@@ -669,6 +665,8 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const { user, isLoading: isAuthLoading } = useAuth();
   const { toast } = useToast();
   const { data, isLoading, isError } = useGetServiceQuery(slug);
+  const { data: categoriesData } = useGetServiceCategoriesQuery();
+  const categoryLabel = (code: string) => categoriesData?.categories.find((item) => item.code === code)?.title ?? code;
   const [launchService, launchState] = useLaunchServiceMutation();
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
@@ -836,7 +834,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="bg-slate-800 text-indigo-100">
-                {categoryLabels[service.category as ServiceCategory] ?? service.category}
+                {categoryLabel(service.category)}
               </Badge>
               {service.isFeatured && (
                 <Badge className="border-amber-300/60 bg-amber-400 text-slate-950">

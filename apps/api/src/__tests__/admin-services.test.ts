@@ -4,7 +4,6 @@ import {
   prisma,
   ProcessingType,
   ProjectStatus,
-  ServiceCategory,
   type Service,
 } from '@allvision/database';
 import { app } from '../app';
@@ -77,8 +76,7 @@ async function createService(data = validData()): Promise<Service> {
       title: data.title,
       shortDesc: data.shortDesc,
       description: data.description,
-      category: data.category as ServiceCategory,
-      priceTokens: data.priceCoinsStandard,
+      category: data.category as priceTokens: data.priceCoinsStandard,
       costUsd: 0,
       galleryImages: [],
       isActive: data.isActive,
@@ -301,7 +299,7 @@ describe('/api/admin/services', () => {
         title: `Service ${RUN_ID} Legacy`,
         shortDesc: 'Legacy short description',
         description: 'Legacy description',
-        category: ServiceCategory.NOSTALGIA,
+        category: "NOSTALGIA",
         priceTokens: 100,
         costUsd: 0,
         galleryImages: [],

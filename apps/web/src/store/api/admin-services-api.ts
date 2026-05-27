@@ -3,17 +3,8 @@ import { createBaseQueryWithReauth } from './base-query';
 import type { BlockCatalogItem } from '@allvision/shared';
 import { publicApi } from './public-api';
 
-export type ServiceCategory =
-  | 'NOSTALGIA'
-  | 'TRENDS_MEMES'
-  | 'KIDS_HEROES'
-  | 'SPECIAL_OCCASIONS'
-  | 'PHOTO_RESTORE'
-  | 'PHOTO_ANIMATE'
-  | 'TREND'
-  | 'CARTOON_CUSTOM'
-  | 'REALISTIC_CUSTOM'
-  | 'FAIRY_TALE';
+// Category codes are now data-driven (ServiceCategoryDef table). Use the categories API to list.
+export type ServiceCategory = string;
 
 export type PipelineStep = {
   id: string;

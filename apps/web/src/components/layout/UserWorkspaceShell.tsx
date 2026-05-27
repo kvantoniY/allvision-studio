@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { LogOut } from 'lucide-react';
 
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { DashboardSidebarMobile } from '@/components/dashboard/DashboardSidebarMobile';
@@ -19,7 +20,7 @@ function initialsOf(name: string | null | undefined, email: string) {
 }
 
 export function UserWorkspaceShell({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const pathname = usePathname();
   const showPublicFooter = pathname === '/' || pathname?.startsWith('/services');
 
@@ -44,6 +45,14 @@ export function UserWorkspaceShell({ children }: { children: React.ReactNode }) 
                   <AvatarFallback>{initialsOf(user.name, user.email)}</AvatarFallback>
                 </Avatar>
               </Link>
+              <button
+                type="button"
+                onClick={() => { void logout(); }}
+                aria-label="Выйти"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-300 transition hover:border-rose-400 hover:text-rose-300"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}

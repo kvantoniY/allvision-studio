@@ -57,6 +57,7 @@ async function getUserBalance() {
 beforeAll(async () => {
   process.env.PAYMENT_PROVIDER = 'mock';
   process.env.PUBLIC_WEB_URL = 'http://localhost:3000';
+  process.env.PAYMENT_EXPIRES_IN_MS = '900000';
 
   await purge();
 
@@ -105,6 +106,7 @@ describe('POST /api/payments/topup', () => {
     expect(res.status).toBe(200);
     expect(res.body.payment.amountRub).toBe(49900);
     expect(res.body.payment.tokensAdded).toBe(550);
+    expect(res.body.payment.expiresAt).toBeTruthy();
     expect(res.body.confirmationUrl).toContain('/mock-payment/');
 
     const payment = await prisma.payment.findUniqueOrThrow({ where: { id: res.body.payment.id } });
@@ -112,6 +114,8 @@ describe('POST /api/payments/topup', () => {
     expect(payment.status).toBe('PENDING');
     expect(payment.provider).toBe('mock');
     expect(payment.providerPaymentId).toBe(payment.id);
+    expect(payment.expiresAt).not.toBeNull();
+    expect(payment.expiresAt!.getTime()).toBeGreaterThan(payment.createdAt.getTime());
     expect(res.body.confirmationUrl).toContain(payment.id);
   });
 
@@ -251,6 +255,21 @@ describe('GET /api/payments/:id/status', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('SUCCEEDED');
     expect(res.body.tokensAdded).toBe(550);
+  });
+
+  it('returns CANCELLED after payment expiration', async () => {
+    const paymentId = await createPendingTopup();
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const res = await agent.get(`/api/payments/${paymentId}/status`);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('CANCELLED');
+
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: paymentId } });
+    expect(payment.status).toBe('CANCELLED');
   });
 
   it('returns 403 for another user', async () => {

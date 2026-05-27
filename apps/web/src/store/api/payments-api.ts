@@ -5,7 +5,7 @@ import { accountApi } from './account-api';
 import { authApi } from './auth-api';
 
 export type CreatePaymentResponse = {
-  payment: Pick<Payment, 'id' | 'amountRub' | 'tokensAdded'>;
+  payment: Pick<Payment, 'id' | 'amountRub' | 'tokensAdded' | 'expiresAt'>;
   confirmationUrl: string;
   confirmationMethod?: 'GET' | 'POST';
   confirmationParams?: Record<string, string>;
@@ -36,12 +36,12 @@ export const paymentsApi = createApi({
       query: (id) => ({ url: `/${id}` }),
       providesTags: (_result, _error, id) => [{ type: 'Payment', id }],
     }),
-    getPaymentStatus: build.query<{ status: PaymentStatus; tokensAdded: number | null }, string>({
+    getPaymentStatus: build.query<{ status: PaymentStatus; tokensAdded: number | null; expiresAt: string | Date | null }, string>({
       query: (id) => ({ url: `/${id}/status` }),
       providesTags: (_result, _error, id) => [{ type: 'Payment', id }],
     }),
     recheckPayment: build.mutation<
-      { status: PaymentStatus; tokensAdded: number | null; providerStatus: string | null },
+      { status: PaymentStatus; tokensAdded: number | null; expiresAt: string | Date | null; providerStatus: string | null },
       string
     >({
       query: (id) => ({ url: `/${id}/recheck`, method: 'POST' }),

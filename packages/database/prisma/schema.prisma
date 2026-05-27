@@ -57,12 +57,12 @@ enum MessengerType {
 
 // === Каталог услуг ===
 model Service {
-  id             String          @id @default(cuid())
-  slug           String          @unique
+  id             String  @id @default(cuid())
+  slug           String  @unique
   title          String
-  description    String          @db.Text
+  description    String  @db.Text
   shortDesc      String
-  category       ServiceCategory
+  category       String
   priceTokens    Int
   costUsd        Float
   coverImage     String?
@@ -90,19 +90,18 @@ model Service {
   projects Project[]
 }
 
-enum ServiceCategory {
-  PHOTO_RESTORE
-  PHOTO_ANIMATE
-  TREND
-  CARTOON_CUSTOM
-  REALISTIC_CUSTOM
-  FAIRY_TALE
-
-  // Gift factory categories (P1+)
-  NOSTALGIA
-  TRENDS_MEMES
-  KIDS_HEROES
-  SPECIAL_OCCASIONS
+// === Определения категорий услуг (data-driven, P9.2+) ===
+model ServiceCategoryDef {
+  code             String   @id
+  title            String
+  description      String?  @db.Text
+  shortDescription String?  @db.Text
+  iconName         String?
+  sortOrder        Int      @default(0)
+  isActive         Boolean  @default(true)
+  isFeatured       Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 enum ProcessingType {
@@ -372,12 +371,15 @@ model Payment {
   purpose           PaymentPurpose
   metadata          Json?
   createdAt         DateTime       @default(now())
+  expiresAt         DateTime?
   paidAt            DateTime?
 
   user      User       @relation(fields: [userId], references: [id])
   order     Order?
   character Character?
   scene     Scene?
+
+  @@index([status, expiresAt])
 }
 
 enum PaymentStatus {

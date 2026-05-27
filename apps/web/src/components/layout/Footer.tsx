@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Instagram, MessageCircle, Music2, Send, Sparkles, Youtube } from 'lucide-react';
+import { Instagram, MessageCircle, Music2, Youtube } from 'lucide-react';
+import { BrandLogo } from '@/components/ui/brand-logo';
 import { merchantInfo } from '@/lib/merchant';
 import { serviceLinks } from '@/lib/public-content';
 
@@ -17,7 +18,6 @@ const socials = [
   { label: 'TikTok', icon: Music2 },
   { label: 'VK', icon: MessageCircle },
   { label: 'YouTube', icon: Youtube },
-  { label: 'Telegram', icon: Send },
 ];
 
 export function Footer() {
@@ -26,7 +26,7 @@ export function Footer() {
       <div className="container grid gap-10 py-12 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <Link href="/" className="flex items-center gap-2 font-semibold">
-            <Sparkles className="h-5 w-5 text-indigo-500" />
+            <BrandLogo className="h-6 w-auto" />
             <span>Allvision Studio</span>
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-6 text-muted-foreground">
@@ -81,12 +81,6 @@ export function Footer() {
                 {merchantInfo.email}
               </a>
             </li>
-            <li>
-              Telegram:{' '}
-              <a href="https://t.me/allvision_support" className="underline-offset-4 transition hover:text-foreground hover:underline">
-                {merchantInfo.supportTelegram}
-              </a>
-            </li>
             <li>Телефон: {merchantInfo.phone}</li>
             <li>Время работы: {merchantInfo.workingHours}</li>
           </ul>
@@ -97,9 +91,6 @@ export function Footer() {
         <div className="container flex flex-col gap-2 py-5 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
           <div>© 2026 {merchantInfo.brandName}. Все права защищены.</div>
           <div>{merchantInfo.legalName}, ИНН {merchantInfo.inn}, НПД</div>
-          <a href="#" className="underline-offset-4 transition hover:text-foreground hover:underline">
-            Сайт сделан с ❤️ и нейросетями
-          </a>
         </div>
       </div>
     </footer>

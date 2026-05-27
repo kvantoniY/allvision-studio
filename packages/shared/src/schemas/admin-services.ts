@@ -7,14 +7,14 @@ const booleanFromForm = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
-const serviceCategoryValues = [
-  'NOSTALGIA',
-  'TRENDS_MEMES',
-  'KIDS_HEROES',
-  'SPECIAL_OCCASIONS',
-] as const;
-
-export const adminServiceCategorySchema = z.enum(serviceCategoryValues);
+// Category codes are validated against the ServiceCategoryDef table at runtime in the API layer,
+// not here. Schema just enforces shape: short ASCII identifier.
+export const adminServiceCategorySchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(80)
+  .regex(/^[A-Z0-9_-]+$/, 'Category code must be UPPERCASE letters, digits, underscores or hyphens');
 
 export const adminServiceListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -272,8 +272,6 @@ function validateValueAgainstJsonSchema(value: unknown, schema: JsonSchemaObject
     if (schema.maximum !== undefined && value > schema.maximum) throw new Error(`PARAM_TOO_LARGE:${path}:${schema.maximum}`);
   }
 }
-
-export const serviceCategoryValuesForUi = serviceCategoryValues;
 
 export function formatAdminServiceValidationError(error: string): string {
   const [code, path, limit] = error.split(':');

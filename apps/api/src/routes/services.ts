@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { Prisma, prisma, type ServiceCategory } from '@allvision/database';
+import { Prisma, prisma } from '@allvision/database';
 import { userInputFormSchema, type UserInputFieldInput } from '@allvision/shared';
 import { requireAuth } from '../middleware/auth';
 import { uploadServiceLaunchInputs } from '../middleware/upload';
@@ -11,12 +11,13 @@ import * as queues from '../queues';
 
 export const servicesRouter = Router();
 
-const giftCategories: ServiceCategory[] = [
-  'NOSTALGIA',
-  'TRENDS_MEMES',
-  'KIDS_HEROES',
-  'SPECIAL_OCCASIONS',
-];
+async function listActiveCategoryCodes(): Promise<string[]> {
+  const items = await prisma.serviceCategoryDef.findMany({
+    where: { isActive: true },
+    select: { code: true },
+  });
+  return items.map((item) => item.code);
+}
 
 const publicServiceSelect = {
   id: true,
@@ -269,14 +270,15 @@ servicesRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
   try {
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const featured = parseBoolean(req.query.featured);
+    const activeCategories = await listActiveCategoryCodes();
+    const categoryFilter = category && activeCategories.includes(category)
+      ? { category }
+      : { category: { in: activeCategories } };
     const services = await prisma.service.findMany({
       where: {
         isActive: true,
-        category: { in: giftCategories },
         pipelineConfig: { not: Prisma.JsonNull },
-        ...(category && giftCategories.includes(category as ServiceCategory)
-          ? { category: category as ServiceCategory }
-          : {}),
+        ...categoryFilter,
         ...(featured === true ? { isFeatured: true } : {}),
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -290,11 +292,12 @@ servicesRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
 
 servicesRouter.get('/:slug', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const activeCategories = await listActiveCategoryCodes();
     const service = await prisma.service.findFirst({
       where: {
         slug: req.params.slug,
         isActive: true,
-        category: { in: giftCategories },
+        category: { in: activeCategories },
         pipelineConfig: { not: Prisma.JsonNull },
       },
       select: publicServiceDetailSelect,
@@ -313,11 +316,12 @@ servicesRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     const uploadedInputs: Array<{ key: string; url: string }> = [];
     try {
+      const activeCategories = await listActiveCategoryCodes();
       const service = await prisma.service.findFirst({
         where: {
           slug: req.params.slug,
           isActive: true,
-          category: { in: giftCategories },
+          category: { in: activeCategories },
           pipelineConfig: { not: Prisma.JsonNull },
         },
         select: serviceForLaunchSelect,

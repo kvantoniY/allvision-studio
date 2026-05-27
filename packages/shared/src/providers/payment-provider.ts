@@ -4,6 +4,7 @@ export interface PaymentProvider {
     userId: string;
     purpose: 'topup' | 'order';
     providerPaymentId?: string;
+    expiresAt?: Date;
     metadata: Record<string, string>;
   }): Promise<PaymentConfirmation>;
 

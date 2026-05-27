@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { AlertTriangle, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, Video, Volume2, VolumeX, X } from 'lucide-react';
+import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from 'react';
+import { AlertTriangle, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
 import { CHAT_MODELS, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,6 @@ import { TokenIcon } from '@/components/ui/token-icon';
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -21,7 +20,7 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
-import { useCreateChatMessageMutation, useGetChatModelsQuery } from '@/store/api/user-chat-api';
+import { useCreateChatMessageMutation, useGetChatModelsQuery, useUploadChatInputMutation } from '@/store/api/user-chat-api';
 import { InputSourcePicker, type SelectedInputSource } from './InputSourcePicker';
 
 type ChatFormProps = {
@@ -40,8 +39,8 @@ const categoryLabels: Record<ChatCategory, string> = {
   video: 'Видео',
 };
 
-function apiErrorMessage(error: unknown) {
-  return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Не удалось запустить генерацию';
+function apiErrorMessage(error: unknown, fallback = 'Не удалось запустить генерацию') {
+  return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? fallback;
 }
 
 function defaultModel(category: ChatCategory): ChatModelOption {
@@ -108,6 +107,23 @@ function sourceListValue(value: ChatAdvancedParams[string]): string[] {
   return [];
 }
 
+function fileMediaKind(file: File): SelectedInputSource['mediaKind'] | null {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type.startsWith('video/')) return 'video';
+  if (file.type.startsWith('audio/')) return 'audio';
+  const name = file.name.toLowerCase();
+  if (/\.(jpe?g|png|webp)$/.test(name)) return 'image';
+  if (/\.(mp4|mov)$/.test(name)) return 'video';
+  if (/\.(mp3|wav|ogg)$/.test(name)) return 'audio';
+  return null;
+}
+
+function modelAcceptsSource(model: ChatModelOption, mediaKind: SelectedInputSource['mediaKind']) {
+  if (mediaKind === 'image') return model.acceptsImageInput;
+  if (mediaKind === 'video') return model.acceptsVideoInput;
+  return model.acceptsAudioInput;
+}
+
 function modelFamilies(models: ChatModelOption[]) {
   const map = new Map<string, { slug: string; title: string; models: ChatModelOption[] }>();
   for (const model of models) {
@@ -125,6 +141,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const me = useGetMeQuery();
   const modelPricing = useGetChatModelsQuery();
   const [createMessage, createMessageState] = useCreateChatMessageMutation();
+  const [uploadInput, uploadInputState] = useUploadChatInputMutation();
   const [category, setCategory] = useState<ChatCategory>('image');
   const [modelSlug, setModelSlug] = useState(defaultModel('image').slug);
   const [prompt, setPrompt] = useState('');
@@ -133,6 +150,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [generateAudio, setGenerateAudio] = useState(false);
   const [source, setSource] = useState<SelectedInputSource | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [isDraggingReference, setIsDraggingReference] = useState(false);
   const [advancedParams, setAdvancedParams] = useState<ChatAdvancedParams>(() => defaultAdvancedParams(defaultModel('image')));
 
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
@@ -160,7 +178,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     (source.mediaKind === 'video' && !selectedModel.acceptsVideoInput) ||
     (source.mediaKind === 'audio' && !selectedModel.acceptsAudioInput)
   );
-  const canSubmit = prompt.trim().length > 0 && canPay && (!needsInput || !!source) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading;
+  const canSubmit = prompt.trim().length > 0 && canPay && (!needsInput || !!source) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -209,6 +227,56 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     onPromptConsumed?.();
   }, [initialPrompt, onPromptConsumed]);
 
+  const uploadReferenceFile = async (file: File) => {
+    const mediaKind = fileMediaKind(file);
+    if (!mediaKind) {
+      toast({ title: 'Этот тип файла нельзя прикрепить как референс', variant: 'destructive' });
+      return;
+    }
+    if (!canUseInput || !modelAcceptsSource(selectedModel, mediaKind)) {
+      toast({ title: `Модель ${selectedModel.title} не принимает такой референс`, variant: 'destructive' });
+      return;
+    }
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const result = await uploadInput(form).unwrap();
+      setSource({
+        ref: result.input.ref,
+        url: result.input.url,
+        title: file.name,
+        mediaKind: result.input.mediaKind,
+        origin: 'upload',
+      });
+      toast({ title: 'Файл прикреплен' });
+    } catch (error) {
+      toast({ title: apiErrorMessage(error, 'Не удалось прикрепить файл'), variant: 'destructive' });
+    }
+  };
+
+  const hasDraggedFiles = (event: DragEvent<HTMLDivElement>) => Array.from(event.dataTransfer.types).includes('Files');
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = canUseInput ? 'copy' : 'none';
+    if (canUseInput) setIsDraggingReference(true);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setIsDraggingReference(false);
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    setIsDraggingReference(false);
+    const file = event.dataTransfer.files?.[0];
+    if (file) await uploadReferenceFile(file);
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!canSubmit) {
@@ -242,9 +310,11 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   };
 
   const costText = `${estimatedCostCoins} токенов`;
-  const submitHint = referenceUnsupported
-    ? 'Референс не подходит модели'
-    : needsInput && !source
+  const submitHint = uploadInputState.isLoading
+    ? 'Файл загружается'
+    : referenceUnsupported
+      ? 'Референс не подходит модели'
+      : needsInput && !source
       ? 'Нужен референс'
       : missingAdvanced
         ? missingAdvanced
@@ -256,7 +326,15 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
   return (
     <form onSubmit={submit} className="mx-auto max-w-5xl">
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-2xl shadow-black/20">
+      <div
+        className={cn(
+          'relative overflow-hidden rounded-lg border bg-slate-900 shadow-2xl shadow-black/20 transition',
+          isDraggingReference ? 'border-violet-400 ring-2 ring-violet-500/35' : 'border-slate-800',
+        )}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         {(source || referenceUnsupported || !canPay || selectedModel.experimental) && (
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/45 px-3 py-2">
             {source && (
@@ -292,78 +370,85 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           </div>
         )}
 
-        <Textarea
-          value={prompt}
-          onChange={(event) => {
-            setPrompt(event.target.value);
-            if (submitAttempted) setSubmitAttempted(false);
-          }}
-          rows={2}
-          placeholder="Опишите результат: сюжет, стиль, камера, настроение..."
-          className="min-h-[76px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-        />
-
-        <div className="grid gap-3 border-t border-slate-800 px-3 py-3 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 lg:pr-2">
-            <CategoryControl category={category} onChange={setCategory} />
-            <ModelFamilyControl
-              selectedFamily={selectedFamily}
-              families={families}
-              onChange={(familySlug) => {
-                const next = families.find((family) => family.slug === familySlug);
-                if (next?.models[0]) setModelSlug(next.models[0].slug);
-              }}
-            />
-            <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
-            <AspectControl
-              value={aspectRatio}
-              values={selectedModel.supportedAspectRatios}
-              onChange={(value) => setAspectRatio(value as ChatAspectRatio)}
-            />
-            {category === 'video' && <DurationControl value={duration} values={selectedModel.durationOptions} onChange={setDuration} />}
-            {selectedModel.supportedResolutions.length > 0 && (
-              <ResolutionControl
-                value={typeof advancedParams.resolution === 'string' ? advancedParams.resolution : selectedModel.defaultResolution ?? selectedModel.supportedResolutions[0]}
-                values={selectedModel.supportedResolutions}
-                onChange={(value) => setAdvancedParams((current) => ({ ...current, resolution: value }))}
-              />
-            )}
-            {category === 'video' && (
-              <AudioControl
-                enabled={effectiveGenerateAudio}
-                supported={selectedModel.supportsAudio}
-                onChange={setGenerateAudio}
-              />
-            )}
-            {canUseInput ? (
-              <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact iconOnly />
-            ) : (
-              <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-400" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
-                <Paperclip className="h-4 w-4" />
-              </Button>
-            )}
-            <AdvancedParamsControl model={selectedModel} value={advancedParams} onChange={setAdvancedParams} />
-          </div>
-
-          <div className="flex flex-col gap-2 rounded-md border border-slate-800/70 bg-slate-950/45 p-2 sm:flex-row sm:items-center sm:justify-between lg:w-[260px] lg:shrink-0">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
-              <TokenIcon className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
-              <span className={canPay ? 'font-semibold text-amber-200' : 'font-semibold text-red-200'}>{costText}</span>
-              {submitHint && (
-                <span className={cn('basis-full sm:basis-auto', canPay ? 'text-slate-500' : 'text-red-200')}>{submitHint}</span>
-              )}
-              <span className="hidden text-slate-600 sm:inline">Баланс {balance}</span>
+        <div className="relative">
+          <Textarea
+            value={prompt}
+            onChange={(event) => {
+              setPrompt(event.target.value);
+              if (submitAttempted) setSubmitAttempted(false);
+            }}
+            rows={2}
+            placeholder="Опишите результат: сюжет, стиль, камера, настроение..."
+            className="min-h-[82px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            onKeyDown={(event) => {
+              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+          />
+          {(isDraggingReference || uploadInputState.isLoading) && (
+            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-sm">
+              <div className="inline-flex items-center gap-2 rounded-md border border-violet-400/50 bg-violet-500/15 px-3 py-2 text-sm font-semibold text-violet-100">
+                {uploadInputState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                {uploadInputState.isLoading ? 'Загружаем файл' : 'Отпустите файл, чтобы прикрепить'}
+              </div>
             </div>
-            <Button type="submit" disabled={!canSubmit} className="h-10 w-full shrink-0 bg-amber-500 px-4 text-slate-950 hover:bg-amber-400 sm:w-auto">
-              {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              Создать
-            </Button>
+          )}
+        </div>
+
+        <div className="border-t border-slate-800 px-3 py-2.5">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <CategoryControl category={category} onChange={setCategory} />
+              <ModelFamilyControl
+                selectedFamily={selectedFamily}
+                families={families}
+                onChange={(familySlug) => {
+                  const next = families.find((family) => family.slug === familySlug);
+                  if (next?.models[0]) setModelSlug(next.models[0].slug);
+                }}
+              />
+              <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
+              {canUseInput ? (
+                <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact iconOnly />
+              ) : (
+                <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-400" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
+                  <Paperclip className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+
+            <div className="flex w-full min-w-0 items-center gap-2 rounded-md border border-slate-800/80 bg-slate-950/55 px-2 py-1.5 md:w-auto md:max-w-[380px]">
+              <DetailedSettingsControl
+                model={selectedModel}
+                category={category}
+                aspectRatio={aspectRatio}
+                duration={duration}
+                generateAudio={effectiveGenerateAudio}
+                advancedParams={advancedParams}
+                onAspectRatioChange={setAspectRatio}
+                onDurationChange={setDuration}
+                onGenerateAudioChange={setGenerateAudio}
+                onAdvancedParamsChange={setAdvancedParams}
+              />
+              <div className="min-w-0 flex-1 text-xs text-slate-500">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="inline-flex items-center gap-1.5">
+                    <TokenIcon className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
+                    <span className={canPay ? 'font-semibold text-amber-200' : 'font-semibold text-red-200'}>{costText}</span>
+                  </span>
+                  <span className="text-slate-600">Баланс {balance}</span>
+                  {submitHint && (
+                    <span className={cn('basis-full truncate', canPay ? 'text-slate-400' : 'text-red-200')}>{submitHint}</span>
+                  )}
+                </div>
+              </div>
+              <Button type="submit" disabled={!canSubmit} className="h-9 shrink-0 bg-amber-500 px-4 text-slate-950 hover:bg-amber-400">
+                {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Создать
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -480,111 +565,6 @@ function ModelFunctionControl({
   );
 }
 
-function AspectControl({
-  value,
-  values,
-  onChange,
-}: {
-  value: string;
-  values: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950">
-          <Frame className="h-4 w-4 text-slate-400" />
-          {value}
-          <ChevronDown className="h-4 w-4 text-slate-500" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="border-slate-800 bg-slate-950 text-slate-100">
-        <DropdownMenuLabel>Формат</DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-slate-800" />
-        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-          {values.map((ratio) => (
-            <DropdownMenuRadioItem key={ratio} value={ratio} className="focus:bg-slate-900">
-              {ratio}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function DurationControl({ value, values, onChange }: { value: number; values: number[]; onChange: (value: number) => void }) {
-  const min = values.length ? Math.min(...values) : 1;
-  const max = values.length ? Math.max(...values) : 30;
-  return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950">
-          <Clock3 className="h-4 w-4 text-slate-400" />
-          {value} сек
-          <ChevronDown className="h-4 w-4 text-slate-500" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56 border-slate-800 bg-slate-950 text-slate-100">
-        <DropdownMenuLabel>Длительность</DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-slate-800" />
-        <div className="px-2 py-2">
-          <Input
-            type="number"
-            min={min}
-            max={max}
-            step={1}
-            value={value}
-            onChange={(event) => {
-              const next = Number(event.target.value);
-              if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, Math.round(next))));
-            }}
-            className="h-9 border-slate-700 bg-slate-900"
-          />
-        </div>
-        {values.map((item) => (
-          <DropdownMenuItem key={item} className="focus:bg-slate-900" onClick={() => onChange(item)}>
-            {item} секунд
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function ResolutionControl({
-  value,
-  values,
-  onChange,
-}: {
-  value: string;
-  values: string[];
-  onChange: (value: string) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 border-slate-700 bg-slate-950">
-          <Video className="h-4 w-4 text-slate-400" />
-          {value}
-          <ChevronDown className="h-4 w-4 text-slate-500" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="border-slate-800 bg-slate-950 text-slate-100">
-        <DropdownMenuLabel>Resolution</DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-slate-800" />
-        <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-          {values.map((resolution) => (
-            <DropdownMenuRadioItem key={resolution} value={resolution} className="focus:bg-slate-900">
-              {resolution}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 const advancedSectionsMeta = {
   references: {
     title: 'Референсы',
@@ -618,38 +598,150 @@ function advancedSectionForParam(param: PiAPIParamCapability): AdvancedSectionKe
   return 'prompt';
 }
 
-function AdvancedParamsControl({
+function DetailedSettingsControl({
   model,
-  value,
-  onChange,
+  category,
+  aspectRatio,
+  duration,
+  generateAudio,
+  advancedParams,
+  onAspectRatioChange,
+  onDurationChange,
+  onGenerateAudioChange,
+  onAdvancedParamsChange,
 }: {
   model: ChatModelOption;
-  value: ChatAdvancedParams;
-  onChange: (value: ChatAdvancedParams) => void;
+  category: ChatCategory;
+  aspectRatio: ChatAspectRatio;
+  duration: number;
+  generateAudio: boolean;
+  advancedParams: ChatAdvancedParams;
+  onAspectRatioChange: (value: ChatAspectRatio) => void;
+  onDurationChange: (value: number) => void;
+  onGenerateAudioChange: (value: boolean) => void;
+  onAdvancedParamsChange: (value: ChatAdvancedParams) => void;
 }) {
   const params = visibleAdvancedParams(model);
-  if (params.length === 0) return null;
-  const update = (key: string, next: ChatAdvancedParams[string]) => onChange({ ...value, [key]: next });
+  const update = (key: string, next: ChatAdvancedParams[string]) => onAdvancedParamsChange({ ...advancedParams, [key]: next });
   const sections = (Object.keys(advancedSectionsMeta) as AdvancedSectionKey[])
     .map((key) => ({ key, params: params.filter((param) => advancedSectionForParam(param) === key) }))
     .filter((section) => section.params.length > 0);
+  const resolutionValue = typeof advancedParams.resolution === 'string'
+    ? advancedParams.resolution
+    : model.defaultResolution ?? model.supportedResolutions[0] ?? '';
+  const durationValues = model.durationOptions.length > 0
+    ? model.durationOptions
+    : [model.defaultDurationSec ?? duration].filter((item): item is number => Number.isFinite(item));
+  const durationMin = model.minDurationSec ?? (durationValues.length ? Math.min(...durationValues) : 1);
+  const durationMax = model.maxDurationSec ?? (durationValues.length ? Math.max(...durationValues) : 30);
+  const AudioIcon = generateAudio ? Volume2 : VolumeX;
 
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950" title="Расширенные настройки" aria-label="Расширенные настройки">
+        <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950" title="Детальные настройки" aria-label="Детальные настройки">
           <Settings2 className="h-4 w-4 text-slate-400" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align="start"
+        align="end"
         side="top"
         sideOffset={8}
         className="max-h-[calc(100dvh-2rem)] w-[min(92vw,560px)] space-y-3 overflow-y-auto border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40"
       >
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{compactModelTitle(model.title)}</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">Показываются только параметры, которые есть в документации PiAPI для выбранной функции.</div>
+          <div className="mt-1 text-sm font-semibold text-white">{model.functionTitle || compactModelTitle(model.title)}</div>
+        </div>
+        <div className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
+          <div className="mb-3 text-sm font-semibold text-slate-100">Основные параметры</div>
+          <div className="grid gap-3 md:grid-cols-2">
+            {model.supportedAspectRatios.length > 0 && (
+              <label className="space-y-1 text-sm text-slate-100">
+                <span className="inline-flex items-center gap-2">
+                  <Frame className="h-4 w-4 text-slate-500" />
+                  Формат
+                </span>
+                <select
+                  value={aspectRatio}
+                  onChange={(event) => onAspectRatioChange(event.target.value as ChatAspectRatio)}
+                  className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                >
+                  {model.supportedAspectRatios.map((ratio) => (
+                    <option key={ratio} value={ratio}>{ratio}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {category === 'video' && (
+              <label className="space-y-1 text-sm text-slate-100">
+                <span className="inline-flex items-center gap-2">
+                  <Clock3 className="h-4 w-4 text-slate-500" />
+                  Длительность
+                </span>
+                {durationValues.length > 1 ? (
+                  <select
+                    value={String(duration)}
+                    onChange={(event) => onDurationChange(Number(event.target.value))}
+                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                  >
+                    {durationValues.map((item) => (
+                      <option key={item} value={item}>{item} сек</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    type="number"
+                    min={durationMin}
+                    max={durationMax}
+                    step={1}
+                    value={duration}
+                    onChange={(event) => {
+                      const next = Number(event.target.value);
+                      if (Number.isFinite(next)) onDurationChange(Math.min(durationMax, Math.max(durationMin, Math.round(next))));
+                    }}
+                    className="h-9 border-slate-700 bg-slate-900"
+                  />
+                )}
+              </label>
+            )}
+            {model.supportedResolutions.length > 0 && (
+              <label className="space-y-1 text-sm text-slate-100">
+                <span className="inline-flex items-center gap-2">
+                  <Video className="h-4 w-4 text-slate-500" />
+                  Качество
+                </span>
+                <select
+                  value={resolutionValue}
+                  onChange={(event) => update('resolution', event.target.value)}
+                  className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                >
+                  {model.supportedResolutions.map((resolution) => (
+                    <option key={resolution} value={resolution}>{resolution}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {category === 'video' && (
+              <div className="space-y-1 text-sm text-slate-100">
+                <span>Аудио</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    'h-9 w-full justify-start border-slate-700 bg-slate-900',
+                    generateAudio && 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100',
+                    !model.supportsAudio && 'text-slate-500',
+                  )}
+                  disabled={!model.supportsAudio}
+                  onClick={() => onGenerateAudioChange(!generateAudio)}
+                >
+                  <AudioIcon className="h-4 w-4" />
+                  {model.supportsAudio ? (generateAudio ? 'Со звуком' : 'Без звука') : 'Недоступно'}
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
         {sections.map((section) => {
           const meta = advancedSectionsMeta[section.key];
@@ -657,14 +749,13 @@ function AdvancedParamsControl({
             <div key={section.key} className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
               <div className="mb-3">
                 <div className="text-sm font-semibold text-slate-100">{meta.title}</div>
-                <div className="mt-0.5 text-xs leading-5 text-slate-500">{meta.description}</div>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 {section.params.map((param) => (
                   <AdvancedParamField
                     key={param.key}
                     param={param}
-                    value={value[param.key]}
+                    value={advancedParams[param.key]}
                     onChange={(next) => update(param.key, next)}
                   />
                 ))}
@@ -794,36 +885,5 @@ function AdvancedParamField({
         />
       )}
     </label>
-  );
-}
-
-function AudioControl({
-  enabled,
-  supported,
-  onChange,
-}: {
-  enabled: boolean;
-  supported: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  const Icon = enabled ? Volume2 : VolumeX;
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className={cn(
-        'h-9 border-slate-700 bg-slate-950',
-        enabled && 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100',
-        !supported && 'text-slate-500',
-      )}
-      disabled={!supported}
-      aria-pressed={enabled}
-      title={supported ? 'Включить или выключить генерацию звука' : 'Эта модель не генерирует звук'}
-      onClick={() => onChange(!enabled)}
-    >
-      <Icon className="h-4 w-4" />
-      <span className="hidden sm:inline">{supported ? (enabled ? 'Со звуком' : 'Без звука') : 'Звук недоступен'}</span>
-    </Button>
   );
 }

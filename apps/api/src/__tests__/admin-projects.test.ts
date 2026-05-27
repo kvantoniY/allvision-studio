@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { prisma, ProcessingType, ProjectStatus, ServiceCategory } from '@allvision/database';
+import { prisma, ProcessingType, ProjectStatus } from '@allvision/database';
 import { signAccessToken } from '../utils/jwt';
 
 const { app } = require('../app') as typeof import('../app');
@@ -31,7 +31,7 @@ beforeAll(async () => {
       title: `Projects ${RUN_ID} Service`,
       shortDesc: 'Projects test service',
       description: 'Projects test service',
-      category: ServiceCategory.TRENDS_MEMES,
+      category: "TRENDS_MEMES",
       priceTokens: 40,
       priceCoinsStandard: 40,
       priceCoinsPro: 90,

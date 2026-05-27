@@ -2,42 +2,35 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, Baby, Clapperboard, Gift, Heart, Sparkles } from 'lucide-react';
-import type { PublicService, ServiceCategory } from '@allvision/shared';
+import { AlertCircle, ArrowRight, Baby, Cake, Clapperboard, Flame, Gift, Heart, LayoutGrid, Sparkles } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { PublicService } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListServicesQuery } from '@/store/api/services-api';
-import { GIFT_CATEGORIES, giftServicePriceFrom } from '@/lib/gift-factory';
+import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
+import { categoryHref, giftServicePriceFrom } from '@/lib/gift-factory';
 import { Reveal } from './Reveal';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
-const categoryIcons: Record<ServiceCategory, typeof Heart> = {
-  NOSTALGIA: Heart,
-  TRENDS_MEMES: Clapperboard,
-  KIDS_HEROES: Baby,
-  SPECIAL_OCCASIONS: Gift,
-  PHOTO_RESTORE: Heart,
-  PHOTO_ANIMATE: Sparkles,
-  TREND: Clapperboard,
-  CARTOON_CUSTOM: Baby,
-  REALISTIC_CUSTOM: Gift,
-  FAIRY_TALE: Baby,
+const iconMap: Record<string, LucideIcon> = {
+  Heart, Sparkles, Clapperboard, Baby, Gift, Flame, Cake, LayoutGrid,
 };
 
-const categoryTone: Record<ServiceCategory, string> = {
-  NOSTALGIA: 'border-rose-300/40 bg-rose-500/10 text-rose-200 hover:border-rose-300/70',
-  TRENDS_MEMES: 'border-cyan-300/40 bg-cyan-500/10 text-cyan-200 hover:border-cyan-300/70',
-  KIDS_HEROES: 'border-lime-300/40 bg-lime-500/10 text-lime-200 hover:border-lime-300/70',
-  SPECIAL_OCCASIONS: 'border-amber-300/40 bg-amber-500/10 text-amber-200 hover:border-amber-300/70',
-  PHOTO_RESTORE: 'border-rose-300/40 bg-rose-500/10 text-rose-200 hover:border-rose-300/70',
-  PHOTO_ANIMATE: 'border-violet-300/40 bg-violet-500/10 text-violet-200 hover:border-violet-300/70',
-  TREND: 'border-cyan-300/40 bg-cyan-500/10 text-cyan-200 hover:border-cyan-300/70',
-  CARTOON_CUSTOM: 'border-lime-300/40 bg-lime-500/10 text-lime-200 hover:border-lime-300/70',
-  REALISTIC_CUSTOM: 'border-amber-300/40 bg-amber-500/10 text-amber-200 hover:border-amber-300/70',
-  FAIRY_TALE: 'border-lime-300/40 bg-lime-500/10 text-lime-200 hover:border-lime-300/70',
-};
+function iconForCategory(iconName: string | null | undefined): LucideIcon {
+  if (iconName && iconMap[iconName]) return iconMap[iconName];
+  return LayoutGrid;
+}
+
+const toneCycle = [
+  'border-rose-300/40 bg-rose-500/10 text-rose-200 hover:border-rose-300/70',
+  'border-cyan-300/40 bg-cyan-500/10 text-cyan-200 hover:border-cyan-300/70',
+  'border-lime-300/40 bg-lime-500/10 text-lime-200 hover:border-lime-300/70',
+  'border-amber-300/40 bg-amber-500/10 text-amber-200 hover:border-amber-300/70',
+  'border-violet-300/40 bg-violet-500/10 text-violet-200 hover:border-violet-300/70',
+];
 
 function mediaUrl(value?: string | null) {
   if (!value) return null;
@@ -51,7 +44,9 @@ function servicePreview(service: PublicService) {
 
 export function ServicesGrid() {
   const { data, isLoading, isError } = useListServicesQuery({ featured: true });
+  const { data: categoriesData } = useGetServiceCategoriesQuery();
   const featured = data?.services ?? [];
+  const categories = categoriesData?.categories ?? [];
 
   return (
     <section id="services" className="container py-20">
@@ -71,19 +66,20 @@ export function ServicesGrid() {
       )}
 
       <div className="mt-10 grid auto-rows-fr gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {GIFT_CATEGORIES.map((category, index) => {
-          const Icon = categoryIcons[category.value];
+        {categories.map((category, index) => {
+          const Icon = iconForCategory(category.iconName);
+          const tone = toneCycle[index % toneCycle.length];
           return (
-            <Reveal key={category.value} delay={index * 0.04} className="h-full">
-              <Link href={category.href} className="group block h-full">
-                <Card className={`h-full border bg-slate-950 transition duration-300 hover:-translate-y-1 ${categoryTone[category.value]}`}>
+            <Reveal key={category.code} delay={index * 0.04} className="h-full">
+              <Link href={categoryHref(category.code)} className="group block h-full">
+                <Card className={`h-full border bg-slate-950 transition duration-300 hover:-translate-y-1 ${tone}`}>
                   <CardContent className="flex h-full flex-col gap-5 p-5">
                     <span className="grid h-12 w-12 place-items-center rounded-md border border-current/25 bg-white/5">
                       <Icon className="h-6 w-6" />
                     </span>
                     <div className="flex-1">
-                      <h3 className="text-xl font-bold text-white">{category.label}</h3>
-                      <p className="mt-3 text-sm leading-6 text-slate-300">{category.description}</p>
+                      <h3 className="text-xl font-bold text-white">{category.title}</h3>
+                      <p className="mt-3 text-sm leading-6 text-slate-300">{category.description ?? ''}</p>
                     </div>
                     <div className="flex items-center justify-between text-sm font-medium">
                       <span>Открыть категорию</span>

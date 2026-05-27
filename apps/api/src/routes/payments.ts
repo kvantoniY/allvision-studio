@@ -151,6 +151,9 @@ paymentsRouter.all('/robokassa/success', async (req: Request, res: Response, nex
       } catch (error) {
         logger.warn(`[payments] robokassa success reconcile failed invId=${invId}: ${(error as Error).message}`);
       }
+      if (payment.status === 'PENDING') {
+        payment = await payments.expirePaymentIfNeeded(payment);
+      }
     }
 
     const finalStatus = payment?.status;
@@ -182,6 +185,9 @@ paymentsRouter.all('/robokassa/fail', async (req: Request, res: Response, next: 
         payment = await payments.reconcilePaymentWithProvider(payment, { bypassCache: true, allowRevive: true });
       } catch (error) {
         logger.warn(`[payments] robokassa fail reconcile failed invId=${invId}: ${(error as Error).message}`);
+      }
+      if (payment.status === 'PENDING') {
+        payment = await payments.expirePaymentIfNeeded(payment);
       }
     }
 
@@ -250,7 +256,7 @@ paymentsRouter.get('/:id', optionalAuth, async (req: Request, res: Response, nex
       throw new HttpError(401, 'UNAUTHORIZED', 'Authentication is required');
     }
 
-    res.json(payment);
+    res.json(await payments.expirePaymentIfNeeded(payment));
   } catch (e) {
     next(e);
   }

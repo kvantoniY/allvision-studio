@@ -15,6 +15,7 @@ const ENV_KEYS = [
   'ROBOKASSA_PAYMENT_URL',
   'ROBOKASSA_OP_STATE_URL',
   'ROBOKASSA_STATUS_TIMEOUT_MS',
+  'ROBOKASSA_EXPIRATION_TIME_ZONE',
   'PUBLIC_API_URL',
   'PUBLIC_WEB_URL',
 ] as const;
@@ -40,6 +41,7 @@ beforeEach(() => {
   process.env.ROBOKASSA_PAYMENT_URL = 'https://auth.robokassa.ru/Merchant/Index.aspx';
   process.env.ROBOKASSA_OP_STATE_URL = 'https://auth.robokassa.ru/Merchant/WebService/Service.asmx/OpStateExt';
   process.env.ROBOKASSA_STATUS_TIMEOUT_MS = '5000';
+  process.env.ROBOKASSA_EXPIRATION_TIME_ZONE = 'Europe/Moscow';
   process.env.PUBLIC_API_URL = 'https://allvision-pulse.ru';
   process.env.PUBLIC_WEB_URL = 'https://allvision-pulse.ru';
   global.fetch = originalFetch;
@@ -65,6 +67,7 @@ describe('RobokassaPaymentProvider', () => {
       userId: 'user_1',
       purpose: 'topup',
       providerPaymentId: '123456',
+      expiresAt: new Date(Date.UTC(2029, 0, 16, 9, 0)),
       metadata: {
         paymentId: 'payment_1',
         packageTitle: 'Старт',
@@ -79,6 +82,7 @@ describe('RobokassaPaymentProvider', () => {
     expect(Number(result.confirmationParams?.InvId)).toBeLessThanOrEqual(2_147_483_647);
     expect(result.confirmationParams?.IsTest).toBeUndefined();
     expect(result.confirmationParams?.Description).toBe('Доступ к цифровым услугам Allvision Studio, пакет Старт');
+    expect(result.confirmationParams?.ExpirationDate).toBe('2029-01-16T12:00');
 
     const receipt = JSON.parse(decodeURIComponent(result.confirmationParams?.Receipt ?? '')) as {
       items: Array<Record<string, unknown>>;

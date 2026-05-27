@@ -1,6 +1,6 @@
 import '../src/config/env';
 import sharp from 'sharp';
-import { prisma, ProcessingType, ProjectStatus, ServiceCategory } from '@allvision/database';
+import { prisma, ProcessingType, ProjectStatus } from '@allvision/database';
 import { getAIProvider, getStorageProvider, initialiseWorkerProviders } from '../src/providers';
 import { findLatestAIUsageLog } from '../src/providers/usage-limits';
 
@@ -26,7 +26,7 @@ async function main() {
       title: 'PiAPI smoke',
       shortDesc: 'PiAPI smoke',
       description: 'PiAPI smoke',
-      category: ServiceCategory.TRENDS_MEMES,
+      category: "TRENDS_MEMES",
       priceTokens: 0,
       costUsd: 0,
       galleryImages: [],

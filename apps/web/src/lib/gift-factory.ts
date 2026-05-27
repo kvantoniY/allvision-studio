@@ -1,4 +1,4 @@
-import type { PublicService, ServiceCategory } from '@allvision/shared';
+import type { PublicService, PublicServiceCategory, ServiceCategory } from '@allvision/shared';
 
 export type GiftCategory = {
   value: ServiceCategory;
@@ -8,41 +8,25 @@ export type GiftCategory = {
   href: string;
 };
 
-export const GIFT_CATEGORIES: GiftCategory[] = [
-  {
-    value: 'NOSTALGIA',
-    label: 'Ностальгия',
-    description: 'Оживите старое фото, восстановите выцветшие воспоминания',
-    shortDescription: 'Семейный архив, старые снимки и тёплые видео-воспоминания.',
-    href: '/services?category=NOSTALGIA',
-  },
-  {
-    value: 'TRENDS_MEMES',
-    label: 'Тренды и мемы',
-    description: 'Лицо в трендовом видео или киносцене',
-    shortDescription: 'Быстрые ролики, мемные сцены и форматы для семейного чата.',
-    href: '/services?category=TRENDS_MEMES',
-  },
-  {
-    value: 'KIDS_HEROES',
-    label: 'Дети-герои',
-    description: 'Ваш ребёнок — герой собственной сказки или мультика',
-    shortDescription: 'Добрые стилизованные миры, где ребёнок в центре истории.',
-    href: '/services?category=KIDS_HEROES',
-  },
-  {
-    value: 'SPECIAL_OCCASIONS',
-    label: 'Особые поводы',
-    description: 'Юбилеи, свадьбы, корпоративы, 8 марта и 23 февраля',
-    shortDescription: 'Видео-открытки и сюрпризы для дат, которые хочется помнить.',
-    href: '/services?category=SPECIAL_OCCASIONS',
-  },
-];
+export function categoryHref(code: string) {
+  return `/services?category=${encodeURIComponent(code)}`;
+}
 
-export const CATEGORY_LABELS = Object.fromEntries(
-  GIFT_CATEGORIES.map((category) => [category.value, category.label]),
-) as Record<ServiceCategory, string>;
+export function fromPublicCategory(category: PublicServiceCategory): GiftCategory {
+  return {
+    value: category.code,
+    label: category.title,
+    description: category.description ?? category.title,
+    shortDescription: category.shortDescription ?? category.description ?? '',
+    href: categoryHref(category.code),
+  };
+}
+
+export function buildCategoryLabels(categories: PublicServiceCategory[] | undefined): Record<string, string> {
+  if (!categories || categories.length === 0) return {};
+  return Object.fromEntries(categories.map((category) => [category.code, category.title]));
+}
 
 export function giftServicePriceFrom(service: PublicService) {
-  return service.priceCoinsStandard ?? service.priceTokens;
+  return service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
 }
