@@ -39,6 +39,74 @@ const categoryLabels: Record<ChatCategory, string> = {
   video: 'Видео',
 };
 
+// Человекочитаемые русские названия параметров (каталог хранит технические английские ключи).
+const paramLabelRu: Record<string, string> = {
+  output_format: 'Формат файла',
+  resolution: 'Качество',
+  expand_prompt: 'Улучшать описание автоматически',
+  negative_prompt: 'Что исключить из результата',
+  seed: 'Seed (для повторяемости)',
+  image_urls: 'Изображения-референсы',
+  images: 'Изображения-референсы',
+  video_urls: 'Видео-референсы',
+  video: 'Видео-референс',
+  audio_urls: 'Аудио-референсы',
+  audio_url: 'Аудио-референс',
+  tail_image_url: 'Последний кадр',
+  camera_control: 'Движение камеры',
+  shot_type: 'Тип съёмки',
+  watermark: 'Водяной знак провайдера',
+  keep_original_sound: 'Сохранить исходный звук',
+  keep_original_audio: 'Сохранить исходный звук',
+  video_url: 'Видео с движением',
+  preset_motion: 'Готовое движение',
+  motion_direction: 'Источник движения',
+  target_video: 'Видео для замены лица',
+  estimatedFrames: 'Оценка кадров (для расчёта цены)',
+  swap_faces_index: 'Какие лица взять с фото',
+  target_faces_index: 'Какие лица заменить в видео',
+  prefer_multi_shots: 'Несколько сцен в ролике',
+  multi_shots: 'Описание сцен (JSON)',
+};
+
+const paramDescriptionRu: Record<string, string> = {
+  images: 'Дополнительные изображения. В описании ссылайтесь на них как @image_1, @image_2.',
+  video: 'Дополнительное видео. В описании ссылайтесь на него как @video.',
+  negative_prompt: 'Опишите словами, чего не должно быть в результате.',
+  preset_motion: 'Готовый шаблон движения вместо своего видео.',
+  multi_shots: 'Для продвинутых: список сцен в формате JSON. Оставьте пустым для обычного ролика.',
+  estimatedFrames: 'Влияет только на предварительную оценку стоимости.',
+  target_video: 'Видео, в котором заменим лицо на загруженное.',
+};
+
+const optionLabelRu: Record<string, string> = {
+  '': 'Авто',
+  auto: 'Авто',
+  horizontal: 'Горизонтальное',
+  vertical: 'Вертикальное',
+  zoom: 'Зум',
+  pan: 'Панорама',
+  tilt: 'Наклон',
+  roll: 'Вращение',
+  fixed: 'Фиксированная камера',
+  handheld: 'Съёмка с рук',
+  tracking: 'Слежение за объектом',
+  video: 'По видео с движением',
+  preset: 'По готовому движению',
+};
+
+function ruParamLabel(param: PiAPIParamCapability) {
+  return paramLabelRu[param.key] ?? param.title;
+}
+
+function ruParamDescription(param: PiAPIParamCapability) {
+  return paramDescriptionRu[param.key];
+}
+
+function ruOptionLabel(option: { value: string; label: string }) {
+  return optionLabelRu[option.value] ?? option.label;
+}
+
 function apiErrorMessage(error: unknown, fallback = 'Не удалось запустить генерацию') {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? fallback;
 }
@@ -379,7 +447,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             }}
             rows={2}
             placeholder="Опишите результат: сюжет, стиль, камера, настроение..."
-            className="min-h-[82px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="min-h-[76px] resize-none border-0 bg-transparent px-4 pb-1 pt-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
                 event.preventDefault();
@@ -387,29 +455,10 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               }
             }}
           />
-          {(isDraggingReference || uploadInputState.isLoading) && (
-            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-sm">
-              <div className="inline-flex items-center gap-2 rounded-md border border-violet-400/50 bg-violet-500/15 px-3 py-2 text-sm font-semibold text-violet-100">
-                {uploadInputState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                {uploadInputState.isLoading ? 'Загружаем файл' : 'Отпустите файл, чтобы прикрепить'}
-              </div>
-            </div>
-          )}
-        </div>
 
-        <div className="border-t border-slate-800 px-3 py-2.5">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <CategoryControl category={category} onChange={setCategory} />
-              <ModelFamilyControl
-                selectedFamily={selectedFamily}
-                families={families}
-                onChange={(familySlug) => {
-                  const next = families.find((family) => family.slug === familySlug);
-                  if (next?.models[0]) setModelSlug(next.models[0].slug);
-                }}
-              />
-              <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
+          {/* Панель действий внутри инпута: слева — прикрепить и настройки, справа — стоимость и запуск */}
+          <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1">
+            <div className="flex shrink-0 items-center gap-1.5">
               {canUseInput ? (
                 <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact iconOnly />
               ) : (
@@ -417,9 +466,6 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                   <Paperclip className="h-4 w-4" />
                 </Button>
               )}
-            </div>
-
-            <div className="flex w-full min-w-0 items-center gap-2 rounded-md border border-slate-800/80 bg-slate-950/55 px-2 py-1.5 md:w-auto md:max-w-[380px]">
               <DetailedSettingsControl
                 model={selectedModel}
                 category={category}
@@ -432,17 +478,20 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                 onGenerateAudioChange={setGenerateAudio}
                 onAdvancedParamsChange={setAdvancedParams}
               />
-              <div className="min-w-0 flex-1 text-xs text-slate-500">
-                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <span className="inline-flex items-center gap-1.5">
-                    <TokenIcon className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
-                    <span className={canPay ? 'font-semibold text-amber-200' : 'font-semibold text-red-200'}>{costText}</span>
-                  </span>
-                  <span className="text-slate-600">Баланс {balance}</span>
-                  {submitHint && (
-                    <span className={cn('basis-full truncate', canPay ? 'text-slate-400' : 'text-red-200')}>{submitHint}</span>
-                  )}
+            </div>
+
+            <div className="flex min-w-0 items-center gap-2.5">
+              {submitHint && (
+                <span className={cn('hidden max-w-[180px] truncate text-xs sm:inline lg:max-w-[260px]', canPay ? 'text-slate-400' : 'text-red-200')}>
+                  {submitHint}
+                </span>
+              )}
+              <div className="hidden text-right leading-tight sm:block">
+                <div className="flex items-center justify-end gap-1">
+                  <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-amber-300' : 'text-red-300')} />
+                  <span className={cn('text-xs font-semibold', canPay ? 'text-amber-200' : 'text-red-200')}>{costText}</span>
                 </div>
+                <div className="text-[11px] text-slate-500">Баланс {balance}</div>
               </div>
               <Button type="submit" disabled={!canSubmit} className="h-9 shrink-0 bg-amber-500 px-4 text-slate-950 hover:bg-amber-400">
                 {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -450,6 +499,34 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               </Button>
             </div>
           </div>
+
+          {(isDraggingReference || uploadInputState.isLoading) && (
+            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-sm">
+              <div className="inline-flex items-center gap-2 rounded-md border border-violet-400/50 bg-violet-500/15 px-3 py-2 text-sm font-semibold text-violet-100">
+                {uploadInputState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                {uploadInputState.isLoading ? 'Загружаем файл' : 'Отпустите файл, чтобы прикрепить'}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Нижняя строка: выбор формата и модели — в одну линию */}
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-800 bg-slate-950/40 px-3 py-2.5">
+          <CategoryControl category={category} onChange={setCategory} />
+          <ModelFamilyControl
+            selectedFamily={selectedFamily}
+            families={families}
+            onChange={(familySlug) => {
+              const next = families.find((family) => family.slug === familySlug);
+              if (next?.models[0]) setModelSlug(next.models[0].slug);
+            }}
+          />
+          <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
+          {/* Стоимость на узких экранах, где правый блок инпута скрыт */}
+          <span className="ml-auto inline-flex items-center gap-1 sm:hidden">
+            <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-amber-300' : 'text-red-300')} />
+            <span className={cn('text-xs font-semibold', canPay ? 'text-amber-200' : 'text-red-200')}>{costText}</span>
+          </span>
         </div>
       </div>
     </form>
@@ -566,26 +643,11 @@ function ModelFunctionControl({
 }
 
 const advancedSectionsMeta = {
-  references: {
-    title: 'Референсы',
-    description: 'Дополнительные изображения, видео или аудио, которые PiAPI принимает именно для выбранной функции.',
-  },
-  quality: {
-    title: 'Качество',
-    description: 'Настройки разрешения, кадров, seed и стоимости результата.',
-  },
-  motion: {
-    title: 'Движение',
-    description: 'Управление камерой, движением, preset motion и shot list.',
-  },
-  audio: {
-    title: 'Аудио',
-    description: 'Опции генерации, сохранения или передачи звука, если модель это поддерживает.',
-  },
-  prompt: {
-    title: 'Промпт',
-    description: 'Ограничения, negative prompt и расширение промпта.',
-  },
+  references: { title: 'Дополнительные референсы' },
+  quality: { title: 'Качество и детали' },
+  motion: { title: 'Движение' },
+  audio: { title: 'Звук' },
+  prompt: { title: 'Описание' },
 } as const;
 
 type AdvancedSectionKey = keyof typeof advancedSectionsMeta;
@@ -644,18 +706,21 @@ function DetailedSettingsControl({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
-        align="end"
+        align="start"
         side="top"
         sideOffset={8}
-        className="max-h-[calc(100dvh-2rem)] w-[min(92vw,560px)] space-y-3 overflow-y-auto border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40"
+        className="max-h-[calc(100dvh-2rem)] w-[min(94vw,360px)] space-y-2.5 overflow-y-auto border-slate-800 bg-slate-950 p-3 text-slate-100 shadow-2xl shadow-black/40"
       >
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{compactModelTitle(model.title)}</div>
-          <div className="mt-1 text-sm font-semibold text-white">{model.functionTitle || compactModelTitle(model.title)}</div>
+        <div className="flex items-center gap-2">
+          <Settings2 className="h-4 w-4 text-violet-300" />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-white">Настройки</div>
+            <div className="truncate text-[11px] text-slate-500">{model.functionTitle || compactModelTitle(model.title)}</div>
+          </div>
         </div>
-        <div className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
-          <div className="mb-3 text-sm font-semibold text-slate-100">Основные параметры</div>
-          <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Основное</div>
+          <div className="grid grid-cols-2 gap-2.5">
             {model.supportedAspectRatios.length > 0 && (
               <label className="space-y-1 text-sm text-slate-100">
                 <span className="inline-flex items-center gap-2">
@@ -746,11 +811,9 @@ function DetailedSettingsControl({
         {sections.map((section) => {
           const meta = advancedSectionsMeta[section.key];
           return (
-            <div key={section.key} className="rounded-md border border-slate-800 bg-slate-900/60 p-3">
-              <div className="mb-3">
-                <div className="text-sm font-semibold text-slate-100">{meta.title}</div>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
+            <div key={section.key} className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{meta.title}</div>
+              <div className="grid gap-2.5">
                 {section.params.map((param) => (
                   <AdvancedParamField
                     key={param.key}
@@ -777,16 +840,22 @@ function AdvancedParamField({
   value: ChatAdvancedParams[string];
   onChange: (value: ChatAdvancedParams[string]) => void;
 }) {
+  const label = ruParamLabel(param);
+  const hint = ruParamDescription(param);
+
   if (param.kind === 'boolean') {
     return (
-      <label className="flex items-center gap-3 rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+      <label className="flex items-center gap-2.5 rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100">
         <input
           type="checkbox"
           checked={Boolean(value)}
           onChange={(event) => onChange(event.target.checked)}
-          className="h-4 w-4"
+          className="h-4 w-4 shrink-0"
         />
-        <span className="min-w-0 flex-1">{param.title}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block">{label}</span>
+          {hint && <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">{hint}</span>}
+        </span>
       </label>
     );
   }
@@ -795,16 +864,17 @@ function AdvancedParamField({
     const selected = typeof value === 'string' || typeof value === 'number' ? String(value) : String(param.default ?? '');
     return (
       <label className="space-y-1 text-sm text-slate-100">
-        <span>{param.title}</span>
+        <span>{label}</span>
         <select
           value={selected}
           onChange={(event) => onChange(event.target.value)}
           className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
         >
           {(param.options ?? []).map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <option key={option.value} value={option.value}>{ruOptionLabel(option)}</option>
           ))}
         </select>
+        {hint && <span className="block text-[11px] leading-4 text-slate-500">{hint}</span>}
       </label>
     );
   }
@@ -812,7 +882,7 @@ function AdvancedParamField({
   if (param.kind === 'number') {
     return (
       <label className="space-y-1 text-sm text-slate-100">
-        <span>{param.title}</span>
+        <span>{label}</span>
         <Input
           type="number"
           min={param.minimum}
@@ -821,6 +891,7 @@ function AdvancedParamField({
           onChange={(event) => onChange(event.target.value === '' ? undefined : Number(event.target.value))}
           className="h-9 border-slate-700 bg-slate-900"
         />
+        {hint && <span className="block text-[11px] leading-4 text-slate-500">{hint}</span>}
       </label>
     );
   }
@@ -828,10 +899,11 @@ function AdvancedParamField({
   if (param.kind === 'source-list') {
     const items = sourceListValue(value);
     const mediaKind = param.mediaKind ?? 'image';
+    const mediaLabel = mediaKind === 'image' ? 'изображение' : mediaKind === 'video' ? 'видео' : 'аудио';
     return (
-      <div className="space-y-2 text-sm text-slate-100 md:col-span-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span>{param.title}</span>
+      <div className="space-y-1.5 text-sm text-slate-100">
+        <div className="flex items-center justify-between gap-2">
+          <span>{label}</span>
           <InputSourcePicker
             mediaKind={mediaKind}
             value={null}
@@ -842,25 +914,24 @@ function AdvancedParamField({
             }}
           />
         </div>
-        <Input
-          value={items.join(', ')}
-          onChange={(event) => onChange(param.multiple ? sourceListValue(event.target.value) : event.target.value)}
-          className="h-9 border-slate-700 bg-slate-900 font-mono text-xs"
-          placeholder="asset:id, chat:key, result:id, https://..."
-        />
-        {items.length > 0 && (
+        {hint && <p className="text-[11px] leading-4 text-slate-500">{hint}</p>}
+        {items.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {items.map((item) => (
               <button
                 key={item}
                 type="button"
-                className="max-w-[220px] truncate rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300"
+                title="Убрать"
+                className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 hover:border-rose-400 hover:text-rose-200"
                 onClick={() => onChange(param.multiple ? items.filter((current) => current !== item) : undefined)}
               >
-                {item}
+                <span className="max-w-[180px] truncate">{item}</span>
+                <X className="h-3 w-3 shrink-0" />
               </button>
             ))}
           </div>
+        ) : (
+          <p className="text-[11px] text-slate-600">Не выбрано — нажмите «Прикрепить», чтобы добавить {mediaLabel}.</p>
         )}
       </div>
     );
@@ -868,8 +939,8 @@ function AdvancedParamField({
 
   const isLong = param.kind === 'textarea';
   return (
-    <label className={cn('space-y-1 text-sm text-slate-100', isLong && 'md:col-span-2')}>
-      <span>{param.title}</span>
+    <label className="space-y-1 text-sm text-slate-100">
+      <span>{label}</span>
       {isLong ? (
         <Textarea
           value={typeof value === 'string' ? value : ''}
@@ -884,6 +955,7 @@ function AdvancedParamField({
           className="h-9 border-slate-700 bg-slate-900"
         />
       )}
+      {hint && <span className="block text-[11px] leading-4 text-slate-500">{hint}</span>}
     </label>
   );
 }
