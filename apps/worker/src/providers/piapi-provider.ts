@@ -6,7 +6,7 @@ import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provid
 import { PiAPIClient, type PiAPITaskStatus } from './piapi-client';
 import { ProviderError } from './provider-errors';
 import type { FilePublisher } from './file-publisher';
-import { assertPiAPIDailyCap, createAIUsageLog } from './usage-limits';
+import { createAIUsageLog } from './usage-limits';
 
 type Logger = {
   info: (message: string, meta?: unknown) => void;
@@ -74,11 +74,6 @@ const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; tas
   'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06 },
   'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
-  'flux-pro-ultra': { providerModel: 'Qubico/flux1-pro', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.06 },
-  'flux-kontext-pro': { providerModel: 'Qubico/flux1-dev-redux', taskType: 'img2img', supportsImageInput: true, estimatedCostUsd: 0.04 },
-  'midjourney-v6': { providerModel: 'Qubico/midjourney', taskType: 'imagine', supportsImageInput: false, estimatedCostUsd: 0.05 },
-  'hidream-i1-full': { providerModel: 'Qubico/hidream', taskType: 'txt2img-i1-full', supportsImageInput: false, estimatedCostUsd: 0.03 },
-  'hunyuan-image-3': { providerModel: 'Tencent/hunyuan-image-3', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.04 },
 };
 
 const VIDEO_EFFECT_MODELS: Record<string, { providerModel: string; taskType: string; estimatedCostUsd: number }> = {
@@ -547,11 +542,9 @@ export class PiAPIProvider implements AIProvider {
     }
   }
 
-  private async ensureCanCall(nextCostUsd: number) {
-    if (this.lowBalance) {
-      throw new ProviderError('LOW_PROVIDER_BALANCE', 'PiAPI account balance is too low');
-    }
-    await assertPiAPIDailyCap(nextCostUsd, this.dailyCapUsd);
+  private async ensureCanCall(_nextCostUsd: number) {
+    // Daily cap and low-balance checks intentionally disabled: usage limits are not enforced.
+    // Provider availability is verified by PiAPI itself; account balance is observability-only.
   }
 
   private async refreshBalance() {
@@ -1041,33 +1034,6 @@ function buildImageEditPayload(input: {
         resolution: input.resolution,
         ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
         ...(ar ? { aspect_ratio: ar } : {}),
-      },
-    };
-  }
-
-  if (modelSlug.startsWith('flux-') && modelConfig.taskType === 'img2img') {
-    return {
-      model: modelConfig.providerModel,
-      task_type: modelConfig.taskType,
-      input: {
-        prompt: input.prompt,
-        ...(input.publishedUrl ? { image_url: input.publishedUrl } : {}),
-        ...(typeof input.strength === 'number' ? { strength: input.strength } : {}),
-        ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
-        ...(ar ? { aspect_ratio: ar } : {}),
-        output_format: outputFormat,
-      },
-    };
-  }
-
-  if (modelSlug === 'midjourney-v6') {
-    return {
-      model: modelConfig.providerModel,
-      task_type: modelConfig.taskType,
-      input: {
-        prompt: input.prompt,
-        ...(ar ? { aspect_ratio: ar } : {}),
-        process_mode: readString(input.params, 'process_mode') ?? 'fast',
       },
     };
   }
