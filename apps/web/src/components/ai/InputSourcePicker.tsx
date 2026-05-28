@@ -95,7 +95,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
           type="button"
           variant="outline"
           size={iconOnly ? 'icon' : compact ? 'sm' : 'default'}
-          className={cn('border-slate-700', iconOnly ? 'h-9 w-9 bg-slate-950' : compact ? 'h-9 bg-slate-950' : 'bg-slate-900')}
+          className={cn('border-slate-700', iconOnly ? 'h-8 w-8 bg-slate-950' : compact ? 'h-8 bg-slate-950' : 'bg-slate-900')}
           onClick={() => setOpen(true)}
           title={buttonLabel}
           aria-label={buttonLabel}

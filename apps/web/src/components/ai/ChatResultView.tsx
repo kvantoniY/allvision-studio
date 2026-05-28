@@ -1,6 +1,8 @@
 'use client';
 
-import { Download, ImageIcon, Loader2, RotateCcw, Sparkles, Video } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Download, ImageIcon, Loader2, Maximize2, RotateCcw, Sparkles, Video, X } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -83,6 +85,7 @@ function MessageCard({
   onUseAsReference: (projectId: string, url: string, mediaKind: 'image' | 'video') => void;
   onRetry: (message: ChatMessage) => void;
 }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const project = message.project;
   const status = project.status;
   const progress = project.progress ?? 0;
@@ -133,18 +136,44 @@ function MessageCard({
         )}
 
         {!processing && !failed && (
-          <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+          <div className="group relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
             {resultVideo ? (
-              <video src={resultVideo} poster={resultThumbnail ?? undefined} controls className="max-h-[70vh] w-full bg-black" />
+              <video src={resultVideo} poster={resultThumbnail ?? undefined} controls className="max-h-[58vh] w-full bg-black" />
             ) : resultImage ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={resultImage} alt="Результат Allvision AI" className="max-h-[70vh] w-full object-contain" />
+              <img
+                src={resultImage}
+                alt="Результат Allvision AI"
+                className="max-h-[58vh] w-full cursor-zoom-in object-contain"
+                onClick={() => setLightboxOpen(true)}
+              />
             ) : (
-              <div className="grid min-h-[260px] place-items-center text-slate-600">
+              <div className="grid min-h-[240px] place-items-center text-slate-600">
                 {project.category === 'video' ? <Video className="h-10 w-10" /> : <ImageIcon className="h-10 w-10" />}
               </div>
             )}
+            {(resultVideo || resultImage) && (
+              <button
+                type="button"
+                onClick={() => setLightboxOpen(true)}
+                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-black/55 text-white opacity-0 backdrop-blur transition hover:bg-black/75 focus:opacity-100 group-hover:opacity-100"
+                title="Открыть на весь экран"
+                aria-label="Открыть на весь экран"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
+            )}
           </div>
+        )}
+
+        {lightboxOpen && (resultVideo || resultImage) && (
+          <MediaLightbox
+            videoUrl={resultVideo}
+            imageUrl={resultImage}
+            posterUrl={resultThumbnail}
+            downloadUrl={resultUrl}
+            onClose={() => setLightboxOpen(false)}
+          />
         )}
 
         <div className="flex flex-wrap gap-3">
@@ -189,5 +218,78 @@ function MessageCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function MediaLightbox({
+  videoUrl,
+  imageUrl,
+  posterUrl,
+  downloadUrl,
+  onClose,
+}: {
+  videoUrl: string | null;
+  imageUrl: string | null;
+  posterUrl: string | null;
+  downloadUrl: string | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex flex-col bg-black/95 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div className="flex shrink-0 items-center justify-end gap-2 p-3" onClick={(event) => event.stopPropagation()}>
+        {downloadUrl && (
+          <Button asChild size="sm" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+            <a href={downloadUrl} download target="_blank" rel="noopener">
+              <Download className="h-4 w-4" />
+              Скачать
+            </a>
+          </Button>
+        )}
+        <Button type="button" variant="outline" size="icon" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={onClose} aria-label="Закрыть">
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center p-3 sm:p-6">
+        {videoUrl ? (
+          <video
+            src={videoUrl}
+            poster={posterUrl ?? undefined}
+            controls
+            autoPlay
+            className="max-h-full max-w-full rounded-md"
+            onClick={(event) => event.stopPropagation()}
+          />
+        ) : imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt="Результат Allvision AI"
+            className="max-h-full max-w-full rounded-md object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        ) : null}
+      </div>
+    </div>,
+    document.body,
   );
 }

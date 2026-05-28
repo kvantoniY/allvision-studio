@@ -149,12 +149,14 @@ function AiContent() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 lg:px-8">
-          <ChatResultView
-            messages={messages}
-            isLoading={chatQuery.isLoading && !!activeChatId}
-            onUseAsReference={useAsReference}
-            onRetry={(message: ChatMessage) => setRetryPrompt(message.prompt)}
-          />
+          <div className="mx-auto w-full max-w-3xl">
+            <ChatResultView
+              messages={messages}
+              isLoading={chatQuery.isLoading && !!activeChatId}
+              onUseAsReference={useAsReference}
+              onRetry={(message: ChatMessage) => setRetryPrompt(message.prompt)}
+            />
+          </div>
         </div>
 
         {activeChatId && (

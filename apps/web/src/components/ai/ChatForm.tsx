@@ -393,8 +393,51 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           ? 'Добавьте промпт для запуска'
           : null;
 
+  // Переиспользуемые элементы: на мобайле живут внутри инпута, на ПК — в нижней строке.
+  const attachControl = canUseInput ? (
+    <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact iconOnly />
+  ) : (
+    <Button type="button" variant="outline" size="icon" className="h-8 w-8 border-slate-700 bg-slate-950 text-slate-400" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
+      <Paperclip className="h-4 w-4" />
+    </Button>
+  );
+
+  const settingsControl = (
+    <DetailedSettingsControl
+      model={selectedModel}
+      category={category}
+      aspectRatio={aspectRatio}
+      duration={duration}
+      generateAudio={effectiveGenerateAudio}
+      advancedParams={advancedParams}
+      familyModels={familyModels}
+      priceOverrides={modelPriceOverrides}
+      onModelChange={setModelSlug}
+      onAspectRatioChange={setAspectRatio}
+      onDurationChange={setDuration}
+      onGenerateAudioChange={setGenerateAudio}
+      onAdvancedParamsChange={setAdvancedParams}
+    />
+  );
+
+  const actionControl = (
+    <>
+      <div className="text-right leading-tight">
+        <div className="flex items-center justify-end gap-1">
+          <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-amber-300' : 'text-red-300')} />
+          <span className={cn('text-xs font-semibold', canPay ? 'text-amber-200' : 'text-red-200')}>{costText}</span>
+        </div>
+        <div className="text-[11px] text-slate-500">Баланс {balance}</div>
+      </div>
+      <Button type="submit" disabled={!canSubmit} className="h-8 shrink-0 bg-amber-500 px-3 text-slate-950 hover:bg-amber-400">
+        {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+        Создать
+      </Button>
+    </>
+  );
+
   return (
-    <form onSubmit={submit} className="mx-auto max-w-5xl">
+    <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
       <div
         className={cn(
           'relative overflow-hidden rounded-lg border bg-slate-900 shadow-2xl shadow-black/20 transition',
@@ -439,7 +482,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           </div>
         )}
 
-        {/* Поле ввода — чистое, без кнопок */}
+        {/* Поле ввода. На мобайле кнопки живут внутри инпута снизу, на ПК инпут чистый. */}
         <div className="relative">
           <Textarea
             value={prompt}
@@ -449,7 +492,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             }}
             rows={2}
             placeholder="Опишите результат: сюжет, стиль, камера, настроение..."
-            className="min-h-[88px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="min-h-[84px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
                 event.preventDefault();
@@ -457,6 +500,15 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               }
             }}
           />
+
+          {/* Мобайл: панель действий внутри инпута */}
+          <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1 md:hidden">
+            <div className="flex shrink-0 items-center gap-1.5">
+              {attachControl}
+              {settingsControl}
+            </div>
+            <div className="flex items-center gap-2.5">{actionControl}</div>
+          </div>
 
           {(isDraggingReference || uploadInputState.isLoading) && (
             <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-sm">
@@ -468,73 +520,28 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           )}
         </div>
 
-        {/* Нижняя панель: действия и выбор модели.
-            ПК — одна строка; мобайл — действия сверху, выбор модели снизу. */}
+        {/* Нижняя панель.
+            ПК — всё в одну строку; мобайл — только выбор формата и модели. */}
         <div className="border-t border-slate-800 bg-slate-950/40 px-3 py-2.5">
-          {/* На мобайле — две строки (md:contents «распрямляет» обёртки в одну строку на ПК) */}
-          <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center">
-            {/* Мобайл-строка 1: действия слева, стоимость + «Создать» справа */}
-            <div className="flex items-center gap-2 md:contents">
-              <div className="flex shrink-0 items-center gap-1.5 md:order-1">
-                {canUseInput ? (
-                  <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact iconOnly />
-                ) : (
-                  <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-400" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
-                    <Paperclip className="h-4 w-4" />
-                  </Button>
-                )}
-                <DetailedSettingsControl
-                  model={selectedModel}
-                  category={category}
-                  aspectRatio={aspectRatio}
-                  duration={duration}
-                  generateAudio={effectiveGenerateAudio}
-                  advancedParams={advancedParams}
-                  familyModels={familyModels}
-                  priceOverrides={modelPriceOverrides}
-                  onModelChange={setModelSlug}
-                  onAspectRatioChange={setAspectRatio}
-                  onDurationChange={setDuration}
-                  onGenerateAudioChange={setGenerateAudio}
-                  onAdvancedParamsChange={setAdvancedParams}
-                />
-              </div>
-
-              <div className="ml-auto flex items-center gap-2.5 md:order-last md:ml-auto">
-                <div className="text-right leading-tight">
-                  <div className="flex items-center justify-end gap-1">
-                    <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-amber-300' : 'text-red-300')} />
-                    <span className={cn('text-xs font-semibold', canPay ? 'text-amber-200' : 'text-red-200')}>{costText}</span>
-                  </div>
-                  <div className="text-[11px] text-slate-500">Баланс {balance}</div>
-                </div>
-                <Button type="submit" disabled={!canSubmit} className="h-9 shrink-0 bg-amber-500 px-4 text-slate-950 hover:bg-amber-400">
-                  {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  Создать
-                </Button>
-              </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+              {attachControl}
+              {settingsControl}
             </div>
-
-            {/* Мобайл-строка 2: выбор формата и модели */}
-            <div className="flex flex-wrap items-center gap-2 md:contents">
-              <div className="md:order-2">
-                <CategoryControl category={category} onChange={setCategory} />
-              </div>
-              <div className="md:order-3">
-                <ModelFamilyControl
-                  selectedFamily={selectedFamily}
-                  families={families}
-                  onChange={(familySlug) => {
-                    const next = families.find((family) => family.slug === familySlug);
-                    if (next?.models[0]) setModelSlug(next.models[0].slug);
-                  }}
-                />
-              </div>
-              {/* Функция модели: ПК — в строке, мобайл — внутри настроек */}
-              <div className="hidden md:order-4 md:block">
-                <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
-              </div>
+            <CategoryControl category={category} onChange={setCategory} />
+            <ModelFamilyControl
+              selectedFamily={selectedFamily}
+              families={families}
+              onChange={(familySlug) => {
+                const next = families.find((family) => family.slug === familySlug);
+                if (next?.models[0]) setModelSlug(next.models[0].slug);
+              }}
+            />
+            {/* Функция модели: ПК — в строке, мобайл — внутри настроек */}
+            <div className="hidden md:block">
+              <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
             </div>
+            <div className="ml-auto hidden items-center gap-2.5 md:flex">{actionControl}</div>
           </div>
 
           {submitHint && (
@@ -548,7 +555,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
 function CategoryControl({ category, onChange }: { category: ChatCategory; onChange: (value: ChatCategory) => void }) {
   return (
-    <div className="inline-grid h-9 grid-cols-2 rounded-md border border-slate-700 bg-slate-950 p-0.5">
+    <div className="inline-grid h-8 grid-cols-2 rounded-md border border-slate-700 bg-slate-950 p-0.5">
       {(['image', 'video'] as const).map((item) => {
         const active = category === item;
         const Icon = item === 'image' ? ImageIcon : Video;
@@ -558,11 +565,11 @@ function CategoryControl({ category, onChange }: { category: ChatCategory; onCha
             type="button"
             onClick={() => onChange(item)}
             className={cn(
-              'inline-flex items-center gap-1.5 rounded px-3 text-sm font-medium transition',
+              'inline-flex items-center gap-1.5 rounded px-2.5 text-[13px] font-medium transition',
               active ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white',
             )}
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-3.5 w-3.5" />
             {categoryLabels[item]}
           </button>
         );
@@ -583,10 +590,10 @@ function ModelFamilyControl({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 max-w-[220px] border-slate-700 bg-slate-950">
-          <Sparkles className="h-4 w-4 text-violet-300" />
+        <Button type="button" variant="outline" size="sm" className="h-8 max-w-[160px] border-slate-700 bg-slate-950 px-2.5 text-[13px]">
+          <Sparkles className="h-3.5 w-3.5 text-violet-300" />
           <span className="truncate">{selectedFamily?.title ?? 'Модель'}</span>
-          <ChevronDown className="h-4 w-4 text-slate-500" />
+          <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[min(92vw,320px)] border-slate-800 bg-slate-950 text-slate-100">
@@ -625,10 +632,10 @@ function ModelFunctionControl({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-9 max-w-[260px] border-slate-700 bg-slate-950">
-          <Sparkles className="h-4 w-4 text-violet-300" />
+        <Button type="button" variant="outline" size="sm" className="h-8 max-w-[200px] border-slate-700 bg-slate-950 px-2.5 text-[13px]">
+          <Sparkles className="h-3.5 w-3.5 text-violet-300" />
           <span className="truncate">{selectedModel.functionTitle || compactModelTitle(selectedModel.title)}</span>
-          <ChevronDown className="h-4 w-4 text-slate-500" />
+          <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-[min(92vw,420px)] border-slate-800 bg-slate-950 text-slate-100">
@@ -720,7 +727,7 @@ function DetailedSettingsControl({
   return (
     <Sheet>
       <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="icon" className="h-9 w-9 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950" title="Детальные настройки" aria-label="Детальные настройки">
+        <Button type="button" variant="outline" size="icon" className="h-8 w-8 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950" title="Детальные настройки" aria-label="Детальные настройки">
           <Settings2 className="h-4 w-4 text-slate-400" />
         </Button>
       </SheetTrigger>
