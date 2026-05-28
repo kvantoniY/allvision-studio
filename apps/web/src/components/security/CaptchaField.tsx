@@ -20,12 +20,11 @@ export function CaptchaField({ token, onTokenChange, resetKey, className }: Capt
         <ShieldCheck className="h-4 w-4 text-emerald-400" />
         Проверка безопасности
       </div>
-      <div className="max-w-full overflow-hidden rounded-md border border-slate-800 bg-slate-950 p-1 sm:p-2 [&_iframe]:max-w-full">
+      <div className="max-w-full overflow-hidden [&_iframe]:max-w-full">
         <SmartCaptcha
           key={resetKey}
           sitekey={YANDEX_SMARTCAPTCHA_SITE_KEY}
           language="ru"
-          theme="dark"
           onSuccess={onTokenChange}
           onTokenExpired={() => onTokenChange('')}
           onNetworkError={() => onTokenChange('')}

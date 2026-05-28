@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
 import { CHAT_MODELS, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { TokenIcon } from '@/components/ui/token-icon';
 import {
   DropdownMenu,
@@ -537,10 +537,6 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                 if (next?.models[0]) setModelSlug(next.models[0].slug);
               }}
             />
-            {/* Функция модели: ПК — в строке, мобайл — внутри настроек */}
-            <div className="hidden md:block">
-              <ModelFunctionControl selectedModel={selectedModel} models={familyModels} duration={duration} priceOverrides={modelPriceOverrides} onChange={setModelSlug} />
-            </div>
             <div className="ml-auto hidden items-center gap-2.5 md:flex">{actionControl}</div>
           </div>
 
@@ -616,52 +612,6 @@ function ModelFamilyControl({
   );
 }
 
-function ModelFunctionControl({
-  selectedModel,
-  models,
-  duration,
-  priceOverrides,
-  onChange,
-}: {
-  selectedModel: ChatModelOption;
-  models: ChatModelOption[];
-  duration: number;
-  priceOverrides?: Record<string, number>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-8 max-w-[200px] border-slate-700 bg-slate-950 px-2.5 text-[13px]">
-          <Sparkles className="h-3.5 w-3.5 text-violet-300" />
-          <span className="truncate">{selectedModel.functionTitle || compactModelTitle(selectedModel.title)}</span>
-          <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[min(92vw,420px)] border-slate-800 bg-slate-950 text-slate-100">
-        <DropdownMenuLabel>Функция модели</DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-slate-800" />
-        <DropdownMenuRadioGroup value={selectedModel.slug} onValueChange={onChange}>
-          {models.map((model) => (
-            <DropdownMenuRadioItem key={model.slug} value={model.slug} className="items-start gap-3 py-2 focus:bg-slate-900">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium">{model.functionTitle || compactModelTitle(model.title)}</span>
-                  <span className="text-xs text-amber-300">
-                    от {estimateChatGenerationPriceCoins(model.slug, { duration: model.defaultDurationSec ?? duration, priceOverrides })} токенов
-                  </span>
-                  {model.experimental && <span className="text-xs text-amber-200">бета</span>}
-                </div>
-                <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{model.functionDescription || model.description}</div>
-              </div>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 const advancedSectionsMeta = {
   references: { title: 'Дополнительные референсы' },
   quality: { title: 'Качество и детали' },
@@ -723,43 +673,76 @@ function DetailedSettingsControl({
   const durationMin = model.minDurationSec ?? (durationValues.length ? Math.min(...durationValues) : 1);
   const durationMax = model.maxDurationSec ?? (durationValues.length ? Math.max(...durationValues) : 30);
   const AudioIcon = generateAudio ? Volume2 : VolumeX;
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="icon" className="h-8 w-8 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950" title="Детальные настройки" aria-label="Детальные настройки">
-          <Settings2 className="h-4 w-4 text-slate-400" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent
-        side="bottom"
-        className="mx-auto max-h-[85dvh] gap-0 space-y-2.5 overflow-y-auto rounded-t-2xl border-slate-800 bg-slate-950 p-4 text-slate-100 sm:max-w-md"
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-8 w-8 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950"
+        title="Детальные настройки"
+        aria-label="Детальные настройки"
+        onClick={() => setOpen(true)}
       >
-        <SheetHeader className="flex-row items-center gap-2 space-y-0 pr-8 text-left">
-          <Settings2 className="h-4 w-4 shrink-0 text-violet-300" />
-          <div className="min-w-0">
-            <SheetTitle className="truncate text-sm font-semibold text-white">Настройки</SheetTitle>
-            <div className="truncate text-[11px] text-slate-500">{model.functionTitle || compactModelTitle(model.title)}</div>
-          </div>
-        </SheetHeader>
+        <Settings2 className="h-4 w-4 text-slate-400" />
+      </Button>
 
-        {/* Функция модели — только на мобайле (на ПК есть в нижней строке) */}
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 md:hidden">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Функция</div>
-          <select
-            value={model.slug}
-            onChange={(event) => onModelChange(event.target.value)}
-            className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+      {open && typeof document !== 'undefined' && createPortal((
+        // Мобайл — шторка снизу, ПК — обычное модальное окно по центру
+        <div
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 backdrop-blur-sm md:items-center md:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="max-h-[85dvh] w-full space-y-2.5 overflow-y-auto rounded-t-2xl border border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40 md:max-w-md md:rounded-2xl"
+            onClick={(event) => event.stopPropagation()}
           >
-            {familyModels.map((item) => (
-              <option key={item.slug} value={item.slug}>
-                {(item.functionTitle || compactModelTitle(item.title))} · от {estimateChatGenerationPriceCoins(item.slug, { duration: item.defaultDurationSec ?? duration, priceOverrides })} токенов
-              </option>
-            ))}
-          </select>
-        </div>
+            <div className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 shrink-0 text-violet-300" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-semibold text-white">Настройки</div>
+                <div className="truncate text-[11px] text-slate-500">{model.functionTitle || compactModelTitle(model.title)}</div>
+              </div>
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-slate-400 hover:text-white" onClick={() => setOpen(false)} aria-label="Закрыть">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
 
-        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+            {/* Функция модели */}
+            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Функция</div>
+              <select
+                value={model.slug}
+                onChange={(event) => onModelChange(event.target.value)}
+                className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+              >
+                {familyModels.map((item) => (
+                  <option key={item.slug} value={item.slug}>
+                    {(item.functionTitle || compactModelTitle(item.title))} · от {estimateChatGenerationPriceCoins(item.slug, { duration: item.defaultDurationSec ?? duration, priceOverrides })} токенов
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Основное</div>
           <div className="grid grid-cols-2 gap-2.5">
             {model.supportedAspectRatios.length > 0 && (
@@ -867,8 +850,10 @@ function DetailedSettingsControl({
             </div>
           );
         })}
-      </SheetContent>
-    </Sheet>
+          </div>
+        </div>
+      ), document.body)}
+    </>
   );
 }
 
