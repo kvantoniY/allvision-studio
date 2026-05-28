@@ -30,6 +30,7 @@ function authCookie(userId: string, role: 'USER' | 'ADMIN') {
 }
 
 async function cleanup() {
+  await prisma.payment.deleteMany({ where: { user: { email: { in: [ADMIN_EMAIL, USER_EMAIL] } } } });
   await prisma.aIUsageLog.deleteMany({
     where: {
       OR: [
@@ -172,6 +173,43 @@ describe('/api/admin/usage', () => {
         expect.objectContaining({ blockSlug: `usage-block-${RUN_ID}-video`, requestCount: 2, successRate: 0 }),
       ]),
     );
+  });
+
+  it('returns overview topups in rubles and excludes order payments', async () => {
+    const paidAt = new Date('2035-01-01T12:00:00.000Z');
+    await prisma.payment.createMany({
+      data: [
+        {
+          userId: regularUserId,
+          amountRub: 9900,
+          tokensAdded: 100,
+          status: 'SUCCEEDED',
+          provider: 'mock',
+          purpose: 'TOPUP',
+          paidAt,
+        },
+        {
+          userId: regularUserId,
+          amountRub: 5_000_000,
+          tokensAdded: null,
+          status: 'SUCCEEDED',
+          provider: 'mock',
+          purpose: 'ORDER',
+          paidAt,
+        },
+      ],
+    });
+
+    const dateFrom = new Date('2035-01-01T11:59:00.000Z').toISOString();
+    const dateTo = new Date('2035-01-01T12:01:00.000Z').toISOString();
+    const res = await request(app)
+      .get(`/api/admin/overview?dateFrom=${encodeURIComponent(dateFrom)}&dateTo=${encodeURIComponent(dateTo)}`)
+      .set('Cookie', authCookie(adminUserId, 'ADMIN'));
+
+    expect(res.status).toBe(200);
+    expect(res.body.payments.count).toBe(1);
+    expect(res.body.payments.amountRub).toBe(99);
+    expect(res.body.payments.coinsAdded).toBe(100);
   });
 
   it('returns and caches PiAPI account balance', async () => {

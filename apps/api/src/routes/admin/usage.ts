@@ -169,7 +169,11 @@ adminUsageRouter.get('/overview', async (req: Request, res: Response, next: Next
     ] = await prisma.$transaction([
       prisma.user.count({ where: { role: 'USER', deletedAt: null } }),
       prisma.user.count({ where: { role: 'USER', createdAt: range } }),
-      prisma.payment.aggregate({ where: { status: 'SUCCEEDED', paidAt: range }, _sum: { amountRub: true, tokensAdded: true }, _count: true }),
+      prisma.payment.aggregate({
+        where: { status: 'SUCCEEDED', purpose: 'TOPUP', paidAt: range },
+        _sum: { amountRub: true, tokensAdded: true },
+        _count: true,
+      }),
       prisma.aIUsageLog.aggregate({ where: { provider: 'piapi', createdAt: range }, _sum: { costUsd: true }, _count: true }),
       prisma.project.aggregate({ where: { status: 'COMPLETED', createdAt: range }, _sum: { tokensCost: true } }),
       prisma.project.count({ where: { createdAt: range } }),
@@ -228,7 +232,7 @@ adminUsageRouter.get('/overview', async (req: Request, res: Response, next: Next
       },
       payments: {
         count: paymentsAgg._count,
-        amountRub: paymentsAgg._sum.amountRub ?? 0,
+        amountRub: (paymentsAgg._sum.amountRub ?? 0) / 100,
         coinsAdded: paymentsAgg._sum.tokensAdded ?? 0,
       },
       generations: {

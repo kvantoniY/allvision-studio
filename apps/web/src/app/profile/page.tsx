@@ -1,20 +1,37 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useDispatch } from 'react-redux';
-import { Bell, LogOut, MailCheck, ShieldAlert, User as UserIcon, Wallet } from 'lucide-react';
-import type { Payment, PaymentStatus } from '@allvision/shared';
+import {
+  ArrowDown,
+  ArrowUp,
+  Camera,
+  CheckCircle2,
+  CreditCard,
+  History,
+  ImageIcon,
+  KeyRound,
+  Loader2,
+  LogOut,
+  MailCheck,
+  RefreshCw,
+  ShieldAlert,
+  Trash2,
+  Upload,
+  User as UserIcon,
+  Wallet,
+} from 'lucide-react';
+import type { Payment, PaymentStatus, TokenTransaction, UpdateProfileInput } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
 import { CaptchaField } from '@/components/security/CaptchaField';
-import { PaymentRow } from '@/components/dashboard/PaymentRow';
-import { TransactionRow } from '@/components/dashboard/TransactionRow';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import { PricingCards } from '@/components/public/PricingCards';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -42,13 +59,19 @@ import {
   useTopupMutation,
 } from '@/store/api/payments-api';
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
+import {
+  type UserMediaAsset,
+  useCreateUserMediaAssetMutation,
+  useListUserMediaAssetsQuery,
+} from '@/store/api/user-media-assets-api';
 import { clearUser } from '@/store/slices/auth-slice';
-import { formatDate } from '@/components/dashboard/labels';
+import { formatDate, formatDateTime, transactionDescription } from '@/components/dashboard/labels';
 import { submitPaymentConfirmation, type PaymentConfirmationPayload } from '@/lib/payment-confirmation';
 import { cn } from '@/lib/utils';
 
-type ProfileTab = 'personal' | 'billing' | 'transactions' | 'notifications' | 'danger';
-type TxFilter = 'all' | 'topup' | 'spending';
+type ProfileTab = 'account' | 'billing' | 'transactions';
+type TxFilter = 'all' | 'topup' | 'spending' | 'payments';
+type ProfileUser = NonNullable<ReturnType<typeof useAuth>['user']>;
 
 const PAGE = 20;
 
@@ -61,10 +84,31 @@ const MESSENGERS = [
 
 type MType = (typeof MESSENGERS)[number]['value'];
 
+const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
+  PENDING: 'Ожидает оплаты',
+  SUCCEEDED: 'Оплачен',
+  FAILED: 'Ошибка',
+  CANCELLED: 'Отменён',
+};
+
+const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
+  PENDING: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
+  SUCCEEDED: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  FAILED: 'bg-red-500/20 text-red-300 border-red-500/30',
+  CANCELLED: 'bg-slate-700 text-slate-300 border-slate-600',
+};
+
+const PROJECT_REASONS = new Set(['project_created', 'service_launch', 'free_chat', 'library_generation']);
+
+function normalizeProfileTab(value: string | null): ProfileTab {
+  if (value === 'billing' || value === 'transactions') return value;
+  return 'account';
+}
+
 function initialsOf(name: string | null | undefined, email: string) {
   if (name) {
     const parts = name.trim().split(/\s+/);
-    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+    return (parts[0]?.[0] + (parts[1]?.[0] ?? '')).toUpperCase();
   }
   return email[0]?.toUpperCase() ?? '?';
 }
@@ -102,6 +146,21 @@ async function fetchPaymentStatus(dispatch: AppDispatch, paymentId: string) {
   }
 }
 
+function paymentExpiresAt(payment: Payment) {
+  if (!payment.expiresAt) return null;
+  const value = new Date(payment.expiresAt as Date | string);
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+function formatRemaining(ms: number) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+}
+
 export default function ProfilePage() {
   return (
     <AuthGuard>
@@ -119,13 +178,12 @@ function ProfileContent() {
   const searchParams = useSearchParams();
   const dispatch = useDispatch<AppDispatch>();
   const { toast } = useToast();
-  const [tab, setTab] = useState<ProfileTab>((searchParams.get('tab') as ProfileTab) || 'personal');
+  const [tab, setTab] = useState<ProfileTab>(() => normalizeProfileTab(searchParams.get('tab')));
   const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
   const handledPaymentQueryRef = useRef('');
 
   useEffect(() => {
-    const next = searchParams.get('tab') as ProfileTab | null;
-    if (next && ['personal', 'billing', 'transactions', 'notifications', 'danger'].includes(next)) setTab(next);
+    setTab(normalizeProfileTab(searchParams.get('tab')));
   }, [searchParams]);
 
   useEffect(() => {
@@ -283,7 +341,7 @@ function ProfileContent() {
             Профиль
           </div>
           <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Профиль и баланс</h1>
-          <p className="mt-2 text-sm text-slate-400">Личные данные, пополнение, операции и настройки аккаунта.</p>
+          <p className="mt-2 text-sm text-slate-400">Данные аккаунта, пополнение и история операций.</p>
         </div>
         <Button
           type="button"
@@ -298,14 +356,12 @@ function ProfileContent() {
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as ProfileTab)} className="min-w-0">
         <TabsList className="h-auto w-full max-w-full justify-start overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/80 p-1 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto">
-          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="personal">Личные данные</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="account">Аккаунт</TabsTrigger>
           <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="billing">Баланс</TabsTrigger>
           <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="transactions">История</TabsTrigger>
-          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="notifications">Уведомления</TabsTrigger>
-          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="danger">Удаление</TabsTrigger>
         </TabsList>
-        <TabsContent value="personal" className="mt-5">
-          <PersonalSection />
+        <TabsContent value="account" className="mt-5">
+          <AccountSection />
         </TabsContent>
         <TabsContent value="billing" className="mt-5">
           <BillingSection />
@@ -313,18 +369,12 @@ function ProfileContent() {
         <TabsContent value="transactions" className="mt-5">
           <TransactionsSection />
         </TabsContent>
-        <TabsContent value="notifications" className="mt-5">
-          <NotificationsSection />
-        </TabsContent>
-        <TabsContent value="danger" className="mt-5">
-          <DangerSection />
-        </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function PersonalSection() {
+function AccountSection() {
   const { user } = useAuth();
   const dispatch = useDispatch<AppDispatch>();
   const { toast } = useToast();
@@ -350,10 +400,11 @@ function PersonalSection() {
 
   if (!user) return null;
 
-  const personalDirty = name.trim() !== (user.name ?? '');
+  const profileDirty = name.trim() !== (user.name ?? '');
   const contactDirty = messenger !== (user.messenger ?? '') || messengerType !== (user.messengerType ?? '');
+  const canSaveProfile = profileDirty && name.trim().length >= 2;
 
-  const saveProfile = async (body: { name?: string; messenger?: string | null; messengerType?: MType | null }) => {
+  const saveProfile = async (body: UpdateProfileInput) => {
     try {
       await updateProfile(body).unwrap();
       dispatch(authApi.util.invalidateTags(['Me']));
@@ -401,66 +452,62 @@ function PersonalSection() {
   };
 
   return (
-    <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
+    <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
       <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
         <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-          <CardTitle className="text-xl sm:text-2xl">Личные данные</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
+            <UserIcon className="h-5 w-5 text-violet-300" />
+            Профиль
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:space-y-5 sm:px-6 sm:pb-6">
-          <div className="flex items-start gap-3 sm:items-center sm:gap-4">
-            <Avatar className="h-14 w-14 shrink-0 sm:h-16 sm:w-16">
-              {user.avatar && <AvatarImage src={user.avatar} alt={user.name ?? user.email} />}
-              <AvatarFallback className="text-lg">{initialsOf(user.name, user.email)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 text-sm leading-5 text-slate-400">
-              Дата регистрации: {formatDate(user.createdAt as unknown as string)}
-            </div>
-          </div>
+        <CardContent className="space-y-5 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+          <AvatarManager user={user} />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="name">Имя</Label>
               <Input id="name" value={name} onChange={(event) => setName(event.target.value)} />
+              {profileDirty && name.trim().length > 0 && name.trim().length < 2 ? (
+                <p className="text-xs text-amber-300">Минимум 2 символа.</p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" value={user.email} readOnly disabled />
             </div>
           </div>
-          <EmailVerificationPanel
-            verifiedAt={user.emailVerifiedAt as string | Date | null}
-            loading={emailVerificationState.isLoading}
-            errorState={emailVerificationError}
-            captcha={emailCaptcha}
-            onRequest={onRequestEmailVerification}
-          />
-          <Button onClick={() => saveProfile({ name: name.trim() })} disabled={!personalDirty || savingProfile}>
-            {savingProfile ? 'Сохранение...' : 'Сохранить'}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-400">
+            <span>Дата регистрации</span>
+            <span className="font-medium text-slate-200">{formatDate(user.createdAt as string | Date)}</span>
+          </div>
+          <Button onClick={() => saveProfile({ name: name.trim() })} disabled={!canSaveProfile || savingProfile}>
+            {savingProfile ? 'Сохранение...' : 'Сохранить профиль'}
           </Button>
         </CardContent>
       </Card>
 
       <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
         <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-          <CardTitle className="text-xl sm:text-2xl">Контакт и пароль</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
+            <MailCheck className="h-5 w-5 text-sky-300" />
+            Контакты
+          </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:space-y-5 sm:px-6 sm:pb-6">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-            <div className="space-y-2">
-              <Label htmlFor="messengerType">Тип мессенджера</Label>
-              <select
-                id="messengerType"
-                value={messengerType}
-                onChange={(event) => setMessengerType(event.target.value as MType | '')}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Не выбран</option>
-                {MESSENGERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="messenger">Контакт</Label>
-              <Input id="messenger" value={messenger} onChange={(event) => setMessenger(event.target.value)} placeholder="@username или +7..." />
-            </div>
+        <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+          <div className="space-y-2">
+            <Label htmlFor="messengerType">Тип связи</Label>
+            <select
+              id="messengerType"
+              value={messengerType}
+              onChange={(event) => setMessengerType(event.target.value as MType | '')}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="">Не выбран</option>
+              {MESSENGERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="messenger">Контакт</Label>
+            <Input id="messenger" value={messenger} onChange={(event) => setMessenger(event.target.value)} placeholder="@username или +7..." />
           </div>
           <Button
             variant="outline"
@@ -469,22 +516,188 @@ function PersonalSection() {
           >
             Сохранить контакт
           </Button>
-
-          {!showPasswordForm ? (
-            <Button variant="outline" onClick={() => setShowPasswordForm(true)}>Сменить пароль</Button>
-          ) : (
-            <div className="space-y-3 rounded-md border border-slate-800 bg-slate-950 p-3 sm:p-4">
-              <Input type="password" value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} placeholder="Текущий пароль" />
-              <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Новый пароль" />
-              <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите новый пароль" />
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={onChangePassword} disabled={changingPwd}>{changingPwd ? 'Меняем...' : 'Сменить'}</Button>
-                <Button variant="outline" onClick={() => setShowPasswordForm(false)}>Отмена</Button>
-              </div>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+          <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
+            <KeyRound className="h-5 w-5 text-emerald-300" />
+            Безопасность
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+          <EmailVerificationPanel
+            verifiedAt={user.emailVerifiedAt as string | Date | null}
+            loading={emailVerificationState.isLoading}
+            errorState={emailVerificationError}
+            captcha={emailCaptcha}
+            onRequest={onRequestEmailVerification}
+          />
+          <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 sm:p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="font-semibold text-white">Пароль</div>
+                <p className="mt-1 text-sm text-slate-400">Смена пароля для входа в аккаунт.</p>
+              </div>
+              {!showPasswordForm ? (
+                <Button variant="outline" onClick={() => setShowPasswordForm(true)}>Сменить пароль</Button>
+              ) : null}
+            </div>
+            {showPasswordForm ? (
+              <div className="mt-4 space-y-3">
+                <Input type="password" value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} placeholder="Текущий пароль" />
+                <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Новый пароль" />
+                <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите новый пароль" />
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={onChangePassword} disabled={changingPwd}>{changingPwd ? 'Меняем...' : 'Сохранить пароль'}</Button>
+                  <Button variant="outline" onClick={() => setShowPasswordForm(false)}>Отмена</Button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <DangerSection />
+    </div>
+  );
+}
+
+function AvatarManager({ user }: { user: ProfileUser }) {
+  const dispatch = useDispatch<AppDispatch>();
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 8 });
+  const [createAsset, uploadState] = useCreateUserMediaAssetMutation();
+  const [updateProfile, avatarState] = useUpdateProfileMutation();
+  const [previewAvatar, setPreviewAvatar] = useState(user.avatar);
+  const busy = uploadState.isLoading || avatarState.isLoading;
+
+  useEffect(() => {
+    setPreviewAvatar(user.avatar);
+  }, [user.avatar]);
+
+  const setAvatar = async (avatar: string | null, title: string) => {
+    try {
+      await updateProfile({ avatar }).unwrap();
+      setPreviewAvatar(avatar);
+      dispatch(authApi.util.invalidateTags(['Me']));
+      toast({ title });
+    } catch (error) {
+      toast({ title: 'Не удалось обновить аватар', description: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const uploadAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Выберите изображение', variant: 'destructive' });
+      input.value = '';
+      return;
+    }
+
+    const form = new FormData();
+    form.append('file', file);
+    form.append('data', JSON.stringify({
+      kind: 'user-avatar',
+      title: file.name.replace(/\.[^.]+$/, '') || 'Аватар профиля',
+      tags: ['profile-avatar'],
+    }));
+
+    try {
+      const result = await createAsset(form).unwrap();
+      await updateProfile({ avatar: result.asset.publicUrl }).unwrap();
+      setPreviewAvatar(result.asset.publicUrl);
+      dispatch(authApi.util.invalidateTags(['Me']));
+      toast({ title: 'Аватар обновлён' });
+    } catch (error) {
+      toast({ title: 'Не удалось загрузить аватар', description: apiErrorMessage(error), variant: 'destructive' });
+    } finally {
+      input.value = '';
+    }
+  };
+
+  const studioAvatars = avatars.data?.items ?? [];
+
+  return (
+    <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950/50 p-3 sm:p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="relative h-20 w-20 shrink-0">
+          <Avatar className="h-20 w-20">
+            {previewAvatar && <AvatarImage src={previewAvatar} alt={user.name ?? user.email} />}
+            <AvatarFallback className="text-xl">{initialsOf(user.name, user.email)}</AvatarFallback>
+          </Avatar>
+          <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-violet-300">
+            <Camera className="h-4 w-4" />
+          </span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-white">Аватар</div>
+          <p className="mt-1 text-sm leading-5 text-slate-400">
+            Загрузите новое фото или выберите готовый образ из Студии.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={busy}>
+              {uploadState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              Загрузить фото
+            </Button>
+            <Button type="button" variant="outline" onClick={() => setAvatar(null, 'Аватар удалён')} disabled={!previewAvatar || busy}>
+              <Trash2 className="h-4 w-4" />
+              Убрать
+            </Button>
+            <Button asChild variant="ghost">
+              <Link href="/studio">Открыть Студию</Link>
+            </Button>
+          </div>
+          <input ref={fileInputRef} className="sr-only" type="file" accept="image/*" onChange={uploadAvatar} />
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+          <ImageIcon className="h-3.5 w-3.5" />
+          Из Студии
+        </div>
+        {avatars.isLoading ? (
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+            {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="aspect-square rounded-md" />)}
+          </div>
+        ) : studioAvatars.length === 0 ? (
+          <div className="rounded-md border border-dashed border-slate-800 p-3 text-sm text-slate-500">
+            В Студии пока нет аватаров. Загруженное фото появится здесь автоматически.
+          </div>
+        ) : (
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+            {studioAvatars.map((asset) => {
+              const selected = previewAvatar === asset.publicUrl;
+              return (
+                <button
+                  key={asset.id}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setAvatar(asset.publicUrl, 'Аватар выбран из Студии')}
+                  className={cn(
+                    'group relative aspect-square overflow-hidden rounded-md border bg-slate-900 transition hover:border-violet-400',
+                    selected ? 'border-violet-400 ring-2 ring-violet-500/40' : 'border-slate-800',
+                  )}
+                  title={asset.title}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+                  {selected ? (
+                    <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -515,7 +728,7 @@ function EmailVerificationPanel({
             <div className="font-semibold text-white">{verified ? 'Email подтверждён' : 'Email не подтверждён'}</div>
             <p className="mt-1 max-w-xl text-sm leading-5 text-slate-300 sm:leading-6">
               {verified
-                ? 'Вы сможете восстановить доступ к аккаунту через электронную почту.'
+                ? 'Почта готова для восстановления доступа и важных уведомлений.'
                 : 'Подтвердите электронную почту, чтобы восстановить пароль при потере доступа.'}
             </p>
           </div>
@@ -576,7 +789,7 @@ function BillingSection() {
 function TransactionsSection() {
   const { toast } = useToast();
   const dispatch = useDispatch<AppDispatch>();
-  const [txFilter, setTxFilter] = useState<TxFilter>('all');
+  const [filter, setFilter] = useState<TxFilter>('all');
   const [txPage, setTxPage] = useState(1);
   const [payPage, setPayPage] = useState(1);
   const [pollPending, setPollPending] = useState(false);
@@ -586,8 +799,15 @@ function TransactionsSection() {
   const pendingIdsRef = useRef<Set<string>>(new Set());
   const [topup, { isLoading: isRepeating }] = useTopupMutation();
   const [recheckPayment] = useRecheckPaymentMutation();
-  const txData = useGetTransactionsQuery({ page: txPage, limit: PAGE, type: txFilter });
+  const txType = filter === 'topup' || filter === 'spending' ? filter : 'all';
+  const txData = useGetTransactionsQuery({ page: txPage, limit: PAGE, type: txType });
   const payData = useGetPaymentsQuery({ page: payPage, limit: PAGE }, { pollingInterval: pollPending ? 5000 : 0 });
+  const showTransactions = filter !== 'payments';
+  const showPayments = filter === 'all' || filter === 'payments';
+  const txItems = txData.data?.items ?? [];
+  const paymentItems = payData.data?.items ?? [];
+  const loadingVisible = (showTransactions && txData.isLoading) || (showPayments && payData.isLoading);
+  const hasVisibleItems = (showTransactions && txItems.length > 0) || (showPayments && paymentItems.length > 0);
 
   useEffect(() => {
     const items = payData.data?.items ?? [];
@@ -601,6 +821,12 @@ function TransactionsSection() {
     pendingIdsRef.current = nextPending;
     setPollPending(nextPending.size > 0);
   }, [dispatch, payData.data?.items, toast]);
+
+  const selectFilter = (next: TxFilter) => {
+    setFilter(next);
+    setTxPage(1);
+    setPayPage(1);
+  };
 
   const repeatPayment = async (payment: Payment) => {
     const metadata = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
@@ -635,12 +861,12 @@ function TransactionsSection() {
       } else if (result.status === 'PENDING') {
         toast({
           title: 'Платёж ещё в обработке',
-          description: 'Робокасса пока не подтвердила оплату. Подождите 1–2 минуты и попробуйте ещё раз.',
+          description: 'Робокасса пока не подтвердила оплату. Подождите 1-2 минуты и попробуйте ещё раз.',
         });
       } else if (result.status === 'CANCELLED') {
         toast({
           title: 'Платёж отменён',
-          description: 'Со стороны Робокассы платёж помечен как отменённый. Если деньги списались — напишите в поддержку.',
+          description: 'Со стороны Робокассы платёж помечен как отменённый. Если деньги списались, напишите в поддержку.',
           variant: 'destructive',
         });
       } else if (result.status === 'FAILED') {
@@ -687,124 +913,281 @@ function TransactionsSection() {
   };
 
   return (
-    <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
-        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-xl sm:text-2xl">История транзакций</CardTitle>
-            <div className="flex max-w-full gap-1 overflow-x-auto rounded-md border border-slate-800 bg-slate-950/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {(['all', 'topup', 'spending'] as TxFilter[]).map((filter) => (
-                <Button
-                  key={filter}
-                  size="sm"
-                  variant={txFilter === filter ? 'default' : 'outline'}
-                  className={cn(
-                    'shrink-0 border-0 px-3',
-                    txFilter === filter
-                      ? 'bg-violet-600 hover:bg-violet-500'
-                      : 'bg-transparent text-slate-300 hover:bg-slate-800',
-                  )}
-                  onClick={() => {
-                    setTxFilter(filter);
-                    setTxPage(1);
-                  }}
-                >
-                  {filter === 'all' ? 'Все' : filter === 'topup' ? 'Пополнения' : 'Списания'}
-                </Button>
-              ))}
-            </div>
+    <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+      <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
+              <History className="h-5 w-5 text-violet-300" />
+              История
+            </CardTitle>
+            <p className="mt-1 text-sm text-slate-400">Операции с токенами и платежи в одном списке.</p>
           </div>
-        </CardHeader>
-        <CardContent className="min-w-0 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-          {txData.isLoading ? (
-            <Skeleton className="h-36" />
-          ) : !txData.data || txData.data.items.length === 0 ? (
-            <EmptyState size="md" icon={<Wallet className="h-full w-full" />} title="Операций пока нет" />
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-[680px] w-full text-left">
-                  <thead className="text-xs uppercase tracking-wide text-slate-400">
-                    <tr className="border-b border-slate-800">
-                      <th className="px-3 py-2">Дата</th>
-                      <th className="px-3 py-2">Тип</th>
-                      <th className="px-3 py-2">Описание</th>
-                      <th className="px-3 py-2">Сумма</th>
-                      <th className="px-3 py-2">Баланс</th>
-                    </tr>
-                  </thead>
-                  <tbody>{txData.data.items.map((tx) => <TransactionRow key={tx.id} tx={tx} />)}</tbody>
-                </table>
-              </div>
-              <Pagination page={txData.data.page} totalPages={txData.data.totalPages} onChange={setTxPage} />
-            </>
-          )}
-        </CardContent>
-      </Card>
+          <div className="flex max-w-full gap-1 overflow-x-auto rounded-md border border-slate-800 bg-slate-950/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {([
+              { id: 'all', label: 'Все' },
+              { id: 'topup', label: 'Пополнения' },
+              { id: 'spending', label: 'Списания' },
+              { id: 'payments', label: 'Платежи' },
+            ] as const).map((item) => (
+              <Button
+                key={item.id}
+                size="sm"
+                variant={filter === item.id ? 'default' : 'outline'}
+                className={cn(
+                  'shrink-0 border-0 px-3',
+                  filter === item.id
+                    ? 'bg-violet-600 hover:bg-violet-500'
+                    : 'bg-transparent text-slate-300 hover:bg-slate-800',
+                )}
+                onClick={() => selectFilter(item.id)}
+              >
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="min-w-0 space-y-5 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+        {loadingVisible ? (
+          <div className="space-y-3">
+            <Skeleton className="h-16 rounded-md" />
+            <Skeleton className="h-16 rounded-md" />
+            <Skeleton className="h-16 rounded-md" />
+          </div>
+        ) : !hasVisibleItems ? (
+          <EmptyState size="md" icon={<Wallet className="h-full w-full" />} title="Операций пока нет" actions={[{ label: 'Пополнить баланс', href: '/profile?tab=billing' }]} />
+        ) : (
+          <>
+            {showTransactions && txItems.length > 0 ? (
+              <HistoryGroup
+                title={filter === 'topup' ? 'Пополнения токенов' : filter === 'spending' ? 'Списания токенов' : 'Токены'}
+                count={txData.data?.total}
+              >
+                {txItems.map((tx) => <TransactionListItem key={tx.id} tx={tx} />)}
+                <Pagination page={txData.data?.page ?? 1} totalPages={txData.data?.totalPages ?? 1} onChange={setTxPage} />
+              </HistoryGroup>
+            ) : null}
 
-      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
-        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-          <CardTitle className="text-xl sm:text-2xl">Рублёвые платежи</CardTitle>
-        </CardHeader>
-        <CardContent className="min-w-0 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-          {payData.isLoading ? (
-            <Skeleton className="h-36" />
-          ) : !payData.data || payData.data.items.length === 0 ? (
-            <EmptyState size="md" icon={<Wallet className="h-full w-full" />} title="Платежей ещё не было" actions={[{ label: 'Пополнить', href: '/profile?tab=billing' }]} />
-          ) : (
-            <>
-              <div className="overflow-x-auto">
-                <table className="min-w-[720px] w-full text-left">
-                  <thead className="text-xs uppercase tracking-wide text-slate-400">
-                    <tr className="border-b border-slate-800">
-                      <th className="px-3 py-2">Дата</th>
-                      <th className="px-3 py-2">Сумма</th>
-                      <th className="px-3 py-2">Куда</th>
-                      <th className="px-3 py-2">Статус</th>
-                      <th className="px-3 py-2">Действия</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {payData.data.items.map((payment) => (
-                      <PaymentRow
-                        key={payment.id}
-                        payment={payment}
-                        onRepeat={repeatPayment}
-                        onResume={resumePayment}
-                        onRecheck={handleRecheck}
-                        isRepeating={isRepeating && repeatingPaymentId === payment.id}
-                        isResuming={resumingPaymentId === payment.id}
-                        isRechecking={recheckingPaymentId === payment.id}
-                      />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <Pagination page={payData.data.page} totalPages={payData.data.totalPages} onChange={setPayPage} />
-            </>
+            {showPayments && paymentItems.length > 0 ? (
+              <HistoryGroup title="Платежи" count={payData.data?.total}>
+                {paymentItems.map((payment) => (
+                  <PaymentListItem
+                    key={payment.id}
+                    payment={payment}
+                    onRepeat={repeatPayment}
+                    onResume={resumePayment}
+                    onRecheck={handleRecheck}
+                    isRepeating={isRepeating && repeatingPaymentId === payment.id}
+                    isResuming={resumingPaymentId === payment.id}
+                    isRechecking={recheckingPaymentId === payment.id}
+                  />
+                ))}
+                <Pagination page={payData.data?.page ?? 1} totalPages={payData.data?.totalPages ?? 1} onChange={setPayPage} />
+              </HistoryGroup>
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function HistoryGroup({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count?: number;
+  children: ReactNode;
+}) {
+  return (
+    <section className="min-w-0">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold uppercase text-slate-400">{title}</h2>
+        {typeof count === 'number' ? <span className="text-xs text-slate-500">{count}</span> : null}
+      </div>
+      <div className="divide-y divide-slate-800 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function TransactionListItem({ tx }: { tx: TokenTransaction }) {
+  const isTopup = tx.amount > 0;
+  return (
+    <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+      <div className="flex min-w-0 gap-3">
+        <span
+          className={cn(
+            'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
+            isTopup ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400',
           )}
-        </CardContent>
-      </Card>
+        >
+          {isTopup ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
+        </span>
+        <div className="min-w-0">
+          <div className="font-medium text-white">{transactionDescription(tx.reason)}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+            <span>{formatDateTime(tx.createdAt)}</span>
+            {tx.refId && PROJECT_REASONS.has(tx.reason) ? (
+              <Link href={`/dashboard/projects/${tx.refId}`} className="text-violet-300 hover:underline">
+                см. проект
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3 sm:block sm:text-right">
+        <div
+          className={cn(
+            'whitespace-nowrap text-sm font-semibold',
+            isTopup ? 'text-emerald-400' : 'text-red-400',
+          )}
+        >
+          {isTopup ? '+' : ''}
+          {tx.amount} токен.
+        </div>
+        <div className="whitespace-nowrap text-xs text-slate-500">баланс {tx.balanceAfter}</div>
+      </div>
     </div>
   );
 }
 
-function NotificationsSection() {
+function PaymentListItem({
+  payment,
+  onRepeat,
+  onResume,
+  onRecheck,
+  isRepeating,
+  isResuming,
+  isRechecking,
+}: {
+  payment: Payment;
+  onRepeat?: (payment: Payment) => void;
+  onResume?: (payment: Payment) => void;
+  onRecheck?: (payment: Payment) => void;
+  isRepeating?: boolean;
+  isResuming?: boolean;
+  isRechecking?: boolean;
+}) {
+  const purpose = payment.purpose === 'TOPUP' ? 'Пополнение баланса' : `Заказ #${payment.id.slice(0, 6)}`;
+  const metadata = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
+    ? payment.metadata as Record<string, unknown>
+    : {};
+  const confirmationUrl =
+    'confirmationUrl' in metadata
+      ? String(metadata.confirmationUrl)
+      : undefined;
+  const confirmationMethod = metadata.confirmationMethod === 'POST' ? 'POST' : 'GET';
+  const confirmationParams = metadata.confirmationParams && typeof metadata.confirmationParams === 'object' && !Array.isArray(metadata.confirmationParams)
+    ? metadata.confirmationParams as Record<string, unknown>
+    : undefined;
+  const confirmationHref = confirmationUrl ?? `/mock-payment/${payment.providerPaymentId ?? payment.id}`;
+  const expiresAt = useMemo(() => paymentExpiresAt(payment), [payment]);
+  const [now, setNow] = useState(() => Date.now());
+  const remainingMs = expiresAt ? expiresAt.getTime() - now : null;
+  const paymentExpired = payment.status === 'PENDING' && remainingMs !== null && remainingMs <= 0;
+  const canContinuePayment = payment.status === 'PENDING' && !paymentExpired;
+  const resumeLabel = isResuming ? 'Проверяем...' : 'Продолжить оплату';
+
+  useEffect(() => {
+    if (payment.status !== 'PENDING' || !expiresAt) return undefined;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [expiresAt, payment.status]);
+
   return (
-    <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
-      <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-        <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
-          <Bell className="h-5 w-5 text-violet-300" />
-          Настройки уведомлений
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-        <p className="text-sm leading-6 text-slate-400">
-          Email-уведомления о готовых проектах, платежах и важных изменениях появятся в P7c.
-        </p>
-        <Button disabled variant="outline">Email-настройки скоро</Button>
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-3 p-3 sm:p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-300">
+            <CreditCard className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="font-medium text-white">{purpose}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+              <span>{formatDateTime(payment.createdAt)}</span>
+              <Badge
+                className={cn(
+                  'rounded-md border px-2 py-0.5 text-[11px]',
+                  paymentExpired ? 'border-slate-600 bg-slate-700 text-slate-300' : PAYMENT_STATUS_COLOR[payment.status],
+                )}
+              >
+                {paymentExpired ? 'Время истекло' : PAYMENT_STATUS_LABEL[payment.status]}
+              </Badge>
+              {payment.status === 'PENDING' && expiresAt ? (
+                <span className={cn(paymentExpired ? 'text-slate-500' : 'text-amber-200')}>
+                  {paymentExpired ? 'срок оплаты истёк' : `осталось ${formatRemaining(remainingMs ?? 0)}`}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3 sm:block sm:text-right">
+          <div className="whitespace-nowrap text-sm font-semibold text-amber-300">
+            {(payment.amountRub / 100).toLocaleString('ru-RU')} ₽
+          </div>
+          {payment.tokensAdded ? (
+            <div className="whitespace-nowrap text-xs text-slate-500">+{payment.tokensAdded} токенов</div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pl-0 sm:pl-11">
+        {canContinuePayment && confirmationMethod === 'POST' && confirmationParams ? (
+          <form
+            method="POST"
+            action={confirmationHref}
+            onSubmit={(event) => {
+              if (!onResume) return;
+              event.preventDefault();
+              onResume(payment);
+            }}
+          >
+            {Object.entries(confirmationParams).map(([name, value]) => (
+              <input key={name} type="hidden" name={name} value={String(value)} />
+            ))}
+            <Button type="submit" size="sm" variant="default" disabled={isResuming}>
+              {resumeLabel}
+            </Button>
+          </form>
+        ) : canContinuePayment ? (
+          onResume ? (
+            <Button size="sm" variant="default" disabled={isResuming} onClick={() => onResume(payment)}>
+              {resumeLabel}
+            </Button>
+          ) : (
+            <Button asChild size="sm" variant="default">
+              <Link href={confirmationHref}>Продолжить оплату</Link>
+            </Button>
+          )
+        ) : paymentExpired ? (
+          <Button size="sm" variant="outline" disabled>
+            Время истекло
+          </Button>
+        ) : payment.status === 'FAILED' || payment.status === 'CANCELLED' ? (
+          <Button size="sm" variant="outline" disabled={isRepeating} onClick={() => onRepeat?.(payment)}>
+            Повторить покупку
+          </Button>
+        ) : null}
+
+        {onRecheck && payment.status !== 'SUCCEEDED' ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={isRechecking}
+            onClick={() => onRecheck(payment)}
+            title="Проверить, не зачислены ли деньги на стороне Робокассы"
+          >
+            {isRechecking ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Проверить
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -833,16 +1216,16 @@ function DangerSection() {
       <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
         <CardTitle className="flex items-center gap-2 text-xl text-red-300 sm:text-2xl">
           <ShieldAlert className="h-5 w-5" />
-          Удалить аккаунт
+          Удаление аккаунта
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
         <Alert variant="destructive">
           <AlertDescription>
-            Удаление аккаунта необратимо. Все ваши данные, проекты и заказы будут удалены через 30 дней.
+            Удаление аккаунта необратимо. Данные, проекты и заказы будут удалены через 30 дней.
           </AlertDescription>
         </Alert>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
           <div className="space-y-2">
             <Label htmlFor="confirmText">Введите «УДАЛИТЬ»</Label>
             <Input id="confirmText" value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} />
@@ -871,7 +1254,7 @@ function Pagination({
 }) {
   if (totalPages <= 1) return null;
   return (
-    <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-2 p-3">
       <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onChange(page - 1)}>
         Назад
       </Button>

@@ -84,7 +84,11 @@ adminUsersRouter.get('/:id', async (req: Request, res: Response, next: NextFunct
       prisma.project.count({ where: { userId: user.id, status: 'COMPLETED' } }),
       prisma.project.count({ where: { userId: user.id, status: 'FAILED' } }),
       prisma.project.aggregate({ where: { userId: user.id, status: 'COMPLETED' }, _sum: { tokensCost: true } }),
-      prisma.payment.aggregate({ where: { userId: user.id, status: 'SUCCEEDED' }, _sum: { amountRub: true, tokensAdded: true }, _count: true }),
+      prisma.payment.aggregate({
+        where: { userId: user.id, status: 'SUCCEEDED', purpose: 'TOPUP' },
+        _sum: { amountRub: true, tokensAdded: true },
+        _count: true,
+      }),
       prisma.aIUsageLog.aggregate({ where: { userId: user.id }, _sum: { costUsd: true } }),
     ]);
 
@@ -94,7 +98,7 @@ adminUsersRouter.get('/:id', async (req: Request, res: Response, next: NextFunct
       failedProjects: failedCount,
       spentCoins: spendAgg._sum.tokensCost ?? 0,
       topupCount: paymentsAgg._count,
-      topupRub: paymentsAgg._sum.amountRub ?? 0,
+      topupRub: (paymentsAgg._sum.amountRub ?? 0) / 100,
       topupCoins: paymentsAgg._sum.tokensAdded ?? 0,
       providerCostUsd: providerAgg._sum.costUsd ?? 0,
     };
