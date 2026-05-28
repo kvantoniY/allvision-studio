@@ -127,7 +127,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
       </div>
 
       {open && typeof document !== 'undefined' && createPortal((
-        <div className="fixed inset-0 z-[100] grid min-h-dvh place-items-center overflow-y-auto bg-black/75 p-4" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[200] grid min-h-dvh place-items-center overflow-y-auto bg-black/75 p-4" role="dialog" aria-modal="true">
           <Card className="max-h-[calc(100dvh-2rem)] w-full max-w-4xl overflow-hidden border-slate-800 bg-slate-900">
             <CardContent className="p-0">
               <div className="flex items-center justify-between border-b border-slate-800 p-4">

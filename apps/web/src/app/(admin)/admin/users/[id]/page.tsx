@@ -31,6 +31,23 @@ function apiErrorMessage(error: unknown) {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Не удалось выполнить операцию';
 }
 
+const STAT_ACCENT: Record<string, string> = {
+  violet: 'border-violet-500/30 bg-violet-500/5',
+  amber: 'border-amber-500/30 bg-amber-500/5',
+  emerald: 'border-emerald-500/30 bg-emerald-500/5',
+  slate: 'border-zinc-800 bg-zinc-950',
+};
+
+function StatCard({ label, value, hint, accent = 'slate' }: { label: string; value: string; hint?: string; accent?: string }) {
+  return (
+    <div className={`rounded-lg border p-4 ${STAT_ACCENT[accent] ?? STAT_ACCENT.slate}`}>
+      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-2 text-xl font-bold text-white">{value}</div>
+      {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
+    </div>
+  );
+}
+
 export default function AdminUserDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -139,6 +156,18 @@ export default function AdminUserDetailPage() {
           <div className="mt-2 text-white">{formatMoney({ coins: item.tokenBalance }, { primary: 'coins', showAll: true, usdToRub: rate })}</div>
         </div>
       </section>
+
+      {item.stats && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Сводка по активности</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Генераций всего" value={String(item.stats.totalProjects)} hint={`Завершено ${item.stats.completedProjects} · ошибок ${item.stats.failedProjects}`} accent="violet" />
+            <StatCard label="Потрачено на генерации" value={`${item.stats.spentCoins.toLocaleString('ru-RU')} коинов`} hint="по завершённым проектам" accent="amber" />
+            <StatCard label="Пополнено" value={`${item.stats.topupRub.toLocaleString('ru-RU')} ₽`} hint={`${item.stats.topupCount} платежей · +${item.stats.topupCoins.toLocaleString('ru-RU')} коинов`} accent="emerald" />
+            <StatCard label="Себестоимость PiAPI" value={`$${item.stats.providerCostUsd.toFixed(2)}`} hint="реальные расходы провайдера" accent="slate" />
+          </div>
+        </section>
+      )}
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="font-semibold text-white">Управление балансом</h2>

@@ -71,6 +71,30 @@ export type PiAPIAccountResponse = {
   raw: unknown;
 };
 
+export type AdminAnalyticsOverview = {
+  range: { from: string; to: string };
+  usdToRub: number;
+  users: { total: number; new: number };
+  payments: { count: number; amountRub: number; coinsAdded: number };
+  generations: { total: number; completed: number; failed: number };
+  finance: {
+    revenueCoins: number;
+    providerCostUsd: number;
+    providerCostRub: number;
+    providerRequests: number;
+    netProfitRub: number;
+  };
+  topServices: Array<{
+    serviceId: string;
+    title: string;
+    slug: string;
+    category: string;
+    runs: number;
+    completed: number;
+    revenueCoins: number;
+  }>;
+};
+
 export const adminUsageApi = createApi({
   reducerPath: 'adminUsageApi',
   baseQuery: createBaseQueryWithReauth('/api/admin'),
@@ -92,10 +116,21 @@ export const adminUsageApi = createApi({
       query: (q) => ({ url: `/piapi/account${q?.refresh ? '?refresh=true' : ''}` }),
       providesTags: ['PiAPIAccount'],
     }),
+    getAdminAnalyticsOverview: build.query<AdminAnalyticsOverview, { dateFrom?: string; dateTo?: string } | void>({
+      query: (q) => {
+        const params = new URLSearchParams();
+        if (q?.dateFrom) params.set('dateFrom', q.dateFrom);
+        if (q?.dateTo) params.set('dateTo', q.dateTo);
+        const qs = params.toString();
+        return { url: `/overview${qs ? `?${qs}` : ''}` };
+      },
+      providesTags: ['AdminUsage'],
+    }),
   }),
 });
 
 export const {
   useGetAdminUsageQuery,
   useGetPiAPIAccountQuery,
+  useGetAdminAnalyticsOverviewQuery,
 } = adminUsageApi;

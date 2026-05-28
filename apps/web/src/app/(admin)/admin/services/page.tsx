@@ -99,59 +99,24 @@ function marginBadgeClass(marginPercent: number | null) {
 
 function PricingMetric({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="min-w-0 rounded-md bg-zinc-900/70 px-2.5 py-2">
+    <div className="min-w-0">
       <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 truncate text-sm font-semibold text-slate-100">{value}</div>
-      {sub && <div className="mt-0.5 truncate text-[11px] text-slate-500">{sub}</div>}
+      <div className="truncate text-sm font-semibold text-slate-100">{value}</div>
+      {sub && <div className="truncate text-[11px] text-slate-500">{sub}</div>}
     </div>
   );
 }
 
-function PricingTierCard({
-  label,
-  margin,
-  usdToRub,
-}: {
-  label: string;
-  margin: ServiceMargin;
-  usdToRub: number;
-}) {
+// Единая стоимость: показываем цену, себестоимость и маржу одной компактной строкой.
+function PricingCell({ margin, usdToRub }: { margin: ServiceMargin; usdToRub: number }) {
   return (
-    <div className="rounded-lg border border-zinc-800/80 bg-zinc-950/80 p-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
-        <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', marginBadgeClass(margin.marginPercent))}>
-          {formatMargin(margin.marginPercent)}
-        </span>
-      </div>
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        <PricingMetric label="Себест." value={formatUsd(margin.costUsd)} sub={formatRub(margin.costUsd * usdToRub)} />
-        <PricingMetric label="Цена" value={`${margin.priceCoins} ток.`} sub={`~${margin.priceCoins.toLocaleString('ru-RU')} ₽`} />
-        <PricingMetric label="Прибыль" value={formatUsd(margin.profitUsd)} sub={formatRub(margin.profitCoins)} />
-      </div>
-    </div>
-  );
-}
-
-function PricingSummaryCell({
-  standardMargin,
-  proMargin,
-  usdToRub,
-}: {
-  standardMargin: ServiceMargin;
-  proMargin: ServiceMargin | null;
-  usdToRub: number;
-}) {
-  return (
-    <div className="w-[320px] space-y-2">
-      <PricingTierCard label="Стандарт" margin={standardMargin} usdToRub={usdToRub} />
-      {proMargin ? (
-        <PricingTierCard label="Pro" margin={proMargin} usdToRub={usdToRub} />
-      ) : (
-        <div className="rounded-lg border border-dashed border-zinc-800 px-3 py-2 text-xs text-slate-500">
-          Pro-цена не задана
-        </div>
-      )}
+    <div className="flex items-center gap-4">
+      <PricingMetric label="Цена" value={`${margin.priceCoins} ток.`} sub={`~${margin.priceCoins.toLocaleString('ru-RU')} ₽`} />
+      <PricingMetric label="Себест." value={formatUsd(margin.costUsd)} sub={formatRub(margin.costUsd * usdToRub)} />
+      <PricingMetric label="Прибыль" value={formatUsd(margin.profitUsd)} sub={formatRub(margin.profitCoins)} />
+      <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold', marginBadgeClass(margin.marginPercent))}>
+        {formatMargin(margin.marginPercent)}
+      </span>
     </div>
   );
 }
@@ -304,17 +269,17 @@ export default function AdminServicesPage() {
       )}
 
       <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-800">
-        <table className="min-w-[1280px] divide-y divide-zinc-800 text-sm">
+        <table className="min-w-[920px] divide-y divide-zinc-800 text-sm">
           <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-slate-400">
             <tr>
-              <th className="w-[92px] px-4 py-3">Превью</th>
-              <th className="w-[280px] px-4 py-3">Название</th>
-              <th className="w-[150px] px-4 py-3">Категория</th>
-              <th className="w-[360px] px-4 py-3">Экономика</th>
-              <th className="w-[120px] px-4 py-3">Реком.</th>
-              <th className="w-[120px] px-4 py-3">Статус</th>
-              <th className="w-[90px] px-4 py-3">Порядок</th>
-              <th className="w-[300px] px-4 py-3 text-right">Действия</th>
+              <th className="w-[64px] px-3 py-2.5">Превью</th>
+              <th className="px-3 py-2.5">Название</th>
+              <th className="w-[130px] px-3 py-2.5">Категория</th>
+              <th className="px-3 py-2.5">Экономика</th>
+              <th className="w-[56px] px-3 py-2.5 text-center">Реком.</th>
+              <th className="w-[96px] px-3 py-2.5">Статус</th>
+              <th className="w-[64px] px-3 py-2.5 text-center">Порядок</th>
+              <th className="px-3 py-2.5 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800 bg-zinc-950">
@@ -337,69 +302,60 @@ export default function AdminServicesPage() {
             )}
             {items.map((service) => {
               const pricing = summarizePipelinePricing(service.pipelineConfig, blocks, usdToRub);
-              const standardMargin = serviceMargin(
-                service.priceCoinsStandard ?? service.priceTokens,
-                pricing.standard.costUsd,
-                usdToRub,
-              );
-              const proMargin = service.priceCoinsPro
-                ? serviceMargin(service.priceCoinsPro, pricing.pro.costUsd, usdToRub)
-                : null;
-              const marginValues = [standardMargin.marginPercent, proMargin?.marginPercent]
-                .filter((value): value is number => value !== null && value !== undefined);
-              const minMargin = marginValues.length ? Math.min(...marginValues) : null;
+              const effectivePrice = service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
+              const margin = serviceMargin(effectivePrice, pricing.pro.costUsd, usdToRub);
               return (
-              <tr key={service.id} className={cn('align-middle transition-colors hover:bg-zinc-900/70', marginRowClass(minMargin))}>
-                <td className="px-4 py-3">
+              <tr key={service.id} className={cn('align-middle transition-colors hover:bg-zinc-900/70', marginRowClass(margin.marginPercent))}>
+                <td className="px-3 py-2.5">
                   {previewUrl(service) ? (
-                    <img src={previewUrl(service)!} alt="" className="h-[60px] w-[60px] rounded-md object-cover" />
+                    <img src={previewUrl(service)!} alt="" className="h-11 w-11 rounded-md object-cover" />
                   ) : (
-                    <div className="h-[60px] w-[60px] rounded-md bg-zinc-800" />
+                    <div className="h-11 w-11 rounded-md bg-zinc-800" />
                   )}
                 </td>
-                <td className="max-w-[260px] px-4 py-3">
+                <td className="px-3 py-2.5">
                   <div className="truncate font-medium text-white">{service.title}</div>
-                  <div className="mt-1 truncate text-xs text-slate-500">{service.slug}</div>
+                  <div className="truncate text-xs text-slate-500">{service.slug}</div>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2.5">
                   <Badge className="bg-zinc-800 text-slate-200">{categoryTitleByCode.get(service.category) ?? service.category}</Badge>
                 </td>
-                <td className="px-4 py-3">
-                  <PricingSummaryCell standardMargin={standardMargin} proMargin={proMargin} usdToRub={usdToRub} />
+                <td className="px-3 py-2.5">
+                  <PricingCell margin={margin} usdToRub={usdToRub} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2.5 text-center">
                   <button type="button" onClick={() => toggleFeatured(service)} aria-label="Рекомендуемая">
                     <Star className={service.isFeatured ? 'h-5 w-5 fill-amber-400 text-amber-400' : 'h-5 w-5 text-slate-600'} />
                   </button>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-3 py-2.5">
                   <button type="button" onClick={() => toggleActive(service)}>
                     <Badge className={service.isActive ? 'bg-emerald-600' : 'bg-zinc-700'}>
                       {service.isActive ? 'Активна' : 'Скрыта'}
                     </Badge>
                   </button>
                 </td>
-                <td className="px-4 py-3">{service.sortOrder}</td>
-                <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" variant="outline" size="icon" onClick={() => reorder(service, 'up')} aria-label="Вверх">
+                <td className="px-3 py-2.5 text-center">{service.sortOrder}</td>
+                <td className="px-3 py-2.5">
+                  <div className="flex justify-end gap-1">
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => reorder(service, 'up')} aria-label="Вверх">
                       <ArrowUp className="h-4 w-4" />
                     </Button>
-                    <Button type="button" variant="outline" size="icon" onClick={() => reorder(service, 'down')} aria-label="Вниз">
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => reorder(service, 'down')} aria-label="Вниз">
                       <ArrowDown className="h-4 w-4" />
                     </Button>
-                    <Button type="button" variant="outline" size="icon" onClick={() => runTest(service)} aria-label="Тест">
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => runTest(service)} aria-label="Тест">
                       <Play className="h-4 w-4" />
                     </Button>
-                    <Button asChild variant="outline" size="icon" aria-label="Редактировать">
+                    <Button asChild variant="outline" size="icon" className="h-8 w-8" aria-label="Редактировать">
                       <Link href={`/admin/services/${service.id}`}>
                         <Edit className="h-4 w-4" />
                       </Link>
                     </Button>
-                    <Button type="button" variant="outline" size="icon" onClick={() => duplicate(service)} aria-label="Дублировать">
+                    <Button type="button" variant="outline" size="icon" className="h-8 w-8" onClick={() => duplicate(service)} aria-label="Дублировать">
                       <Copy className="h-4 w-4" />
                     </Button>
-                    <Button type="button" variant="destructive" size="icon" onClick={() => setDeleteTarget(service)} aria-label="Удалить">
+                    <Button type="button" variant="destructive" size="icon" className="h-8 w-8" onClick={() => setDeleteTarget(service)} aria-label="Удалить">
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

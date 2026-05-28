@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useGetAdminUsageQuery, useGetPiAPIAccountQuery } from '@/store/api/admin-usage-api';
+import { useGetAdminAnalyticsOverviewQuery, useGetAdminUsageQuery, useGetPiAPIAccountQuery } from '@/store/api/admin-usage-api';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 
 function statusClass(status: string) {
@@ -39,6 +39,7 @@ export default function AdminUsagePage() {
     status: filters.status || undefined,
   });
   const account = useGetPiAPIAccountQuery();
+  const overview = useGetAdminAnalyticsOverviewQuery();
   const settings = useGetAdminSettingsQuery();
   const usdToRub = settings.data?.settings.usdToRub ?? 80;
   const maxSpend = Math.max(0.01, ...(usage.data?.byDay.map((day) => day.totalCostUsd) ?? [0.01]));
@@ -53,11 +54,84 @@ export default function AdminUsagePage() {
           <h1 className="text-3xl font-bold text-white">Аналитика расходов</h1>
           <p className="mt-2 text-sm text-slate-400">Расход PiAPI, здоровье запросов, последние ошибки провайдера и статистика по моделям.</p>
         </div>
-        <Button type="button" variant="outline" onClick={() => { usage.refetch(); account.refetch(); }}>
+        <Button type="button" variant="outline" onClick={() => { usage.refetch(); account.refetch(); overview.refetch(); }}>
           <RefreshCw className="h-4 w-4" />
           Обновить
         </Button>
       </div>
+
+      {overview.data && (
+        <div className="space-y-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Бизнес-обзор · 30 дней</h2>
+
+          {/* Деньги */}
+          <div>
+            <div className="mb-2 text-xs font-medium text-slate-400">Деньги</div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <BizCard
+                label="Пополнения"
+                value={`${overview.data.payments.amountRub.toLocaleString('ru-RU')} ₽`}
+                hint={`${overview.data.payments.count} платежей · +${overview.data.payments.coinsAdded.toLocaleString('ru-RU')} коинов`}
+                accent="emerald"
+              />
+              <BizCard
+                label="Выручка с генераций"
+                value={`${overview.data.finance.revenueCoins.toLocaleString('ru-RU')} коинов`}
+                hint="оплачено за завершённые генерации"
+                accent="violet"
+              />
+              <BizCard
+                label="Расход PiAPI"
+                value={formatMoney({ usd: overview.data.finance.providerCostUsd }, { primary: 'usd', showAll: true, usdToRub })}
+                hint={`${overview.data.finance.providerRequests} вызовов провайдера`}
+                accent="rose"
+              />
+              <BizCard
+                label="Чистая прибыль"
+                value={`${Math.round(overview.data.finance.netProfitRub).toLocaleString('ru-RU')} ₽`}
+                hint="выручка − себестоимость генераций"
+                accent={overview.data.finance.netProfitRub >= 0 ? 'emerald' : 'rose'}
+              />
+            </div>
+          </div>
+
+          {/* Пользователи и генерации */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <BizCard label="Пользователей всего" value={overview.data.users.total.toLocaleString('ru-RU')} hint={`+${overview.data.users.new} за период`} accent="slate" />
+            <BizCard label="Генераций за период" value={overview.data.generations.total.toLocaleString('ru-RU')} hint={`завершено ${overview.data.generations.completed} · ошибок ${overview.data.generations.failed}`} accent="slate" />
+            <BizCard label="Конверсия в результат" value={overview.data.generations.total ? `${Math.round((overview.data.generations.completed / overview.data.generations.total) * 100)}%` : '—'} hint="завершено / всего" accent="slate" />
+            <BizCard label="Визиты на сайт" value="—" hint="нужна веб-аналитика (Я.Метрика/GA)" accent="slate" />
+          </div>
+
+          {/* Популярные услуги */}
+          <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
+            <h3 className="font-semibold text-white">Популярные услуги</h3>
+            <p className="mt-1 text-xs text-slate-500">Сколько раз запускали каждую услугу за период — для отслеживания трендов.</p>
+            <div className="mt-4 space-y-2">
+              {overview.data.topServices.length === 0 && <div className="text-sm text-slate-500">За период запусков услуг нет</div>}
+              {overview.data.topServices.slice(0, 12).map((service, index) => {
+                const max = overview.data!.topServices[0]?.runs || 1;
+                return (
+                  <div key={service.serviceId} className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="w-5 shrink-0 text-slate-500">{index + 1}</span>
+                        <span className="truncate font-medium text-white">{service.title}</span>
+                      </span>
+                      <span className="shrink-0 text-slate-400">
+                        {service.runs} запусков · {service.revenueCoins.toLocaleString('ru-RU')} коинов
+                      </span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                      <div className="h-full rounded-full bg-violet-500" style={{ width: `${Math.max(4, (service.runs / max) * 100)}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+      )}
 
       <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         {account.data ? (
@@ -231,6 +305,24 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
       <div className="text-xs uppercase text-slate-500">{label}</div>
       <div className="mt-2 text-2xl font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+const BIZ_ACCENT: Record<string, string> = {
+  violet: 'border-violet-500/30 bg-violet-500/5',
+  amber: 'border-amber-500/30 bg-amber-500/5',
+  emerald: 'border-emerald-500/30 bg-emerald-500/5',
+  rose: 'border-rose-500/30 bg-rose-500/5',
+  slate: 'border-zinc-800 bg-zinc-950',
+};
+
+function BizCard({ label, value, hint, accent = 'slate' }: { label: string; value: string; hint?: string; accent?: string }) {
+  return (
+    <div className={`rounded-lg border p-4 ${BIZ_ACCENT[accent] ?? BIZ_ACCENT.slate}`}>
+      <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-2 text-2xl font-bold text-white">{value}</div>
+      {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
     </div>
   );
 }

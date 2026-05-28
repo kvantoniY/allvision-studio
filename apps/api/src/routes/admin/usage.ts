@@ -140,6 +140,116 @@ adminUsageRouter.get('/usage', async (req: Request, res: Response, next: NextFun
   }
 });
 
+const overviewQuerySchema = z.object({
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional(),
+});
+
+adminUsageRouter.get('/overview', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const query = overviewQuerySchema.parse(req.query);
+    const to = query.dateTo ? new Date(query.dateTo) : new Date();
+    const from = query.dateFrom ? new Date(query.dateFrom) : (() => {
+      const date = new Date(to);
+      date.setUTCDate(date.getUTCDate() - 30);
+      return date;
+    })();
+    const range = { gte: from, lte: to };
+
+    const [
+      totalUsers,
+      newUsers,
+      paymentsAgg,
+      providerAgg,
+      revenueAgg,
+      totalGenerations,
+      completedGenerations,
+      failedGenerations,
+      projectsForServices,
+    ] = await prisma.$transaction([
+      prisma.user.count({ where: { role: 'USER', deletedAt: null } }),
+      prisma.user.count({ where: { role: 'USER', createdAt: range } }),
+      prisma.payment.aggregate({ where: { status: 'SUCCEEDED', paidAt: range }, _sum: { amountRub: true, tokensAdded: true }, _count: true }),
+      prisma.aIUsageLog.aggregate({ where: { provider: 'piapi', createdAt: range }, _sum: { costUsd: true }, _count: true }),
+      prisma.project.aggregate({ where: { status: 'COMPLETED', createdAt: range }, _sum: { tokensCost: true } }),
+      prisma.project.count({ where: { createdAt: range } }),
+      prisma.project.count({ where: { status: 'COMPLETED', createdAt: range } }),
+      prisma.project.count({ where: { status: 'FAILED', createdAt: range } }),
+      prisma.project.findMany({
+        where: { createdAt: range, serviceId: { not: null } },
+        select: { serviceId: true, status: true, tokensCost: true },
+        take: 50000,
+      }),
+    ]);
+
+    const serviceMap = new Map<string, { serviceId: string; runs: number; completed: number; revenueCoins: number }>();
+    for (const project of projectsForServices) {
+      if (!project.serviceId) continue;
+      const current = serviceMap.get(project.serviceId) ?? { serviceId: project.serviceId, runs: 0, completed: 0, revenueCoins: 0 };
+      current.runs += 1;
+      if (project.status === 'COMPLETED') {
+        current.completed += 1;
+        current.revenueCoins += project.tokensCost;
+      }
+      serviceMap.set(project.serviceId, current);
+    }
+    const serviceIds = [...serviceMap.keys()];
+    const services = serviceIds.length
+      ? await prisma.service.findMany({ where: { id: { in: serviceIds } }, select: { id: true, title: true, slug: true, category: true } })
+      : [];
+    const serviceTitle = new Map(services.map((service) => [service.id, service]));
+    const topServices = [...serviceMap.values()]
+      .map((row) => ({
+        serviceId: row.serviceId,
+        title: serviceTitle.get(row.serviceId)?.title ?? 'Без услуги',
+        slug: serviceTitle.get(row.serviceId)?.slug ?? '',
+        category: serviceTitle.get(row.serviceId)?.category ?? '',
+        runs: row.runs,
+        completed: row.completed,
+        revenueCoins: row.revenueCoins,
+      }))
+      .sort((a, b) => b.runs - a.runs);
+
+    const usdToRub = Number(
+      (await prisma.setting.findUnique({ where: { key: 'USD_TO_RUB' } }))?.value ?? process.env.PRICING_USD_TO_RUB ?? '80',
+    ) || 80;
+
+    const revenueCoins = revenueAgg._sum.tokensCost ?? 0;
+    const providerCostUsd = providerAgg._sum.costUsd ?? 0;
+    const providerCostRub = providerCostUsd * usdToRub;
+    const netProfitRub = revenueCoins - providerCostRub;
+
+    res.json({
+      range: { from: from.toISOString(), to: to.toISOString() },
+      usdToRub,
+      users: {
+        total: totalUsers,
+        new: newUsers,
+      },
+      payments: {
+        count: paymentsAgg._count,
+        amountRub: paymentsAgg._sum.amountRub ?? 0,
+        coinsAdded: paymentsAgg._sum.tokensAdded ?? 0,
+      },
+      generations: {
+        total: totalGenerations,
+        completed: completedGenerations,
+        failed: failedGenerations,
+      },
+      finance: {
+        revenueCoins,
+        providerCostUsd,
+        providerCostRub,
+        providerRequests: providerAgg._count,
+        netProfitRub,
+      },
+      topServices,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 adminUsageRouter.get('/piapi/account', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const force = req.query.refresh === 'true';

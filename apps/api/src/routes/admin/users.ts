@@ -79,7 +79,27 @@ adminUsersRouter.get('/:id', async (req: Request, res: Response, next: NextFunct
       },
     });
     if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
-    res.json({ user: await enrichUserListItem(user) });
+
+    const [completedCount, failedCount, spendAgg, paymentsAgg, providerAgg] = await prisma.$transaction([
+      prisma.project.count({ where: { userId: user.id, status: 'COMPLETED' } }),
+      prisma.project.count({ where: { userId: user.id, status: 'FAILED' } }),
+      prisma.project.aggregate({ where: { userId: user.id, status: 'COMPLETED' }, _sum: { tokensCost: true } }),
+      prisma.payment.aggregate({ where: { userId: user.id, status: 'SUCCEEDED' }, _sum: { amountRub: true, tokensAdded: true }, _count: true }),
+      prisma.aIUsageLog.aggregate({ where: { userId: user.id }, _sum: { costUsd: true } }),
+    ]);
+
+    const stats = {
+      totalProjects: user._count.projects,
+      completedProjects: completedCount,
+      failedProjects: failedCount,
+      spentCoins: spendAgg._sum.tokensCost ?? 0,
+      topupCount: paymentsAgg._count,
+      topupRub: paymentsAgg._sum.amountRub ?? 0,
+      topupCoins: paymentsAgg._sum.tokensAdded ?? 0,
+      providerCostUsd: providerAgg._sum.costUsd ?? 0,
+    };
+
+    res.json({ user: { ...(await enrichUserListItem(user)), stats } });
   } catch (err) {
     next(err);
   }

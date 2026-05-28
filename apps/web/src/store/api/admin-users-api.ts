@@ -13,6 +13,16 @@ export type AdminUser = {
   _count: { projects: number };
   projects?: Array<{ id: string; title: string; status: string; progress: number; tokensCost: number; createdAt: string; service: { id: string; slug: string; title: string } | null }>;
   tokenTxns?: Array<{ id: string; amount: number; reason: string; refId: string | null; balanceAfter: number; createdAt: string }>;
+  stats?: {
+    totalProjects: number;
+    completedProjects: number;
+    failedProjects: number;
+    spentCoins: number;
+    topupCount: number;
+    topupRub: number;
+    topupCoins: number;
+    providerCostUsd: number;
+  };
 };
 
 export type AdminUsersQuery = {
