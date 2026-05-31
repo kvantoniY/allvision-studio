@@ -233,7 +233,7 @@ function ServicePhotoInput({
     <div className="space-y-3">
       <Label htmlFor={field.id}>{label} {required}</Label>
       {tabs.length > 1 && (
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2">
           {tabs.map((item) => (
             <Button
               key={item.id}
@@ -241,10 +241,10 @@ function ServicePhotoInput({
               variant={tab === item.id ? 'default' : 'outline'}
               size="sm"
               onClick={() => setTab(item.id)}
-              className={cn(tab === item.id && 'bg-violet-600 hover:bg-violet-500')}
+              className={cn('w-full justify-center gap-2', tab === item.id && 'bg-violet-600 hover:bg-violet-500')}
             >
-              {item.id === 'upload' ? <ImagePlus className="h-4 w-4" /> : <Library className="h-4 w-4" />}
-              {item.label}
+              {item.id === 'upload' ? <ImagePlus className="h-4 w-4 shrink-0" /> : <Library className="h-4 w-4 shrink-0" />}
+              <span className="truncate">{item.label}</span>
             </Button>
           ))}
         </div>
@@ -534,7 +534,7 @@ function FieldControl({
           onChange={(event) => onValueChange(field.id, event.target.value)}
           className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          <option value="">Р’С‹Р±РµСЂРёС‚Рµ РІР°СЂРёР°РЅС‚</option>
+          <option value="">Выберите вариант</option>
           {options.map((option) => (
             <option key={option.id} value={option.id}>
               {option.title}
@@ -853,7 +853,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
               <h2 className="text-2xl font-bold tracking-tight">Как это работает</h2>
             </div>
             <div className="grid gap-4 md:grid-cols-3">
-              {['Загрузите фото или выберите параметры подарка.', 'Allvision запускает подготовленный AI-pipeline.', 'Готовый результат появится в кабинете.'].map((item, index) => (
+              {['Загрузите фото или выберите параметры услуги.', 'Allvision запускает подготовленный AI-pipeline.', 'Готовый результат появится в кабинете.'].map((item, index) => (
                 <Card key={item} className="border-slate-800 bg-slate-900">
                   <CardContent className="p-5">
                     <CheckCircle2 className="h-6 w-6 text-emerald-400" />
@@ -868,11 +868,11 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
         <Card className="border-slate-800 bg-slate-900 lg:sticky lg:top-6">
           <CardHeader>
-            <CardTitle className="text-xl">Создать подарок</CardTitle>
+            <CardTitle className="text-xl">Создать услугу</CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
-              <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость подарка</div>
+              <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
               <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
             </div>
 

@@ -120,10 +120,10 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
         <div className="grid gap-8 lg:grid-cols-[1fr_0.7fr] lg:items-end">
           <div className="max-w-4xl">
             <Badge className="border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/10">
-              AI-фабрика подарков
+              AI-фабрика услуг
             </Badge>
             <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight md:text-6xl">
-              Цифровые подарки, которые удивят
+              Цифровые услуги, которые удивят
             </h1>
             <p className="mt-5 text-lg leading-8 text-slate-300">
               Выберите повод, загрузите фото или пару деталей, а Allvision соберёт готовый ролик, открытку или мем за несколько минут.
@@ -187,7 +187,7 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
               <div className="mb-5 flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-amber-400" />
                 <h2 className="text-2xl font-bold tracking-tight">
-                  {activeCategory ? `Популярное в категории «${activeCategory.label}»` : 'Популярные подарки'}
+                  {activeCategory ? `Популярное в категории «${activeCategory.label}»` : 'Популярные услуги'}
                 </h2>
               </div>
               <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">

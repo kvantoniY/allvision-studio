@@ -3,7 +3,7 @@ import type { ServiceCategory } from '@allvision/shared';
 import { ServicesCatalog } from '@/components/pages/ServicesCatalog';
 
 export const metadata: Metadata = {
-  title: 'Цифровые подарки',
+  title: 'Цифровые услуги',
   description: 'Каталог Allvision Studio: оживление старых фото, трендовые видео, дети-герои и видео-открытки к особым поводам.',
 };
 

@@ -254,7 +254,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     setModelSlug(next.slug);
     setAspectRatio(next.supportedAspectRatios[0] ?? 'auto');
     setDuration(next.defaultDurationSec ?? next.durationOptions[0] ?? 5);
-    setGenerateAudio(false);
+    setGenerateAudio(next.supportsAudio);
     setSource(null);
     setSubmitAttempted(false);
     setAdvancedParams(defaultAdvancedParams(next));
@@ -280,6 +280,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
   useEffect(() => {
     setAdvancedParams(defaultAdvancedParams(selectedModel));
+    setGenerateAudio(selectedModel.supportsAudio);
   }, [selectedModel]);
 
   useEffect(() => {

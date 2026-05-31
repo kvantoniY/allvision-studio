@@ -216,7 +216,7 @@ export default function AdminServicesPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">Услуги (готовые решения)</h1>
-          <p className="mt-2 text-sm text-slate-400">Настраиваемые пайплайны для витрины AI-подарков.</p>
+          <p className="mt-2 text-sm text-slate-400">Настраиваемые пайплайны для витрины AI-услуг.</p>
         </div>
         <Button asChild className="bg-rose-500 hover:bg-rose-400">
           <Link href="/admin/services/new">

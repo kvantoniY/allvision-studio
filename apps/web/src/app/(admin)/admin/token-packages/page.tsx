@@ -235,7 +235,7 @@ function PackageFields({
           <Field label="Токены">
             <Input type="number" min={1} value={draft.tokens} onChange={(event) => update('tokens', Number(event.target.value))} required />
           </Field>
-          <Field label="Подарок">
+          <Field label="Бонус">
             <Input type="number" min={0} value={draft.bonus} onChange={(event) => update('bonus', Number(event.target.value))} />
           </Field>
           <Field label="Цена, ₽">
@@ -289,7 +289,7 @@ function PreviewBadge({ draft }: { draft: Draft }) {
     <div className="flex flex-wrap gap-2 text-sm">
       <Badge className="bg-zinc-800 text-slate-200">{totalTokens(draft)} токенов</Badge>
       {discount && <Badge className="bg-yellow-400 text-slate-950">-{discount}%</Badge>}
-      {draft.bonus > 0 && <Badge className="bg-emerald-700">+{draft.bonus} в подарок</Badge>}
+      {draft.bonus > 0 && <Badge className="bg-emerald-700">+{draft.bonus} бонусом</Badge>}
     </div>
   );
 }
@@ -328,7 +328,7 @@ function TokenPackagePreview({ draft }: { draft: Draft }) {
         <span className="text-sm text-slate-400">разово</span>
       </div>
 
-      {draft.bonus > 0 && <Badge className="mt-3 w-fit bg-emerald-950 text-emerald-200">+{draft.bonus} токенов в подарок</Badge>}
+      {draft.bonus > 0 && <Badge className="mt-3 w-fit bg-emerald-950 text-emerald-200">+{draft.bonus} токенов бонусом</Badge>}
 
       <ul className="mt-6 flex-1 space-y-3 text-sm text-slate-300">
         {(features.length ? features : defaultFeatures).map((feature) => (

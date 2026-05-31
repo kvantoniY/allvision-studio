@@ -340,7 +340,7 @@ function klingCapability(params: {
         key: params.audio.booleanParam,
         title: 'Generate audio',
         kind: 'boolean' as const,
-        default: false,
+        default: true,
       }] : []),
       ...(params.version === '3.0' ? [preferMultiShotsParam, multiShotsParam] : []),
     ],

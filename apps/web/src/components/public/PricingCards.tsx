@@ -142,7 +142,7 @@ function TokenPackageCard({
         </div>
         {pkg.bonus > 0 && (
           <Badge variant="secondary" className="w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-            +{pkg.bonus} токенов в подарок
+            +{pkg.bonus} токенов бонусом
           </Badge>
         )}
       </CardHeader>

@@ -97,7 +97,7 @@ export const HOME_LANDING_CONTENT = {
   hero: {
     sectionKey: 'hero',
     eyebrow: 'Трендовые AI-услуги',
-    title: 'Трендовые видео, образы и подарки за минуты',
+    title: 'Трендовые видео, образы и услуги за минуты',
     lead:
       'Выберите готовый сценарий или откройте Allvision AI: фото, видео, аватары, локации и референсы собираются в одном рабочем пространстве.',
     primaryCta: 'Открыть Allvision AI',
@@ -141,7 +141,7 @@ export const HOME_LANDING_CONTENT = {
         slotId: 'trend-old-photo',
         serviceSlug: 'revive-old-photo',
         title: 'Оживить старое фото',
-        description: 'Теплое движение для семейного архива, открытки или памятного подарка.',
+        description: 'Теплое движение для семейного архива, открытки или памятного видео.',
         media: {
           type: 'image',
           url: 'https://picsum.photos/seed/allvision-old-photo-memory/900/1200',

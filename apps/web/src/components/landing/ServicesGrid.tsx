@@ -51,7 +51,7 @@ export function ServicesGrid() {
   return (
     <section id="services" className="container py-20">
       <Reveal className="mx-auto max-w-3xl text-center">
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Категории подарков</p>
+        <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Категории услуг</p>
         <h2 className="mt-3 text-3xl font-bold md:text-5xl">Сначала повод, потом формат</h2>
         <p className="mt-4 text-lg leading-8 text-muted-foreground">
           Выберите направление, которое ближе к вашему сюрпризу. Внутри — готовые решения с понятной ценой и сроком.
@@ -98,7 +98,7 @@ export function ServicesGrid() {
           <div>
             <div className="flex items-center gap-2 text-sm font-medium uppercase tracking-[0.18em] text-amber-500">
               <Sparkles className="h-4 w-4" />
-              Популярные подарки
+              Популярные услуги
             </div>
             <h3 className="mt-2 text-2xl font-bold md:text-3xl">Готовые сценарии, которые чаще всего выбирают</h3>
           </div>

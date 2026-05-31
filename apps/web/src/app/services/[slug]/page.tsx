@@ -7,7 +7,7 @@ type ServicePageProps = {
 
 export function generateMetadata({ params }: ServicePageProps): Metadata {
   return {
-    title: `Подарок ${params.slug}`,
+    title: `Услуга ${params.slug}`,
     description: 'Страница услуги Allvision Studio: превью, описание, выбор качества, форма запуска и цена в токенах.',
   };
 }

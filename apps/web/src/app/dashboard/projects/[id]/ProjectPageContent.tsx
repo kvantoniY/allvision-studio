@@ -359,7 +359,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
             <CardContent className="space-y-5 p-6">
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Не удалось создать подарок</AlertTitle>
+                <AlertTitle>Не удалось выполнить услугу</AlertTitle>
                 <AlertDescription>
                   <p>{friendlyError}</p>
                   <p className="mt-2">Токены возвращены на баланс.</p>
@@ -534,7 +534,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
         <Card className="border-slate-800 bg-slate-900">
           <CardContent className="p-5">
             <div className="mb-5 flex items-center justify-between text-sm">
-              <span className="font-medium">Генерация подарка</span>
+              <span className="font-medium">Генерация результата</span>
               <span className="text-slate-400">{progress}%</span>
             </div>
             <Progress value={progress} />

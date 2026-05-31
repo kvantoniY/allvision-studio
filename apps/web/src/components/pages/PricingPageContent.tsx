@@ -22,7 +22,7 @@ export function PricingPageContent() {
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Цены</p>
         <h1 className="mt-3 text-4xl font-bold md:text-6xl">Простая оплата — только за то что используете</h1>
         <p className="mt-5 text-lg leading-8 text-muted-foreground">
-          Пополняйте баланс токенами и запускайте готовые подарки без подписки. Заказные видео оцениваются отдельно до начала работы.
+          Пополняйте баланс токенами и запускайте готовые услуги без подписки. Заказные видео оцениваются отдельно до начала работы.
         </p>
       </div>
 

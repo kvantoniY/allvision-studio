@@ -22,10 +22,10 @@ export function HeroSection() {
         >
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-sm text-indigo-100 backdrop-blur">
             <Gift className="h-4 w-4 text-amber-300" />
-            Цифровые подарки для семейных историй и важных дат
+            Цифровые услуги для семейных историй и важных дат
           </div>
           <h1 className="text-5xl font-black leading-none tracking-tight md:text-7xl">
-            Выберите повод, а мы соберём подарок за несколько минут
+            Выберите повод, а мы соберём результат за несколько минут
           </h1>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-indigo-100 md:text-xl">
             Оживите свадебное фото бабушки, отправьте лицо в трендовое видео или сделайте ребёнка героем доброго мультика. Никаких промптов — только формат, фото и готовый результат.
@@ -33,7 +33,7 @@ export function HeroSection() {
           <div className="mt-9 grid gap-3 sm:inline-grid sm:grid-cols-[260px_260px] sm:items-start">
             <Button asChild size="lg" className="h-14 w-full bg-amber-500 text-slate-950 hover:bg-amber-400">
               <Link href="/services">
-                Посмотреть подарки
+                Посмотреть услуги
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
@@ -48,7 +48,7 @@ export function HeroSection() {
             <span className="text-violet-300">·</span>
             <span>Standard и Pro качество</span>
             <span className="text-violet-300">·</span>
-            <span>4 категории подарков</span>
+            <span>4 категории услуг</span>
           </div>
         </motion.div>
 
@@ -62,7 +62,7 @@ export function HeroSection() {
             <div className="overflow-hidden rounded-lg">
               <Image
                 src="https://picsum.photos/seed/allvision-gift-family/1200/800"
-                alt="Семейный цифровой подарок Allvision Studio"
+                alt="Семейная цифровая услуга Allvision Studio"
                 width={1200}
                 height={800}
                 priority

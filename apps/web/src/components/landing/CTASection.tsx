@@ -15,7 +15,7 @@ export function CTASection() {
               <Sparkles className="h-4 w-4 text-amber-300" />
               25 токенов после регистрации
             </div>
-            <h2 className="text-3xl font-bold md:text-5xl">Готовы собрать подарок, который не забудут?</h2>
+            <h2 className="text-3xl font-bold md:text-5xl">Готовы создать результат, который не забудут?</h2>
             <p className="mt-4 max-w-2xl text-lg leading-8 text-indigo-100">
               Начните с одного фото или имени: выберите категорию, формат и качество, а результат появится в кабинете.
             </p>
