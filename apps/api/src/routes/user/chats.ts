@@ -194,7 +194,7 @@ userChatsRouter.post('/:id/messages', async (req: Request, res: Response, next: 
       const created = await tx.chatMessage.create({
         data: {
           chatId: chat.id,
-          prompt: generation.body.prompt,
+          prompt: generation.body.prompt ?? '',
           modelSlug: generation.model.slug,
           aspectRatio: generation.aspectRatio,
           duration: generation.duration,
@@ -206,7 +206,9 @@ userChatsRouter.post('/:id/messages', async (req: Request, res: Response, next: 
       await tx.chat.update({
         where: { id: chat.id },
         data: {
-          title: shouldAutotitle ? titleFromPrompt(generation.body.prompt, '') : chat.title,
+          title: shouldAutotitle
+            ? (generation.body.prompt ? titleFromPrompt(generation.body.prompt, '') : generation.model.functionTitle)
+            : chat.title,
           updatedAt: new Date(),
         },
       });

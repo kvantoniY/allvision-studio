@@ -37,6 +37,11 @@ export interface PiAPIAudioCapability {
   booleanParam?: 'enable_audio' | 'generate_audio';
   inputParam?: 'audio_url' | 'audio_urls';
   preserveParam?: 'keep_original_sound';
+  /**
+   * Модель генерирует звук нативно (видео и аудио в одном проходе) и звук
+   * нельзя отключить. Для таких моделей нет тумблера enable_audio — звук всегда есть.
+   */
+  alwaysOn?: boolean;
   description?: string;
 }
 
@@ -517,7 +522,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21'],
     resolutions: ['480p', '720p', '1080p'],
     defaultResolution: '720p',
-    audio: { mode: 'none' },
+    audio: { mode: 'none', alwaysOn: true },
     params: [
       {
         key: 'resolution',
@@ -545,7 +550,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21'],
     resolutions: ['480p', '720p', '1080p'],
     defaultResolution: '720p',
-    audio: { mode: 'none' },
+    audio: { mode: 'none', alwaysOn: true },
     params: [
       {
         key: 'resolution',
@@ -604,7 +609,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21'],
     resolutions: ['480p', '720p', '1080p'],
     defaultResolution: '720p',
-    audio: { mode: 'none' },
+    audio: { mode: 'none', alwaysOn: true },
     params: [
       {
         key: 'resolution',
@@ -663,7 +668,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21'],
     resolutions: ['480p', '720p', '1080p'],
     defaultResolution: '720p',
-    audio: { mode: 'none' },
+    audio: { mode: 'none', alwaysOn: true },
     params: [
       {
         key: 'resolution',
@@ -690,7 +695,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21'],
     resolutions: ['480p', '720p', '1080p'],
     defaultResolution: '720p',
-    audio: { mode: 'input', inputParam: 'audio_urls' },
+    audio: { mode: 'input', inputParam: 'audio_urls', alwaysOn: true },
     params: [
       {
         key: 'resolution',
@@ -720,7 +725,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '9:21'],
     resolutions: ['480p', '720p', '1080p'],
     defaultResolution: '720p',
-    audio: { mode: 'input', inputParam: 'audio_urls' },
+    audio: { mode: 'input', inputParam: 'audio_urls', alwaysOn: true },
     params: [
       {
         key: 'resolution',
@@ -866,7 +871,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16'],
     resolutions: ['720p'],
     defaultResolution: '720p',
-    audio: { mode: 'none' },
+    audio: { mode: 'none', alwaysOn: true },
     params: [],
   },
   {
@@ -883,7 +888,7 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     aspectRatios: ['16:9', '9:16'],
     resolutions: ['720p', '1080p'],
     defaultResolution: '720p',
-    audio: { mode: 'none' },
+    audio: { mode: 'none', alwaysOn: true },
     params: [],
   },
   {
@@ -978,6 +983,28 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
       presetMotionParam,
       motionDirectionParam,
       keepOriginalSoundParam,
+    ],
+  },
+  {
+    slug: 'remove-watermark',
+    title: 'Удаление водяного знака',
+    blockSlug: 'video-watermark-remove',
+    blockCategory: 'video',
+    providerModel: 'seedance',
+    taskType: 'remove-watermark',
+    inputKinds: ['video'],
+    outputKind: 'video',
+    docsUrl: 'https://piapi.ai/docs/seedance-api/video-watermark-remover',
+    audio: { mode: 'preserve' },
+    params: [
+      {
+        key: 'video_url',
+        title: 'Видео с водяным знаком',
+        kind: 'source-list',
+        mediaKind: 'video',
+        multiple: false,
+        description: 'Видео, из которого нужно убрать водяной знак. Длительность определяется автоматически.',
+      },
     ],
   },
 ];

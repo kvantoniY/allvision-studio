@@ -79,4 +79,12 @@ export interface AIProvider {
     params?: Record<string, unknown>;
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
+
+  removeWatermark(input: {
+    videoUrl: string;
+    durationSec?: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
 }

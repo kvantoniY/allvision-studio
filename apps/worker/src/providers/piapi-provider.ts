@@ -35,6 +35,7 @@ const FACE_SWAP_MODEL = 'qubico-video-toolkit';
 const FACE_SWAP_COST_PER_FRAME_USD = 0.004;
 const DEFAULT_FACE_SWAP_DURATION_SEC = 5;
 const DEFAULT_FACE_SWAP_FPS = 24;
+const WATERMARK_COST_PER_SEC_USD = 0.008;
 const PIAPI_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
 const NANO_BANANA_COST_USD: Record<string, number> = {
@@ -452,6 +453,58 @@ export class PiAPIProvider implements AIProvider {
           provider: 'piapi',
           effectId: input.effectId,
           aspectRatio: aspectRatio ?? 'auto',
+        },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      throw err;
+    }
+  }
+
+  async removeWatermark(input: {
+    videoUrl: string;
+    durationSec?: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    if (input.model !== 'remove-watermark') {
+      throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported watermark model: ${input.model}`);
+    }
+    const seconds = Math.max(5, Math.ceil(input.durationSec ?? readNumber(input.params, 'duration') ?? 5));
+    const estimatedCost = seconds * WATERMARK_COST_PER_SEC_USD;
+    await this.ensureCanCall(estimatedCost);
+
+    const startedAt = Date.now();
+    let taskId: string | undefined;
+    let completedTask: PiAPITaskStatus | undefined;
+    try {
+      const payload = buildWatermarkPayload(input.videoUrl, input.durationSec);
+      const created = await this.client.createTask(payload);
+      taskId = created.taskId;
+      const completed = await this.client.pollUntilDone(taskId, {
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
+        expectedDurationMs: 5 * 60 * 1000,
+        onProgress: input.context.reportProgress,
+      });
+      completedTask = completed;
+      if (!completed.outputUrl) {
+        throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI watermark task completed without video URL');
+      }
+      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
+      const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      return {
+        outputUrl: local.url,
+        costUsd,
+        durationMs,
+        meta: {
+          piapiTaskId: taskId,
+          piapiUrl: completed.outputUrl,
+          model: input.model,
+          provider: 'piapi',
         },
       };
     } catch (err) {
@@ -1052,10 +1105,22 @@ function buildImageEditPayload(input: {
   };
 }
 
+function buildWatermarkPayload(videoUrl: string, durationSec?: number) {
+  return {
+    model: 'seedance',
+    task_type: 'remove-watermark',
+    input: {
+      video_url: videoUrl,
+      ...(durationSec ? { duration: Math.ceil(durationSec) } : {}),
+    },
+  };
+}
+
 export const __piapiPayloadBuildersForTests = {
   buildImageToVideoPayload,
   buildTextToVideoPayload,
   buildImageEditPayload,
+  buildWatermarkPayload,
 };
 
 function aspectRatioFromDimensions(width: number, height: number): '9:16' | '16:9' | '1:1' {

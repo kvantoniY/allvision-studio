@@ -1,6 +1,6 @@
 import { __piapiPayloadBuildersForTests } from '../providers/piapi-provider';
 
-const { buildImageToVideoPayload, buildTextToVideoPayload } = __piapiPayloadBuildersForTests;
+const { buildImageToVideoPayload, buildTextToVideoPayload, buildWatermarkPayload } = __piapiPayloadBuildersForTests;
 
 describe('PiAPI payload builders', () => {
   it('builds Veo 3.1 text-to-video payload with audio and quality controls', () => {
@@ -151,6 +151,20 @@ describe('PiAPI payload builders', () => {
         watermark: false,
         seed: 321,
       },
+    });
+  });
+
+  it('builds watermark remover payload, omitting duration when auto-detected', () => {
+    expect(buildWatermarkPayload('https://cdn.test/clip.mp4')).toEqual({
+      model: 'seedance',
+      task_type: 'remove-watermark',
+      input: { video_url: 'https://cdn.test/clip.mp4' },
+    });
+
+    expect(buildWatermarkPayload('https://cdn.test/clip.mp4', 7.2)).toEqual({
+      model: 'seedance',
+      task_type: 'remove-watermark',
+      input: { video_url: 'https://cdn.test/clip.mp4', duration: 8 },
     });
   });
 });

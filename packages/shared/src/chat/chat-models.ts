@@ -25,6 +25,8 @@ export interface ChatModelOption {
   acceptsTextOnly: boolean;
   supportedAspectRatios: ChatAspectRatio[];
   supportsAudio: boolean;
+  /** Модель генерирует звук нативно и его нельзя отключить (Seedance, Sora 2). */
+  audioAlwaysOn: boolean;
   audioParam?: 'enable_audio' | 'generate_audio';
   audioInputParam?: 'audio_url' | 'audio_urls';
   minDurationSec?: number;
@@ -35,6 +37,10 @@ export interface ChatModelOption {
   defaultResolution?: string;
   advancedParams: PiAPIParamCapability[];
   experimental?: boolean;
+  /** Нужен ли текстовый промпт. Для видео-инструментов (например, удаление watermark) — false. */
+  requiresPrompt: boolean;
+  /** Утилита (обработка готового медиа), а не генератор. Влияет на группировку в UI. */
+  tool?: boolean;
 }
 
 function requireBlock(blockSlug: string): BlockCatalogItem {
@@ -65,6 +71,8 @@ function fromCatalog(params: {
   acceptsTextOnly: boolean;
   supportedAspectRatios?: ChatAspectRatio[];
   experimental?: boolean;
+  requiresPrompt?: boolean;
+  tool?: boolean;
 }): ChatModelOption {
   const model = requireModel(params.blockSlug, params.modelSlug);
   const capability = getPiAPIModelCapability(model.slug);
@@ -95,6 +103,7 @@ function fromCatalog(params: {
     acceptsTextOnly: params.acceptsTextOnly,
     supportedAspectRatios: ratios.length ? ratios : ['auto'],
     supportsAudio: !!audioParam,
+    audioAlwaysOn: !!capability?.audio.alwaysOn,
     audioParam,
     audioInputParam,
     minDurationSec: capability?.duration?.minimum ?? model.limits?.minDurationSec,
@@ -105,6 +114,8 @@ function fromCatalog(params: {
     defaultResolution: capability?.defaultResolution,
     advancedParams: capability?.params ?? [],
     experimental: params.experimental,
+    requiresPrompt: params.requiresPrompt ?? true,
+    tool: params.tool,
   };
 }
 
@@ -139,6 +150,7 @@ function modelFamilyFor(modelSlug: string, blockSlug: string) {
   if (modelSlug.startsWith('wan-2.6')) return { slug: 'wan-2.6', title: 'Wan 2.6' };
   if (modelSlug.startsWith('sora-2')) return { slug: 'sora-2', title: 'Sora 2' };
   if (blockSlug === 'face-swap-video') return { slug: 'face-swap', title: 'Face Swap' };
+  if (blockSlug === 'video-watermark-remove') return { slug: 'watermark-remove', title: 'Удаление watermark' };
   return { slug: modelSlug, title: modelSlug };
 }
 
@@ -477,6 +489,19 @@ export const CHAT_MODELS: ChatModelOption[] = [
     acceptsImageInput: false,
     acceptsTextOnly: true,
     experimental: true,
+  }),
+  fromCatalog({
+    blockSlug: 'video-watermark-remove',
+    modelSlug: 'remove-watermark',
+    category: 'video',
+    description: 'Убирает водяной знак из загруженного видео, сохраняя качество и звук. Прикрепите видео — промпт не нужен. Стоимость зависит от длительности (от 5 сек).',
+    functionTitle: 'Удаление водяного знака',
+    acceptsImageInput: false,
+    acceptsVideoInput: true,
+    acceptsTextOnly: false,
+    supportedAspectRatios: ['auto'],
+    requiresPrompt: false,
+    tool: true,
   }),
 ];
 

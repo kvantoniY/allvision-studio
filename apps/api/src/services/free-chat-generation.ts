@@ -8,7 +8,7 @@ import { readModelPriceOverrides } from './model-pricing';
 
 export const chatMessageSchema = z.object({
   modelSlug: z.string().trim().min(1),
-  prompt: z.string().trim().min(1).max(4000),
+  prompt: z.string().trim().max(4000).optional(),
   aspectRatio: z.enum(['1:1', '9:16', '16:9', '4:3', '3:4', '21:9', '9:21', 'auto']).optional(),
   duration: z.coerce.number().int().min(1).max(30).optional(),
   generateAudio: z.boolean().optional(),
@@ -283,6 +283,11 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   const model = getChatModel(body.modelSlug);
   if (!model) throw new HttpError(400, 'UNKNOWN_CHAT_MODEL', 'Модель недоступна в Allvision AI');
 
+  const prompt = (body.prompt ?? '').trim();
+  if (model.requiresPrompt && prompt.length === 0) {
+    throw new HttpError(400, 'PROMPT_REQUIRED', 'Введите запрос для генерации');
+  }
+
   const aspectRatio = body.aspectRatio ?? model.supportedAspectRatios[0] ?? 'auto';
   if (!model.supportedAspectRatios.includes(aspectRatio)) {
     throw new HttpError(400, 'UNSUPPORTED_ASPECT_RATIO', 'Эта модель не поддерживает выбранное соотношение сторон');
@@ -363,7 +368,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   const pipelineSnapshot = buildPipeline({
     blockSlug: model.blockSlug,
     modelSlug: model.slug,
-    prompt: body.prompt,
+    prompt,
     aspectRatio,
     duration,
     generateAudio,
@@ -390,11 +395,11 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
         data: {
           userId,
           mode: 'free-chat',
-          title: titleFromPrompt(body.prompt),
+          title: prompt ? titleFromPrompt(prompt) : `Чат: ${model.functionTitle}`,
           status: 'PENDING',
           progress: 0,
           inputImages: imageInput ? [imageInput.publicUrl] : [],
-          inputText: body.prompt,
+          inputText: prompt,
           tokensCost,
           pipelineSnapshot: pipelineSnapshot as Prisma.InputJsonValue,
           selectedTier: 'standard',
@@ -403,7 +408,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
               modelSlug: model.slug,
               blockSlug: model.blockSlug,
               category: model.category,
-              prompt: body.prompt,
+              prompt: prompt || undefined,
               aspectRatio,
               duration,
               generateAudio: generateAudio || undefined,

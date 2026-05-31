@@ -247,7 +247,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     (source.mediaKind === 'video' && !selectedModel.acceptsVideoInput) ||
     (source.mediaKind === 'audio' && !selectedModel.acceptsAudioInput)
   );
-  const canSubmit = prompt.trim().length > 0 && canPay && (!needsInput || !!source) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
+  const requiresPrompt = selectedModel.requiresPrompt !== false;
+  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && canPay && (!needsInput || !!source) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -360,8 +361,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           modelSlug: selectedModel.slug,
           prompt,
           aspectRatio,
-          duration: selectedModel.category === 'video' ? duration : undefined,
-          generateAudio: selectedModel.category === 'video' ? effectiveGenerateAudio : undefined,
+          duration: selectedModel.category === 'video' && !selectedModel.tool ? duration : undefined,
+          generateAudio: selectedModel.category === 'video' && !selectedModel.tool ? effectiveGenerateAudio : undefined,
           inputRef: source?.ref,
           imageInputRef: source?.mediaKind === 'image' ? source.ref : undefined,
           videoInputRef: source?.mediaKind === 'video' ? source.ref : undefined,
@@ -390,7 +391,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         ? missingAdvanced
       : !canPay
         ? 'Недостаточно токенов'
-        : submitAttempted && !prompt.trim()
+        : submitAttempted && requiresPrompt && !prompt.trim()
           ? 'Добавьте промпт для запуска'
           : null;
 
@@ -492,7 +493,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               if (submitAttempted) setSubmitAttempted(false);
             }}
             rows={2}
-            placeholder="Опишите результат: сюжет, стиль, камера, настроение..."
+            placeholder={requiresPrompt ? 'Опишите результат: сюжет, стиль, камера, настроение...' : 'Промпт не нужен — прикрепите видео и нажмите запуск'}
             className="min-h-[84px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             onKeyDown={(event) => {
               if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
@@ -673,7 +674,8 @@ function DetailedSettingsControl({
     : [model.defaultDurationSec ?? duration].filter((item): item is number => Number.isFinite(item));
   const durationMin = model.minDurationSec ?? (durationValues.length ? Math.min(...durationValues) : 1);
   const durationMax = model.maxDurationSec ?? (durationValues.length ? Math.max(...durationValues) : 30);
-  const AudioIcon = generateAudio ? Volume2 : VolumeX;
+  const audioOn = model.audioAlwaysOn || generateAudio;
+  const AudioIcon = audioOn ? Volume2 : VolumeX;
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -743,6 +745,7 @@ function DetailedSettingsControl({
               </select>
             </div>
 
+            {!model.tool && (
             <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Основное</div>
           <div className="grid grid-cols-2 gap-2.5">
@@ -820,19 +823,25 @@ function DetailedSettingsControl({
                   variant="outline"
                   className={cn(
                     'h-9 w-full justify-start border-slate-700 bg-slate-900',
-                    generateAudio && 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100',
-                    !model.supportsAudio && 'text-slate-500',
+                    audioOn && 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100',
+                    !model.supportsAudio && !model.audioAlwaysOn && 'text-slate-500',
                   )}
                   disabled={!model.supportsAudio}
                   onClick={() => onGenerateAudioChange(!generateAudio)}
+                  title={model.audioAlwaysOn ? 'Эта модель всегда генерирует видео со звуком' : undefined}
                 >
                   <AudioIcon className="h-4 w-4" />
-                  {model.supportsAudio ? (generateAudio ? 'Со звуком' : 'Без звука') : 'Недоступно'}
+                  {model.audioAlwaysOn
+                    ? 'Со звуком (всегда)'
+                    : model.supportsAudio
+                      ? (generateAudio ? 'Со звуком' : 'Без звука')
+                      : 'Недоступно'}
                 </Button>
               </div>
             )}
           </div>
         </div>
+        )}
         {sections.map((section) => {
           const meta = advancedSectionsMeta[section.key];
           return (

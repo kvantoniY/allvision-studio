@@ -88,4 +88,14 @@ export class StubAIProvider implements AIProvider {
   }): Promise<ProviderResult> {
     return result('stub://video-effect.mp4', { type: 'video' });
   }
+
+  async removeWatermark(_input: {
+    videoUrl: string;
+    durationSec?: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://remove-watermark.mp4', { type: 'video' });
+  }
 }

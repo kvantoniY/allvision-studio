@@ -1,13 +1,15 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, Baby, Cake, Clapperboard, Flame, Gift, Heart, LayoutGrid, Sparkles } from 'lucide-react';
+import { AlertCircle, ArrowRight, Baby, Cake, Clapperboard, Flame, Gift, Heart, LayoutGrid, Search, Sparkles, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListServicesQuery } from '@/store/api/services-api';
 import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
@@ -34,6 +36,72 @@ function mediaUrl(value?: string | null) {
 function priceFrom(service: PublicService) {
   return giftServicePriceFrom(service);
 }
+
+function normalizeText(value: string) {
+  return value.toLowerCase().replace(/ё/g, 'е').replace(/[^a-zа-я0-9\s]/gi, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function bigrams(value: string): string[] {
+  const grams: string[] = [];
+  for (let i = 0; i < value.length - 1; i += 1) grams.push(value.slice(i, i + 2));
+  return grams;
+}
+
+// Коэффициент Сёренсена–Дайса по биграммам: 1 — идентичны, 0 — нет общего.
+// Ловит опечатки и близкие по написанию слова ("похожие").
+function diceSimilarity(a: string, b: string): number {
+  if (a === b) return 1;
+  if (a.length < 2 || b.length < 2) return 0;
+  const aGrams = bigrams(a);
+  const bGrams = bigrams(b);
+  const counts = new Map<string, number>();
+  for (const gram of aGrams) counts.set(gram, (counts.get(gram) ?? 0) + 1);
+  let intersection = 0;
+  for (const gram of bGrams) {
+    const count = counts.get(gram) ?? 0;
+    if (count > 0) {
+      intersection += 1;
+      counts.set(gram, count - 1);
+    }
+  }
+  return (2 * intersection) / (aGrams.length + bGrams.length);
+}
+
+// Релевантность услуги поисковому запросу: точные вхождения важнее,
+// плюс fuzzy-совпадение по словам для опечаток и похожих формулировок.
+function scoreService(service: PublicService, categoryLabel: string, query: string): number {
+  const q = normalizeText(query);
+  if (!q) return 0;
+  const title = normalizeText(service.title);
+  const haystack = normalizeText([service.title, service.shortDesc, service.description ?? '', categoryLabel].join(' '));
+  const words = new Set(haystack.split(' ').filter((word) => word.length >= 2));
+
+  let score = 0;
+  if (title.includes(q)) score += 120;
+  else if (haystack.includes(q)) score += 60;
+
+  const queryTokens = q.split(' ').filter((token) => token.length >= 2);
+  for (const token of queryTokens) {
+    if (title.includes(token)) {
+      score += 24;
+      continue;
+    }
+    if (haystack.includes(token)) {
+      score += 12;
+      continue;
+    }
+    let best = 0;
+    for (const word of words) {
+      const sim = diceSimilarity(token, word);
+      if (sim > best) best = sim;
+    }
+    if (best >= 0.6) score += best * 14;
+    else if (best >= 0.42) score += best * 5;
+  }
+  return score;
+}
+
+const SEARCH_SCORE_THRESHOLD = 6;
 
 function previewFrom(service: PublicService) {
   return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? 'https://picsum.photos/seed/allvision-service/900/600';
@@ -114,6 +182,23 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
   const activeCategory = dynamicCategories.find((category) => category.value === selectedCategory);
   const categories = dynamicCategories;
 
+  const [query, setQuery] = useState('');
+  const trimmedQuery = query.trim();
+  const isSearching = trimmedQuery.length > 0;
+  const categoryLabelMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const category of dynamicCategories) map.set(category.value, category.label);
+    return map;
+  }, [dynamicCategories]);
+  const searchResults = useMemo(() => {
+    if (!isSearching) return [] as PublicService[];
+    return services
+      .map((service) => ({ service, score: scoreService(service, categoryLabelMap.get(service.category) ?? '', trimmedQuery) }))
+      .filter((item) => item.score >= SEARCH_SCORE_THRESHOLD)
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.service);
+  }, [isSearching, services, categoryLabelMap, trimmedQuery]);
+
   return (
     <div className="pb-16">
       <section className="container py-12 md:py-16">
@@ -128,6 +213,27 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
             <p className="mt-5 text-lg leading-8 text-slate-300">
               Выберите повод, загрузите фото или пару деталей, а Allvision соберёт готовый ролик, открытку или мем за несколько минут.
             </p>
+            <div className="relative mt-6 max-w-xl">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Поиск услуги: оживить фото, тренд, открытка..."
+                aria-label="Поиск услуг"
+                className="h-12 border-slate-700 bg-slate-900/80 pl-10 pr-10 text-base"
+              />
+              {isSearching && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  aria-label="Очистить поиск"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
           </div>
           <nav aria-label="Категории услуг" className="min-w-0 lg:justify-self-end">
             <div className="rounded-lg border border-slate-800 bg-slate-900/85 p-1 shadow-lg shadow-black/15">
@@ -179,6 +285,26 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
           {Array.from({ length: 8 }).map((_, index) => (
             <Skeleton key={index} className="h-[360px] rounded-lg" />
           ))}
+        </section>
+      ) : isSearching ? (
+        <section className="container">
+          <div className="mb-6 flex items-center gap-2">
+            <Search className="h-5 w-5 text-amber-400" />
+            <h2 className="text-2xl font-bold tracking-tight">
+              Результаты поиска{searchResults.length > 0 ? ` · ${searchResults.length}` : ''}
+            </h2>
+          </div>
+          {searchResults.length > 0 ? (
+            <div className="grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {searchResults.map((service) => (
+                <ServiceTile key={service.id} service={service} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-8 text-sm text-slate-400">
+              Ничего не найдено по запросу «{trimmedQuery}». Попробуйте другие слова или загляните в категории ниже.
+            </div>
+          )}
         </section>
       ) : (
         <>

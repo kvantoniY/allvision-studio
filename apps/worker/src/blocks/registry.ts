@@ -8,6 +8,7 @@ import { motionTransferBlock } from './motion-transfer';
 import { videoComposeBlock } from './video-compose';
 import { textToVideoBlock } from './text-to-video';
 import { videoEffectBlock } from './video-effect';
+import { videoWatermarkRemoveBlock } from './video-watermark-remove';
 
 export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'image-restore': imageRestoreBlock,
@@ -19,6 +20,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'video-compose': videoComposeBlock,
   'text-to-video': textToVideoBlock,
   'video-effect': videoEffectBlock,
+  'video-watermark-remove': videoWatermarkRemoveBlock,
 };
 
 export function getBlock(slug: string): BlockDefinition {
