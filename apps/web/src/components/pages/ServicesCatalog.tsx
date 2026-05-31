@@ -3,17 +3,16 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, Baby, Cake, ChevronDown, Clapperboard, Flame, Gift, Heart, LayoutGrid, Search, Sparkles, X } from 'lucide-react';
+import { AlertCircle, Baby, Cake, ChevronDown, Clapperboard, Flame, Gift, Heart, LayoutGrid, Search, Sparkles, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListServicesQuery } from '@/store/api/services-api';
 import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
-import { categoryHref, giftServicePriceFrom } from '@/lib/gift-factory';
+import { categoryHref } from '@/lib/gift-factory';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -31,10 +30,6 @@ function mediaUrl(value?: string | null) {
   if (!value) return null;
   if (value.startsWith('/static/')) return `${API_URL}${value}`;
   return value;
-}
-
-function priceFrom(service: PublicService) {
-  return giftServicePriceFrom(service);
 }
 
 function normalizeText(value: string) {
@@ -107,65 +102,13 @@ function previewFrom(service: PublicService) {
   return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? 'https://picsum.photos/seed/allvision-service/900/600';
 }
 
-function ServiceTile({ service, featured = false }: { service: PublicService; featured?: boolean }) {
-  const previewVideo = mediaUrl(service.previewVideo);
-  const previewImage = previewFrom(service);
-
-  return (
-    <Card className="group flex h-full overflow-hidden border-slate-800 bg-slate-900 transition duration-300 hover:-translate-y-1 hover:border-amber-400/70 hover:shadow-xl hover:shadow-amber-500/10">
-      <Link href={`/services/${service.slug}`} className="flex w-full flex-col">
-        <div className={cn('relative overflow-hidden bg-slate-950', featured ? 'aspect-[16/9]' : 'aspect-[4/3]')}>
-          {previewVideo ? (
-            <video
-              src={previewVideo}
-              muted
-              loop
-              playsInline
-              autoPlay
-              className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-            />
-          ) : (
-            <Image
-              src={previewImage}
-              alt={service.title}
-              fill
-              sizes={featured ? '(max-width: 1024px) 100vw, 33vw' : '(max-width: 1024px) 100vw, 25vw'}
-              className="object-cover transition duration-500 group-hover:scale-105"
-            />
-          )}
-          {service.isFeatured && (
-            <Badge className="absolute left-3 top-3 border-amber-300/60 bg-amber-400 text-slate-950">
-              Популярное
-            </Badge>
-          )}
-        </div>
-        <CardContent className="flex flex-1 flex-col p-5">
-          <div className="flex flex-1 flex-col gap-3">
-            <h3 className="text-xl font-bold tracking-tight text-slate-50">{service.title}</h3>
-            <p className="line-clamp-3 text-sm leading-6 text-slate-400">{service.shortDesc}</p>
-          </div>
-          <div className="mt-5 flex items-center justify-between gap-3">
-            <div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">Цена</div>
-              <div className="text-lg font-bold text-amber-400">от {priceFrom(service)} коинов</div>
-            </div>
-            <span className="grid h-10 w-10 place-items-center rounded-md border border-slate-700 bg-slate-800 text-slate-100 transition group-hover:border-amber-400 group-hover:text-amber-300">
-              <ArrowRight className="h-4 w-4" />
-            </span>
-          </div>
-        </CardContent>
-      </Link>
-    </Card>
-  );
-}
-
-function CompactServiceTile({ service }: { service: PublicService }) {
+function ServiceTile({ service }: { service: PublicService }) {
   const previewVideo = mediaUrl(service.previewVideo);
   const previewImage = previewFrom(service);
 
   return (
     <Link href={`/services/${service.slug}`} className="group block">
-      <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+      <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 transition group-hover:border-amber-400/70">
         {previewVideo ? (
           <video
             src={previewVideo}
@@ -180,23 +123,19 @@ function CompactServiceTile({ service }: { service: PublicService }) {
             src={previewImage}
             alt={service.title}
             fill
-            sizes="(max-width: 640px) 50vw, 20vw"
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
             className="object-cover transition duration-500 group-hover:scale-105"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
         {service.isFeatured && (
           <Badge className="absolute left-2.5 top-2.5 border-amber-300/60 bg-amber-400 px-2 py-0.5 text-[11px] text-slate-950">
             Популярное
           </Badge>
         )}
         <div className="absolute inset-x-3 bottom-2.5">
-          <div className="line-clamp-1 text-base font-bold text-white drop-shadow-md">{service.title}</div>
+          <div className="w-full truncate text-sm font-semibold text-white drop-shadow-md">{service.title}</div>
         </div>
-      </div>
-      <div className="mt-2 flex items-center justify-between gap-2 px-0.5">
-        <span className="line-clamp-1 text-xs text-slate-400">{service.shortDesc}</span>
-        <span className="shrink-0 text-sm font-semibold text-amber-400">от {priceFrom(service)}</span>
       </div>
     </Link>
   );
@@ -249,10 +188,7 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
     <div className="pb-16">
       <section className="container pt-12 md:pt-16">
         <div className="max-w-3xl">
-          <Badge className="border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/10">
-            AI-фабрика услуг
-          </Badge>
-          <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight md:text-6xl">
+          <h1 className="text-4xl font-black leading-tight tracking-tight md:text-6xl">
             Цифровые услуги, которые удивят
           </h1>
           <p className="mt-5 text-lg leading-8 text-slate-300">
@@ -346,7 +282,7 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
             </h2>
           </div>
           {searchResults.length > 0 ? (
-            <div className="grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {searchResults.map((service) => (
                 <ServiceTile key={service.id} service={service} />
               ))}
@@ -381,7 +317,7 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
               </div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {visibleFeatured.map((service) => (
-                  <CompactServiceTile key={service.id} service={service} />
+                  <ServiceTile key={service.id} service={service} />
                 ))}
               </div>
             </section>
@@ -407,7 +343,7 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
                     </div>
                   </div>
                   {items.length > 0 ? (
-                    <div className="grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                       {items.map((service) => (
                         <ServiceTile key={service.id} service={service} />
                       ))}

@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowRight, Bot, CheckCircle2, Film, ImagePlus, ImageIcon, Layers3, Library, MessageSquareText, PlayCircle, Sparkles, TrendingUp, Video, Volume2, Wand2, Zap } from 'lucide-react';
+import { ArrowRight, Bot, CheckCircle2, Film, ImagePlus, ImageIcon, Layers3, Library, MessageSquareText, PlayCircle, Sparkles, Video, Volume2, Wand2, Zap } from 'lucide-react';
 import { TokenIcon } from '@/components/ui/token-icon';
 import {
   CHAT_MODELS,
@@ -236,15 +236,6 @@ function HeroLanding({
       <div className="relative mx-auto w-full max-w-[1480px] px-4 py-10 sm:px-6 sm:py-12 lg:px-8 lg:py-14">
         <div className="grid gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.58fr)] lg:items-center xl:gap-12">
           <div className="max-w-3xl">
-            <div
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-sm font-medium text-cyan-100 backdrop-blur"
-              {...fieldAttrs(content.hero.sectionKey, 'eyebrow')}
-            >
-              <TrendingUp className="h-4 w-4 text-cyan-300" />
-              <EditableText editor={editor} path={['hero', 'eyebrow']} label="Бейдж первого блока" value={content.hero.eyebrow}>
-                {content.hero.eyebrow}
-              </EditableText>
-            </div>
             <h1
               className="mt-5 max-w-3xl text-4xl font-black leading-[0.98] tracking-normal text-white sm:text-5xl xl:text-6xl"
               {...fieldAttrs(content.hero.sectionKey, 'title')}

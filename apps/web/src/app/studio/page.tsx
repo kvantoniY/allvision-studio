@@ -3,7 +3,7 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ImageIcon, Loader2, MapPin, Palette, Plus, Trash2, Upload, Wand2 } from 'lucide-react';
+import { ImageIcon, Loader2, MapPin, Plus, Trash2, Upload, Wand2 } from 'lucide-react';
 import { buildStylePresetPrompt, getBlockCatalogItem, type PublicStylePreset } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -103,11 +103,7 @@ function StudioContent() {
     <div className="w-full max-w-full space-y-5 sm:space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm text-violet-300">
-            <Palette className="h-4 w-4" />
-            Личная библиотека
-          </div>
-          <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Студия</h1>
+          <h1 className="text-2xl font-bold text-white sm:text-3xl">Студия</h1>
           <p className="mt-2 max-w-2xl text-sm text-slate-400">
             Сохраняйте аватары и локации, чтобы потом использовать их как референсы в чате и услугах.
           </p>
@@ -616,13 +612,15 @@ function StylePresetPicker({
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="w-full max-w-lg rounded-lg border border-slate-800 bg-slate-900 p-5 shadow-2xl">
-        <div className="mb-5 flex items-center justify-between gap-3">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4">
+      <div className="my-auto flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-2xl">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
           <h3 className="text-lg font-semibold text-white">{title}</h3>
           <Button type="button" variant="ghost" size="icon" onClick={onClose}>x</Button>
         </div>
-        {children}
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {children}
+        </div>
       </div>
     </div>
   );
