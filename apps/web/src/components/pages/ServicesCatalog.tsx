@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { AlertCircle, ArrowRight, Baby, Cake, Clapperboard, Flame, Gift, Heart, LayoutGrid, Search, Sparkles, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, Baby, Cake, ChevronDown, Clapperboard, Flame, Gift, Heart, LayoutGrid, Search, Sparkles, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { PublicService, ServiceCategory } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -159,6 +159,49 @@ function ServiceTile({ service, featured = false }: { service: PublicService; fe
   );
 }
 
+function CompactServiceTile({ service }: { service: PublicService }) {
+  const previewVideo = mediaUrl(service.previewVideo);
+  const previewImage = previewFrom(service);
+
+  return (
+    <Link href={`/services/${service.slug}`} className="group block">
+      <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+        {previewVideo ? (
+          <video
+            src={previewVideo}
+            muted
+            loop
+            playsInline
+            autoPlay
+            className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <Image
+            src={previewImage}
+            alt={service.title}
+            fill
+            sizes="(max-width: 640px) 50vw, 20vw"
+            className="object-cover transition duration-500 group-hover:scale-105"
+          />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/15 to-transparent" />
+        {service.isFeatured && (
+          <Badge className="absolute left-2.5 top-2.5 border-amber-300/60 bg-amber-400 px-2 py-0.5 text-[11px] text-slate-950">
+            Популярное
+          </Badge>
+        )}
+        <div className="absolute inset-x-3 bottom-2.5">
+          <div className="line-clamp-1 text-base font-bold text-white drop-shadow-md">{service.title}</div>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 px-0.5">
+        <span className="line-clamp-1 text-xs text-slate-400">{service.shortDesc}</span>
+        <span className="shrink-0 text-sm font-semibold text-amber-400">от {priceFrom(service)}</span>
+      </div>
+    </Link>
+  );
+}
+
 type ServicesCatalogProps = {
   initialCategory?: ServiceCategory;
 };
@@ -183,6 +226,9 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
   const categories = dynamicCategories;
 
   const [query, setQuery] = useState('');
+  const [showAllFeatured, setShowAllFeatured] = useState(false);
+  const FEATURED_COLLAPSED = 5;
+  const visibleFeatured = showAllFeatured ? featured : featured.slice(0, FEATURED_COLLAPSED);
   const trimmedQuery = query.trim();
   const isSearching = trimmedQuery.length > 0;
   const categoryLabelMap = useMemo(() => {
@@ -201,73 +247,78 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
 
   return (
     <div className="pb-16">
-      <section className="container py-12 md:py-16">
-        <div className="grid gap-8 lg:grid-cols-[1fr_0.7fr] lg:items-end">
-          <div className="max-w-4xl">
-            <Badge className="border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/10">
-              AI-фабрика услуг
-            </Badge>
-            <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight md:text-6xl">
-              Цифровые услуги, которые удивят
-            </h1>
-            <p className="mt-5 text-lg leading-8 text-slate-300">
-              Выберите повод, загрузите фото или пару деталей, а Allvision соберёт готовый ролик, открытку или мем за несколько минут.
-            </p>
-            <div className="relative mt-6 max-w-xl">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <Input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Поиск услуги: оживить фото, тренд, открытка..."
-                aria-label="Поиск услуг"
-                className="h-12 border-slate-700 bg-slate-900/80 pl-10 pr-10 text-base"
-              />
-              {isSearching && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  aria-label="Очистить поиск"
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-200"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
+      <section className="container pt-12 md:pt-16">
+        <div className="max-w-3xl">
+          <Badge className="border-amber-400/40 bg-amber-400/10 text-amber-200 hover:bg-amber-400/10">
+            AI-фабрика услуг
+          </Badge>
+          <h1 className="mt-5 text-4xl font-black leading-tight tracking-tight md:text-6xl">
+            Цифровые услуги, которые удивят
+          </h1>
+          <p className="mt-5 text-lg leading-8 text-slate-300">
+            Выберите повод, загрузите фото или пару деталей, а Allvision соберёт готовый ролик, открытку или мем за несколько минут.
+          </p>
+          <div className="relative mt-6 max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Поиск услуги: оживить фото, тренд, открытка..."
+              aria-label="Поиск услуг"
+              className="h-12 border-slate-700 bg-slate-900/80 pl-10 pr-10 text-base"
+            />
+            {isSearching && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                aria-label="Очистить поиск"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 transition hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <nav aria-label="Категории услуг" className="min-w-0 lg:justify-self-end">
-            <div className="rounded-lg border border-slate-800 bg-slate-900/85 p-1 shadow-lg shadow-black/15">
-              <div className="flex max-w-full gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        </div>
+      </section>
+
+      {/* Переключатель категорий — полноширинной строкой над услугами */}
+      <section className="container sticky top-0 z-20 mt-8 bg-background/80 py-3 backdrop-blur">
+        <nav aria-label="Категории услуг" className="-mx-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-max gap-2 px-1">
+            <Link
+              href="/services"
+              className={cn(
+                'inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition',
+                !selectedCategory
+                  ? 'border-amber-400 bg-amber-400 text-slate-950 hover:bg-amber-300'
+                  : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-600 hover:text-white',
+              )}
+            >
+              <LayoutGrid className="h-4 w-4" />
+              <span>Все</span>
+            </Link>
+            {categories.map((category) => {
+              const Icon = category.icon;
+              const isActive = selectedCategory === category.value;
+              return (
                 <Link
-                  href="/services"
+                  key={category.value}
+                  href={`/services?category=${category.value}`}
                   className={cn(
-                    'inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white',
-                    !selectedCategory && 'bg-amber-400 text-slate-950 hover:bg-amber-300 hover:text-slate-950',
+                    'inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition',
+                    isActive
+                      ? 'border-amber-400 bg-amber-400 text-slate-950 hover:bg-amber-300'
+                      : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-600 hover:text-white',
                   )}
                 >
-                  <LayoutGrid className="h-4 w-4" />
-                  <span>Все</span>
+                  <Icon className="h-4 w-4" />
+                  <span>{category.label}</span>
                 </Link>
-                {categories.map((category) => {
-                  const Icon = category.icon;
-                  return (
-                    <Link
-                      key={category.value}
-                      href={`/services?category=${category.value}`}
-                      className={cn(
-                        'inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-3 text-sm font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white',
-                        selectedCategory === category.value && 'bg-amber-400 text-slate-950 hover:bg-amber-300 hover:text-slate-950',
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      <span>{category.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </div>
-          </nav>
-        </div>
+              );
+            })}
+          </div>
+        </nav>
       </section>
 
       {isError && (
@@ -309,16 +360,28 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
       ) : (
         <>
           {featured.length > 0 && (
-            <section className="container">
-              <div className="mb-5 flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-amber-400" />
-                <h2 className="text-2xl font-bold tracking-tight">
-                  {activeCategory ? `Популярное в категории «${activeCategory.label}»` : 'Популярные услуги'}
-                </h2>
+            <section className="container mt-6">
+              <div className="mb-5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-amber-400" />
+                  <h2 className="text-2xl font-bold tracking-tight">
+                    {activeCategory ? `Популярное в категории «${activeCategory.label}»` : 'Популярные услуги'}
+                  </h2>
+                </div>
+                {featured.length > FEATURED_COLLAPSED && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllFeatured((value) => !value)}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-700 px-3.5 py-1.5 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
+                  >
+                    {showAllFeatured ? 'Свернуть' : 'Показать все'}
+                    <ChevronDown className={cn('h-4 w-4 transition', showAllFeatured && 'rotate-180')} />
+                  </button>
+                )}
               </div>
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                {featured.map((service) => (
-                  <ServiceTile key={service.id} service={service} featured />
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {visibleFeatured.map((service) => (
+                  <CompactServiceTile key={service.id} service={service} />
                 ))}
               </div>
             </section>

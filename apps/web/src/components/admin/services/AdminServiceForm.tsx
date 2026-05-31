@@ -87,14 +87,27 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
   text: 'Текст',
   textarea: 'Большой текст',
   photo: 'Фото',
-  select: 'Select',
-  'media-select': 'Media select',
-  avatar: 'Avatar',
-  tier: 'Quality tier (legacy)',
+  select: 'Список вариантов',
+  'media-select': 'Выбор из медиа-библиотеки',
+  avatar: 'Аватар из Студии',
+  tier: 'Тариф качества (устар.)',
   audio: 'Аудио (mp3/wav)',
   duration: 'Длительность (секунды)',
   aspect_ratio: 'Формат кадра',
   'music-select': 'Музыка из библиотеки',
+};
+
+const fieldTypeHints: Partial<Record<UserInputField['type'], string>> = {
+  text: 'Однострочное текстовое поле (например, имя ребёнка или короткая надпись).',
+  textarea: 'Многострочное поле для длинного текста или пожеланий.',
+  photo: 'Загрузка фото пользователем; можно разрешить выбор аватара из Студии.',
+  select: 'Выпадающий список с заранее заданными вариантами (вы задаёте их ниже).',
+  'media-select': 'Пользователь выбирает готовый файл из медиа-библиотеки (например, тренд-видео).',
+  avatar: 'Выбор аватара из личной Студии пользователя.',
+  audio: 'Загрузка пользователем аудио-дорожки (mp3/wav и т.п.).',
+  duration: 'Кнопки выбора длительности результата в секундах.',
+  aspect_ratio: 'Кнопки выбора формата кадра (9:16, 16:9 и т.д.).',
+  'music-select': 'Выбор фоновой музыки из медиа-библиотеки.',
 };
 
 type AdminServiceFormProps = {
@@ -385,9 +398,28 @@ function formatModelLimit(key: string, value: unknown) {
   return `${labels[key] ?? key}: ${formatted}`;
 }
 
+const blockCategoryNames: Record<string, string> = {
+  image: 'Изображения',
+  video: 'Видео',
+  motion: 'Перенос движения',
+  compose: 'Сборка / монтаж',
+  audio: 'Аудио',
+  text: 'Текст',
+};
+
 function blockCategoryLabel(block: BlockCatalogItem) {
-  if (block.category === 'motion') return 'motion-transfer';
-  return block.category;
+  return blockCategoryNames[block.category] ?? block.category;
+}
+
+function groupBlocksByCategory(blocks: BlockCatalogItem[]): Array<[string, BlockCatalogItem[]]> {
+  const groups = new Map<string, BlockCatalogItem[]>();
+  for (const block of blocks) {
+    const label = blockCategoryLabel(block);
+    const list = groups.get(label) ?? [];
+    list.push(block);
+    groups.set(label, list);
+  }
+  return [...groups.entries()];
 }
 
 function defaultValueForSchema(schema: JsonSchemaObject, block: BlockCatalogItem, key?: string): unknown {
@@ -1101,10 +1133,14 @@ function PipelineBuilder({
                                     }}
                                     className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
                                   >
-                                    {(blocks ?? []).map((item) => (
-                                      <option key={item.slug} value={item.slug}>
-                                        {item.slug}
-                                      </option>
+                                    {groupBlocksByCategory(blocks ?? []).map(([label, items]) => (
+                                      <optgroup key={label} label={label}>
+                                        {items.map((item) => (
+                                          <option key={item.slug} value={item.slug}>
+                                            {item.title}
+                                          </option>
+                                        ))}
+                                      </optgroup>
                                     ))}
                                   </select>
                                 </div>
@@ -1150,13 +1186,28 @@ function PipelineBuilder({
         </SortableContext>
       </DndContext>
 
-      <div className="flex flex-wrap gap-2">
-        {(blocks ?? []).map((block) => (
-          <Button key={block.slug} type="button" variant="outline" size="sm" onClick={() => addStep(block.slug)}>
-            <Plus className="h-4 w-4" />
-            {block.title}
-          </Button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-zinc-700 bg-zinc-950/60 p-3">
+        <Plus className="h-4 w-4 text-slate-400" />
+        <span className="text-sm text-slate-300">Добавить шаг pipeline:</span>
+        <select
+          value=""
+          onChange={(event) => {
+            if (event.target.value) addStep(event.target.value);
+            event.target.value = '';
+          }}
+          className="h-10 min-w-[260px] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 md:flex-none"
+        >
+          <option value="">Выберите блок…</option>
+          {groupBlocksByCategory(blocks ?? []).map(([label, items]) => (
+            <optgroup key={label} label={label}>
+              {items.map((block) => (
+                <option key={block.slug} value={block.slug}>
+                  {block.title}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
       </div>
 
       <div className={cn('rounded-md border p-3 text-sm', errors.length ? 'border-red-900/60 bg-red-950/30 text-red-200' : 'border-emerald-900/50 bg-emerald-950/20 text-emerald-200')}>
@@ -1179,9 +1230,11 @@ function PipelineBuilder({
 function UserInputFormBuilder({
   fields,
   onChange,
+  servicePreview,
 }: {
   fields: UserInputField[];
   onChange: (fields: UserInputField[]) => void;
+  servicePreview?: { title: string; shortDesc: string; priceCoins: number; imageUrl: string | null };
 }) {
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -1265,11 +1318,11 @@ function UserInputFormBuilder({
                           </div>
                           <div className="grid gap-4 md:grid-cols-3">
                             <div className="space-y-2">
-                              <Label>ID</Label>
-                              <Input value={field.id} onChange={(event) => updateField(index, { id: event.target.value })} disabled={field.type === 'tier'} />
+                              <FieldLabel help="Технический идентификатор поля. В pipeline ссылка на него — {{user.ID}}.">ID поля</FieldLabel>
+                              <Input value={field.id} onChange={(event) => updateField(index, { id: event.target.value })} disabled={field.type === 'tier'} className="font-mono" />
                             </div>
                             <div className="space-y-2">
-                              <Label>Type</Label>
+                              <FieldLabel help="Тип поля определяет, что и как вводит пользователь на странице услуги.">Тип поля</FieldLabel>
                               <select
                                 value={field.type}
                                 onChange={(event) => updateField(index, { type: event.target.value as UserInputField['type'] })}
@@ -1284,23 +1337,26 @@ function UserInputFormBuilder({
                                     </option>
                                   ))}
                               </select>
+                              {fieldTypeHints[field.type] && (
+                                <p className="text-xs leading-5 text-slate-500">{fieldTypeHints[field.type]}</p>
+                              )}
                             </div>
                             <div className="space-y-2">
-                              <Label>Label</Label>
+                              <FieldLabel help="Заголовок поля, который пользователь видит на странице услуги.">Подпись для пользователя</FieldLabel>
                               <Input value={field.label} onChange={(event) => updateField(index, { label: event.target.value })} />
                             </div>
                           </div>
                           <div className="grid gap-4 md:grid-cols-2">
                             <div className="space-y-2">
-                              <Label>Hint</Label>
+                              <FieldLabel help="Поясняющий текст под полем (необязательно).">Подсказка под полем</FieldLabel>
                               <Input value={field.hint ?? ''} onChange={(event) => updateField(index, { hint: event.target.value || undefined })} />
                             </div>
                             <div className="space-y-2">
-                              <Label>Placeholder</Label>
+                              <FieldLabel help="Серый текст внутри пустого поля (placeholder).">Текст внутри поля</FieldLabel>
                               <Input value={field.placeholder ?? ''} onChange={(event) => updateField(index, { placeholder: event.target.value || undefined })} />
                             </div>
                           </div>
-                          <div className="flex flex-wrap gap-4 text-sm">
+                          <div className="flex flex-wrap items-center gap-4 text-sm">
                             <label className="flex items-center gap-2">
                               <input
                                 type="checkbox"
@@ -1308,11 +1364,11 @@ function UserInputFormBuilder({
                                 onChange={(event) => updateField(index, { required: event.target.checked })}
                                 disabled={field.type === 'tier'}
                               />
-                              required
+                              Обязательное
                             </label>
                             {(field.type === 'text' || field.type === 'textarea') && (
                               <label className="flex items-center gap-2">
-                                maxLength
+                                Макс. длина
                                 <Input
                                   type="number"
                                   min={1}
@@ -1324,7 +1380,7 @@ function UserInputFormBuilder({
                             )}
                             {field.type === 'photo' && (
                               <label className="flex items-center gap-2">
-                                max MB
+                                Макс. размер, МБ
                                 <Input
                                   type="number"
                                   min={1}
@@ -1356,7 +1412,7 @@ function UserInputFormBuilder({
                             )}
                             {field.type === 'media-select' && (
                               <label className="flex items-center gap-2">
-                                mediaKind
+                                Вид медиа (kind)
                                 <Input
                                   value={field.mediaKind ?? ''}
                                   onChange={(event) => updateField(index, { mediaKind: event.target.value || undefined })}
@@ -1366,7 +1422,7 @@ function UserInputFormBuilder({
                             )}
                             {field.type === 'music-select' && (
                               <label className="flex items-center gap-2">
-                                mediaKind
+                                Вид медиа (kind)
                                 <Input
                                   value={field.mediaKind ?? 'background-music'}
                                   onChange={(event) => updateField(index, { mediaKind: event.target.value || undefined })}
@@ -1377,7 +1433,7 @@ function UserInputFormBuilder({
                             {field.type === 'audio' && (
                               <>
                                 <label className="flex items-center gap-2">
-                                  max MB
+                                  Макс. размер, МБ
                                   <Input
                                     type="number"
                                     min={1}
@@ -1392,7 +1448,7 @@ function UserInputFormBuilder({
                                     checked={field.allowLibrary === true}
                                     onChange={(event) => updateField(index, { allowLibrary: event.target.checked })}
                                   />
-                                  + библиотека
+                                  Добавить выбор из библиотеки
                                 </label>
                               </>
                             )}
@@ -1432,23 +1488,56 @@ function UserInputFormBuilder({
                           </div>
                           {field.type === 'select' && (
                             <div className="space-y-2">
-                              <Label>Options</Label>
-                              <Textarea
-                                rows={3}
-                                value={(field.options ?? []).map((option) => `${option.label}:${option.value}`).join('\n')}
-                                onChange={(event) => {
-                                  const options = event.target.value
-                                    .split('\n')
-                                    .map((line) => line.trim())
-                                    .filter(Boolean)
-                                    .map((line) => {
-                                      const [label, value] = line.split(':');
-                                      return { label: label.trim(), value: (value ?? label).trim() };
-                                    });
+                              <FieldLabel help="Список вариантов, которые увидит пользователь. «Подпись» — то, что видит пользователь; «значение» — то, что уходит в pipeline.">Варианты списка</FieldLabel>
+                              <div className="space-y-2">
+                                {(field.options ?? []).map((option, optionIndex) => (
+                                  <div key={optionIndex} className="flex items-center gap-2">
+                                    <Input
+                                      value={option.label}
+                                      placeholder="Подпись для пользователя"
+                                      onChange={(event) => {
+                                        const options = (field.options ?? []).map((item, current) =>
+                                          current === optionIndex ? { ...item, label: event.target.value } : item,
+                                        );
+                                        updateField(index, { options });
+                                      }}
+                                    />
+                                    <Input
+                                      value={option.value}
+                                      placeholder="значение"
+                                      className="font-mono"
+                                      onChange={(event) => {
+                                        const options = (field.options ?? []).map((item, current) =>
+                                          current === optionIndex ? { ...item, value: event.target.value } : item,
+                                        );
+                                        updateField(index, { options });
+                                      }}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => updateField(index, { options: (field.options ?? []).filter((_item, current) => current !== optionIndex) })}
+                                      aria-label="Удалить вариант"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const options = [...(field.options ?? [])];
+                                  options.push({ label: `Вариант ${options.length + 1}`, value: `option_${options.length + 1}` });
                                   updateField(index, { options });
                                 }}
-                                placeholder="Label:value"
-                              />
+                              >
+                                <Plus className="h-4 w-4" />
+                                Добавить вариант
+                              </Button>
                             </div>
                           )}
                         </div>
@@ -1461,18 +1550,51 @@ function UserInputFormBuilder({
           </SortableContext>
         </DndContext>
 
-        <div className="flex flex-wrap gap-2">
-          {(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
-            <Button key={type} type="button" variant="outline" size="sm" onClick={() => addField(type)}>
-              <Plus className="h-4 w-4" />
-              {fieldTypeLabels[type]}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-zinc-700 bg-zinc-950/60 p-3">
+          <Plus className="h-4 w-4 text-slate-400" />
+          <span className="text-sm text-slate-300">Добавить поле формы:</span>
+          <select
+            value=""
+            onChange={(event) => {
+              if (event.target.value) addField(event.target.value as UserInputField['type']);
+              event.target.value = '';
+            }}
+            className="h-10 min-w-[220px] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 md:flex-none"
+          >
+            <option value="">Выберите тип поля…</option>
+            {(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
+              <option key={type} value={type}>
+                {fieldTypeLabels[type]}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-        <h3 className="font-semibold text-white">Live preview</h3>
+      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+        {servicePreview && (
+          <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+            <div className="border-b border-zinc-800 px-4 py-2.5 text-sm font-semibold text-white">Как увидит пользователь</div>
+            <div className="p-4">
+              <div className="overflow-hidden rounded-lg border border-zinc-800">
+                {servicePreview.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={servicePreview.imageUrl} alt="" className="h-32 w-full object-cover" />
+                ) : (
+                  <div className="flex h-32 items-center justify-center bg-zinc-900 text-xs text-slate-500">Превью услуги</div>
+                )}
+              </div>
+              <div className="mt-3 text-lg font-bold text-white">{servicePreview.title || 'Название услуги'}</div>
+              {servicePreview.shortDesc && <p className="mt-1 text-sm leading-6 text-slate-400">{servicePreview.shortDesc}</p>}
+              <div className="mt-3 rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-center">
+                <div className="text-[11px] uppercase tracking-wide text-amber-300">Стоимость услуги</div>
+                <div className="text-xl font-black text-amber-200">{servicePreview.priceCoins} коинов</div>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+        <h3 className="font-semibold text-white">Предпросмотр формы</h3>
         <div className="mt-4 space-y-4">
           {fields.map((field) => (
             <div key={field.id} className="space-y-2">
@@ -1507,6 +1629,7 @@ function UserInputFormBuilder({
               {field.hint && <p className="text-xs text-slate-500">{field.hint}</p>}
             </div>
           ))}
+        </div>
         </div>
       </div>
     </div>
@@ -1878,8 +2001,17 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         />
       </Section>
 
-      <Section title="Форма для юзера" description="Поля, которые появятся на странице услуги в P3. Поле тарифа всегда одно и обязательное.">
-        <UserInputFormBuilder fields={draft.userInputForm} onChange={(userInputForm) => updateDraft({ userInputForm })} />
+      <Section title="Форма для юзера" description="Поля, которые увидит пользователь на странице услуги. Слева — конструктор, справа — живой предпросмотр формы и карточки услуги.">
+        <UserInputFormBuilder
+          fields={draft.userInputForm}
+          onChange={(userInputForm) => updateDraft({ userInputForm })}
+          servicePreview={{
+            title: draft.title,
+            shortDesc: draft.shortDesc,
+            priceCoins: draft.priceCoinsPro,
+            imageUrl: imagePreviewUrl ?? service?.previewImage ?? null,
+          }}
+        />
       </Section>
 
       <Section title="Тестовый прогон" description="Запускает сохранённый pipeline на моковых данных и показывает прогресс.">
