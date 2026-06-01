@@ -701,11 +701,11 @@ const giftFactoryServices = [
     description:
       'Загрузите фото 2–4 друзей — нейросеть соберёт одно групповое фото в духе 2016–2017: вспышка в лицо, олимпийки и Thrasher, малиновый закат, дворы и плёночное зерно. Лица сохраняются с ваших фотографий.',
     category: ServiceCategory.NOSTALGIA,
-    // Себестоимость: gpt-image-2 ($0.1) ≈ 10 коинов
+    // Себестоимость: nano-banana @2K ($0.08) ≈ 10 коинов
     priceTokens: 49,
     priceCoinsStandard: 49,
     priceCoinsPro: 49,
-    costUsd: 0.1,
+    costUsd: 0.08,
     coverImage: image('gift-group-2017'),
     galleryImages: [image('gift-group-2017-1'), image('gift-group-2017-2')],
     previewImage: image('gift-group-2017-preview'),
@@ -767,13 +767,13 @@ const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.friend_1}}',
         params: {
-          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
+          model: { standard: 'nano-banana', pro: 'nano-banana' },
           image_urls: ['{{user.friend_2}}', '{{user.friend_3}}', '{{user.friend_4}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
           resolution: '2K',
           prompt:
-            'Create ONE single group photo of all the people from the reference images standing together as friends (2 to 4 people). Authentic mid-2010s (2016–2017) post-Soviet street aesthetic: harsh direct on-camera flash at dusk/night, glossy over-sharpened phone-camera look, slight overexposure on the faces, deep crushed shadows. Wardrobe of the era: Adidas / sport tracksuits (олимпийки), a Thrasher flame hoodie, bucket hats, thin gold chains, white sneakers, casual СНГ streetwear. Setting: a courtyard between Soviet panel apartment blocks (хрущёвки), maybe a tinted old Lada, with a vivid crimson-magenta sunset (малиновый закат) glowing behind everyone. Vibe: confident, slightly ironic, nostalgic VK / Instagram 2017 energy. Add subtle low-resolution film grain, mild chromatic aberration and a small yellow date stamp in a corner. CRITICAL: preserve each person’s real face and identity exactly from their reference photo — do not merge, swap or distort faces; everyone must be clearly recognizable. Natural group composition, all faces clearly visible and well lit by the flash.',
+            'Combine the people from the reference photos into ONE single realistic group photo of friends standing close together. IDENTITY IS THE ABSOLUTE TOP PRIORITY: reproduce every person\'s face EXACTLY as in their own reference photo — identical face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle and age. Each face must stay perfectly sharp, in focus, photorealistic and 1:1 recognizable as the original person. Never blend, mix or swap faces between people. Never smooth, beautify, slim, re-age, retouch or repaint any face, and never apply a beauty filter — keep natural skin texture and real pores, no plastic look, no blur on faces. Change ONLY the clothing, environment, lighting and color around the people to a mid-2010s 2016–2017 post-Soviet (СНГ) street aesthetic: harsh direct on-camera night flash, glossy phone-camera look with slight overexposure and deep shadows; Adidas / sport tracksuits (олимпийки), a Thrasher flame hoodie, bucket hats, thin gold chains, white sneakers; a courtyard between Soviet panel apartment blocks with a vivid crimson-magenta sunset (малиновый закат) behind everyone, light film grain, mild chromatic aberration and a small yellow date stamp in a corner. Confident, slightly ironic VK / Instagram-2017 vibe. Natural group composition, all faces clearly visible and well lit by the flash.',
         },
       },
     ],

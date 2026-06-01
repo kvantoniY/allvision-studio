@@ -131,12 +131,12 @@ const services = [
         params: {
           model: { standard: 'nano-banana', pro: 'nano-banana' },
           prompt:
-            'Transform the uploaded photo into a tasteful 2017 social-media era portrait while preserving the person identity, face shape, age, skin tone, hairstyle, and pose. Selected vibe: {{user.vibe}}. Use direct on-camera flash or glossy soft flash when appropriate; add subtle mid-2010s social-media color grading, clean retouching, slight film grain, sharp smartphone/editorial detail, trendy casual styling, and a confident playful mood. Keep the result realistic, premium, and recognizable. Do not add logos, brand names, text, watermarks, heavy face changes, deformed hands, extra people, explicit content, or parody effects.',
+            'Keep the EXACT same person from the uploaded photo. IDENTITY IS THE ABSOLUTE TOP PRIORITY: reproduce their face precisely — identical face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and pose. The face must stay perfectly sharp, in focus, photorealistic and 1:1 recognizable as the same person. Never smooth, beautify, slim, re-age, swap or repaint the face, and never apply a beauty filter — keep natural skin texture and real pores, no plastic look, no blur on the face. Restyle ONLY the photo around the person into a mid-2010s 2017 social-media look (selected vibe: {{user.vibe}}): direct on-camera flash or glossy soft flash, mid-2010s color grading, subtle film grain, sharp smartphone/editorial detail, trendy casual styling of the era, confident playful mood. Realistic, premium, recognizable. No logos, brand names, text, watermarks, deformed hands, extra people, nudity or parody.',
           negative_prompt:
             'logos, text, watermark, extra fingers, deformed face, changed identity, plastic skin, overprocessed beauty filter, low resolution, blur, nudity, explicit content',
           output_format: 'jpg',
           aspect_ratio: 'auto',
-          resolution: '1K',
+          resolution: '2K',
         },
       },
     ],
