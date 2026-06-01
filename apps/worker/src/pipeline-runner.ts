@@ -260,7 +260,11 @@ export function resolvePlaceholders(value: unknown, context: PlaceholderContext)
   }
 
   if (Array.isArray(value)) {
-    return value.map((item) => resolvePlaceholders(item, context));
+    // Выкидываем неразрешённые элементы (например, незаполненные опциональные
+    // {{user.friend_3}} в image_urls), чтобы массив не содержал undefined/''.
+    return value
+      .map((item) => resolvePlaceholders(item, context))
+      .filter((item) => item !== undefined && item !== null && item !== '');
   }
 
   if (value && typeof value === 'object') {
