@@ -17,6 +17,7 @@ const ALLOWED_SUPPORT_FILE_MIME = new Set([
 const ALLOWED_CHAT_VIDEO_MIME = new Set(['video/mp4', 'video/quicktime']);
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
+const MAX_SERVICE_LAUNCH_SIZE = 100 * 1024 * 1024; // 100 MB (user video uploads); per-field maxSizeMb enforces tighter limits
 const MAX_V3_REFERENCE_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_CHAT_INPUT_SIZE = 25 * 1024 * 1024; // 25 MB
 
@@ -123,7 +124,7 @@ function serviceLaunchFileFilter(
   file: Express.Multer.File,
   cb: multer.FileFilterCallback,
 ) {
-  if (ALLOWED_IMAGE_MIME.has(file.mimetype) || ALLOWED_AUDIO_MIME.has(file.mimetype)) {
+  if (ALLOWED_IMAGE_MIME.has(file.mimetype) || ALLOWED_AUDIO_MIME.has(file.mimetype) || ALLOWED_VIDEO_MIME.has(file.mimetype)) {
     cb(null, true);
     return;
   }
@@ -132,7 +133,7 @@ function serviceLaunchFileFilter(
 
 const serviceLaunchMulter = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_FILE_SIZE },
+  limits: { fileSize: MAX_SERVICE_LAUNCH_SIZE },
   fileFilter: serviceLaunchFileFilter,
 });
 

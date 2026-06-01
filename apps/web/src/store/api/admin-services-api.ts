@@ -19,6 +19,7 @@ export type UserInputField = {
     | 'text'
     | 'textarea'
     | 'photo'
+    | 'video'
     | 'select'
     | 'media-select'
     | 'avatar'
@@ -33,6 +34,7 @@ export type UserInputField = {
   placeholder?: string;
   maxLength?: number;
   maxSizeMb?: number;
+  maxDurationSec?: number;
   mediaKind?: string;
   allowedFormats?: string[];
   allowStudioAvatars?: boolean;

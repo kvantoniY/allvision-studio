@@ -4,7 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, ImagePlus, Library, Loader2, Lock, Sparkles, Star, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, ImagePlus, Library, Loader2, Lock, Sparkles, Star, Video, X } from 'lucide-react';
 import type { PublicService } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -36,12 +36,15 @@ type UserInputOption = {
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select';
+  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select';
   label?: string;
   required?: boolean;
   hint?: string;
   placeholder?: string;
   maxLength?: number;
+  maxSizeMb?: number;
+  maxDurationSec?: number;
+  allowedFormats?: string[];
   options?: UserInputOption[];
   mediaKind?: string;
   allowStudioAvatars?: boolean;
@@ -142,9 +145,9 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
   const errors: string[] = [];
   for (const field of fields) {
     if (field.type === 'tier') continue;
-    if (field.type === 'photo' || field.type === 'audio') {
+    if (field.type === 'photo' || field.type === 'audio' || field.type === 'video') {
       if (field.required && !files[field.id] && !values[field.id]?.trim()) {
-        errors.push(`Загрузите файл или выберите вариант: ${field.label ?? field.id}`);
+        errors.push(`Загрузите файл: ${field.label ?? field.id}`);
       }
       continue;
     }
@@ -451,6 +454,83 @@ function ServiceAudioInput({
   );
 }
 
+function ServiceVideoInput({
+  field,
+  label,
+  required,
+  file,
+  onFileChange,
+}: {
+  field: UserInputField;
+  label: string;
+  required: ReactNode;
+  file?: File;
+  onFileChange: (id: string, file?: File) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const maxMb = field.maxSizeMb ?? 50;
+  const maxDur = field.maxDurationSec;
+
+  const selectFile = (next?: File) => {
+    setError(null);
+    if (!next) {
+      onFileChange(field.id, undefined);
+      return;
+    }
+    if (next.size > maxMb * 1024 * 1024) {
+      setError(`Файл больше ${maxMb} МБ`);
+      onFileChange(field.id, undefined);
+      return;
+    }
+    if (maxDur) {
+      const url = URL.createObjectURL(next);
+      const probe = document.createElement('video');
+      probe.preload = 'metadata';
+      probe.onloadedmetadata = () => {
+        URL.revokeObjectURL(url);
+        if (Number.isFinite(probe.duration) && probe.duration > maxDur + 0.5) {
+          setError(`Видео длиннее ${maxDur} сек. Обрежьте ролик и загрузите снова.`);
+          onFileChange(field.id, undefined);
+        } else {
+          onFileChange(field.id, next);
+        }
+      };
+      probe.onerror = () => {
+        URL.revokeObjectURL(url);
+        onFileChange(field.id, next);
+      };
+      probe.src = url;
+    } else {
+      onFileChange(field.id, next);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={field.id}>{label} {required}</Label>
+      <label
+        htmlFor={field.id}
+        className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center transition hover:border-amber-400"
+      >
+        <Video className="h-8 w-8 text-slate-500" />
+        <span className="mt-3 text-sm font-medium text-slate-200">{file ? file.name : 'Загрузить видео'}</span>
+        <span className="mt-1 text-xs text-slate-500">
+          MP4/WebM/MOV, до {maxMb} МБ{maxDur ? `, до ${maxDur} сек` : ''}
+        </span>
+        <Input
+          id={field.id}
+          type="file"
+          accept="video/mp4,video/webm,video/quicktime"
+          className="hidden"
+          onChange={(event) => selectFile(event.target.files?.[0])}
+        />
+      </label>
+      {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 function FieldControl({
   field,
   value,
@@ -480,6 +560,18 @@ function FieldControl({
         file={file}
         value={value}
         onValueChange={onValueChange}
+        onFileChange={onFileChange}
+      />
+    );
+  }
+
+  if (field.type === 'video') {
+    return (
+      <ServiceVideoInput
+        field={field}
+        label={label}
+        required={required}
+        file={file}
         onFileChange={onFileChange}
       />
     );

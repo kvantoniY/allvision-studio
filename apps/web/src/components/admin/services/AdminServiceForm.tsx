@@ -87,6 +87,7 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
   text: 'Текст',
   textarea: 'Большой текст',
   photo: 'Фото',
+  video: 'Видео (загрузка юзером)',
   select: 'Список вариантов',
   'media-select': 'Выбор из медиа-библиотеки',
   avatar: 'Аватар из Студии',
@@ -101,6 +102,7 @@ const fieldTypeHints: Partial<Record<UserInputField['type'], string>> = {
   text: 'Однострочное текстовое поле (например, имя ребёнка или короткая надпись).',
   textarea: 'Многострочное поле для длинного текста или пожеланий.',
   photo: 'Загрузка фото пользователем; можно разрешить выбор аватара из Студии.',
+  video: 'Пользователь загружает своё видео. Лимиты по размеру (МБ) и длительности (сек) — для Seedance до 15 сек.',
   select: 'Выпадающий список с заранее заданными вариантами (вы задаёте их ниже).',
   'media-select': 'Пользователь выбирает готовый файл из медиа-библиотеки (например, тренд-видео).',
   avatar: 'Выбор аватара из личной Студии пользователя.',
@@ -1259,7 +1261,8 @@ function UserInputFormBuilder({
       id,
       type,
       label: fieldTypeLabels[type],
-      required: type === 'tier' || type === 'photo',
+      required: type === 'tier' || type === 'photo' || type === 'video',
+      ...(type === 'video' ? { maxSizeMb: 50, maxDurationSec: 15, allowedFormats: ['mp4', 'webm', 'mov'], allowUserUpload: true } : {}),
       ...(type === 'media-select' ? { mediaKind: 'trend-video' } : {}),
       ...(type === 'music-select' ? { mediaKind: 'background-music', allowUserUpload: false, allowLibrary: true } : {}),
       ...(type === 'audio' ? { maxSizeMb: 25, allowedFormats: ['mp3', 'wav', 'ogg', 'm4a'], allowUserUpload: true, allowLibrary: false } : {}),
@@ -1389,6 +1392,31 @@ function UserInputFormBuilder({
                                   className="h-8 w-24"
                                 />
                               </label>
+                            )}
+                            {field.type === 'video' && (
+                              <>
+                                <label className="flex items-center gap-2">
+                                  Макс. размер, МБ
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={field.maxSizeMb ?? ''}
+                                    onChange={(event) => updateField(index, { maxSizeMb: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-24"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  Макс. длительность, сек
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={60}
+                                    value={field.maxDurationSec ?? ''}
+                                    onChange={(event) => updateField(index, { maxDurationSec: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-24"
+                                  />
+                                </label>
+                              </>
                             )}
                             {field.type === 'photo' && (
                               <label className="flex items-center gap-2">
@@ -1562,7 +1590,7 @@ function UserInputFormBuilder({
             className="h-10 min-w-[220px] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 md:flex-none"
           >
             <option value="">Выберите тип поля…</option>
-            {(['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
+            {(['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
               <option key={type} value={type}>
                 {fieldTypeLabels[type]}
               </option>
@@ -1604,6 +1632,12 @@ function UserInputFormBuilder({
                 <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-zinc-700 text-sm text-slate-500">
                   <Upload className="mr-2 h-4 w-4" />
                   Фото
+                </div>
+              )}
+              {field.type === 'video' && (
+                <div className="flex h-28 flex-col items-center justify-center rounded-md border border-dashed border-zinc-700 text-sm text-slate-500">
+                  <Upload className="mb-1 h-4 w-4" />
+                  Видео{field.maxDurationSec ? ` (до ${field.maxDurationSec} сек)` : ''}
                 </div>
               )}
               {field.type === 'select' && (

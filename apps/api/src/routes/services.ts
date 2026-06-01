@@ -333,9 +333,14 @@ servicesRouter.post(
       const data = parseDataField(req.body.data ?? req.body);
       const photoFields = fields.filter((field) => field.type === 'photo');
       const audioFields = fields.filter((field) => field.type === 'audio');
+      const videoFields = fields.filter((field) => field.type === 'video');
       const fileMap = filesByField(
         req,
-        new Set([...photoFields.map((field) => field.id), ...audioFields.map((field) => field.id)]),
+        new Set([
+          ...photoFields.map((field) => field.id),
+          ...audioFields.map((field) => field.id),
+          ...videoFields.map((field) => field.id),
+        ]),
       );
       const tierField = fields.find((field) => field.type === 'tier');
       const userId = req.user!.id;
@@ -357,6 +362,13 @@ servicesRouter.post(
           if (!hasFile && !requiredMissing(value)) {
             const asset = await resolvePhotoInputAsset(field, value, userId);
             if (asset) assetInputs.set(field.id, asset);
+          }
+          continue;
+        }
+
+        if (field.type === 'video') {
+          if (field.required && !fileMap.has(field.id)) {
+            throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
           }
           continue;
         }
@@ -406,7 +418,7 @@ servicesRouter.post(
         userInputs[fieldId] = asset.ref;
       }
 
-      for (const field of [...photoFields, ...audioFields]) {
+      for (const field of [...photoFields, ...audioFields, ...videoFields]) {
         const file = fileMap.get(field.id);
         if (!file) continue;
         if (field.maxSizeMb && file.size > field.maxSizeMb * 1024 * 1024) {
