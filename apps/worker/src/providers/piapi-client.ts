@@ -103,6 +103,62 @@ export class PiAPIClient {
     return { buffer: Buffer.from(await res.arrayBuffer()), contentType };
   }
 
+  // GPT Image (OpenAI через PiAPI) живёт НЕ на unified /api/v1/task, а на
+  // OpenAI-совместимых эндпоинтах. Без референсов — /v1/images/generations (JSON),
+  // с референсами — /v1/images/edits (multipart, каждое фото полем `image`).
+  async generateGptImage(params: {
+    model: string;
+    prompt: string;
+    imageUrls: string[];
+    size: string;
+    quality: string;
+  }): Promise<{ url?: string; b64?: string }> {
+    const useEdits = params.imageUrls.length > 0;
+    const endpoint = `${this.baseUrl}/v1/images/${useEdits ? 'edits' : 'generations'}`;
+    let res: Response;
+    if (useEdits) {
+      const form = new FormData();
+      form.append('model', params.model);
+      form.append('prompt', params.prompt);
+      form.append('n', '1');
+      form.append('size', params.size);
+      form.append('quality', params.quality);
+      form.append('response_format', 'url');
+      for (const url of params.imageUrls) {
+        const { buffer, contentType } = await this.download(url);
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+        form.append('image', new Blob([new Uint8Array(buffer)], { type: contentType || 'image/png' }), `ref.${ext}`);
+      }
+      res = await this.fetchWithRetry(endpoint, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.apiKey}` },
+        body: form,
+      }, true);
+    } else {
+      res = await this.fetchWithRetry(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
+        body: JSON.stringify({
+          model: params.model,
+          prompt: params.prompt,
+          n: 1,
+          size: params.size,
+          quality: params.quality,
+          response_format: 'url',
+        }),
+      }, true);
+    }
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const data = Array.isArray((json as { data?: unknown }).data)
+      ? (json as { data: Array<Record<string, unknown>> }).data
+      : [];
+    const first = data[0] ?? {};
+    return {
+      url: typeof first.url === 'string' ? first.url : undefined,
+      b64: typeof first.b64_json === 'string' ? first.b64_json : undefined,
+    };
+  }
+
   private async requestJson(path: string, init: RequestInit): Promise<Record<string, unknown>> {
     const res = await this.fetchWithRetry(`${this.baseUrl}${path}`, {
       ...init,

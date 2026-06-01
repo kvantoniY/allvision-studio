@@ -75,8 +75,9 @@ const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; tas
   'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06 },
   'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
-  // GPT Image 2 (OpenAI через PiAPI). model/task_type заданы по docs/скриншоту песочницы PiAPI;
-  // если реальный вызов вернёт UNSUPPORTED, сверьте вкладку "Запуск API" и поправьте эти две строки.
+  // GPT Image 2 (OpenAI через PiAPI). Идёт НЕ через unified /api/v1/task, а через
+  // OpenAI-совместимые /v1/images/generations|edits — см. ветку gpt-image в imageEdit().
+  // providerModel/taskType здесь не используются для вызова, оставлены для единообразия каталога.
   'gpt-image-2': { providerModel: 'gpt-image-2', taskType: 'gpt-image-2', supportsImageInput: true, estimatedCostUsd: 0.1 },
 };
 
@@ -148,6 +149,33 @@ export class PiAPIProvider implements AIProvider {
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
     try {
+      // GPT Image идёт через OpenAI-совместимый эндпоинт (синхронно), а не unified task.
+      if (input.model.startsWith('gpt-image')) {
+        const aspect = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
+        const sizeByAspect: Record<string, string> = { '1:1': '1024x1024', '9:16': '1024x1536', '16:9': '1536x1024' };
+        const size = sizeByAspect[aspect ?? ''] ?? '1024x1024';
+        const quality = readString(input.params, 'quality') ?? 'high';
+        const refs = [input.imageUrl, ...readStringList(input.params, 'image_urls')]
+          .filter((url): url is string => typeof url === 'string' && url.length > 0);
+        const result = await this.client.generateGptImage({ model: input.model, prompt: input.prompt, imageUrls: refs, size, quality });
+        let local;
+        if (result.url) {
+          local = await this.persistProviderOutput(result.url, input.context, 'png');
+        } else if (result.b64) {
+          const key = `outputs/${input.context.userId ?? 'unknown'}/${input.context.projectId}/${input.context.stepId}/result.png`;
+          local = await this.storage.upload({ key, body: Buffer.from(result.b64, 'base64'), contentType: 'image/png' });
+        } else {
+          throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'GPT Image returned no image');
+        }
+        const durationMs = Date.now() - startedAt;
+        await this.logUsage(input.context, input.model, undefined, 'success', estimatedCost, durationMs);
+        return {
+          outputUrl: local.url,
+          costUsd: estimatedCost,
+          durationMs,
+          meta: { model: input.model, provider: 'piapi', size },
+        };
+      }
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
       const published = input.imageUrl ? await this.publisher.publishImageUrl(input.imageUrl, 1) : undefined;
       const extraImageUrls = readStringList(input.params, 'image_urls');
@@ -1090,23 +1118,6 @@ function buildImageEditPayload(input: {
         resolution: input.resolution,
         ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
         ...(ar ? { aspect_ratio: ar } : {}),
-      },
-    };
-  }
-
-  if (modelSlug.startsWith('gpt-image')) {
-    const imageUrls = [...(input.publishedUrl ? [input.publishedUrl] : []), ...input.extraImageUrls];
-    // GPT Image использует size (а не aspect_ratio): мапим формат кадра в допустимые размеры.
-    const sizeByAspect: Record<string, string> = { '1:1': '1024x1024', '9:16': '1024x1536', '16:9': '1536x1024' };
-    const quality = readString(input.params, 'quality') ?? 'high';
-    return {
-      model: modelConfig.providerModel,
-      task_type: modelConfig.taskType,
-      input: {
-        prompt: input.prompt,
-        ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
-        size: sizeByAspect[ar ?? ''] ?? '1024x1024',
-        quality,
       },
     };
   }
