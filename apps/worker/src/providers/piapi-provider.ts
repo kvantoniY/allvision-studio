@@ -75,6 +75,9 @@ const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; tas
   'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06 },
   'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
+  // GPT Image 2 (OpenAI через PiAPI). model/task_type заданы по docs/скриншоту песочницы PiAPI;
+  // если реальный вызов вернёт UNSUPPORTED, сверьте вкладку "Запуск API" и поправьте эти две строки.
+  'gpt-image-2': { providerModel: 'gpt-image-2', taskType: 'gpt-image-2', supportsImageInput: true, estimatedCostUsd: 0.1 },
 };
 
 const VIDEO_EFFECT_MODELS: Record<string, { providerModel: string; taskType: string; estimatedCostUsd: number }> = {
@@ -1087,6 +1090,23 @@ function buildImageEditPayload(input: {
         resolution: input.resolution,
         ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
         ...(ar ? { aspect_ratio: ar } : {}),
+      },
+    };
+  }
+
+  if (modelSlug.startsWith('gpt-image')) {
+    const imageUrls = [...(input.publishedUrl ? [input.publishedUrl] : []), ...input.extraImageUrls];
+    // GPT Image использует size (а не aspect_ratio): мапим формат кадра в допустимые размеры.
+    const sizeByAspect: Record<string, string> = { '1:1': '1024x1024', '9:16': '1024x1536', '16:9': '1536x1024' };
+    const quality = readString(input.params, 'quality') ?? 'high';
+    return {
+      model: modelConfig.providerModel,
+      task_type: modelConfig.taskType,
+      input: {
+        prompt: input.prompt,
+        ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
+        size: sizeByAspect[ar ?? ''] ?? '1024x1024',
+        quality,
       },
     };
   }

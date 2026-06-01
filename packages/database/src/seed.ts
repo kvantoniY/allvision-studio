@@ -701,11 +701,11 @@ const giftFactoryServices = [
     description:
       'Загрузите фото 2–4 друзей — нейросеть соберёт одно групповое фото в духе 2016–2017: вспышка в лицо, олимпийки и Thrasher, малиновый закат, дворы и плёночное зерно. Лица сохраняются с ваших фотографий.',
     category: ServiceCategory.NOSTALGIA,
-    // Себестоимость: nano-banana @2K ($0.08) ≈ 10 коинов
+    // Себестоимость: gpt-image-2 ($0.1) ≈ 10 коинов
     priceTokens: 49,
     priceCoinsStandard: 49,
     priceCoinsPro: 49,
-    costUsd: 0.08,
+    costUsd: 0.1,
     coverImage: image('gift-group-2017'),
     galleryImages: [image('gift-group-2017-1'), image('gift-group-2017-2')],
     previewImage: image('gift-group-2017-preview'),
@@ -767,7 +767,7 @@ const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.friend_1}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           image_urls: ['{{user.friend_2}}', '{{user.friend_3}}', '{{user.friend_4}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',

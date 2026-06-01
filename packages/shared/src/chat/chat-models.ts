@@ -220,6 +220,15 @@ export const CHAT_MODELS: ChatModelOption[] = [
   }),
   fromCatalog({
     blockSlug: 'image-edit',
+    modelSlug: 'gpt-image-2',
+    category: 'image',
+    description: 'GPT Image 2 от OpenAI — сильная модель для лиц и групповых фото, держит идентичность и композицию лучше Nano Banana. Принимает несколько референс-фото. Размер: 1:1, 9:16 или 16:9.',
+    acceptsImageInput: true,
+    acceptsTextOnly: true,
+    supportedAspectRatios: ['1:1', '9:16', '16:9'],
+  }),
+  fromCatalog({
+    blockSlug: 'image-edit',
     modelSlug: 'flux-schnell',
     category: 'image',
     description: 'Flux Schnell — самая быстрая и дешёвая модель Flux. Подходит для быстрых черновиков, превью и эскизов идей. Только text-to-image.',

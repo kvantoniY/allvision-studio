@@ -154,6 +154,21 @@ const imageEditModels: ModelOption[] = [
     optionalParams: ['aspect_ratio', 'output_format', 'guidance_scale', 'steps'],
     docsUrl: 'https://piapi.ai/docs/flux-api/text-to-image',
   },
+  {
+    slug: 'gpt-image-2',
+    title: 'GPT Image 2 (OpenAI)',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.1),
+    estimatedCostUsd: 0.1,
+    provider: 'piapi',
+    providerModel: 'gpt-image-2',
+    taskType: 'gpt-image-2',
+    description: 'Генерация и редактирование изображений от OpenAI (GPT Image 2). Заметно лучше Nano Banana держит лица и композицию на групповых фото; принимает несколько референс-изображений. Размер выбирается из формата кадра: 1:1 → 1024×1024, 9:16 → 1024×1536, 16:9 → 1536×1024.',
+    limits: { maxResolution: '1536x1024', maxFileSize: '10MB', maxInputImages: 10 },
+    requiredParams: ['prompt'],
+    optionalParams: ['image_urls', 'aspect_ratio'],
+    docsUrl: 'https://piapi.ai/docs/gpt-image/gpt-image-api',
+  },
 ].map((model) => withPiAPICapability(model as ModelOption));
 
 const imageToVideoModels: ModelOption[] = [
