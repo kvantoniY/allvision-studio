@@ -53,6 +53,9 @@ const mockPrisma = {
     findUnique: jest.fn(),
     create: jest.fn(),
   },
+  stylePreset: {
+    upsert: jest.fn(),
+  },
   $executeRawUnsafe: jest.fn(),
   $disconnect: jest.fn(),
 };
