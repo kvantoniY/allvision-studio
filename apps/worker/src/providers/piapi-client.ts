@@ -80,7 +80,7 @@ export class PiAPIClient {
       }
 
       throw new ProviderError(
-        status.errorCode ?? 'PIAPI_TASK_FAILED',
+        classifyFailureCode(status.errorCode, status.errorMessage),
         status.errorMessage ?? 'PiAPI task failed',
       );
     }
@@ -187,6 +187,16 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
     errorCode,
     errorMessage,
   };
+}
+
+// Классифицирует провал задачи PiAPI. Модерация контента важнее общего кода,
+// чтобы пользователь видел понятную причину, а не "задача не выполнена".
+function classifyFailureCode(errorCode: string | undefined, errorMessage: string | undefined): string {
+  const text = `${errorCode ?? ''} ${errorMessage ?? ''}`.toLowerCase();
+  if (/violat|community guidelines|moderat|sensitive|nsfw|policy|not allowed|inappropriate|safety/.test(text)) {
+    return 'CONTENT_MODERATION';
+  }
+  return errorCode ?? 'PIAPI_TASK_FAILED';
 }
 
 export function extractPiAPIActualCostUsd(raw: Record<string, unknown>): number | null {
