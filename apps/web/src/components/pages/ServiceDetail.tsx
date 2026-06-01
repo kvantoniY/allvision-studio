@@ -104,6 +104,11 @@ function parseFields(value: unknown): UserInputField[] {
       hint: typeof item.hint === 'string' ? item.hint : undefined,
       placeholder: typeof item.placeholder === 'string' ? item.placeholder : undefined,
       maxLength: typeof item.maxLength === 'number' ? item.maxLength : undefined,
+      maxSizeMb: typeof item.maxSizeMb === 'number' ? item.maxSizeMb : undefined,
+      maxDurationSec: typeof item.maxDurationSec === 'number' ? item.maxDurationSec : undefined,
+      allowedFormats: Array.isArray(item.allowedFormats)
+        ? item.allowedFormats.filter((v): v is string => typeof v === 'string')
+        : undefined,
       mediaKind: typeof item.mediaKind === 'string' ? item.mediaKind : undefined,
       allowStudioAvatars: typeof item.allowStudioAvatars === 'boolean' ? item.allowStudioAvatars : undefined,
       allowSystemLibrary: typeof item.allowSystemLibrary === 'boolean' ? item.allowSystemLibrary : undefined,
@@ -126,7 +131,7 @@ function parseFields(value: unknown): UserInputField[] {
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select'].includes(item.type));
 }
 
 function servicePrice(service: PublicService) {
