@@ -39,7 +39,7 @@ function mediaUrl(value?: string | null) {
 }
 
 function servicePreview(service: PublicService) {
-  return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? 'https://picsum.photos/seed/allvision-featured-gift/900/600';
+  return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? '/mock_preview.png';
 }
 
 export function ServicesGrid() {

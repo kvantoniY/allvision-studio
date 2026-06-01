@@ -89,7 +89,7 @@ function selectedVideoPreview(fields: UserInputField[], values: FormValues, medi
 }
 
 function previewImage(service: PublicService) {
-  return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? 'https://picsum.photos/seed/allvision-detail/1200/800';
+  return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? '/mock_preview.png';
 }
 
 function parseFields(value: unknown): UserInputField[] {

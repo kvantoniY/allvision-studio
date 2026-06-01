@@ -99,7 +99,7 @@ function scoreService(service: PublicService, categoryLabel: string, query: stri
 const SEARCH_SCORE_THRESHOLD = 6;
 
 function previewFrom(service: PublicService) {
-  return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? 'https://picsum.photos/seed/allvision-service/900/600';
+  return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? '/mock_preview.png';
 }
 
 function ServiceTile({ service }: { service: PublicService }) {

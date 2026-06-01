@@ -1735,6 +1735,8 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const [draft, setDraft] = useState<FormDraft>(() => initialDraft(service));
   const [previewImage, setPreviewImage] = useState<File | null>(null);
   const [previewVideo, setPreviewVideo] = useState<File | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
+  const [removeVideo, setRemoveVideo] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [testGenerationId, setTestGenerationId] = useState<string | null>(null);
   const { data: blocksData } = useGetAdminBlocksQuery();
@@ -1769,6 +1771,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
     [draft.priceCoinsPro, pricingSummary.pro.costUsd, usdToRub],
   );
   const imagePreviewUrl = useMemo(() => (previewImage ? URL.createObjectURL(previewImage) : null), [previewImage]);
+  const videoPreviewUrl = useMemo(() => (previewVideo ? URL.createObjectURL(previewVideo) : null), [previewVideo]);
 
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
@@ -1786,12 +1789,16 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   };
 
   const changeImage = (event: ChangeEvent<HTMLInputElement>) => {
-    setPreviewImage(event.target.files?.[0] ?? null);
+    const file = event.target.files?.[0] ?? null;
+    setPreviewImage(file);
+    if (file) setRemoveImage(false);
     setDirty(true);
   };
 
   const changeVideo = (event: ChangeEvent<HTMLInputElement>) => {
-    setPreviewVideo(event.target.files?.[0] ?? null);
+    const file = event.target.files?.[0] ?? null;
+    setPreviewVideo(file);
+    if (file) setRemoveVideo(false);
     setDirty(true);
   };
 
@@ -1814,7 +1821,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
       }),
     );
     if (previewImage) form.append('previewImage', previewImage);
+    else if (removeImage) form.append('removePreviewImage', 'true');
     if (previewVideo) form.append('previewVideo', previewVideo);
+    else if (removeVideo) form.append('removePreviewVideo', 'true');
     return form;
   };
 
@@ -1963,7 +1972,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
       </details>
 
-      <Section title="Превью" description="Изображение для каталога и видео для страницы услуги.">
+      <Section title="Превью" description="Картинка и/или видео. Если есть оба — на витрине показывается видео. Удалите ненужное, чтобы осталось то превью, которое нужно.">
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-2">
               <Label htmlFor="previewImage">Превью-изображение</Label>
@@ -1971,7 +1980,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
             {fileName(previewImage) && <p className="text-xs text-slate-400">{fileName(previewImage)}</p>}
             {imagePreviewUrl ? (
               <img src={imagePreviewUrl} alt="" className="h-40 w-full rounded-md object-cover" />
-            ) : draft && service?.previewImage ? (
+            ) : (service?.previewImage && !removeImage) ? (
               <img src={service.previewImage} alt="" className="h-40 w-full rounded-md object-cover" />
             ) : (
               <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-zinc-700 text-slate-500">
@@ -1979,21 +1988,44 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
                 Нет изображения
               </div>
             )}
+            {(imagePreviewUrl || (service?.previewImage && !removeImage)) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => { setPreviewImage(null); setRemoveImage(true); setDirty(true); }}
+              >
+                <Trash2 className="h-4 w-4" />
+                Удалить изображение
+              </Button>
+            )}
           </div>
           <div className="space-y-2">
               <Label htmlFor="previewVideo">Превью-видео</Label>
             <Input id="previewVideo" type="file" accept="video/*" onChange={changeVideo} />
             {fileName(previewVideo) && <p className="text-xs text-slate-400">{fileName(previewVideo)}</p>}
-            {service?.previewVideo ? (
-              <Link href={service.previewVideo} target="_blank" className="inline-flex items-center gap-2 text-sm text-rose-300 hover:text-rose-200">
-                <Video className="h-4 w-4" />
-                Текущее превью-видео
-              </Link>
+            {videoPreviewUrl ? (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <video src={videoPreviewUrl} controls className="h-40 w-full rounded-md bg-black object-contain" />
+            ) : (service?.previewVideo && !removeVideo) ? (
+              // eslint-disable-next-line jsx-a11y/media-has-caption
+              <video src={service.previewVideo} controls className="h-40 w-full rounded-md bg-black object-contain" />
             ) : (
-              <div className="flex h-20 items-center justify-center rounded-md border border-dashed border-zinc-700 text-slate-500">
+              <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-zinc-700 text-slate-500">
                 <Video className="mr-2 h-4 w-4" />
                 Нет видео
               </div>
+            )}
+            {(videoPreviewUrl || (service?.previewVideo && !removeVideo)) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => { setPreviewVideo(null); setRemoveVideo(true); setDirty(true); }}
+              >
+                <Trash2 className="h-4 w-4" />
+                Удалить видео
+              </Button>
             )}
           </div>
         </div>

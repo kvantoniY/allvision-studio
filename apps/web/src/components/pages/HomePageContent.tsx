@@ -624,7 +624,7 @@ function ServicesShowcase({
 function ServiceShowcaseCard({ service }: { service: PublicService }) {
   const media = serviceMedia(service) ?? {
     type: 'image' as const,
-    url: `https://picsum.photos/seed/allvision-service-${service.slug}/900/600`,
+    url: '/mock_preview.png',
     alt: service.title,
   };
 

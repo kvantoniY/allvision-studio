@@ -237,6 +237,8 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
 
     const previewImage = firstFile(req, 'previewImage');
     const previewVideo = firstFile(req, 'previewVideo');
+    const removeImage = req.body.removePreviewImage === 'true' || req.body.removePreviewImage === true;
+    const removeVideo = req.body.removePreviewVideo === 'true' || req.body.removePreviewVideo === true;
     const oldKeys: string[] = [];
     const data: Prisma.ServiceUpdateInput = {};
 
@@ -267,12 +269,21 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
       data.coverImage = image.url;
       const oldKey = storageKeyFromUrl(current.previewImage ?? current.coverImage);
       if (oldKey) oldKeys.push(oldKey);
+    } else if (removeImage) {
+      data.previewImage = null;
+      data.coverImage = null;
+      const oldKey = storageKeyFromUrl(current.previewImage ?? current.coverImage);
+      if (oldKey) oldKeys.push(oldKey);
     }
 
     if (previewVideo) {
       const video = await fileService.uploadServicePreview(previewVideo.buffer, previewVideo.mimetype, 'video');
       uploaded.push(video);
       data.previewVideo = video.url;
+      const oldKey = storageKeyFromUrl(current.previewVideo);
+      if (oldKey) oldKeys.push(oldKey);
+    } else if (removeVideo) {
+      data.previewVideo = null;
       const oldKey = storageKeyFromUrl(current.previewVideo);
       if (oldKey) oldKeys.push(oldKey);
     }
