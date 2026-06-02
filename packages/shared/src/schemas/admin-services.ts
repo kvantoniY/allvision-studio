@@ -55,6 +55,7 @@ export const userInputFieldSchema = z.object({
   hint: z.string().trim().max(240).optional(),
   placeholder: z.string().trim().max(160).optional(),
   mediaKind: z.string().trim().min(1).max(80).optional(),
+  mediaGroup: z.string().trim().min(1).max(80).optional(),
   maxLength: z.number().int().min(1).max(5000).optional(),
   maxSizeMb: z.number().int().min(1).max(200).optional(),
   maxDurationSec: z.number().int().min(1).max(60).optional(),

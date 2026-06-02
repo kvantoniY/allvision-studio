@@ -36,6 +36,7 @@ export type UserInputField = {
   maxSizeMb?: number;
   maxDurationSec?: number;
   mediaKind?: string;
+  mediaGroup?: string;
   allowedFormats?: string[];
   allowStudioAvatars?: boolean;
   allowSystemLibrary?: boolean;

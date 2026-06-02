@@ -224,10 +224,12 @@ publicRouter.get('/trends/:id', async (req: Request, res: Response<PublicTrendRe
 publicRouter.get('/media-assets', async (req: Request, res: Response<PublicMediaAssetsResponse>, next: NextFunction) => {
   try {
     const kind = typeof req.query.kind === 'string' ? req.query.kind.trim() : undefined;
+    const group = typeof req.query.group === 'string' && req.query.group.trim() ? req.query.group.trim() : undefined;
     const active = req.query.active === undefined ? true : req.query.active === 'true';
     const assets = await prisma.mediaAsset.findMany({
       where: {
         ...(kind ? { kind } : {}),
+        ...(group ? { groupCode: group } : {}),
         ...(active ? { isActive: true } : {}),
         ownerUserId: null,
       },
@@ -235,6 +237,7 @@ publicRouter.get('/media-assets', async (req: Request, res: Response<PublicMedia
       select: {
         id: true,
         kind: true,
+        groupCode: true,
         title: true,
         description: true,
         tags: true,

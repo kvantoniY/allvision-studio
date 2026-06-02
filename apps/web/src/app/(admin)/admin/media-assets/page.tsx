@@ -32,21 +32,28 @@ function thumbnailUrl(asset: AdminMediaAsset) {
 
 export default function AdminMediaAssetsPage() {
   const [kind, setKind] = useState('trend-video');
+  const [groupFilter, setGroupFilter] = useState('');
   const [isActive, setIsActive] = useState<string>('all');
   const [search, setSearch] = useState('');
-  const [draft, setDraft] = useState({ kind: 'trend-video', title: '', description: '', tags: '' });
+  const [draft, setDraft] = useState({ kind: 'trend-video', title: '', description: '', tags: '', group: '' });
   const [file, setFile] = useState<File | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const query = useMemo(() => ({
     kind: kind || undefined,
+    group: groupFilter || undefined,
     isActive: isActive === 'all' ? undefined : isActive === 'true',
     search: search || undefined,
-  }), [kind, isActive, search]);
+  }), [kind, groupFilter, isActive, search]);
   const { data, isFetching, refetch } = useListAdminMediaAssetsQuery(query);
   const [createAsset, createState] = useCreateAdminMediaAssetMutation();
   const [updateAsset] = useUpdateAdminMediaAssetMutation();
   const [deleteAsset] = useDeleteAdminMediaAssetMutation();
   const [reorderAsset] = useReorderAdminMediaAssetMutation();
+
+  const groupSuggestions = useMemo(
+    () => Array.from(new Set((data?.items ?? []).map((asset) => asset.groupCode).filter((value): value is string => Boolean(value)))).sort(),
+    [data?.items],
+  );
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -59,7 +66,7 @@ export default function AdminMediaAssetsPage() {
     form.append('data', JSON.stringify({ ...draft, tags: draft.tags }));
     try {
       await createAsset(form).unwrap();
-      setDraft({ kind: 'trend-video', title: '', description: '', tags: '' });
+      setDraft({ kind: 'trend-video', title: '', description: '', tags: '', group: '' });
       setFile(null);
       toast({ title: 'Медиа-файл загружен' });
     } catch (error) {
@@ -116,6 +123,11 @@ export default function AdminMediaAssetsPage() {
 
   return (
     <div className="space-y-8">
+      <datalist id="media-group-suggestions">
+        {groupSuggestions.map((group) => (
+          <option key={group} value={group} />
+        ))}
+      </datalist>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white">Медиа-файлы</h1>
@@ -144,6 +156,15 @@ export default function AdminMediaAssetsPage() {
             <Input value={draft.title} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} required />
           </div>
           <div className="space-y-2">
+            <Label>Группа</Label>
+            <Input
+              list="media-group-suggestions"
+              value={draft.group}
+              onChange={(event) => setDraft((current) => ({ ...current, group: event.target.value }))}
+              placeholder="напр. Трендовые танцы"
+            />
+          </div>
+          <div className="space-y-2">
             <Label>Теги</Label>
             <Input value={draft.tags} onChange={(event) => setDraft((current) => ({ ...current, tags: event.target.value }))} placeholder="dance, meme" />
           </div>
@@ -162,13 +183,17 @@ export default function AdminMediaAssetsPage() {
         </Button>
       </form>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         <div className="space-y-2">
           <Label>Фильтр по типу</Label>
           <select value={kind} onChange={(event) => setKind(event.target.value)} className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100">
             <option value="">all</option>
             {kinds.map((item) => <option key={item} value={item}>{item}</option>)}
           </select>
+        </div>
+        <div className="space-y-2">
+          <Label>Фильтр по группе</Label>
+          <Input list="media-group-suggestions" value={groupFilter} onChange={(event) => setGroupFilter(event.target.value)} placeholder="все группы" />
         </div>
         <div className="space-y-2">
           <Label>Activity</Label>
@@ -189,6 +214,7 @@ export default function AdminMediaAssetsPage() {
           <thead className="bg-zinc-950 text-slate-400">
             <tr>
               <th className="p-3">Asset</th>
+              <th className="p-3">Группа</th>
               <th className="p-3">Meta</th>
               <th className="p-3">Владелец</th>
               <th className="p-3">Статус</th>
@@ -227,6 +253,21 @@ export default function AdminMediaAssetsPage() {
                         <div className="mt-1 text-xs text-slate-500">{asset.kind} / {asset.id}</div>
                       </div>
                     </div>
+                  </td>
+                  <td className="p-3">
+                    <Input
+                      list="media-group-suggestions"
+                      defaultValue={asset.groupCode ?? ''}
+                      placeholder="без группы"
+                      className="h-8 w-40"
+                      onBlur={(event) => {
+                        const next = event.target.value.trim();
+                        if (next === (asset.groupCode ?? '')) return;
+                        updateAsset({ id: asset.id, body: { group: next || null } }).unwrap().catch(() => {
+                          toast({ title: 'Не удалось обновить группу', variant: 'destructive' });
+                        });
+                      }}
+                    />
                   </td>
                   <td className="p-3 text-slate-300">
                     <div>{formatBytes(asset.fileSize)} / {asset.mimeType}</div>
@@ -269,7 +310,7 @@ export default function AdminMediaAssetsPage() {
               );
             })}
             {!isFetching && (data?.items.length ?? 0) === 0 && (
-              <tr><td colSpan={5} className="p-8 text-center text-slate-500">Медиа-файлов пока нет</td></tr>
+              <tr><td colSpan={6} className="p-8 text-center text-slate-500">Медиа-файлов пока нет</td></tr>
             )}
           </tbody>
         </table>

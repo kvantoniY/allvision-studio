@@ -7,6 +7,7 @@ export type AdminMediaAsset = {
   createdAt: string;
   updatedAt: string;
   kind: string;
+  groupCode: string | null;
   title: string;
   description: string | null;
   tags: string[];
@@ -30,6 +31,7 @@ export type AdminMediaAssetsQuery = {
   page?: number;
   limit?: number;
   kind?: string;
+  group?: string;
   isActive?: boolean;
   search?: string;
 };
@@ -52,6 +54,7 @@ export const adminMediaAssetsApi = createApi({
         params.set('page', String(q?.page ?? 1));
         params.set('limit', String(q?.limit ?? 50));
         if (q?.kind) params.set('kind', q.kind);
+        if (q?.group) params.set('group', q.group);
         if (q?.isActive !== undefined) params.set('isActive', String(q.isActive));
         if (q?.search) params.set('search', q.search);
         return { url: `/media-assets?${params.toString()}` };
@@ -69,7 +72,7 @@ export const adminMediaAssetsApi = createApi({
         dispatch(publicApi.util.invalidateTags(['MediaAssets']));
       },
     }),
-    updateAdminMediaAsset: build.mutation<{ asset: AdminMediaAsset }, { id: string; body: Partial<AdminMediaAsset> }>({
+    updateAdminMediaAsset: build.mutation<{ asset: AdminMediaAsset }, { id: string; body: Partial<AdminMediaAsset> & { group?: string | null } }>({
       query: ({ id, body }) => ({ url: `/media-assets/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _error, { id }) => ['AdminMediaAsset', { type: 'AdminMediaAsset', id }],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {

@@ -91,6 +91,7 @@ export type PublicSettings = {
 export type PublicMediaAsset = {
   id: string;
   kind: string;
+  groupCode?: string | null;
   title: string;
   description: string | null;
   tags: string[];

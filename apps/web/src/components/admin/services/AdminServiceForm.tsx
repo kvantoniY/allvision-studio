@@ -1243,6 +1243,15 @@ function UserInputFormBuilder({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  const [mediaGroups, setMediaGroups] = useState<string[]>([]);
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_API_URL ?? '';
+    fetch(`${base}/api/admin/media-assets/groups`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : { groups: [] }))
+      .then((json: { groups?: string[] }) => setMediaGroups(Array.isArray(json.groups) ? json.groups : []))
+      .catch(() => undefined);
+  }, []);
+
   const updateField = (index: number, patch: Partial<UserInputField>) => {
     onChange(fields.map((field, current) => (current === index ? { ...field, ...patch } : field)));
   };
@@ -1292,6 +1301,11 @@ function UserInputFormBuilder({
 
   return (
     <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <datalist id="admin-media-groups">
+        {mediaGroups.map((group) => (
+          <option key={group} value={group} />
+        ))}
+      </datalist>
       <div className="space-y-4">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={fields.map((field) => field.id)} strategy={verticalListSortingStrategy}>
@@ -1439,14 +1453,26 @@ function UserInputFormBuilder({
                               </label>
                             )}
                             {field.type === 'media-select' && (
-                              <label className="flex items-center gap-2">
-                                Вид медиа (kind)
-                                <Input
-                                  value={field.mediaKind ?? ''}
-                                  onChange={(event) => updateField(index, { mediaKind: event.target.value || undefined })}
-                                  className="h-8 w-40"
-                                />
-                              </label>
+                              <>
+                                <label className="flex items-center gap-2">
+                                  Вид медиа (kind)
+                                  <Input
+                                    value={field.mediaKind ?? ''}
+                                    onChange={(event) => updateField(index, { mediaKind: event.target.value || undefined })}
+                                    className="h-8 w-40"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  <span title="Пусто — юзер выбирает из всех медиа этого вида. Указана группа — только из неё.">Группа (пусто = все)</span>
+                                  <Input
+                                    list="admin-media-groups"
+                                    value={field.mediaGroup ?? ''}
+                                    onChange={(event) => updateField(index, { mediaGroup: event.target.value || undefined })}
+                                    placeholder="все"
+                                    className="h-8 w-44"
+                                  />
+                                </label>
+                              </>
                             )}
                             {field.type === 'music-select' && (
                               <label className="flex items-center gap-2">

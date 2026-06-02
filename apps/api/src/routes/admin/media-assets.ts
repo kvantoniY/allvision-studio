@@ -16,6 +16,7 @@ const listQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   kind: z.string().trim().min(1).max(80).optional(),
+  group: z.string().trim().min(1).max(80).optional(),
   isActive: z.preprocess((value) => {
     if (value === 'true') return true;
     if (value === 'false') return false;
@@ -26,6 +27,7 @@ const listQuerySchema = z.object({
 
 const createSchema = z.object({
   kind: z.string().trim().min(1).max(80),
+  group: z.string().trim().max(80).optional(),
   title: z.string().trim().min(1).max(160),
   description: z.string().trim().max(1000).optional(),
   tags: z.union([z.array(z.string()), z.string()]).optional(),
@@ -34,6 +36,7 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   kind: z.string().trim().min(1).max(80).optional(),
+  group: z.string().trim().max(80).nullable().optional(),
   title: z.string().trim().min(1).max(160).optional(),
   description: z.string().trim().max(1000).nullable().optional(),
   tags: z.union([z.array(z.string()), z.string()]).optional(),
@@ -72,6 +75,7 @@ function selectAsset() {
     createdAt: true,
     updatedAt: true,
     kind: true,
+    groupCode: true,
     title: true,
     description: true,
     tags: true,
@@ -102,6 +106,7 @@ adminMediaAssetsRouter.get('/', async (req: Request, res: Response, next: NextFu
     const query = listQuerySchema.parse(req.query);
     const where: Prisma.MediaAssetWhereInput = {
       ...(query.kind ? { kind: query.kind } : {}),
+      ...(query.group ? { groupCode: query.group } : {}),
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
       ...(query.search
         ? {
@@ -123,6 +128,22 @@ adminMediaAssetsRouter.get('/', async (req: Request, res: Response, next: NextFu
       prisma.mediaAsset.count({ where }),
     ]);
     res.json({ items, total, page: query.page, limit: query.limit });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminMediaAssetsRouter.get('/groups', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const kind = typeof req.query.kind === 'string' && req.query.kind.trim() ? req.query.kind.trim() : undefined;
+    const rows = await prisma.mediaAsset.findMany({
+      where: { groupCode: { not: null }, ...(kind ? { kind } : {}) },
+      distinct: ['groupCode'],
+      select: { groupCode: true },
+      orderBy: { groupCode: 'asc' },
+    });
+    const groups = rows.map((row) => row.groupCode).filter((value): value is string => Boolean(value));
+    res.json({ groups });
   } catch (err) {
     next(err);
   }
@@ -152,6 +173,7 @@ adminMediaAssetsRouter.post('/', uploadMediaAsset, async (req: Request, res: Res
     const asset = await prisma.mediaAsset.create({
       data: {
         kind: body.kind,
+        groupCode: body.group?.trim() || null,
         title: body.title,
         description: body.description ?? null,
         tags: normaliseTags(body.tags),
@@ -186,6 +208,7 @@ adminMediaAssetsRouter.patch('/:id', async (req: Request, res: Response, next: N
       where: { id: current.id },
       data: {
         ...(body.kind !== undefined ? { kind: body.kind } : {}),
+        ...(body.group !== undefined ? { groupCode: body.group ? body.group.trim() : null } : {}),
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.tags !== undefined ? { tags: normaliseTags(body.tags) } : {}),

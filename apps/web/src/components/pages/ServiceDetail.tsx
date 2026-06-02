@@ -47,6 +47,7 @@ type UserInputField = {
   allowedFormats?: string[];
   options?: UserInputOption[];
   mediaKind?: string;
+  mediaGroup?: string;
   allowStudioAvatars?: boolean;
   allowSystemLibrary?: boolean;
   durationOptions?: number[];
@@ -75,10 +76,14 @@ function videoPreviewUrl(value?: string | null) {
   return /^https?:\/\/.+\.mp4(?:[?#].*)?$/i.test(url) ? url : null;
 }
 
+function mediaSelectKey(kind: string, group?: string) {
+  return group ? `${kind}::${group}` : kind;
+}
+
 function selectedVideoPreview(fields: UserInputField[], values: FormValues, mediaByKind: Record<string, MediaAssetOption[]>) {
   const mediaSelect = fields.find((field) => field.type === 'media-select' && field.mediaKind);
   if (mediaSelect?.mediaKind) {
-    const asset = mediaByKind[mediaSelect.mediaKind]?.find((item) => item.id === values[mediaSelect.id]);
+    const asset = mediaByKind[mediaSelectKey(mediaSelect.mediaKind, mediaSelect.mediaGroup)]?.find((item) => item.id === values[mediaSelect.id]);
     return videoPreviewUrl(asset?.publicUrl);
   }
   const videoSelect = fields.find(
@@ -110,6 +115,7 @@ function parseFields(value: unknown): UserInputField[] {
         ? item.allowedFormats.filter((v): v is string => typeof v === 'string')
         : undefined,
       mediaKind: typeof item.mediaKind === 'string' ? item.mediaKind : undefined,
+      mediaGroup: typeof item.mediaGroup === 'string' ? item.mediaGroup : undefined,
       allowStudioAvatars: typeof item.allowStudioAvatars === 'boolean' ? item.allowStudioAvatars : undefined,
       allowSystemLibrary: typeof item.allowSystemLibrary === 'boolean' ? item.allowSystemLibrary : undefined,
       durationOptions: Array.isArray(item.durationOptions)
@@ -621,7 +627,7 @@ function FieldControl({
   }
 
   if (field.type === 'media-select') {
-    const options = field.mediaKind ? mediaOptions[field.mediaKind] ?? [] : [];
+    const options = field.mediaKind ? mediaOptions[mediaSelectKey(field.mediaKind, field.mediaGroup)] ?? [] : [];
     return (
       <div className="space-y-2">
         <Label htmlFor={field.id}>{label} {required}</Label>
@@ -774,14 +780,22 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
 
   useEffect(() => {
-    const kinds = Array.from(new Set(fields.filter((field) => field.type === 'media-select' && field.mediaKind).map((field) => field.mediaKind!)));
-    if (kinds.length === 0) return;
+    const specs = new Map<string, { kind: string; group?: string }>();
+    for (const field of fields) {
+      if (field.type === 'media-select' && field.mediaKind) {
+        const key = mediaSelectKey(field.mediaKind, field.mediaGroup);
+        if (!specs.has(key)) specs.set(key, { kind: field.mediaKind, group: field.mediaGroup });
+      }
+    }
+    if (specs.size === 0) return;
     let cancelled = false;
     Promise.all(
-      kinds.map(async (item) => {
-        const res = await fetch(`${API_URL}/api/public/media-assets?kind=${encodeURIComponent(item)}&active=true`, { credentials: 'include' });
+      Array.from(specs.entries()).map(async ([key, spec]) => {
+        const params = new URLSearchParams({ kind: spec.kind, active: 'true' });
+        if (spec.group) params.set('group', spec.group);
+        const res = await fetch(`${API_URL}/api/public/media-assets?${params.toString()}`, { credentials: 'include' });
         const json = await res.json() as { assets?: MediaAssetOption[] };
-        return [item, json.assets ?? []] as const;
+        return [key, json.assets ?? []] as const;
       }),
     ).then((entries) => {
       if (!cancelled) setMediaByKind(Object.fromEntries(entries));

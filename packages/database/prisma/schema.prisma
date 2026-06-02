@@ -657,6 +657,7 @@ model MediaAsset {
   updatedAt DateTime @updatedAt
 
   kind        String
+  groupCode   String?
   title       String
   description String?
   tags        String[]
@@ -682,6 +683,7 @@ model MediaAsset {
   variations MediaAsset[] @relation("MediaAssetVariations")
 
   @@index([kind])
+  @@index([kind, groupCode])
   @@index([ownerUserId, kind])
   @@index([parentAssetId])
   @@index([isActive, sortOrder])
