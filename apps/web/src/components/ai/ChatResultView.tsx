@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, ImageIcon, Loader2, Maximize2, RotateCcw, Sparkles, Video, X } from 'lucide-react';
+import { AlertTriangle, Download, ImageIcon, Loader2, Maximize2, RotateCcw, Sparkles, Video, X } from 'lucide-react';
+import { getUserFriendlyError } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -21,6 +22,7 @@ type ChatResultViewProps = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
+const warningAlertClass = 'border-amber-500 bg-amber-950 text-amber-50 [&>svg]:text-amber-300';
 
 function mediaUrl(value?: string | null) {
   if (!value) return null;
@@ -37,6 +39,28 @@ function hasGeneratedAudio(userInputs: unknown) {
   const meta = (userInputs as Record<string, unknown>).chatGeneration;
   if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return false;
   return (meta as Record<string, unknown>).generateAudio === true;
+}
+
+function creativeProgressMessage(progress: number) {
+  if (progress < 12) return 'Нейронка раскладывает идею по пикселям...';
+  if (progress < 32) return 'Ищем лучший свет и настроение...';
+  if (progress < 58) return 'Собираем детали в цельный кадр...';
+  if (progress < 82) return 'Полируем результат без лишнего шума...';
+  return 'Финальные штрихи, почти готово...';
+}
+
+function russianErrorFromRawMessage(message?: string | null) {
+  const raw = message?.toLowerCase() ?? '';
+  if (/violat|community guidelines|moderat|sensitive|nsfw|policy|not allowed|inappropriate|safety/.test(raw)) {
+    return getUserFriendlyError('CONTENT_MODERATION');
+  }
+  if (/queue unavailable|очеред/.test(raw)) return getUserFriendlyError('QUEUE_UNAVAILABLE');
+  return null;
+}
+
+function chatFailureMessage(errorCode?: string | null, errorMessage?: string | null) {
+  if (errorCode) return getUserFriendlyError(errorCode);
+  return russianErrorFromRawMessage(errorMessage) ?? getUserFriendlyError(errorCode);
 }
 
 export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry }: ChatResultViewProps) {
@@ -95,6 +119,8 @@ function MessageCard({
   const resultUrl = resultVideo ?? resultImage ?? resultThumbnail;
   const failed = status === 'FAILED';
   const processing = isActive(status);
+  const safeProgress = Math.max(0, Math.min(100, progress));
+  const friendlyError = chatFailureMessage(project.errorCode, project.errorMessage);
   const withAudio = hasGeneratedAudio(project.userInputs);
 
   return (
@@ -118,19 +144,23 @@ function MessageCard({
 
         {processing && (
           <div>
-            <div className="mb-3 flex items-center justify-between text-sm text-slate-300">
-              <span>Генерация выполняется</span>
-              <span>{progress}%</span>
+            <div className="mb-3 flex items-center justify-between gap-3 text-sm text-slate-300">
+              <span className="flex min-w-0 items-center gap-2 font-medium text-slate-100">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
+                <span className="truncate">{creativeProgressMessage(safeProgress)}</span>
+              </span>
+              <span className="shrink-0 text-slate-400">{safeProgress}%</span>
             </div>
-            <Progress value={progress} />
+            <Progress value={safeProgress} />
           </div>
         )}
 
         {failed && (
-          <Alert variant="destructive">
-            <AlertTitle>Генерация не удалась</AlertTitle>
+          <Alert className={warningAlertClass}>
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Генерация не выполнена</AlertTitle>
             <AlertDescription>
-              {project.errorMessage ?? 'Токены будут возвращены стандартным механизмом refund.'}
+              {friendlyError}
             </AlertDescription>
           </Alert>
         )}

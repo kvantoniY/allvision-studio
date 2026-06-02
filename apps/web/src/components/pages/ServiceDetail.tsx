@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   AlertTriangle,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Download,
@@ -174,7 +173,8 @@ function getErrorMessage(error: unknown): string | undefined {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
 }
 
-const warningToastClass = 'border-amber-500/50 bg-amber-500/10 text-amber-50';
+const warningToastClass = 'border-amber-500 bg-amber-950 text-amber-50 shadow-2xl shadow-black/40';
+const warningAlertClass = 'border-amber-500 bg-amber-950 text-amber-50 [&>svg]:text-amber-300';
 
 const LAUNCH_ERROR_MESSAGES: Record<string, string> = {
   INSUFFICIENT_TOKENS: 'На балансе недостаточно коинов для запуска услуги. Пополните баланс и попробуйте снова.',
@@ -1073,6 +1073,14 @@ function isActiveProjectStatus(status?: ProjectStatus) {
   return status === 'PENDING' || status === 'PROCESSING';
 }
 
+function creativeProgressMessage(progress: number) {
+  if (progress < 12) return 'Нейронка раскладывает идею по пикселям...';
+  if (progress < 32) return 'Ищем лучший свет и настроение...';
+  if (progress < 58) return 'Собираем детали в цельный кадр...';
+  if (progress < 82) return 'Полируем результат без лишнего шума...';
+  return 'Финальные штрихи, почти готово...';
+}
+
 function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov)(\?|$)/i.test(url);
 }
@@ -1262,15 +1270,16 @@ function GenerationProgress({ project, compact = false }: { project: ProjectList
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
       <div className="flex items-center justify-between gap-3 text-sm">
-        <span className={cn('font-medium', compact ? 'text-amber-200' : 'text-slate-100')}>
-          {project.status === 'PENDING' ? 'Генерация в очереди' : 'Генерация в работе'}
+        <span className={cn('flex min-w-0 items-center gap-2 font-medium', compact ? 'text-amber-200' : 'text-slate-100')}>
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
+          <span className="truncate">{creativeProgressMessage(progress)}</span>
         </span>
         <span className="shrink-0 text-slate-400">{progress}%</span>
       </div>
       <Progress value={progress} />
       {!compact && (
         <p className="text-sm leading-6 text-slate-400">
-          Идёт обработка. Страница обновляет прогресс автоматически, результат появится здесь.
+          Можно закрыть страницу: генерация продолжится, а результат появится здесь автоматически.
         </p>
       )}
     </div>
@@ -1279,19 +1288,11 @@ function GenerationProgress({ project, compact = false }: { project: ProjectList
 
 function GenerationWarning({ project }: { project: ProjectListItem }) {
   return (
-    <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-50 [&>svg]:text-amber-300">
+    <Alert className={warningAlertClass}>
       <AlertTriangle className="h-4 w-4" />
       <AlertTitle>Генерация не выполнена</AlertTitle>
       <AlertDescription>
         <p>{projectWarningMessage(project)}</p>
-        {project.errorMessage && (
-          <details className="mt-3">
-            <summary className="cursor-pointer text-amber-100">Детали для поддержки</summary>
-            <p className="mt-2 break-words text-xs text-amber-100/80">
-              {project.errorCode ? `${project.errorCode}: ` : ''}{project.errorMessage}
-            </p>
-          </details>
-        )}
       </AlertDescription>
     </Alert>
   );
@@ -1358,9 +1359,6 @@ function GenerationCard({
                 </Button>
               )}
               <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
-              <Button asChild variant="outline" className="border-slate-700 bg-slate-950">
-                <Link href={`/dashboard/projects/${project.id}`}>Открыть детали</Link>
-              </Button>
             </div>
           )}
         </div>
@@ -1417,6 +1415,46 @@ function GenerationsPanel({
         />
       ))}
     </div>
+  );
+}
+
+function ServiceFileCriteria({ fields }: { fields: UserInputField[] }) {
+  const hasPhoto = fields.some((field) => field.type === 'photo' || field.type === 'avatar');
+  const hasVideo = fields.some((field) => field.type === 'video');
+  const hasAudio = fields.some((field) => field.type === 'audio');
+  const items: string[] = [];
+
+  if (hasPhoto) {
+    items.push('Лицо хорошо видно: без сильного размытия, тёмных очков, масок и резких теней.');
+    items.push('Лучше всего работает портрет анфас или лёгкий поворот, с естественным светом и без тяжёлых фильтров.');
+    items.push('Для нескольких людей используйте отдельное фото для каждого человека: так перенос лиц будет точнее.');
+  }
+  if (hasVideo) {
+    items.push('Видео должно быть коротким, стабильным и без сильной тряски; главный человек должен быть виден в кадре.');
+  }
+  if (hasAudio) {
+    items.push('Музыку лучше загружать без перегруза по громкости, в MP3/WAV/OGG, чтобы финальный звук не хрипел.');
+  }
+  if (items.length === 0) {
+    items.push('Чем чище исходные материалы и понятнее параметры, тем стабильнее будет результат.');
+  }
+
+  return (
+    <Card className="border-slate-800 bg-slate-900">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-amber-400" />
+          <h2 className="text-xl font-bold tracking-tight">Чтобы результат был чище</h2>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {items.map((item) => (
+            <div key={item} className="rounded-md border border-slate-800 bg-slate-950/70 p-3 text-sm leading-6 text-slate-300">
+              {item}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1562,7 +1600,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     const formData = new FormData();
     formData.append('data', JSON.stringify(dataPayload));
     for (const field of fields) {
-      if (field.type !== 'photo' && field.type !== 'audio') continue;
+      if (field.type !== 'photo' && field.type !== 'audio' && field.type !== 'video') continue;
       const file = files[field.id];
       if (file) formData.append(field.id, file);
     }
@@ -1661,23 +1699,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                 <p className="mt-5 text-lg leading-8 text-slate-300">{service.description}</p>
               </div>
 
-              <div>
-                <div className="mb-4 flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-amber-400" />
-                  <h2 className="text-2xl font-bold tracking-tight">Как это работает</h2>
-                </div>
-                <div className="grid gap-4 md:grid-cols-3">
-                  {['Загрузите фото или выберите параметры услуги.', 'Allvision запускает подготовленный AI-pipeline.', 'Готовый результат появится в кабинете.'].map((item, index) => (
-                    <Card key={item} className="border-slate-800 bg-slate-900">
-                      <CardContent className="p-5">
-                        <CheckCircle2 className="h-6 w-6 text-emerald-400" />
-                        <div className="mt-4 text-sm font-semibold text-amber-400">Шаг {index + 1}</div>
-                        <p className="mt-2 text-sm leading-6 text-slate-400">{item}</p>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </div>
+              <ServiceFileCriteria fields={fields} />
             </>
           ) : (
             <GenerationsPanel

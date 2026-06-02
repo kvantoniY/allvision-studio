@@ -10,7 +10,7 @@ import {
   Copy,
   Download,
   Image as ImageIcon,
-  ListChecks,
+  Loader2,
   Maximize2,
   RotateCcw,
   Share2,
@@ -56,21 +56,14 @@ function projectFailureMessage(errorCode?: string | null, errorMessage?: string 
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
-
-type StepProgressItem = {
-  stepId: string;
-  blockSlug: string;
-  status: string;
-  progress: number;
-  output?: unknown;
-  errorMessage?: string;
-};
+const warningAlertClass = 'border-amber-500 bg-amber-950 text-amber-50 [&>svg]:text-amber-300';
 
 function progressMessage(progress: number): string {
-  if (progress < 15) return 'Анализируем фото...';
-  if (progress < 50) return 'Восстанавливаем детали...';
-  if (progress < 85) return 'Улучшаем качество...';
-  return 'Почти готово...';
+  if (progress < 12) return 'Нейронка раскладывает идею по пикселям...';
+  if (progress < 32) return 'Ищем лучший свет и настроение...';
+  if (progress < 58) return 'Собираем детали в цельный кадр...';
+  if (progress < 82) return 'Полируем результат без лишнего шума...';
+  return 'Финальные штрихи, почти готово...';
 }
 
 function isActiveStatus(status?: ProjectStatus) {
@@ -91,21 +84,6 @@ function mediaUrl(value?: string | null) {
   return value;
 }
 
-function parseStepProgress(value: unknown): StepProgressItem[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
-    .map((item) => ({
-      stepId: typeof item.stepId === 'string' ? item.stepId : '',
-      blockSlug: typeof item.blockSlug === 'string' ? item.blockSlug : '',
-      status: typeof item.status === 'string' ? item.status : 'pending',
-      progress: typeof item.progress === 'number' ? item.progress : 0,
-      output: item.output,
-      errorMessage: typeof item.errorMessage === 'string' ? item.errorMessage : undefined,
-    }))
-    .filter((item) => item.stepId && item.blockSlug);
-}
-
 function urlsFromInputs(value: unknown): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
   return Object.values(value)
@@ -115,138 +93,10 @@ function urlsFromInputs(value: unknown): string[] {
     .map((item) => mediaUrl(item) ?? item);
 }
 
-function outputUrl(output: unknown): string | null {
-  if (typeof output === 'string') return mediaUrl(output);
-  if (!output || typeof output !== 'object' || Array.isArray(output)) return null;
-  const raw = output as Record<string, unknown>;
-  for (const key of ['url', 'resultVideo', 'resultImage', 'resultThumbnail', 'videoUrl', 'imageUrl']) {
-    const value = raw[key];
-    if (typeof value === 'string') return mediaUrl(value);
-  }
-  return null;
-}
-
-function outputMetadata(output: unknown): Record<string, unknown> {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) return {};
-  const metadata = (output as Record<string, unknown>).metadata;
-  return metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-    ? metadata as Record<string, unknown>
-    : {};
-}
-
-function isVideoUrl(url: string) {
-  return /\.(mp4|webm|mov)(\?|$)/i.test(url);
-}
-
-function stepLabel(slug: string) {
-  const labels: Record<string, string> = {
-    'image-restore': 'Восстановление фото',
-    'image-upscale': 'Увеличение разрешения',
-    'image-to-video': 'Анимация фото',
-    'face-swap-video': 'Свап лица',
-    'video-compose': 'Финальная сборка',
-    'text-to-video': 'Видео по промпту',
-  };
-  return labels[slug] ?? slug;
-}
-
-function stepStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    queued: 'В очереди',
-    pending: 'В очереди',
-    processing: 'В работе',
-    completed: 'Готово',
-    failed: 'Не выполнено',
-  };
-  return labels[status] ?? status;
-}
-
-function stepStatusClass(status: string) {
-  return cn(
-    'bg-slate-800',
-    (status === 'queued' || status === 'pending') && 'text-slate-300',
-    status === 'completed' && 'bg-emerald-500/15 text-emerald-200',
-    status === 'processing' && 'bg-amber-500/15 text-amber-200',
-    status === 'failed' && 'bg-orange-500/15 text-orange-200',
-  );
-}
-
 function tierLabel(value?: string | null) {
   if (value === 'pro') return 'Pro';
   if (value === 'standard') return 'Standard';
   return 'Не выбрано';
-}
-
-function stringifyOutput(output: unknown) {
-  try {
-    return JSON.stringify(output, null, 2);
-  } catch {
-    return String(output);
-  }
-}
-
-function StepProgressList({ steps, showOutputs = false }: { steps: StepProgressItem[]; showOutputs?: boolean }) {
-  return (
-    <div className="space-y-3">
-      {steps.map((step, index) => {
-        const url = outputUrl(step.output);
-        const metadata = outputMetadata(step.output);
-        const costUsd = typeof metadata.providerCostUsd === 'number' ? metadata.providerCostUsd : undefined;
-        const piapiTaskId = typeof metadata.piapiTaskId === 'string' ? metadata.piapiTaskId : undefined;
-        return (
-          <div key={step.stepId} className="rounded-lg border border-slate-800 bg-slate-950 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-slate-100">
-                  Шаг {index + 1}: {stepLabel(step.blockSlug)}
-                </div>
-                <div className="mt-1 text-xs text-slate-500">{step.blockSlug}</div>
-              </div>
-              <Badge variant="secondary" className={stepStatusClass(step.status)}>
-                {stepStatusLabel(step.status)}
-              </Badge>
-            </div>
-            <div className="mt-3 flex items-center gap-3">
-              <Progress value={step.progress} />
-              <span className="w-10 text-right text-xs text-slate-500">{step.progress}%</span>
-            </div>
-            {showOutputs && url && (
-              <div className="mt-3 overflow-hidden rounded-md border border-slate-800 bg-slate-900">
-                {isVideoUrl(url) ? (
-                  <video src={url} controls className="max-h-56 w-full" />
-                ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={url} alt={`Результат шага ${index + 1}`} className="max-h-56 w-full object-contain" />
-                )}
-              </div>
-            )}
-            {showOutputs && (costUsd !== undefined || piapiTaskId) && (
-              <div className="mt-3 grid gap-2 rounded-md border border-slate-800 bg-slate-900 p-3 text-xs text-slate-400 sm:grid-cols-2">
-                {costUsd !== undefined && (
-                  <div>
-                    <span className="text-slate-500">costUsd:</span> ${costUsd.toFixed(4)}
-                  </div>
-                )}
-                {piapiTaskId && (
-                  <div className="break-all">
-                    <span className="text-slate-500">piapiTaskId:</span> {piapiTaskId}
-                  </div>
-                )}
-              </div>
-            )}
-            {showOutputs && step.output !== undefined && (
-              <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-slate-900 p-3 text-xs leading-5 text-slate-400">
-                {stringifyOutput(step.output)}
-              </pre>
-            )}
-            {step.errorMessage && (
-              <p className="mt-3 text-sm text-amber-200">{step.errorMessage}</p>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
 }
 
 function SourceThumbnails({ images }: { images: string[] }) {
@@ -268,6 +118,35 @@ function SourceThumbnails({ images }: { images: string[] }) {
         </div>
       ))}
     </div>
+  );
+}
+
+function ProjectProgressBody({ progress }: { progress: number }) {
+  const safeProgress = Math.max(0, Math.min(100, progress));
+  return (
+    <>
+      <div className="mb-4 flex items-center justify-between gap-4 text-sm">
+        <span className="flex min-w-0 items-center gap-2 font-medium text-slate-100">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
+          <span className="truncate">{progressMessage(safeProgress)}</span>
+        </span>
+        <span className="shrink-0 text-slate-400">{safeProgress}%</span>
+      </div>
+      <Progress value={safeProgress} />
+      <p className="mt-5 text-sm leading-6 text-slate-400">
+        Можно закрыть страницу: генерация продолжится, а результат появится в проектах автоматически.
+      </p>
+    </>
+  );
+}
+
+function ProjectProgressPanel({ progress }: { progress: number }) {
+  return (
+    <Card className="border-slate-800 bg-slate-900">
+      <CardContent className="p-5">
+        <ProjectProgressBody progress={progress} />
+      </CardContent>
+    </Card>
   );
 }
 
@@ -329,7 +208,6 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const resultUrl = resultImage ?? resultVideo ?? resultThumbnail;
   const retryHref = retryHrefFor(project);
   const isPipelineProject = !!project.pipelineSnapshot;
-  const pipelineSteps = live?.stepProgress ?? parseStepProgress(project.stepProgress);
   const inputUrls = urlsFromInputs(project.userInputs);
   const pipelineInputImages = inputUrls.length > 0
     ? inputUrls
@@ -369,17 +247,11 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
           {projectHeader}
           <Card className="border-slate-800 bg-slate-900">
             <CardContent className="space-y-5 p-6">
-              <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-50 [&>svg]:text-amber-300">
+              <Alert className={warningAlertClass}>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Генерация не выполнена</AlertTitle>
                 <AlertDescription>
                   <p>{friendlyError}</p>
-                  {errorMessage && (
-                    <details className="mt-3">
-                      <summary className="cursor-pointer text-amber-100">Детали для поддержки</summary>
-                      <p className="mt-2 break-words text-xs text-amber-100/80">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
-                    </details>
-                  )}
                 </AlertDescription>
               </Alert>
               <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
@@ -481,13 +353,6 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
             </CardContent>
           </Card>
 
-          <details className="rounded-lg border border-slate-800 bg-slate-900 p-5">
-            <summary className="cursor-pointer text-lg font-bold text-slate-100">Детали генерации</summary>
-            <div className="mt-5">
-              <StepProgressList steps={pipelineSteps} showOutputs />
-            </div>
-          </details>
-
           {isShareOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
               <div className="w-full max-w-lg rounded-lg border border-slate-800 bg-slate-900 p-5 shadow-2xl">
@@ -542,42 +407,17 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
     return (
       <div className="space-y-6">
         {projectHeader}
+        <ProjectProgressPanel progress={progress} />
+
         <Card className="border-slate-800 bg-slate-900">
           <CardContent className="p-5">
-            <div className="mb-5 flex items-center justify-between text-sm">
-              <span className="font-medium">Генерация результата</span>
-              <span className="text-slate-400">{progress}%</span>
+            <div className="mb-4 flex items-center gap-2">
+              <ImageIcon className="h-5 w-5 text-amber-400" />
+              <h2 className="text-lg font-bold">Исходные материалы</h2>
             </div>
-            <Progress value={progress} />
-            <p className="mt-5 text-sm leading-6 text-slate-400">
-              Это занимает обычно 3–15 минут, можно закрыть страницу — вернётесь позже, статус сохранится.
-            </p>
+            <SourceThumbnails images={pipelineInputImages} />
           </CardContent>
         </Card>
-
-        <div className="grid gap-6 lg:grid-cols-[0.75fr_1fr]">
-          <Card className="border-slate-800 bg-slate-900">
-            <CardContent className="p-5">
-              <div className="mb-4 flex items-center gap-2">
-                <ImageIcon className="h-5 w-5 text-amber-400" />
-                <h2 className="text-lg font-bold">Исходные материалы</h2>
-              </div>
-              <SourceThumbnails images={pipelineInputImages} />
-            </CardContent>
-          </Card>
-          <Card className="border-slate-800 bg-slate-900">
-            <CardContent className="p-5">
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <ListChecks className="h-5 w-5 text-amber-400" />
-                  <h2 className="text-lg font-bold">Шаги обработки</h2>
-                </div>
-                <span className="text-sm text-slate-400">{progress}%</span>
-              </div>
-              <StepProgressList steps={pipelineSteps} />
-            </CardContent>
-          </Card>
-        </div>
       </div>
     );
   }
@@ -629,18 +469,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
         <Card className="bg-slate-900 border-slate-800">
           <CardContent className="p-5">
             {status === 'PENDING' || status === 'PROCESSING' ? (
-              <div className="space-y-5">
-                <div>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-medium">{progressMessage(progress)}</span>
-                    <span className="text-slate-400">{progress}%</span>
-                  </div>
-                  <Progress value={progress} />
-                </div>
-                <p className="text-sm leading-6 text-slate-400">
-                  Страница обновляет статус каждые 3 секунды. Можно спокойно перейти в другой раздел кабинета.
-                </p>
-              </div>
+              <ProjectProgressBody progress={progress} />
             ) : status === 'COMPLETED' ? (
               <div className="space-y-5">
                 <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
@@ -670,17 +499,11 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
               </div>
             ) : (
               <div className="space-y-5">
-                <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-50 [&>svg]:text-amber-300">
+                <Alert className={warningAlertClass}>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle>Генерация не выполнена</AlertTitle>
                   <AlertDescription>
                     <p>{friendlyError}</p>
-                    {errorMessage && (
-                      <details className="mt-3">
-                        <summary className="cursor-pointer text-amber-100">Детали для поддержки</summary>
-                        <p className="mt-2 break-words text-xs text-amber-100/80">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
-                      </details>
-                    )}
                   </AlertDescription>
                 </Alert>
                 <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
