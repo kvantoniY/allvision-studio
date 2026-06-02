@@ -194,7 +194,7 @@ const LAUNCH_ERROR_MESSAGES: Record<string, string> = {
 
 function russianErrorFromRawMessage(message?: string) {
   const raw = message?.toLowerCase() ?? '';
-  if (/violat|community guidelines|moderat|sensitive|nsfw|policy|not allowed|inappropriate|safety/.test(raw)) {
+  if (/violat|community guidelines|moderat|nsfw|content policy|policy violation|safety policy|unsafe content/.test(raw)) {
     return getUserFriendlyError('CONTENT_MODERATION');
   }
   if (/queue unavailable|очеред/.test(raw)) return getUserFriendlyError('QUEUE_UNAVAILABLE');

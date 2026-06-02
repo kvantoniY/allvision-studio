@@ -249,7 +249,7 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
 // чтобы пользователь видел понятную причину, а не "задача не выполнена".
 function classifyFailureCode(errorCode: string | undefined, errorMessage: string | undefined): string {
   const text = `${errorCode ?? ''} ${errorMessage ?? ''}`.toLowerCase();
-  if (/violat|community guidelines|moderat|sensitive|nsfw|policy|not allowed|inappropriate|safety/.test(text)) {
+  if (/violat|community guidelines|moderat|nsfw|content policy|policy violation|safety policy|unsafe content/.test(text)) {
     return 'CONTENT_MODERATION';
   }
   return errorCode ?? 'PIAPI_TASK_FAILED';

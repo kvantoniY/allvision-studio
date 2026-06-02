@@ -8,4 +8,11 @@ export class NoopPublisher implements FilePublisher {
       expiresAt: expiresAt(ttlHours),
     };
   }
+
+  async publishFileUrl(fileUrl: string, ttlHours: number) {
+    return {
+      publicUrl: fileUrl,
+      expiresAt: expiresAt(ttlHours),
+    };
+  }
 }

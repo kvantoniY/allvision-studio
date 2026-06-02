@@ -1008,7 +1008,7 @@ const giftFactoryServices = [
           aspect_ratio: '9:16',
           resolution: '720p',
           prompt:
-            'Recreate the reference video @video_1 frame-accurately: keep the exact choreography, body motion, camera movement, timing, outfit, lighting and background. Replace the performer with the person whose face and identity come from @image_1 — preserve their real facial features, skin tone and hair precisely so the result clearly looks like that specific person. Seamless, photorealistic, natural skin, the same identity consistently across every frame, vertical 9:16.',
+            'Create a new photorealistic vertical video using @video_1 as the motion, camera, timing and scene reference, and @image_1 as the visual identity reference for the main subject. Keep the same overall action, framing, rhythm, lighting and background from the reference video, but adapt clothing, body proportions and styling naturally to the person from @image_1 when needed so the result looks believable and modest. Preserve the person from @image_1 with strong likeness: face shape, eyes, nose, mouth, eyebrows, skin tone, hair and natural expression. Do not copy a different person from the video; make one coherent subject matching @image_1 throughout the clip. If the selected output duration is shorter or longer than the reference motion, trim, loop or ease the movement naturally without abrupt jumps. Photorealistic, natural skin texture, stable identity across every frame, no distortion, no extra people, no text, vertical 9:16.',
         },
       },
       {
@@ -1113,7 +1113,7 @@ const giftFactoryServices = [
           aspect_ratio: '9:16',
           resolution: '720p',
           prompt:
-            'Recreate the reference dance video @video_1 frame-accurately: keep the exact choreography, body motion, timing, outfits, camera movement and background. There are two performers. The performer on the LEFT must have the face and identity of @image_1; the performer on the RIGHT must have the face and identity of @image_2. Preserve each person’s real facial features, skin tone and hair precisely so each is clearly recognizable. Keep them as two distinct separate people — do not blend or swap their faces. Photorealistic, natural skin, identities consistent across every frame, vertical 9:16.',
+            'Create a new photorealistic vertical video using @video_1 as the motion, camera, timing and scene reference, and @image_1 plus @image_2 as the visual identity references for two separate subjects. Keep the same overall action, framing, rhythm, lighting and background from the reference video, but adapt clothing, body proportions and styling naturally to the two reference people when needed so the result looks believable and modest. The subject on the LEFT should match @image_1; the subject on the RIGHT should match @image_2. Preserve each person with strong likeness: face shape, eyes, nose, mouth, eyebrows, skin tone, hair and natural expression. Keep them clearly distinct, do not blend identities, do not duplicate faces, and do not add extra people. If the selected output duration is shorter or longer than the reference motion, trim, loop or ease the movement naturally without abrupt jumps. Photorealistic, natural skin texture, stable identities across every frame, no distortion, no text, vertical 9:16.',
         },
       },
       {

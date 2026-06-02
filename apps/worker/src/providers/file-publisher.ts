@@ -6,6 +6,7 @@ export interface PublishedFile {
 
 export interface FilePublisher {
   publishImageUrl(imageUrl: string, ttlHours: number): Promise<PublishedFile>;
+  publishFileUrl(fileUrl: string, ttlHours: number, contentType?: string): Promise<PublishedFile>;
 }
 
 export function expiresAt(ttlHours: number) {

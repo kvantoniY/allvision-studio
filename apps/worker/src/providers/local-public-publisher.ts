@@ -21,11 +21,18 @@ export class LocalPublicPublisher implements FilePublisher {
     imageUrl: string,
     ttlHours: number,
   ): Promise<{ publicUrl: string; expiresAt: Date; key?: string }> {
-    if (isProbablyPublicUrl(imageUrl) && !this.isLocalStaticUrl(imageUrl)) {
-      return { publicUrl: imageUrl, expiresAt: expiresAt(ttlHours) };
+    return this.publishFileUrl(imageUrl, ttlHours);
+  }
+
+  async publishFileUrl(
+    fileUrl: string,
+    ttlHours: number,
+  ): Promise<{ publicUrl: string; expiresAt: Date; key?: string }> {
+    if (isProbablyPublicUrl(fileUrl) && !this.isLocalStaticUrl(fileUrl)) {
+      return { publicUrl: fileUrl, expiresAt: expiresAt(ttlHours) };
     }
 
-    const relativePath = this.relativePathFromLocalValue(imageUrl);
+    const relativePath = this.relativePathFromLocalValue(fileUrl);
     return {
       publicUrl: `${this.publicBaseUrl}/static/${relativePath}`,
       expiresAt: expiresAt(ttlHours),

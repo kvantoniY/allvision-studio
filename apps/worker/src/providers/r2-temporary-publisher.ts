@@ -70,6 +70,34 @@ export class R2TemporaryPublisher implements FilePublisher {
     };
   }
 
+  async publishFileUrl(
+    fileUrl: string,
+    ttlHours: number,
+    contentType?: string,
+  ): Promise<{ publicUrl: string; expiresAt: Date; key?: string }> {
+    if (isProbablyPublicUrl(fileUrl) && !this.isLocalStaticUrl(fileUrl)) {
+      return { publicUrl: fileUrl, expiresAt: expiresAt(ttlHours) };
+    }
+
+    const localPath = this.localPathFromStaticUrl(fileUrl);
+    const body = await fs.promises.readFile(localPath);
+    const resolvedContentType = contentType ?? contentTypeForPath(localPath);
+    const key = `${this.prefix}/${datePath()}/${crypto.randomUUID()}.${extensionForContentType(resolvedContentType, localPath)}`;
+
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: body,
+      ContentType: resolvedContentType,
+    }));
+
+    return {
+      publicUrl: `${this.publicBaseUrl}/${key}`,
+      expiresAt: expiresAt(ttlHours),
+      key,
+    };
+  }
+
   private isLocalStaticUrl(value: string) {
     return value.startsWith('/static/') || value.includes('/static/');
   }
@@ -101,4 +129,35 @@ function datePath() {
     String(now.getUTCMonth() + 1).padStart(2, '0'),
     String(now.getUTCDate()).padStart(2, '0'),
   ].join('/');
+}
+
+function contentTypeForPath(filePath: string) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.mp4') return 'video/mp4';
+  if (ext === '.webm') return 'video/webm';
+  if (ext === '.mov') return 'video/quicktime';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.ogg') return 'audio/ogg';
+  return 'application/octet-stream';
+}
+
+function extensionForContentType(contentType: string, filePath: string) {
+  const map: Record<string, string> = {
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/quicktime': 'mov',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'audio/mpeg': 'mp3',
+    'audio/mp3': 'mp3',
+    'audio/wav': 'wav',
+    'audio/x-wav': 'wav',
+    'audio/ogg': 'ogg',
+  };
+  return map[contentType] ?? (path.extname(filePath).replace(/^\./, '') || 'bin');
 }

@@ -317,13 +317,14 @@ export class PiAPIProvider implements AIProvider {
     let completedTask: PiAPITaskStatus | undefined;
     try {
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
+      const providerParams = await this.publishTextToVideoReferences(input.model, input.params);
       const payload = buildTextToVideoPayload(input.model, {
         prompt: input.prompt,
         durationSec: input.durationSec,
         aspectRatio,
         resolution: readString(input.params, 'resolution'),
         generateAudio: readBoolean(input.params, 'generate_audio') ?? false,
-        params: input.params,
+        params: providerParams,
       });
       const created = await this.client.createTask(payload);
       taskId = created.taskId;
@@ -357,6 +358,30 @@ export class PiAPIProvider implements AIProvider {
       await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
       throw err;
     }
+  }
+
+  private async publishTextToVideoReferences(model: string, params: Record<string, unknown> | undefined) {
+    if (!model.startsWith('seedance-2') && model !== 'kling-3-omni') return params;
+    const next: Record<string, unknown> = { ...(params ?? {}) };
+    const imageUrls = readStringList(params, 'image_urls');
+    const videoUrls = readStringList(params, 'video_urls');
+    const audioUrls = readStringList(params, 'audio_urls');
+    if (imageUrls.length > 0) {
+      next.image_urls = await Promise.all(
+        imageUrls.map(async (url) => (await this.publisher.publishImageUrl(url, 1)).publicUrl),
+      );
+    }
+    if (videoUrls.length > 0) {
+      next.video_urls = await Promise.all(
+        videoUrls.map(async (url) => (await this.publisher.publishFileUrl(url, 1, contentTypeForUrl(url, 'video/mp4'))).publicUrl),
+      );
+    }
+    if (audioUrls.length > 0) {
+      next.audio_urls = await Promise.all(
+        audioUrls.map(async (url) => (await this.publisher.publishFileUrl(url, 1, contentTypeForUrl(url, 'audio/mpeg'))).publicUrl),
+      );
+    }
+    return next;
   }
 
   async faceSwapVideo(input: {
@@ -1233,4 +1258,18 @@ function extFor(contentType: string, url: string, fallback: string) {
   if (contentType === 'image/webp') return 'webp';
   const ext = path.extname(new URL(url).pathname).replace(/^\./, '');
   return ext || fallback;
+}
+
+function contentTypeForUrl(url: string, fallback: string) {
+  const clean = url.split('?')[0]?.toLowerCase() ?? '';
+  if (clean.endsWith('.mp4')) return 'video/mp4';
+  if (clean.endsWith('.webm')) return 'video/webm';
+  if (clean.endsWith('.mov')) return 'video/quicktime';
+  if (clean.endsWith('.jpg') || clean.endsWith('.jpeg')) return 'image/jpeg';
+  if (clean.endsWith('.png')) return 'image/png';
+  if (clean.endsWith('.webp')) return 'image/webp';
+  if (clean.endsWith('.mp3')) return 'audio/mpeg';
+  if (clean.endsWith('.wav')) return 'audio/wav';
+  if (clean.endsWith('.ogg')) return 'audio/ogg';
+  return fallback;
 }
