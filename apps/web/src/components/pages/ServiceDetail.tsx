@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
@@ -15,12 +16,14 @@ import {
   Library,
   Loader2,
   Lock,
+  Maximize2,
+  Plus,
   Sparkles,
   Star,
   Video,
   X,
 } from 'lucide-react';
-import { getUserFriendlyError, type Project, type ProjectStatus, type PublicService } from '@allvision/shared';
+import { getUserFriendlyError, type ProjectStatus, type PublicService } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,7 +36,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useGetServiceQuery, useLaunchServiceMutation } from '@/store/api/services-api';
-import { useListProjectsQuery } from '@/store/api/projects-api';
+import { type ProjectListItem, useListProjectsQuery } from '@/store/api/projects-api';
 import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import { useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
@@ -205,7 +208,7 @@ function launchErrorMessage(error: unknown) {
     ?? (code ? getUserFriendlyError(code) : 'Запуск не выполнен из-за технической ошибки. Попробуйте ещё раз через несколько минут.');
 }
 
-function projectWarningMessage(project: Project) {
+function projectWarningMessage(project: ProjectListItem) {
   if (project.errorCode) return getUserFriendlyError(project.errorCode);
   return russianErrorFromRawMessage(project.errorMessage ?? undefined)
     ?? getUserFriendlyError(project.errorCode);
@@ -242,6 +245,220 @@ function assetIdFromRef(value?: string) {
 
 function isImageAsset(asset: { mimeType?: string | null }) {
   return !asset.mimeType || asset.mimeType.startsWith('image/');
+}
+
+function useFileObjectUrl(file?: File) {
+  const [url, setUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!file) {
+      setUrl(null);
+      return;
+    }
+    const nextUrl = URL.createObjectURL(file);
+    setUrl(nextUrl);
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [file]);
+
+  return url;
+}
+
+function PhotoReferencePreview({
+  label,
+  file,
+  url,
+  onRemove,
+}: {
+  label: string;
+  file?: File;
+  url?: string | null;
+  onRemove: () => void;
+}) {
+  const fileUrl = useFileObjectUrl(file);
+  const previewUrl = fileUrl ?? mediaUrl(url);
+
+  return (
+    <div className="group relative h-24 w-24 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
+      {previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={previewUrl} alt={label} className="h-full w-full object-cover" />
+      ) : (
+        <div className="grid h-full place-items-center text-slate-600">
+          <ImagePlus className="h-7 w-7" />
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-950/80 text-white opacity-0 transition hover:bg-slate-800 group-hover:opacity-100"
+        aria-label={`Удалить ${label}`}
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+      <div className="absolute inset-x-0 bottom-0 bg-slate-950/75 px-1.5 py-1 text-[10px] font-medium text-white">
+        <span className="block truncate">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+function ServicePhotoReferencesGroup({
+  fields,
+  values,
+  files,
+  onValueChange,
+  onFileChange,
+}: {
+  fields: UserInputField[];
+  values: FormValues;
+  files: FileValues;
+  onValueChange: (id: string, value: string) => void;
+  onFileChange: (id: string, file?: File) => void;
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const studioEnabled = fields.some((field) => field.allowStudioAvatars !== false);
+  const libraryEnabled = fields.some((field) => field.allowSystemLibrary === true);
+  const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 }, { skip: !studioEnabled });
+  const publicAssets = useGetPublicMediaAssetsQuery(
+    { kind: 'preview-image', active: true },
+    { skip: !libraryEnabled },
+  );
+  const studioAssets = useMemo(
+    () => (avatars.data?.items ?? []).filter(isImageAsset),
+    [avatars.data?.items],
+  );
+  const libraryAssets = useMemo(
+    () => (publicAssets.data?.assets ?? []).filter(isImageAsset),
+    [publicAssets.data?.assets],
+  );
+  const allAssets = useMemo(
+    () => [...studioAssets, ...libraryAssets],
+    [studioAssets, libraryAssets],
+  );
+
+  const items = fields.map((field) => {
+    const asset = allAssets.find((item) => item.id === assetIdFromRef(values[field.id]));
+    const rawUrl = asset?.thumbnailUrl || asset?.publicUrl || values[field.id];
+    return {
+      field,
+      file: files[field.id],
+      value: values[field.id],
+      asset,
+      previewUrl: rawUrl,
+      hasReference: Boolean(files[field.id] || values[field.id]?.trim()),
+    };
+  });
+  const filled = items.filter((item) => item.hasReference);
+  const nextField = items.find((item) => !item.hasReference)?.field;
+  const canAdd = Boolean(nextField);
+  const title = fields.length > 1 ? 'Референсы' : (fields[0]?.label ?? 'Фото');
+  const firstRequired = fields.some((field) => field.required);
+  const nextInputId = nextField ? `${nextField.id}-reference-upload` : undefined;
+
+  const clearField = (field: UserInputField) => {
+    onValueChange(field.id, '');
+    onFileChange(field.id, undefined);
+  };
+
+  const selectAsset = (field: UserInputField, asset: MediaAssetOption) => {
+    onFileChange(field.id, undefined);
+    onValueChange(field.id, `asset:${asset.id}`);
+    setPickerOpen(false);
+  };
+
+  const selectFile = (field: UserInputField, file?: File) => {
+    onValueChange(field.id, '');
+    onFileChange(field.id, file);
+    if (file) setPickerOpen(false);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label>
+          {title} {firstRequired ? <span className="text-amber-300">*</span> : null}
+        </Label>
+        <p className="mt-1 text-xs leading-5 text-slate-500">
+          {filled.length}/{fields.length} добавлено
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-3">
+        {filled.map((item) => (
+          <PhotoReferencePreview
+            key={item.field.id}
+            label={item.field.label ?? item.field.id}
+            file={item.file}
+            url={item.previewUrl}
+            onRemove={() => clearField(item.field)}
+          />
+        ))}
+
+        {canAdd && nextField && (
+          <label
+            htmlFor={nextInputId}
+            className={cn(
+              'grid h-24 w-24 cursor-pointer place-items-center rounded-md border border-dashed border-slate-700 bg-slate-950/60 text-center transition hover:border-amber-400',
+              filled.length > 0 ? 'text-slate-300' : 'text-slate-200',
+            )}
+          >
+            <div>
+              {filled.length > 0 ? (
+                <Plus className="mx-auto h-7 w-7 text-slate-400" />
+              ) : (
+                <ImagePlus className="mx-auto h-7 w-7 text-slate-500" />
+              )}
+              <div className="mt-2 px-2 text-xs font-medium">
+                {filled.length > 0 ? 'Добавить' : 'Загрузить фото'}
+              </div>
+              <div className="mt-0.5 max-w-[5.5rem] truncate px-2 text-[10px] text-slate-500">
+                {nextField.label ?? nextField.id}
+              </div>
+            </div>
+            <Input
+              id={nextInputId}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(event) => selectFile(nextField, event.target.files?.[0])}
+            />
+          </label>
+        )}
+      </div>
+
+      {canAdd && nextField && studioEnabled && (
+        <Button
+          type="button"
+          variant={pickerOpen ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setPickerOpen((current) => !current)}
+          className={cn('w-full justify-center gap-2', pickerOpen && 'bg-violet-600 hover:bg-violet-500')}
+        >
+          <Library className="h-4 w-4 shrink-0" />
+          Добавить из Студии
+        </Button>
+      )}
+
+      {pickerOpen && canAdd && nextField && (
+        <AssetChoiceGrid
+          isLoading={avatars.isLoading || publicAssets.isLoading}
+          items={[
+            ...(nextField.allowStudioAvatars !== false ? studioAssets : []),
+            ...(nextField.allowSystemLibrary === true ? libraryAssets : []),
+          ]}
+          empty={
+            <div className="text-center">
+              <div className="text-sm text-slate-400">В Студии пока нет подходящих аватаров.</div>
+              <Button asChild variant="outline" size="sm" className="mt-3 border-slate-700 bg-slate-950">
+                <Link href="/studio">Создать первый аватар</Link>
+              </Button>
+            </div>
+          }
+          onSelect={(asset) => selectAsset(nextField, asset)}
+        />
+      )}
+    </div>
+  );
 }
 
 function ServicePhotoInput({
@@ -539,6 +756,7 @@ function ServiceVideoInput({
   const [error, setError] = useState<string | null>(null);
   const maxMb = field.maxSizeMb ?? 50;
   const maxDur = field.maxDurationSec;
+  const previewUrl = useFileObjectUrl(file);
 
   const selectFile = (next?: File) => {
     setError(null);
@@ -577,23 +795,51 @@ function ServiceVideoInput({
   return (
     <div className="space-y-2">
       <Label htmlFor={field.id}>{label} {required}</Label>
-      <label
-        htmlFor={field.id}
-        className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center transition hover:border-amber-400"
-      >
-        <Video className="h-8 w-8 text-slate-500" />
-        <span className="mt-3 text-sm font-medium text-slate-200">{file ? file.name : 'Загрузить видео'}</span>
-        <span className="mt-1 text-xs text-slate-500">
-          MP4/WebM/MOV, до {maxMb} МБ{maxDur ? `, до ${maxDur} сек` : ''}
-        </span>
-        <Input
-          id={field.id}
-          type="file"
-          accept="video/mp4,video/webm,video/quicktime"
-          className="hidden"
-          onChange={(event) => selectFile(event.target.files?.[0])}
-        />
-      </label>
+      {file ? (
+        <div className="flex items-center gap-3">
+          <div className="relative h-24 w-24 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
+            {previewUrl ? (
+              <video src={previewUrl} muted preload="metadata" className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full place-items-center text-slate-600">
+                <Video className="h-7 w-7" />
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => onFileChange(field.id, undefined)}
+              className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-950/80 text-white transition hover:bg-slate-800"
+              aria-label={`Удалить ${label}`}
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <div className="min-w-0 text-sm">
+            <div className="truncate font-medium text-slate-100">{file.name}</div>
+            <div className="mt-1 text-xs text-slate-500">
+              MP4/WebM/MOV, до {maxMb} МБ{maxDur ? `, до ${maxDur} сек` : ''}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <label
+          htmlFor={field.id}
+          className="flex min-h-28 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center transition hover:border-amber-400"
+        >
+          <Video className="h-8 w-8 text-slate-500" />
+          <span className="mt-3 text-sm font-medium text-slate-200">Загрузить видео</span>
+          <span className="mt-1 text-xs text-slate-500">
+            MP4/WebM/MOV, до {maxMb} МБ{maxDur ? `, до ${maxDur} сек` : ''}
+          </span>
+          <Input
+            id={field.id}
+            type="file"
+            accept="video/mp4,video/webm,video/quicktime"
+            className="hidden"
+            onChange={(event) => selectFile(event.target.files?.[0])}
+          />
+        </label>
+      )}
       {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
@@ -831,28 +1077,65 @@ function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov)(\?|$)/i.test(url);
 }
 
-function projectOutputUrl(project: Project) {
+function projectOutputUrl(project: ProjectListItem) {
   return mediaUrl(project.resultVideo ?? project.resultImage ?? project.resultThumbnail);
 }
 
-function projectPosterUrl(project: Project) {
+function projectPosterUrl(project: ProjectListItem) {
   return mediaUrl(project.resultThumbnail ?? project.resultImage);
 }
 
-function projectPreviewUrl(project: Project) {
+function projectFallbackPreviewUrl(project: ProjectListItem) {
   return mediaUrl(project.resultThumbnail ?? project.resultImage ?? project.resultVideo ?? project.inputImages[0]);
 }
 
-function GenerationPreview({ project, expanded }: { project: Project; expanded: boolean }) {
+function projectServicePreviewUrl(project: ProjectListItem) {
+  const service = project.service;
+  return mediaUrl(service?.previewImage ?? service?.coverImage ?? service?.galleryImages?.[0] ?? null)
+    ?? projectFallbackPreviewUrl(project);
+}
+
+function projectServicePreviewVideoUrl(project: ProjectListItem) {
+  return mediaUrl(project.service?.previewVideo ?? null);
+}
+
+function GenerationServiceThumb({ project }: { project: ProjectListItem }) {
+  const previewUrl = projectServicePreviewUrl(project);
+  const previewVideoUrl = projectServicePreviewVideoUrl(project);
+  return (
+    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-slate-800 bg-slate-950">
+      {previewVideoUrl ? (
+        <video src={previewVideoUrl} muted preload="metadata" className="h-full w-full object-cover" />
+      ) : previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={previewUrl} alt={project.service?.title ?? project.title} className="h-full w-full object-cover" />
+      ) : (
+        <div className="grid h-full place-items-center text-slate-600">
+          <Video className="h-6 w-6" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GenerationPreview({
+  project,
+  expanded,
+  onOpenResult,
+}: {
+  project: ProjectListItem;
+  expanded: boolean;
+  onOpenResult: () => void;
+}) {
   const resultUrl = projectOutputUrl(project);
   const posterUrl = projectPosterUrl(project);
-  const previewUrl = projectPreviewUrl(project);
+  const previewUrl = projectServicePreviewUrl(project);
+  const previewVideoUrl = projectServicePreviewVideoUrl(project);
   const isResultVideo = !!resultUrl && isVideoUrl(resultUrl);
-  const isPreviewVideo = !!previewUrl && isVideoUrl(previewUrl);
 
   if (project.status === 'COMPLETED' && resultUrl) {
     return (
-      <div className="overflow-hidden rounded-md border border-slate-800 bg-slate-950">
+      <div className="group relative overflow-hidden rounded-md border border-slate-800 bg-slate-950">
         {isResultVideo ? (
           <video
             src={resultUrl}
@@ -864,21 +1147,35 @@ function GenerationPreview({ project, expanded }: { project: Project; expanded: 
           />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={resultUrl} alt="Результат генерации" className={cn('w-full object-contain', expanded ? 'max-h-[520px]' : 'h-32')} />
+          <img
+            src={resultUrl}
+            alt="Результат генерации"
+            className={cn('w-full cursor-zoom-in object-contain', expanded ? 'max-h-[520px]' : 'h-32')}
+            onClick={onOpenResult}
+          />
         )}
+        <button
+          type="button"
+          onClick={onOpenResult}
+          className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-black/55 text-white opacity-0 backdrop-blur transition hover:bg-black/75 focus:opacity-100 group-hover:opacity-100"
+          title="Открыть на весь экран"
+          aria-label="Открыть на весь экран"
+        >
+          <Maximize2 className="h-4 w-4" />
+        </button>
       </div>
     );
   }
 
-  if (previewUrl) {
+  if (previewVideoUrl || previewUrl) {
     return (
       <div className="overflow-hidden rounded-md border border-slate-800 bg-slate-950">
-        {isPreviewVideo ? (
-          <video src={previewUrl} muted preload="metadata" className={cn('w-full object-cover', expanded ? 'max-h-72' : 'h-24')} />
-        ) : (
+        {previewVideoUrl ? (
+          <video src={previewVideoUrl} muted preload="metadata" className={cn('w-full object-cover', expanded ? 'max-h-72' : 'h-24')} />
+        ) : previewUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={previewUrl} alt="Исходный материал" className={cn('w-full object-cover', expanded ? 'max-h-72' : 'h-24')} />
-        )}
+          <img src={previewUrl} alt={project.service?.title ?? project.title} className={cn('w-full object-cover', expanded ? 'max-h-72' : 'h-24')} />
+        ) : null}
       </div>
     );
   }
@@ -890,7 +1187,77 @@ function GenerationPreview({ project, expanded }: { project: Project; expanded: 
   );
 }
 
-function GenerationProgress({ project, compact = false }: { project: Project; compact?: boolean }) {
+function GenerationResultLightbox({
+  project,
+  onClose,
+}: {
+  project: ProjectListItem;
+  onClose: () => void;
+}) {
+  const resultUrl = projectOutputUrl(project);
+  const videoUrl = mediaUrl(project.resultVideo);
+  const imageUrl = mediaUrl(project.resultImage ?? project.resultThumbnail);
+  const posterUrl = projectPosterUrl(project);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [onClose]);
+
+  if (typeof document === 'undefined' || !resultUrl) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex flex-col bg-black/95 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+    >
+      <div className="flex shrink-0 items-center justify-end gap-2 p-3" onClick={(event) => event.stopPropagation()}>
+        <Button asChild size="sm" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+          <a href={resultUrl} download target="_blank" rel="noopener">
+            <Download className="h-4 w-4" />
+            Скачать
+          </a>
+        </Button>
+        <Button type="button" variant="outline" size="icon" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={onClose} aria-label="Закрыть">
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center p-3 sm:p-6">
+        {videoUrl ? (
+          <video
+            src={videoUrl}
+            poster={posterUrl ?? undefined}
+            controls
+            autoPlay
+            className="max-h-full max-w-full rounded-md"
+            onClick={(event) => event.stopPropagation()}
+          />
+        ) : imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt="Результат генерации"
+            className="max-h-full max-w-full rounded-md object-contain"
+            onClick={(event) => event.stopPropagation()}
+          />
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function GenerationProgress({ project, compact = false }: { project: ProjectListItem; compact?: boolean }) {
   const progress = Math.max(0, Math.min(100, project.progress ?? 0));
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
@@ -910,7 +1277,7 @@ function GenerationProgress({ project, compact = false }: { project: Project; co
   );
 }
 
-function GenerationWarning({ project }: { project: Project }) {
+function GenerationWarning({ project }: { project: ProjectListItem }) {
   return (
     <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-50 [&>svg]:text-amber-300">
       <AlertTriangle className="h-4 w-4" />
@@ -935,10 +1302,11 @@ function GenerationCard({
   expanded,
   onToggle,
 }: {
-  project: Project;
+  project: ProjectListItem;
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const isActive = isActiveProjectStatus(project.status);
   const resultUrl = projectOutputUrl(project);
 
@@ -952,6 +1320,7 @@ function GenerationCard({
         <div className="mt-0.5 shrink-0 text-slate-400">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </div>
+        <GenerationServiceThumb project={project} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="min-w-0 truncate text-sm font-semibold text-slate-100">{project.title}</h3>
@@ -972,7 +1341,7 @@ function GenerationCard({
 
       {expanded && (
         <div className="space-y-4 border-t border-slate-800 p-4">
-          <GenerationPreview project={project} expanded />
+          <GenerationPreview project={project} expanded onOpenResult={() => setLightboxOpen(true)} />
 
           {isActive && <GenerationProgress project={project} />}
 
@@ -996,6 +1365,8 @@ function GenerationCard({
           )}
         </div>
       )}
+
+      {lightboxOpen && <GenerationResultLightbox project={project} onClose={() => setLightboxOpen(false)} />}
     </div>
   );
 }
@@ -1006,7 +1377,7 @@ function GenerationsPanel({
   expandedId,
   onExpandedChange,
 }: {
-  projects: Project[];
+  projects: ProjectListItem[];
   isLoading: boolean;
   expandedId: string | null;
   onExpandedChange: (id: string) => void;
@@ -1070,6 +1441,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const service = data?.service;
   const projects = useMemo(() => projectsQuery.data?.items ?? [], [projectsQuery.data?.items]);
   const fields = useMemo(() => parseFields(service?.userInputForm), [service?.userInputForm]);
+  const photoFields = useMemo(() => fields.filter((field) => field.type === 'photo'), [fields]);
   const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
 
   useEffect(() => {
@@ -1342,17 +1714,33 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                 <div className="space-y-5">
                   {fields
                     .filter((field) => field.type !== 'tier')
-                    .map((field) => (
-                      <FieldControl
-                        key={field.id}
-                        field={field}
-                        value={values[field.id]}
-                        file={files[field.id]}
-                        mediaOptions={mediaByKind}
-                        onValueChange={setFieldValue}
-                        onFileChange={setFieldFile}
-                      />
-                    ))}
+                    .map((field) => {
+                      if (field.type === 'photo') {
+                        if (photoFields[0]?.id !== field.id) return null;
+                        return (
+                          <ServicePhotoReferencesGroup
+                            key="photo-references"
+                            fields={photoFields}
+                            values={values}
+                            files={files}
+                            onValueChange={setFieldValue}
+                            onFileChange={setFieldFile}
+                          />
+                        );
+                      }
+
+                      return (
+                        <FieldControl
+                          key={field.id}
+                          field={field}
+                          value={values[field.id]}
+                          file={files[field.id]}
+                          mediaOptions={mediaByKind}
+                          onValueChange={setFieldValue}
+                          onFileChange={setFieldFile}
+                        />
+                      );
+                    })}
                 </div>
 
                 <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">

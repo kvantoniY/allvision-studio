@@ -13,9 +13,17 @@ export type ProjectService = {
   slug: string;
   title: string;
   category: ServiceCategory;
+  coverImage?: string | null;
+  galleryImages?: string[];
+  previewImage?: string | null;
+  previewVideo?: string | null;
 };
 
 export type ProjectDetails = Project & {
+  service: ProjectService | null;
+};
+
+export type ProjectListItem = Project & {
   service: ProjectService | null;
 };
 
@@ -49,7 +57,7 @@ export type ProjectsQuery = {
 };
 
 export type ProjectsResponse = {
-  items: Project[];
+  items: ProjectListItem[];
   total: number;
   page: number;
   limit: number;

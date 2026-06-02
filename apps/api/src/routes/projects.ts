@@ -53,6 +53,17 @@ const projectListSelect = {
   stepProgress: true,
   createdAt: true,
   completedAt: true,
+  service: {
+    select: {
+      slug: true,
+      title: true,
+      category: true,
+      coverImage: true,
+      galleryImages: true,
+      previewImage: true,
+      previewVideo: true,
+    },
+  },
 } as const;
 
 function formatProjectDate(): string {
@@ -305,6 +316,10 @@ projectsRouter.get('/:id', requireAuth, async (req: Request, res: Response, next
             slug: true,
             title: true,
             category: true,
+            coverImage: true,
+            galleryImages: true,
+            previewImage: true,
+            previewVideo: true,
           },
         },
       },
