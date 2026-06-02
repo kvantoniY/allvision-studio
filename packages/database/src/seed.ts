@@ -1000,7 +1000,7 @@ const giftFactoryServices = [
         blockSlug: 'text-to-video',
         input: '{{user.face}}',
         params: {
-          model: { standard: 'seedance-2-omni', pro: 'seedance-2-omni' },
+          model: { standard: 'seedance-2-less-restriction', pro: 'seedance-2-less-restriction' },
           mode: 'omni_reference',
           video_urls: ['{{user.userVideo}}'],
           image_urls: ['{{user.face}}'],
@@ -1105,7 +1105,7 @@ const giftFactoryServices = [
         blockSlug: 'text-to-video',
         input: '{{user.face_left}}',
         params: {
-          model: { standard: 'seedance-2-omni', pro: 'seedance-2-omni' },
+          model: { standard: 'seedance-2-less-restriction', pro: 'seedance-2-less-restriction' },
           mode: 'omni_reference',
           video_urls: ['{{user.userVideo}}'],
           image_urls: ['{{user.face_left}}', '{{user.face_right}}'],

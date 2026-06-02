@@ -83,6 +83,35 @@ describe('PiAPI payload builders', () => {
     });
   });
 
+  it('builds Seedance less-restriction omni-reference payload', () => {
+    const payload = buildTextToVideoPayload('seedance-2-less-restriction', {
+      prompt: 'match the references',
+      durationSec: 10,
+      aspectRatio: '9:16',
+      resolution: '720p',
+      generateAudio: false,
+      params: {
+        mode: 'omni_reference',
+        image_urls: ['https://cdn.test/a.jpg'],
+        video_urls: ['https://cdn.test/b.mp4'],
+      },
+    });
+
+    expect(payload).toEqual({
+      model: 'seedance',
+      task_type: 'seedance-2-less-restriction',
+      input: {
+        prompt: 'match the references',
+        mode: 'omni_reference',
+        duration: 10,
+        aspect_ratio: '9:16',
+        resolution: '720p',
+        image_urls: ['https://cdn.test/a.jpg'],
+        video_urls: ['https://cdn.test/b.mp4'],
+      },
+    });
+  });
+
   it('builds Kling 3.0 Omni payload with references and audio controls', () => {
     const payload = buildTextToVideoPayload('kling-3-omni', {
       prompt: 'use @image_1 and @video as references',

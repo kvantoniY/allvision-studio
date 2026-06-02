@@ -51,6 +51,8 @@ const WAN_IMAGE_TO_VIDEO_MODELS = new Set(['wan-2.6-i2v']);
 const TEXT_TO_VIDEO_MODELS = new Set([
   'seedance-2',
   'seedance-2-fast',
+  'seedance-2-less-restriction',
+  'seedance-2-fast-less-restriction',
   'seedance-2-omni',
   'seedance-2-fast-omni',
   'hailuo-2.3',
@@ -898,6 +900,8 @@ function veoTaskType(model: string) {
 }
 
 function seedanceTaskType(model: string) {
+  if (model.includes('fast-less-restriction')) return 'seedance-2-fast-less-restriction';
+  if (model.includes('less-restriction')) return 'seedance-2-less-restriction';
   return model.includes('fast') ? 'seedance-2-fast' : 'seedance-2';
 }
 

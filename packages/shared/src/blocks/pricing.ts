@@ -131,7 +131,7 @@ export function estimateModelCostUsd(model: ModelOption, params: Record<string, 
     return hailuoCost(model.slug, duration, resolution ?? '768P');
   }
 
-  if (model.slug === 'seedance-2' || model.slug === 'seedance-2-fast' || model.slug === 'seedance-2-omni' || model.slug === 'seedance-2-fast-omni' || model.slug === 'seedance-2-first-last' || model.slug === 'seedance-2-fast-first-last') {
+  if (model.slug === 'seedance-2' || model.slug === 'seedance-2-fast' || model.slug === 'seedance-2-less-restriction' || model.slug === 'seedance-2-fast-less-restriction' || model.slug === 'seedance-2-omni' || model.slug === 'seedance-2-fast-omni' || model.slug === 'seedance-2-first-last' || model.slug === 'seedance-2-fast-first-last') {
     return duration * seedancePerSecond(model.slug, resolution ?? '720p');
   }
 
@@ -241,7 +241,8 @@ function seedancePerSecond(slug: string, resolution: string) {
     'seedance-2': { '480p': 0.1, '720p': 0.2, '1080p': 0.5 },
     'seedance-2-fast': { '480p': 0.06, '720p': 0.16, '1080p': 0.35 },
   };
-  return table[canonical]?.[resolution] ?? table[canonical]?.['720p'] ?? 0;
+  const base = table[canonical]?.[resolution] ?? table[canonical]?.['720p'] ?? 0;
+  return slug.includes('less-restriction') ? base * 1.25 : base;
 }
 
 function veoPerSecond(slug: string, generateAudio: boolean) {
