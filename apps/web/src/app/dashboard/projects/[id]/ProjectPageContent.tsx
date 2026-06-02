@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Copy,
   Download,
@@ -30,7 +31,6 @@ import {
   useGetProjectStatusQuery,
 } from '@/store/api/projects-api';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/use-auth';
 
 type ProjectPageContentProps = {
   id: string;
@@ -39,6 +39,20 @@ type ProjectPageContentProps = {
 
 function getErrorCode(error: unknown): string | undefined {
   return (error as { data?: { error?: { code?: string } } })?.data?.error?.code;
+}
+
+function russianErrorFromRawMessage(message?: string | null) {
+  const raw = message?.toLowerCase() ?? '';
+  if (/violat|community guidelines|moderat|sensitive|nsfw|policy|not allowed|inappropriate|safety/.test(raw)) {
+    return getUserFriendlyError('CONTENT_MODERATION');
+  }
+  if (/queue unavailable|очеред/.test(raw)) return getUserFriendlyError('QUEUE_UNAVAILABLE');
+  return null;
+}
+
+function projectFailureMessage(errorCode?: string | null, errorMessage?: string | null) {
+  if (errorCode) return getUserFriendlyError(errorCode);
+  return russianErrorFromRawMessage(errorMessage) ?? getUserFriendlyError(errorCode);
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -142,7 +156,7 @@ function stepStatusLabel(status: string) {
     pending: 'В очереди',
     processing: 'В работе',
     completed: 'Готово',
-    failed: 'Ошибка',
+    failed: 'Не выполнено',
   };
   return labels[status] ?? status;
 }
@@ -153,7 +167,7 @@ function stepStatusClass(status: string) {
     (status === 'queued' || status === 'pending') && 'text-slate-300',
     status === 'completed' && 'bg-emerald-500/15 text-emerald-200',
     status === 'processing' && 'bg-amber-500/15 text-amber-200',
-    status === 'failed' && 'bg-destructive/15 text-destructive',
+    status === 'failed' && 'bg-orange-500/15 text-orange-200',
   );
 }
 
@@ -226,7 +240,7 @@ function StepProgressList({ steps, showOutputs = false }: { steps: StepProgressI
               </pre>
             )}
             {step.errorMessage && (
-              <p className="mt-3 text-sm text-destructive">{step.errorMessage}</p>
+              <p className="mt-3 text-sm text-amber-200">{step.errorMessage}</p>
             )}
           </div>
         );
@@ -261,7 +275,6 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const [lastStatus, setLastStatus] = useState<ProjectStatus | undefined>(initialProject?.status);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const { user } = useAuth();
   const projectQuery = useGetProjectQuery(id);
   const project = projectQuery.data ?? initialProject;
   const statusForPolling = lastStatus ?? project?.status;
@@ -310,8 +323,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const resultThumbnail = live?.resultThumbnail ?? project.resultThumbnail;
   const errorMessage = live?.errorMessage ?? project.errorMessage;
   const errorCode = live?.errorCode ?? project.errorCode;
-  const isAdmin = user?.role === 'ADMIN';
-  const friendlyError = isAdmin ? (errorMessage ?? getUserFriendlyError(errorCode)) : getUserFriendlyError(errorCode);
+  const friendlyError = projectFailureMessage(errorCode, errorMessage);
   const completedAt = live?.completedAt ?? project.completedAt;
   const inputImage = project.inputImages?.[0];
   const resultUrl = resultImage ?? resultVideo ?? resultThumbnail;
@@ -357,16 +369,15 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
           {projectHeader}
           <Card className="border-slate-800 bg-slate-900">
             <CardContent className="space-y-5 p-6">
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Не удалось выполнить услугу</AlertTitle>
+              <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-50 [&>svg]:text-amber-300">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Генерация не выполнена</AlertTitle>
                 <AlertDescription>
                   <p>{friendlyError}</p>
-                  <p className="mt-2">Токены возвращены на баланс.</p>
-                  {!isAdmin && errorMessage && (
+                  {errorMessage && (
                     <details className="mt-3">
-                      <summary className="cursor-pointer">Детали для поддержки</summary>
-                      <p className="mt-2 break-words text-xs">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
+                      <summary className="cursor-pointer text-amber-100">Детали для поддержки</summary>
+                      <p className="mt-2 break-words text-xs text-amber-100/80">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
                     </details>
                   )}
                 </AlertDescription>
@@ -659,16 +670,15 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
               </div>
             ) : (
               <div className="space-y-5">
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Обработка не удалась</AlertTitle>
+                <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-50 [&>svg]:text-amber-300">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Генерация не выполнена</AlertTitle>
                   <AlertDescription>
                     <p>{friendlyError}</p>
-                    <p className="mt-2">Токены возвращены на баланс.</p>
-                    {!isAdmin && errorMessage && (
+                    {errorMessage && (
                       <details className="mt-3">
-                        <summary className="cursor-pointer">Детали для поддержки</summary>
-                        <p className="mt-2 break-words text-xs">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
+                        <summary className="cursor-pointer text-amber-100">Детали для поддержки</summary>
+                        <p className="mt-2 break-words text-xs text-amber-100/80">{errorCode ? `${errorCode}: ` : ''}{errorMessage}</p>
                       </details>
                     )}
                   </AlertDescription>

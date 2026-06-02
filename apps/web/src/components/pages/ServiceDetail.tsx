@@ -4,22 +4,41 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, CheckCircle2, ImagePlus, Library, Loader2, Lock, Sparkles, Star, Video, X } from 'lucide-react';
-import type { PublicService } from '@allvision/shared';
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  ImagePlus,
+  Library,
+  Loader2,
+  Lock,
+  Sparkles,
+  Star,
+  Video,
+  X,
+} from 'lucide-react';
+import { getUserFriendlyError, type Project, type ProjectStatus, type PublicService } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { useGetServiceQuery, useLaunchServiceMutation } from '@/store/api/services-api';
+import { useListProjectsQuery } from '@/store/api/projects-api';
 import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import { useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
+import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import { cn } from '@/lib/utils';
 
 import { TokenIcon } from '@/components/ui/token-icon';
@@ -152,6 +171,46 @@ function getErrorMessage(error: unknown): string | undefined {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
 }
 
+const warningToastClass = 'border-amber-500/50 bg-amber-500/10 text-amber-50';
+
+const LAUNCH_ERROR_MESSAGES: Record<string, string> = {
+  INSUFFICIENT_TOKENS: 'На балансе недостаточно коинов для запуска услуги. Пополните баланс и попробуйте снова.',
+  REQUIRED_FIELD_MISSING: 'Не заполнено обязательное поле. Проверьте фото и параметры услуги.',
+  FILE_REQUIRED: 'Нужно загрузить файл для запуска услуги.',
+  FILE_TOO_LARGE: 'Файл слишком большой. Загрузите файл меньшего размера.',
+  UNSUPPORTED_FORMAT: 'Формат файла не поддерживается. Используйте JPG, PNG или WebP для фото.',
+  INVALID_MEDIA_ASSET: 'Выбранный файл из Студии недоступен для этой услуги. Выберите другой файл или загрузите новый.',
+  MEDIA_ASSET_NOT_FOUND: 'Выбранный файл из Студии не найден. Обновите страницу и выберите файл заново.',
+  MEDIA_ASSET_NOT_ALLOWED: 'Этот файл нельзя использовать в выбранном поле. Выберите подходящее изображение из Студии.',
+  SERVICE_NOT_FOUND: 'Услуга сейчас недоступна или скрыта из каталога.',
+  QUEUE_UNAVAILABLE: getUserFriendlyError('QUEUE_UNAVAILABLE'),
+  SERVICE_FORM_INVALID: 'Форма услуги настроена некорректно. Мы уже видим эту техническую ошибку.',
+  PIPELINE_CONFIG_MISSING: 'Сценарий услуги не настроен. Запуск временно недоступен.',
+  PIPELINE_CONFIG_INVALID: 'Сценарий услуги настроен некорректно. Запуск временно недоступен.',
+};
+
+function russianErrorFromRawMessage(message?: string) {
+  const raw = message?.toLowerCase() ?? '';
+  if (/violat|community guidelines|moderat|sensitive|nsfw|policy|not allowed|inappropriate|safety/.test(raw)) {
+    return getUserFriendlyError('CONTENT_MODERATION');
+  }
+  if (/queue unavailable|очеред/.test(raw)) return getUserFriendlyError('QUEUE_UNAVAILABLE');
+  return null;
+}
+
+function launchErrorMessage(error: unknown) {
+  const code = getErrorCode(error);
+  if (code && LAUNCH_ERROR_MESSAGES[code]) return LAUNCH_ERROR_MESSAGES[code];
+  return russianErrorFromRawMessage(getErrorMessage(error))
+    ?? (code ? getUserFriendlyError(code) : 'Запуск не выполнен из-за технической ошибки. Попробуйте ещё раз через несколько минут.');
+}
+
+function projectWarningMessage(project: Project) {
+  if (project.errorCode) return getUserFriendlyError(project.errorCode);
+  return russianErrorFromRawMessage(project.errorMessage ?? undefined)
+    ?? getUserFriendlyError(project.errorCode);
+}
+
 function validateClient(fields: UserInputField[], values: FormValues, files: FileValues) {
   const errors: string[] = [];
   for (const field of fields) {
@@ -235,18 +294,17 @@ function ServicePhotoInput({
   const selectFile = (next?: File) => {
     onValueChange(field.id, '');
     onFileChange(field.id, next);
+    if (next) setTab('upload');
   };
 
-  const tabs = [
-    uploadEnabled ? { id: 'upload' as const, label: 'Загрузить фото' } : null,
-    studioEnabled ? { id: 'studio' as const, label: 'Выбрать из Студии' } : null,
-    libraryEnabled ? { id: 'library' as const, label: 'Из библиотеки' } : null,
-  ].filter((item): item is { id: PhotoSourceTab; label: string } => Boolean(item));
+  const tabs: Array<{ id: PhotoSourceTab; label: string }> = [];
+  if (studioEnabled) tabs.push({ id: 'studio', label: 'Добавить из Студии' });
+  if (libraryEnabled) tabs.push({ id: 'library', label: 'Из библиотеки' });
 
   return (
     <div className="space-y-3">
       <Label htmlFor={field.id}>{label} {required}</Label>
-      {tabs.length > 1 && (
+      {tabs.length > 0 && uploadEnabled && (
         <div className="grid gap-2">
           {tabs.map((item) => (
             <Button
@@ -254,10 +312,10 @@ function ServicePhotoInput({
               type="button"
               variant={tab === item.id ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setTab(item.id)}
+              onClick={() => setTab((current) => (uploadEnabled && current === item.id ? 'upload' : item.id))}
               className={cn('w-full justify-center gap-2', tab === item.id && 'bg-violet-600 hover:bg-violet-500')}
             >
-              {item.id === 'upload' ? <ImagePlus className="h-4 w-4 shrink-0" /> : <Library className="h-4 w-4 shrink-0" />}
+              <Library className="h-4 w-4 shrink-0" />
               <span className="truncate">{item.label}</span>
             </Button>
           ))}
@@ -280,26 +338,6 @@ function ServicePhotoInput({
             <X className="h-4 w-4" />
           </Button>
         </div>
-      )}
-
-      {tab === 'upload' && uploadEnabled && (
-        <label
-          htmlFor={field.id}
-          className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center transition hover:border-amber-400"
-        >
-          <ImagePlus className="h-8 w-8 text-slate-500" />
-          <span className="mt-3 text-sm font-medium text-slate-200">
-            {file ? file.name : 'Загрузить фото'}
-          </span>
-          {field.hint && <span className="mt-1 text-xs text-slate-500">{field.hint}</span>}
-          <Input
-            id={field.id}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            onChange={(event) => selectFile(event.target.files?.[0])}
-          />
-        </label>
       )}
 
       {tab === 'studio' && studioEnabled && (
@@ -325,6 +363,26 @@ function ServicePhotoInput({
           empty={<div className="text-sm text-slate-400">В системной библиотеке нет подходящих изображений.</div>}
           onSelect={selectAsset}
         />
+      )}
+
+      {uploadEnabled && (
+        <label
+          htmlFor={field.id}
+          className="flex min-h-36 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950/60 p-5 text-center transition hover:border-amber-400"
+        >
+          <ImagePlus className="h-8 w-8 text-slate-500" />
+          <span className="mt-3 text-sm font-medium text-slate-200">
+            {file ? file.name : 'Загрузить фото'}
+          </span>
+          {field.hint && <span className="mt-1 text-xs text-slate-500">{field.hint}</span>}
+          <Input
+            id={field.id}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(event) => selectFile(event.target.files?.[0])}
+          />
+        </label>
       )}
     </div>
   );
@@ -763,6 +821,234 @@ function FieldControl({
   );
 }
 
+type ServiceDetailView = 'service' | 'generations';
+
+function isActiveProjectStatus(status?: ProjectStatus) {
+  return status === 'PENDING' || status === 'PROCESSING';
+}
+
+function isVideoUrl(url: string) {
+  return /\.(mp4|webm|mov)(\?|$)/i.test(url);
+}
+
+function projectOutputUrl(project: Project) {
+  return mediaUrl(project.resultVideo ?? project.resultImage ?? project.resultThumbnail);
+}
+
+function projectPosterUrl(project: Project) {
+  return mediaUrl(project.resultThumbnail ?? project.resultImage);
+}
+
+function projectPreviewUrl(project: Project) {
+  return mediaUrl(project.resultThumbnail ?? project.resultImage ?? project.resultVideo ?? project.inputImages[0]);
+}
+
+function GenerationPreview({ project, expanded }: { project: Project; expanded: boolean }) {
+  const resultUrl = projectOutputUrl(project);
+  const posterUrl = projectPosterUrl(project);
+  const previewUrl = projectPreviewUrl(project);
+  const isResultVideo = !!resultUrl && isVideoUrl(resultUrl);
+  const isPreviewVideo = !!previewUrl && isVideoUrl(previewUrl);
+
+  if (project.status === 'COMPLETED' && resultUrl) {
+    return (
+      <div className="overflow-hidden rounded-md border border-slate-800 bg-slate-950">
+        {isResultVideo ? (
+          <video
+            src={resultUrl}
+            poster={posterUrl ?? undefined}
+            controls={expanded}
+            muted={!expanded}
+            preload="metadata"
+            className={cn('w-full bg-black object-contain', expanded ? 'max-h-[520px]' : 'h-32')}
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={resultUrl} alt="Результат генерации" className={cn('w-full object-contain', expanded ? 'max-h-[520px]' : 'h-32')} />
+        )}
+      </div>
+    );
+  }
+
+  if (previewUrl) {
+    return (
+      <div className="overflow-hidden rounded-md border border-slate-800 bg-slate-950">
+        {isPreviewVideo ? (
+          <video src={previewUrl} muted preload="metadata" className={cn('w-full object-cover', expanded ? 'max-h-72' : 'h-24')} />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={previewUrl} alt="Исходный материал" className={cn('w-full object-cover', expanded ? 'max-h-72' : 'h-24')} />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid h-28 place-items-center rounded-md border border-slate-800 bg-slate-950 text-slate-600">
+      <Video className="h-8 w-8" />
+    </div>
+  );
+}
+
+function GenerationProgress({ project, compact = false }: { project: Project; compact?: boolean }) {
+  const progress = Math.max(0, Math.min(100, project.progress ?? 0));
+  return (
+    <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className={cn('font-medium', compact ? 'text-amber-200' : 'text-slate-100')}>
+          {project.status === 'PENDING' ? 'Генерация в очереди' : 'Генерация в работе'}
+        </span>
+        <span className="shrink-0 text-slate-400">{progress}%</span>
+      </div>
+      <Progress value={progress} />
+      {!compact && (
+        <p className="text-sm leading-6 text-slate-400">
+          Идёт обработка. Страница обновляет прогресс автоматически, результат появится здесь.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function GenerationWarning({ project }: { project: Project }) {
+  return (
+    <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-50 [&>svg]:text-amber-300">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle>Генерация не выполнена</AlertTitle>
+      <AlertDescription>
+        <p>{projectWarningMessage(project)}</p>
+        {project.errorMessage && (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-amber-100">Детали для поддержки</summary>
+            <p className="mt-2 break-words text-xs text-amber-100/80">
+              {project.errorCode ? `${project.errorCode}: ` : ''}{project.errorMessage}
+            </p>
+          </details>
+        )}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+function GenerationCard({
+  project,
+  expanded,
+  onToggle,
+}: {
+  project: Project;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const isActive = isActiveProjectStatus(project.status);
+  const resultUrl = projectOutputUrl(project);
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-slate-800/60"
+      >
+        <div className="mt-0.5 shrink-0 text-slate-400">
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="min-w-0 truncate text-sm font-semibold text-slate-100">{project.title}</h3>
+            <Badge className={cn('rounded-md', PROJECT_STATUS_COLOR[project.status])}>
+              {PROJECT_STATUS_LABEL[project.status]}
+            </Badge>
+          </div>
+          <div className="mt-1 text-xs text-slate-500">{formatDateTime(project.createdAt)}</div>
+        </div>
+        <div className="shrink-0 text-right text-xs text-slate-500">{project.tokensCost} коинов</div>
+      </button>
+
+      {!expanded && isActive && (
+        <div className="border-t border-slate-800 px-4 pb-4">
+          <GenerationProgress project={project} compact />
+        </div>
+      )}
+
+      {expanded && (
+        <div className="space-y-4 border-t border-slate-800 p-4">
+          <GenerationPreview project={project} expanded />
+
+          {isActive && <GenerationProgress project={project} />}
+
+          {project.status === 'FAILED' && <GenerationWarning project={project} />}
+
+          {project.status === 'COMPLETED' && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {resultUrl && (
+                <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+                  <a href={resultUrl} download target="_blank" rel="noopener">
+                    <Download className="h-4 w-4" />
+                    Скачать
+                  </a>
+                </Button>
+              )}
+              <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
+              <Button asChild variant="outline" className="border-slate-700 bg-slate-950">
+                <Link href={`/dashboard/projects/${project.id}`}>Открыть детали</Link>
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GenerationsPanel({
+  projects,
+  isLoading,
+  expandedId,
+  onExpandedChange,
+}: {
+  projects: Project[];
+  isLoading: boolean;
+  expandedId: string | null;
+  onExpandedChange: (id: string) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-28 rounded-lg" />
+        <Skeleton className="h-20 rounded-lg" />
+        <Skeleton className="h-20 rounded-lg" />
+      </div>
+    );
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div className="grid min-h-[360px] place-items-center rounded-lg border border-dashed border-slate-800 bg-slate-950/60 p-8 text-center">
+        <div>
+          <Sparkles className="mx-auto h-10 w-10 text-slate-600" />
+          <h2 className="mt-4 text-xl font-bold">Генераций пока нет</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Запустите услугу справа, и прогресс появится здесь без перехода на отдельную страницу.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {projects.map((project) => (
+        <GenerationCard
+          key={project.id}
+          project={project}
+          expanded={expandedId === project.id}
+          onToggle={() => onExpandedChange(project.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function ServiceDetail({ slug }: ServiceDetailProps) {
   const router = useRouter();
   const { user, isLoading: isAuthLoading } = useAuth();
@@ -774,10 +1060,26 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
   const [mediaByKind, setMediaByKind] = useState<Record<string, MediaAssetOption[]>>({});
+  const [activeView, setActiveView] = useState<ServiceDetailView>('service');
+  const [expandedGenerationId, setExpandedGenerationId] = useState<string | null>(null);
+  const projectsQuery = useListProjectsQuery(
+    { page: 1, limit: 40 },
+    { skip: !user, pollingInterval: activeView === 'generations' ? 3000 : 0 },
+  );
 
   const service = data?.service;
+  const projects = useMemo(() => projectsQuery.data?.items ?? [], [projectsQuery.data?.items]);
   const fields = useMemo(() => parseFields(service?.userInputForm), [service?.userInputForm]);
   const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
+
+  useEffect(() => {
+    const latest = projects[0];
+    if (!latest) {
+      setExpandedGenerationId(null);
+      return;
+    }
+    setExpandedGenerationId((current) => current ?? latest.id);
+  }, [projects]);
 
   useEffect(() => {
     const specs = new Map<string, { kind: string; group?: string }>();
@@ -853,7 +1155,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       toast({
         title: 'Недостаточно токенов',
         description: `Нужно ${price}, на балансе ${balance}.`,
-        variant: 'destructive',
+        className: warningToastClass,
       });
       router.push('/profile?tab=billing');
       return;
@@ -864,7 +1166,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       toast({
         title: 'Проверьте форму',
         description: errors[0],
-        variant: 'destructive',
+        className: warningToastClass,
       });
       return;
     }
@@ -895,22 +1197,28 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
     try {
       const result = await launchService({ slug: service.slug, formData }).unwrap();
-      router.push(`/dashboard/projects/${result.project.id}`);
+      setActiveView('generations');
+      setExpandedGenerationId(result.project.id);
+      void projectsQuery.refetch();
+      toast({
+        title: 'Генерация запущена',
+        description: 'Прогресс и результат появятся слева во вкладке «Генерации».',
+      });
     } catch (error) {
       const code = getErrorCode(error);
       if (code === 'INSUFFICIENT_TOKENS') {
         toast({
           title: 'Недостаточно токенов',
-          description: 'Пополните баланс и запустите услугу снова.',
-          variant: 'destructive',
+          description: LAUNCH_ERROR_MESSAGES.INSUFFICIENT_TOKENS,
+          className: warningToastClass,
         });
         router.push('/profile?tab=billing');
         return;
       }
       toast({
-        title: 'Запуск не удался',
-        description: getErrorMessage(error) ?? 'Попробуйте ещё раз через несколько минут.',
-        variant: 'destructive',
+        title: 'Запуск не выполнен',
+        description: launchErrorMessage(error),
+        className: warningToastClass,
       });
     }
   };
@@ -919,62 +1227,94 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     <section className="container py-10 md:py-14">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
         <div className="space-y-8">
-          <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
-            {previewVideo ? (
-              <div className="flex justify-center bg-slate-950">
-                <div className="aspect-[9/16] h-[70vh] min-h-[360px] max-h-[620px] max-w-full">
-                  <video
-                    key={previewVideo}
-                    src={previewVideo}
-                    muted
-                    loop
-                    playsInline
-                    autoPlay
-                    controls
-                    className="h-full w-full object-contain"
-                  />
+          <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1">
+            {([
+              ['service', 'Услуга'],
+              ['generations', 'Генерации'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveView(id)}
+                className={cn(
+                  'rounded-md px-4 py-2 text-sm font-semibold transition',
+                  activeView === id
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {activeView === 'service' ? (
+            <>
+              <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+                {previewVideo ? (
+                  <div className="flex justify-center bg-slate-950">
+                    <div className="aspect-[9/16] h-[70vh] min-h-[360px] max-h-[620px] max-w-full">
+                      <video
+                        key={previewVideo}
+                        src={previewVideo}
+                        muted
+                        loop
+                        playsInline
+                        autoPlay
+                        controls
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="relative aspect-[16/10]">
+                    <Image src={preview} alt={service.title} fill priority sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="secondary" className="bg-slate-800 text-indigo-100">
+                    {categoryLabel(service.category)}
+                  </Badge>
+                  {service.isFeatured && (
+                    <Badge className="border-amber-300/60 bg-amber-400 text-slate-950">
+                      <Star className="h-3.5 w-3.5" />
+                      Популярное
+                    </Badge>
+                  )}
+                </div>
+                <h1 className="mt-4 text-4xl font-black leading-tight tracking-tight md:text-6xl">{service.title}</h1>
+                <p className="mt-5 text-lg leading-8 text-slate-300">{service.description}</p>
+              </div>
+
+              <div>
+                <div className="mb-4 flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-amber-400" />
+                  <h2 className="text-2xl font-bold tracking-tight">Как это работает</h2>
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {['Загрузите фото или выберите параметры услуги.', 'Allvision запускает подготовленный AI-pipeline.', 'Готовый результат появится в кабинете.'].map((item, index) => (
+                    <Card key={item} className="border-slate-800 bg-slate-900">
+                      <CardContent className="p-5">
+                        <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                        <div className="mt-4 text-sm font-semibold text-amber-400">Шаг {index + 1}</div>
+                        <p className="mt-2 text-sm leading-6 text-slate-400">{item}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <div className="relative aspect-[16/10]">
-                <Image src={preview} alt={service.title} fill priority sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
-              </div>
-            )}
-          </div>
-
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="bg-slate-800 text-indigo-100">
-                {categoryLabel(service.category)}
-              </Badge>
-              {service.isFeatured && (
-                <Badge className="border-amber-300/60 bg-amber-400 text-slate-950">
-                  <Star className="h-3.5 w-3.5" />
-                  Популярное
-                </Badge>
-              )}
-            </div>
-            <h1 className="mt-4 text-4xl font-black leading-tight tracking-tight md:text-6xl">{service.title}</h1>
-            <p className="mt-5 text-lg leading-8 text-slate-300">{service.description}</p>
-          </div>
-
-          <div>
-            <div className="mb-4 flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-amber-400" />
-              <h2 className="text-2xl font-bold tracking-tight">Как это работает</h2>
-            </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              {['Загрузите фото или выберите параметры услуги.', 'Allvision запускает подготовленный AI-pipeline.', 'Готовый результат появится в кабинете.'].map((item, index) => (
-                <Card key={item} className="border-slate-800 bg-slate-900">
-                  <CardContent className="p-5">
-                    <CheckCircle2 className="h-6 w-6 text-emerald-400" />
-                    <div className="mt-4 text-sm font-semibold text-amber-400">Шаг {index + 1}</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-400">{item}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </div>
+            </>
+          ) : (
+            <GenerationsPanel
+              projects={projects}
+              isLoading={projectsQuery.isLoading}
+              expandedId={expandedGenerationId}
+              onExpandedChange={setExpandedGenerationId}
+            />
+          )}
         </div>
 
         <Card className="border-slate-800 bg-slate-900 lg:sticky lg:top-6">

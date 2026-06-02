@@ -4,14 +4,14 @@ export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
   PENDING: 'В очереди',
   PROCESSING: 'В обработке',
   COMPLETED: 'Готово',
-  FAILED: 'Ошибка',
+  FAILED: 'Не выполнено',
 };
 
 export const PROJECT_STATUS_COLOR: Record<ProjectStatus, string> = {
   PENDING: 'bg-slate-700 text-slate-200',
   PROCESSING: 'bg-amber-500/20 text-amber-300',
   COMPLETED: 'bg-emerald-500/20 text-emerald-300',
-  FAILED: 'bg-red-500/20 text-red-300',
+  FAILED: 'bg-orange-500/20 text-orange-300',
 };
 
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {

@@ -15,7 +15,7 @@ const FILTERS: { value: 'ALL' | ProjectStatus; label: string }[] = [
   { value: 'ALL', label: 'Все' },
   { value: 'PROCESSING', label: 'В обработке' },
   { value: 'COMPLETED', label: 'Готово' },
-  { value: 'FAILED', label: 'С ошибкой' },
+  { value: 'FAILED', label: 'Не выполнено' },
 ];
 
 export default function ProjectsPage() {
