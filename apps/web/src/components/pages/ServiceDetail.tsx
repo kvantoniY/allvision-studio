@@ -1726,29 +1726,35 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
           )}
         </div>
 
-        <Card className="border-slate-800 bg-slate-900 lg:sticky lg:top-6">
-          <CardHeader>
+        <Card className="border-slate-800 bg-slate-900 lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100vh-3rem)] lg:flex-col lg:overflow-hidden">
+          <CardHeader className="shrink-0">
             <CardTitle className="text-xl">Создать услугу</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
-              <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
-              <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
-            </div>
-
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
             {!user && !isAuthLoading ? (
-              <Alert className="border-slate-700 bg-slate-950">
-                <Lock className="h-4 w-4" />
-                <AlertTitle>Нужен вход</AlertTitle>
-                <AlertDescription className="mt-2">
-                  <Button asChild className="mt-3 bg-amber-500 text-slate-950 hover:bg-amber-400">
-                    <Link href={loginHref}>Войти, чтобы создать</Link>
-                  </Button>
-                </AlertDescription>
-              </Alert>
+              <div className="space-y-5 px-6 pb-6">
+                <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
+                  <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
+                  <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
+                </div>
+                <Alert className="border-slate-700 bg-slate-950">
+                  <Lock className="h-4 w-4" />
+                  <AlertTitle>Нужен вход</AlertTitle>
+                  <AlertDescription className="mt-2">
+                    <Button asChild className="mt-3 bg-amber-500 text-slate-950 hover:bg-amber-400">
+                      <Link href={loginHref}>Войти, чтобы создать</Link>
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              </div>
             ) : (
               <>
-                <div className="space-y-5">
+                <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-5 lg:pr-5">
+                  <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
+                    <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
+                    <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
+                  </div>
+
                   {fields
                     .filter((field) => field.type !== 'tier')
                     .map((field) => {
@@ -1780,36 +1786,38 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     })}
                 </div>
 
-                <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
-                  <div className="flex items-center justify-between gap-3 text-sm">
-                    <span className="text-slate-400">Ваш баланс</span>
-                    <span className={cn('font-bold', hasEnoughCoins ? 'text-emerald-300' : 'text-amber-300')}>
-                      {balance} коинов
-                    </span>
-                  </div>
-                  {!hasEnoughCoins && (
-                    <div className="mt-3 flex items-start gap-2 text-sm text-amber-200">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>Недостаточно коинов для запуска услуги.</span>
+                <div className="shrink-0 space-y-4 border-t border-slate-800 bg-slate-900 px-6 py-5 shadow-[0_-16px_32px_rgba(2,6,23,0.45)]">
+                  <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="text-slate-400">Ваш баланс</span>
+                      <span className={cn('font-bold', hasEnoughCoins ? 'text-emerald-300' : 'text-amber-300')}>
+                        {balance} коинов
+                      </span>
                     </div>
+                    {!hasEnoughCoins && (
+                      <div className="mt-3 flex items-start gap-2 text-sm text-amber-200">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>Недостаточно коинов для запуска услуги.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={submit}
+                    disabled={launchState.isLoading || isAuthLoading}
+                    className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400"
+                    size="lg"
+                  >
+                    {launchState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TokenIcon className="h-4 w-4" />}
+                    Создать за {price} коинов
+                  </Button>
+                  {!hasEnoughCoins && user && (
+                    <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">
+                      <Link href="/profile?tab=billing">Пополнить баланс</Link>
+                    </Button>
                   )}
                 </div>
-
-                <Button
-                  type="button"
-                  onClick={submit}
-                  disabled={launchState.isLoading || isAuthLoading}
-                  className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400"
-                  size="lg"
-                >
-                  {launchState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TokenIcon className="h-4 w-4" />}
-                  Создать за {price} коинов
-                </Button>
-                {!hasEnoughCoins && user && (
-                  <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">
-                    <Link href="/profile?tab=billing">Пополнить баланс</Link>
-                  </Button>
-                )}
               </>
             )}
           </CardContent>

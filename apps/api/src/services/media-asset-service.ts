@@ -11,7 +11,7 @@ const IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
 const AUDIO_MIME = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg']);
 
-const MAX_VIDEO_DURATION_SEC = 10;
+const MAX_VIDEO_DURATION_SEC = 15;
 const MAX_VIDEO_FILE_SIZE = 15 * 1024 * 1024;
 const MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_AUDIO_FILE_SIZE = 20 * 1024 * 1024;
@@ -104,7 +104,7 @@ async function processAudio(kind: string, file: Express.Multer.File): Promise<Pr
 
 async function processVideo(kind: string, file: Express.Multer.File): Promise<ProcessedMediaAsset> {
   if (file.size > MAX_VIDEO_FILE_SIZE) {
-    throw new HttpError(413, 'FILE_TOO_LARGE', 'Видео должно быть не длиннее 10 секунд и не тяжелее 15 МБ');
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Видео должно быть не длиннее 15 секунд и не тяжелее 15 МБ');
   }
 
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'allvision-media-'));
@@ -116,7 +116,7 @@ async function processVideo(kind: string, file: Express.Multer.File): Promise<Pr
     await fs.writeFile(inputPath, file.buffer);
     const probe = await ffprobe(inputPath);
     if (!probe.durationSec || probe.durationSec > MAX_VIDEO_DURATION_SEC) {
-      throw new HttpError(400, 'VIDEO_TOO_LONG', 'Видео должно быть не длиннее 10 секунд');
+      throw new HttpError(400, 'VIDEO_TOO_LONG', 'Видео должно быть не длиннее 15 секунд');
     }
 
     await runCommand('ffmpeg', [
