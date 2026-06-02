@@ -181,7 +181,7 @@ const LAUNCH_ERROR_MESSAGES: Record<string, string> = {
   REQUIRED_FIELD_MISSING: 'Не заполнено обязательное поле. Проверьте фото и параметры услуги.',
   FILE_REQUIRED: 'Нужно загрузить файл для запуска услуги.',
   FILE_TOO_LARGE: 'Файл слишком большой. Загрузите файл меньшего размера.',
-  UNSUPPORTED_FORMAT: 'Формат файла не поддерживается. Используйте JPG, PNG или WebP для фото.',
+  UNSUPPORTED_FORMAT: 'Формат файла не поддерживается. Фото: JPG, PNG или WebP. Видео: MP4, WebM или MOV. Аудио: MP3, WAV или OGG.',
   INVALID_MEDIA_ASSET: 'Выбранный файл из Студии недоступен для этой услуги. Выберите другой файл или загрузите новый.',
   MEDIA_ASSET_NOT_FOUND: 'Выбранный файл из Студии не найден. Обновите страницу и выберите файл заново.',
   MEDIA_ASSET_NOT_ALLOWED: 'Этот файл нельзя использовать в выбранном поле. Выберите подходящее изображение из Студии.',
@@ -201,8 +201,23 @@ function russianErrorFromRawMessage(message?: string) {
   return null;
 }
 
+function unsupportedFormatMessage(message?: string) {
+  const raw = message?.toLowerCase() ?? '';
+  if (/video|uservideo/.test(raw)) {
+    return 'Формат видео не поддерживается. Загрузите MP4, WebM или MOV. Для MP4 лучше использовать обычный H.264/AAC без редких кодеков.';
+  }
+  if (/audio|music/.test(raw)) {
+    return 'Формат аудио не поддерживается. Загрузите MP3, WAV или OGG.';
+  }
+  if (/photo|image|face|portrait|friend|mother|father/.test(raw)) {
+    return 'Формат фото не поддерживается. Загрузите JPG, PNG или WebP.';
+  }
+  return LAUNCH_ERROR_MESSAGES.UNSUPPORTED_FORMAT;
+}
+
 function launchErrorMessage(error: unknown) {
   const code = getErrorCode(error);
+  if (code === 'UNSUPPORTED_FORMAT') return unsupportedFormatMessage(getErrorMessage(error));
   if (code && LAUNCH_ERROR_MESSAGES[code]) return LAUNCH_ERROR_MESSAGES[code];
   return russianErrorFromRawMessage(getErrorMessage(error))
     ?? (code ? getUserFriendlyError(code) : 'Запуск не выполнен из-за технической ошибки. Попробуйте ещё раз через несколько минут.');
