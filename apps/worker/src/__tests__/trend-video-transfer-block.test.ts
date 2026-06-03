@@ -100,4 +100,36 @@ describe('trend-video-transfer block', () => {
     }));
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://motion-transfer.mp4' }));
   });
+
+  it('runs two-person Kling Omni with image and video references', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'textToVideo');
+
+    const output = await trendVideoTransferBlock.executor(
+      {
+        mode: 'kling_omni',
+        people_count: 'two',
+        reference_video: 'https://cdn.test/duo.mp4',
+        primary_photo: 'https://cdn.test/left.jpg',
+        secondary_photo: 'https://cdn.test/right.jpg',
+        duration: 10,
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining('@image_1'),
+      durationSec: 10,
+      model: 'kling-3-omni',
+      params: expect.objectContaining({
+        images: ['https://cdn.test/left.jpg', 'https://cdn.test/right.jpg'],
+        video: 'https://cdn.test/duo.mp4',
+        aspect_ratio: '9:16',
+        resolution: '720p',
+        enable_audio: false,
+      }),
+    }));
+    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
+  });
 });

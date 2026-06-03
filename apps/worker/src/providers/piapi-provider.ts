@@ -363,7 +363,23 @@ export class PiAPIProvider implements AIProvider {
   }
 
   private async publishTextToVideoReferences(model: string, params: Record<string, unknown> | undefined) {
-    if (!model.startsWith('seedance-2') && model !== 'kling-3-omni') return params;
+    if (model === 'kling-3-omni') {
+      const next: Record<string, unknown> = { ...(params ?? {}) };
+      const imageUrls = readStringList(params, 'images').length > 0
+        ? readStringList(params, 'images')
+        : readStringList(params, 'image_urls');
+      const videoUrl = readString(params, 'video') ?? readStringList(params, 'video_urls')[0];
+      if (imageUrls.length > 0) {
+        next.images = await Promise.all(
+          imageUrls.map(async (url) => (await this.publisher.publishImageUrl(url, 1)).publicUrl),
+        );
+      }
+      if (videoUrl) {
+        next.video = (await this.publisher.publishFileUrl(videoUrl, 1, contentTypeForUrl(videoUrl, 'video/mp4'))).publicUrl;
+      }
+      return next;
+    }
+    if (!model.startsWith('seedance-2')) return params;
     const next: Record<string, unknown> = { ...(params ?? {}) };
     const imageUrls = readStringList(params, 'image_urls');
     const videoUrls = readStringList(params, 'video_urls');
