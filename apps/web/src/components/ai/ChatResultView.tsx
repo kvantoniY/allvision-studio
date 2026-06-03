@@ -54,6 +54,9 @@ function russianErrorFromRawMessage(message?: string | null) {
   if (/violat|community guidelines|moderat|nsfw|content policy|policy violation|safety policy|unsafe content/.test(raw)) {
     return getUserFriendlyError('CONTENT_MODERATION');
   }
+  if (/10001|upstream.*busy|too many requests|rate limit|try again later|temporar(?:y|ily).*busy|overloaded/.test(raw)) {
+    return getUserFriendlyError('PIAPI_UPSTREAM_BUSY');
+  }
   if (/queue unavailable|очеред/.test(raw)) return getUserFriendlyError('QUEUE_UNAVAILABLE');
   return null;
 }

@@ -11,7 +11,11 @@ export class ProviderError extends Error {
 
 export function isProviderUserSafeError(error: unknown) {
   return error instanceof ProviderError
-    && (error.code === 'DAILY_CAP_EXCEEDED' || error.code === 'LOW_PROVIDER_BALANCE');
+    && (
+      error.code === 'DAILY_CAP_EXCEEDED'
+      || error.code === 'LOW_PROVIDER_BALANCE'
+      || error.code === 'PIAPI_UPSTREAM_BUSY'
+    );
 }
 
 export const providerUnavailableMessage =

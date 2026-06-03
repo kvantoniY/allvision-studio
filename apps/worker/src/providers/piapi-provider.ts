@@ -38,6 +38,8 @@ const DEFAULT_FACE_SWAP_FPS = 24;
 const WATERMARK_COST_PER_SEC_USD = 0.008;
 const PIAPI_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
+const PIAPI_UPSTREAM_BUSY_ATTEMPTS = 3;
+const DEFAULT_PIAPI_UPSTREAM_BUSY_RETRY_DELAY_MS = 15_000;
 const NANO_BANANA_COST_USD: Record<string, number> = {
   '1K': 0.06,
   '2K': 0.08,
@@ -328,12 +330,8 @@ export class PiAPIProvider implements AIProvider {
         generateAudio: readBoolean(input.params, 'generate_audio') ?? false,
         params: providerParams,
       });
-      const created = await this.client.createTask(payload);
-      taskId = created.taskId;
-      const completed = await this.client.pollUntilDone(taskId, {
-        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
-        expectedDurationMs: 10 * 60 * 1000,
-        onProgress: input.context.reportProgress,
+      const completed = await this.createAndPollTextToVideoWithRetry(input.model, payload, input.context, (id) => {
+        taskId = id;
       });
       completedTask = completed;
       if (!completed.outputUrl) {
@@ -360,6 +358,37 @@ export class PiAPIProvider implements AIProvider {
       await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
       throw err;
     }
+  }
+
+  private async createAndPollTextToVideoWithRetry(
+    model: string,
+    payload: unknown,
+    context: ProviderRunContext,
+    onTaskId: (taskId: string) => void,
+  ) {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= PIAPI_UPSTREAM_BUSY_ATTEMPTS; attempt += 1) {
+      try {
+        const created = await this.client.createTask(payload);
+        onTaskId(created.taskId);
+        return await this.client.pollUntilDone(created.taskId, {
+          timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
+          expectedDurationMs: 10 * 60 * 1000,
+          onProgress: context.reportProgress,
+        });
+      } catch (err) {
+        lastError = err;
+        if (!(err instanceof ProviderError) || err.code !== 'PIAPI_UPSTREAM_BUSY' || attempt >= PIAPI_UPSTREAM_BUSY_ATTEMPTS) {
+          throw err;
+        }
+        this.logger.warn(`[piapi] ${model} upstream busy; retrying text-to-video task`, {
+          attempt,
+          maxAttempts: PIAPI_UPSTREAM_BUSY_ATTEMPTS,
+        });
+        await delay(upstreamBusyRetryDelayMs() * attempt);
+      }
+    }
+    throw lastError;
   }
 
   private async publishTextToVideoReferences(model: string, params: Record<string, unknown> | undefined) {
@@ -890,6 +919,15 @@ function readJsonArray(source: Record<string, unknown> | undefined, key: string)
   } catch {
     return undefined;
   }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function upstreamBusyRetryDelayMs() {
+  const configured = Number(process.env.PIAPI_UPSTREAM_BUSY_RETRY_DELAY_MS);
+  return Number.isFinite(configured) ? configured : DEFAULT_PIAPI_UPSTREAM_BUSY_RETRY_DELAY_MS;
 }
 
 function optionalSeed(source: Record<string, unknown> | undefined): number | undefined {

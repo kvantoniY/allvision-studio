@@ -232,7 +232,7 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
   const errorMessage = readString(data, ['error', 'message'])
     ?? readString(data, ['error_message'])
     ?? readString(data, ['message']);
-  const errorCode = readString(data, ['error', 'code']) ?? readString(data, ['error_code']);
+  const errorCode = readCode(data, ['error', 'code']) ?? readCode(data, ['error_code']);
   return {
     taskId,
     status,
@@ -249,6 +249,9 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
 // чтобы пользователь видел понятную причину, а не "задача не выполнена".
 function classifyFailureCode(errorCode: string | undefined, errorMessage: string | undefined): string {
   const text = `${errorCode ?? ''} ${errorMessage ?? ''}`.toLowerCase();
+  if (/10001|upstream.*busy|too many requests|rate limit|try again later|temporar(?:y|ily).*busy|overloaded/.test(text)) {
+    return 'PIAPI_UPSTREAM_BUSY';
+  }
   if (/violat|community guidelines|moderat|nsfw|content policy|policy violation|safety policy|unsafe content/.test(text)) {
     return 'CONTENT_MODERATION';
   }
@@ -310,6 +313,13 @@ function readObject(source: Record<string, unknown>, path: string[]): Record<str
 function readString(source: Record<string, unknown>, path: string[]): string | undefined {
   const value = readPath(source, path);
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function readCode(source: Record<string, unknown>, path: string[]): string | undefined {
+  const value = readPath(source, path);
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return undefined;
 }
 
 function readNumber(source: Record<string, unknown>, path: string[]): number | undefined {
