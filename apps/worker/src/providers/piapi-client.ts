@@ -125,7 +125,7 @@ export class PiAPIClient {
       form.append('size', params.size);
       form.append('quality', params.quality);
       if (params.outputFormat) form.append('output_format', params.outputFormat);
-      form.append('response_format', 'url');
+      form.append('response_format', 'b64_json');
       for (const url of params.imageUrls) {
         const { buffer, contentType } = await this.download(url);
         const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
@@ -147,7 +147,7 @@ export class PiAPIClient {
           size: params.size,
           quality: params.quality,
           ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
-          response_format: 'url',
+          response_format: 'b64_json',
         }),
       }, true);
     }

@@ -44,4 +44,28 @@ describe('PiAPIClient polling', () => {
       },
     })).toBeCloseTo(0.06);
   });
+
+  it('requests GPT Image output as base64 to avoid a second provider download', async () => {
+    const client = new PiAPIClient({ apiKey: 'test', baseUrl: 'https://api.test' });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      data: [{ b64_json: Buffer.from('image').toString('base64') }],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const result = await client.generateGptImage({
+      model: 'gpt-image-2',
+      prompt: 'test prompt',
+      imageUrls: [],
+      size: '1024x1024',
+      quality: 'standard',
+      outputFormat: 'jpeg',
+    });
+
+    expect(result.b64).toBe(Buffer.from('image').toString('base64'));
+    const request = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string) as Record<string, unknown>;
+    expect(request.response_format).toBe('b64_json');
+    fetchSpy.mockRestore();
+  });
 });
