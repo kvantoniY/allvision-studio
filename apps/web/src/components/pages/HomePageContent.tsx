@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowRight, Bot, CheckCircle2, Film, ImagePlus, ImageIcon, Layers3, Library, MessageSquareText, PlayCircle, Sparkles, Video, Volume2, Wand2, Zap } from 'lucide-react';
+import { ArrowRight, Bot, Film, ImagePlus, ImageIcon, Layers3, Library, MessageSquareText, PlayCircle, Plus, Sparkles, Trash2, Video, Volume2, Wand2, Zap } from 'lucide-react';
 import { TokenIcon } from '@/components/ui/token-icon';
 import {
   CHAT_MODELS,
@@ -142,6 +142,7 @@ export function HomePageContent() {
         openTextEditor: setTextEdit,
         openMediaEditor: setMediaEdit,
         openServiceSlotEditor: setServiceSlotEdit,
+        setValue: saveContentValue,
       }
     : undefined;
 
@@ -176,7 +177,7 @@ export function HomePageContent() {
       <ChatSection content={content} editor={editor} isAuthed={isAuthed} />
       <ModelCatalogSection content={content} editor={editor} />
       <ServicesShowcase content={content} editor={editor} services={allServices} isLoading={services.isLoading} />
-      <BenefitsPricingSection content={content} editor={editor} isAuthed={isAuthed} starterPackage={firstPackage} />
+      <StudioPricingSection content={content} editor={editor} isAuthed={isAuthed} starterPackage={firstPackage} />
       <FinalCta content={content} editor={editor} isAuthed={isAuthed} />
       <HomeTextEditorModal
         edit={textEdit}
@@ -606,9 +607,21 @@ function ServicesShowcase({
   isLoading: boolean;
 }) {
   const readyServices = content.readyServices;
-  const featured = services
-    .filter((service) => ['revive-old-photo', 'face-in-trend', 'kid-cartoon-hero', 'anniversary-card', 'photo-restore', 'photo-animate'].includes(service.slug))
-    .slice(0, 6);
+  const slugs = readyServices.serviceSlugs ?? [];
+  const serviceBySlug = new Map(services.map((service) => [service.slug, service]));
+
+  const removeAt = (index: number) => {
+    const next = slugs.filter((_, i) => i !== index);
+    editor?.setValue(['readyServices', 'serviceSlugs'], next);
+  };
+
+  const addService = () => {
+    editor?.openServiceSlotEditor({
+      path: ['readyServices', 'serviceSlugs', slugs.length],
+      label: 'Добавить услугу в блок',
+      value: '',
+    });
+  };
 
   return (
     <section className="border-b border-slate-800 bg-slate-950" {...sectionAttrs(readyServices.sectionKey)}>
@@ -643,9 +656,40 @@ function ServicesShowcase({
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {featured.map((service) => (
-              <ServiceShowcaseCard key={service.id} service={service} />
+            {slugs.map((slug, index) => (
+              <ServiceShowcaseSlot
+                key={`${slug}-${index}`}
+                slug={slug}
+                index={index}
+                service={serviceBySlug.get(slug)}
+                editor={editor}
+                onRemove={() => removeAt(index)}
+                onChange={() =>
+                  editor?.openServiceSlotEditor({
+                    path: ['readyServices', 'serviceSlugs', index],
+                    label: 'Заменить услугу в блоке',
+                    value: slug,
+                  })
+                }
+              />
             ))}
+            {editor?.enabled && (
+              <button
+                type="button"
+                onClick={addService}
+                className="grid min-h-[18rem] place-items-center rounded-lg border border-dashed border-amber-300/40 bg-slate-900/40 text-amber-200 transition hover:border-amber-300 hover:bg-slate-900"
+              >
+                <span className="flex flex-col items-center gap-2 text-sm font-semibold">
+                  <Plus className="h-7 w-7" />
+                  Добавить услугу
+                </span>
+              </button>
+            )}
+            {slugs.length === 0 && !editor?.enabled && (
+              <div className="col-span-full rounded-lg border border-dashed border-slate-800 bg-slate-900/40 p-8 text-center text-sm text-slate-400">
+                Услуги для этого блока пока не выбраны.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -653,7 +697,61 @@ function ServicesShowcase({
   );
 }
 
-function ServiceShowcaseCard({ service }: { service: PublicService }) {
+function ServiceShowcaseSlot({
+  slug,
+  index,
+  service,
+  editor,
+  onRemove,
+  onChange,
+}: {
+  slug: string;
+  index: number;
+  service?: PublicService;
+  editor?: HomeEditorController;
+  onRemove: () => void;
+  onChange: () => void;
+}) {
+  const editing = editor?.enabled ?? false;
+  const editControls = editing ? (
+    <div className="absolute right-3 top-3 z-30 flex gap-2" {...sectionAttrs(`ready-services.slot-${index}`)}>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onChange();
+        }}
+        className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/50 bg-slate-950/90 px-3 py-1.5 text-xs font-semibold text-amber-100 shadow-lg shadow-black/30 backdrop-blur transition hover:bg-amber-400 hover:text-slate-950"
+      >
+        <Library className="h-3.5 w-3.5" />
+        Услуга
+      </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRemove();
+        }}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-rose-300/50 bg-slate-950/90 text-rose-200 shadow-lg shadow-black/30 backdrop-blur transition hover:bg-rose-500 hover:text-white"
+        aria-label="Убрать услугу из блока"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  ) : null;
+
+  if (!service) {
+    return (
+      <article className="relative flex min-h-[18rem] flex-col justify-center rounded-lg border border-dashed border-slate-700 bg-slate-900/60 p-5 text-center">
+        {editControls}
+        <div className="text-sm font-semibold text-slate-200">Услуга недоступна</div>
+        <div className="mt-1 break-all text-xs text-slate-500">{slug}</div>
+      </article>
+    );
+  }
+
   const media = serviceMedia(service) ?? {
     type: 'image' as const,
     url: '/mock_preview.png',
@@ -661,28 +759,31 @@ function ServiceShowcaseCard({ service }: { service: PublicService }) {
   };
 
   return (
-    <Link href={`/services/${service.slug}`} className="group block min-w-0">
-      <article className="h-full overflow-hidden rounded-lg border border-slate-800 bg-slate-900 transition duration-300 hover:-translate-y-1 hover:border-amber-300/60">
-        <div className="aspect-[16/10] overflow-hidden bg-slate-950">
-          <MediaBlock media={media} className="transition duration-500 group-hover:scale-105" />
-        </div>
-        <div className="space-y-3 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <h3 className="line-clamp-2 text-lg font-bold text-white">{service.title}</h3>
-            <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-amber-300 transition group-hover:translate-x-1" />
+    <div className="group relative block min-w-0">
+      {editControls}
+      <Link href={`/services/${service.slug}`} className="block">
+        <article className="h-full overflow-hidden rounded-lg border border-slate-800 bg-slate-900 transition duration-300 hover:-translate-y-1 hover:border-amber-300/60">
+          <div className="aspect-[16/10] overflow-hidden bg-slate-950">
+            <MediaBlock media={media} className="transition duration-500 group-hover:scale-105" />
           </div>
-          <p className="line-clamp-2 text-sm leading-6 text-slate-400">{service.shortDesc}</p>
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="font-semibold text-amber-300">от {giftServicePriceFrom(service)} токенов</span>
-            <span className="text-slate-500">готовый flow</span>
+          <div className="space-y-3 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="line-clamp-2 text-lg font-bold text-white">{service.title}</h3>
+              <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-amber-300 transition group-hover:translate-x-1" />
+            </div>
+            <p className="line-clamp-2 text-sm leading-6 text-slate-400">{service.shortDesc}</p>
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="font-semibold text-amber-300">от {giftServicePriceFrom(service)} токенов</span>
+              <span className="text-slate-500">готовый flow</span>
+            </div>
           </div>
-        </div>
-      </article>
-    </Link>
+        </article>
+      </Link>
+    </div>
   );
 }
 
-function BenefitsPricingSection({
+function StudioPricingSection({
   content,
   editor,
   isAuthed,
@@ -693,45 +794,64 @@ function BenefitsPricingSection({
   isAuthed: boolean;
   starterPackage?: { tokens: number; bonus: number; priceRub: number } | null;
 }) {
-  const benefits = content.benefits;
+  const studio = content.studio;
   const photoPrice = estimateChatGenerationCostCoins('nano-banana');
   const videoPrice = estimateChatGenerationCostCoins('veo-3.1-fast', { duration: 8 });
   const audioPrice = estimateChatGenerationCostCoins('veo-3.1-fast', { duration: 8, generateAudio: true });
 
   return (
-    <section className="border-b border-slate-800 bg-slate-900/40" {...sectionAttrs(benefits.sectionKey)}>
+    <section className="border-b border-slate-800 bg-slate-900/40" {...sectionAttrs(studio.sectionKey)}>
       <div className="mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8 lg:py-20">
         <div>
-          <SectionEyebrow icon={<CheckCircle2 className="h-4 w-4" />} text={benefits.eyebrow} section={benefits.sectionKey} editor={editor} path={['benefits', 'eyebrow']} label="Бейдж блока преимуществ" />
-          <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-normal text-white sm:text-4xl lg:text-5xl" {...fieldAttrs(benefits.sectionKey, 'title')}>
-            <EditableText editor={editor} path={['benefits', 'title']} label="Заголовок блока преимуществ" value={benefits.title} multiline>
-              {benefits.title}
+          <SectionEyebrow icon={<Library className="h-4 w-4" />} text={studio.eyebrow} section={studio.sectionKey} editor={editor} path={['studio', 'eyebrow']} label="Бейдж блока Студии" />
+          <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-normal text-white sm:text-4xl lg:text-5xl" {...fieldAttrs(studio.sectionKey, 'title')}>
+            <EditableText editor={editor} path={['studio', 'title']} label="Заголовок блока Студии" value={studio.title} multiline>
+              {studio.title}
             </EditableText>
           </h2>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg" {...fieldAttrs(benefits.sectionKey, 'lead')}>
-            <EditableText editor={editor} path={['benefits', 'lead']} label="Описание блока преимуществ" value={benefits.lead} multiline>
-              {benefits.lead}
+          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg" {...fieldAttrs(studio.sectionKey, 'lead')}>
+            <EditableText editor={editor} path={['studio', 'lead']} label="Описание блока Студии" value={studio.lead} multiline>
+              {studio.lead}
             </EditableText>
           </p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            {benefits.items.map((item, index) => (
-              <article key={item.key} className="rounded-lg border border-slate-800 bg-slate-950 p-5" {...sectionAttrs(`${benefits.sectionKey}.${item.key}`)}>
-                <h3 className="font-bold text-white" {...fieldAttrs(`${benefits.sectionKey}.${item.key}`, 'title')}>
-                  <EditableText editor={editor} path={['benefits', 'items', index, 'title']} label="Название преимущества" value={item.title}>
+
+          <div className="mt-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/20">
+            <div className="relative aspect-[16/9]">
+              <EditableMedia editor={editor} path={['studio', 'media']} label="Картинка блока Студии" media={studio.media} className="absolute inset-0">
+                <MediaBlock media={studio.media} />
+              </EditableMedia>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            {studio.items.map((item, index) => (
+              <article key={item.key} className="rounded-lg border border-slate-800 bg-slate-950 p-5" {...sectionAttrs(`${studio.sectionKey}.${item.key}`)}>
+                <h3 className="font-bold text-white" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'title')}>
+                  <EditableText editor={editor} path={['studio', 'items', index, 'title']} label="Название преимущества Студии" value={item.title}>
                     {item.title}
                   </EditableText>
                 </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-400" {...fieldAttrs(`${benefits.sectionKey}.${item.key}`, 'description')}>
-                  <EditableText editor={editor} path={['benefits', 'items', index, 'description']} label="Описание преимущества" value={item.description} multiline>
+                <p className="mt-2 text-sm leading-6 text-slate-400" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'description')}>
+                  <EditableText editor={editor} path={['studio', 'items', index, 'description']} label="Описание преимущества Студии" value={item.description} multiline>
                     {item.description}
                   </EditableText>
                 </p>
               </article>
             ))}
           </div>
+
+          <Button asChild className="mt-7 h-11 bg-violet-600 px-5 hover:bg-violet-500">
+            <Link href={actionHref('/studio', isAuthed)}>
+              <Sparkles className="h-4 w-4" />
+              <EditableText editor={editor} path={['studio', 'cta']} label="Текст кнопки Студии" value={studio.cta}>
+                {studio.cta}
+              </EditableText>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
 
-        <aside className="rounded-lg border border-amber-300/30 bg-slate-950 p-5 shadow-2xl shadow-black/20" {...sectionAttrs('pricing-card')}>
+        <aside className="rounded-lg border border-amber-300/30 bg-slate-950 p-5 shadow-2xl shadow-black/20 lg:self-start" {...sectionAttrs('pricing-card')}>
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-sm font-medium text-amber-300">Стоимость</div>

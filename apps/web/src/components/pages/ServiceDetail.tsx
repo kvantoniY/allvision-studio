@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Download,
   ImagePlus,
+  Info,
   Library,
   Loader2,
   Lock,
@@ -1454,7 +1455,7 @@ function GenerationsPanel({
   );
 }
 
-function ServiceFileCriteria({ fields }: { fields: UserInputField[] }) {
+function getFileCriteriaItems(fields: UserInputField[]) {
   const hasPhoto = fields.some((field) => field.type === 'photo' || field.type === 'avatar');
   const hasVideo = fields.some((field) => field.type === 'video');
   const hasAudio = fields.some((field) => field.type === 'audio');
@@ -1474,23 +1475,69 @@ function ServiceFileCriteria({ fields }: { fields: UserInputField[] }) {
   if (items.length === 0) {
     items.push('Чем чище исходные материалы и понятнее параметры, тем стабильнее будет результат.');
   }
+  return items;
+}
+
+// Подсказки спрятаны под значок информации: на ПК показываются по наведению,
+// на телефоне — по тапу. Так форма остаётся компактной, а советы под рукой.
+function FileCriteriaInfo({ fields }: { fields: UserInputField[] }) {
+  const items = getFileCriteriaItems(fields);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  if (items.length === 0) return null;
 
   return (
-    <Card className="border-slate-800 bg-slate-900">
-      <CardContent className="p-5">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-amber-400" />
-          <h2 className="text-xl font-bold tracking-tight">Чтобы результат был чище</h2>
+    <div
+      ref={ref}
+      className="relative shrink-0"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-950 text-slate-300 transition hover:border-amber-400 hover:text-amber-300"
+        aria-label="Как получить чистый результат"
+        aria-expanded={open}
+      >
+        <Info className="h-4 w-4" />
+      </button>
+      {open && (
+        <div
+          role="tooltip"
+          className="absolute right-0 top-9 z-50 w-72 rounded-lg border border-slate-800 bg-slate-950 p-4 text-left shadow-2xl shadow-black/50 sm:w-80"
+        >
+          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+            <Sparkles className="h-4 w-4 text-amber-400" />
+            Чтобы результат был чище
+          </div>
+          <ul className="mt-3 space-y-2">
+            {items.map((item) => (
+              <li key={item} className="rounded-md border border-slate-800 bg-slate-900/70 p-2.5 text-xs leading-5 text-slate-300">
+                {item}
+              </li>
+            ))}
+          </ul>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {items.map((item) => (
-            <div key={item} className="rounded-md border border-slate-800 bg-slate-950/70 p-3 text-sm leading-6 text-slate-300">
-              {item}
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
@@ -1734,8 +1781,6 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                 <h1 className="mt-4 text-4xl font-black leading-tight tracking-tight md:text-6xl">{service.title}</h1>
                 <p className="mt-5 text-lg leading-8 text-slate-300">{service.description}</p>
               </div>
-
-              <ServiceFileCriteria fields={fields} />
             </>
           ) : (
             <GenerationsPanel
@@ -1749,7 +1794,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
         <Card className="border-slate-800 bg-slate-900 lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100vh-3rem)] lg:flex-col lg:overflow-hidden">
           <CardHeader className="shrink-0">
-            <CardTitle className="text-xl">Создать услугу</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-xl">Создать услугу</CardTitle>
+              <FileCriteriaInfo fields={fields} />
+            </div>
           </CardHeader>
           <CardContent className="flex min-h-0 flex-1 flex-col p-0">
             {!user && !isAuthLoading ? (

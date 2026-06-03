@@ -78,6 +78,16 @@ export type HomeLandingContent = {
     title: string;
     lead: string;
     cta: string;
+    serviceSlugs: string[];
+  };
+  studio: {
+    sectionKey: string;
+    eyebrow: string;
+    title: string;
+    lead: string;
+    cta: string;
+    media: HomeMedia;
+    items: HomeBenefit[];
   };
   benefits: {
     sectionKey: string;
@@ -255,6 +265,37 @@ export const HOME_LANDING_CONTENT = {
     lead:
       'Услуги скрывают сложность: вы загружаете нужные материалы, а система выбирает готовый пайплайн.',
     cta: 'Все услуги',
+    serviceSlugs: ['revive-old-photo', 'single-photo-2017', 'face-in-trend', 'kid-cartoon-hero', 'anniversary-card', 'group-photo-2017'],
+  },
+  studio: {
+    sectionKey: 'studio-highlight',
+    eyebrow: 'Личная Студия',
+    title: 'Создавайте свой аватар и его вариации',
+    lead:
+      'Загрузите фото один раз — соберите реалистичный аватар и сохраните его в Студии. Затем создавайте сколько угодно вариаций: новый образ, стиль или сцену в один клик и используйте их в любых услугах.',
+    cta: 'Открыть Студию',
+    media: {
+      type: 'image',
+      url: 'https://picsum.photos/seed/allvision-studio-avatar/1200/900',
+      alt: 'Аватары и их вариации в Студии Allvision',
+    } satisfies HomeMedia,
+    items: [
+      {
+        key: 'avatar-once',
+        title: 'Аватар один раз',
+        description: 'Соберите образ из своих фото и переиспользуйте его в услугах и чате.',
+      },
+      {
+        key: 'variations',
+        title: 'Бесконечные вариации',
+        description: 'Меняйте стиль, образ и сцену — каждая вариация сохраняется рядом с оригиналом.',
+      },
+      {
+        key: 'reuse',
+        title: 'Готово к работе',
+        description: 'Выбранный аватар сразу доступен в любой генерации без повторной загрузки.',
+      },
+    ] satisfies HomeBenefit[],
   },
   benefits: {
     sectionKey: 'benefits-pricing',

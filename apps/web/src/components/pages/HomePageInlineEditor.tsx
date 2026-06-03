@@ -45,6 +45,7 @@ export type HomeEditorController = {
   openTextEditor: (edit: HomeTextEditState) => void;
   openMediaEditor: (edit: HomeMediaEditState) => void;
   openServiceSlotEditor: (edit: HomeServiceSlotEditState) => void;
+  setValue: (path: HomeEditorPath, value: unknown) => void;
 };
 
 export function HomeAdminToolbar({

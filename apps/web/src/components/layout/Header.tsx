@@ -57,7 +57,7 @@ export function Header() {
   const visibleNavItems = user ? userNavItems : navItems;
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
           {userWorkspaceRoute && <DashboardSidebarMobile />}
