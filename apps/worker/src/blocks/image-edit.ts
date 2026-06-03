@@ -20,7 +20,7 @@ const paramsSchema = z.object({
   negative_prompt: z.string().optional(),
   strength: z.number().min(0).max(1).optional(),
   output_format: z.enum(['jpg', 'png', 'webp']).optional(),
-  aspect_ratio: z.enum(['auto', 'input', '1:1', '16:9', '9:16']).default('auto').optional(),
+  aspect_ratio: z.enum(['auto', 'input', '1:1', '16:9', '9:16', '4:3', '3:4', '21:9', '9:21']).default('auto').optional(),
   resolution: z.enum(['1K', '2K', '4K']).optional(),
   image_urls: z.union([z.string(), z.array(z.string())]).optional(),
 });

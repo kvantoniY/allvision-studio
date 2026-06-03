@@ -15,8 +15,11 @@ import {
 const catalog = getBlockCatalogItem('trend-video-transfer');
 if (!catalog) throw new Error('Block catalog metadata missing: trend-video-transfer');
 
+const modeSchema = z.enum(['face_swap', 'motion_transfer', 'kling_omni', 'seedance_omni']);
+
 const paramsSchema = z.object({
-  mode: z.enum(['face_swap', 'motion_transfer', 'kling_omni']).default('face_swap'),
+  mode: modeSchema.optional(),
+  default_mode: modeSchema.default('face_swap').optional(),
   people_count: z.enum(['one', 'two']).default('one'),
   reference_video: z.string().min(1),
   primary_photo: z.string().optional(),
@@ -26,6 +29,7 @@ const paramsSchema = z.object({
   face_swap_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   motion_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   kling_omni_model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  seedance_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   portrait_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   estimatedFrames: z.number().int().min(1).optional(),
   swap_faces_index: z.string().optional(),
@@ -50,8 +54,9 @@ export const trendVideoTransferBlock: BlockDefinition = {
   paramsSchema,
   estimatedCostCoins: (params) => {
     const parsed = paramsSchema.partial().safeParse(params);
-    const mode = parsed.success ? parsed.data.mode : undefined;
+    const mode = parsed.success ? effectiveMode(parsed.data) : undefined;
     const peopleCount = parsed.success ? parsed.data.people_count : undefined;
+    if (mode === 'seedance_omni') return peopleCount === 'two' ? 190 : 150;
     if (mode === 'kling_omni') return peopleCount === 'two' ? 200 : 150;
     if (mode === 'motion_transfer') return peopleCount === 'two' ? 120 : 100;
     return peopleCount === 'two' ? 160 : 90;
@@ -65,17 +70,25 @@ export const trendVideoTransferBlock: BlockDefinition = {
     }
 
     await ctx.reportProgress(3);
-    if (parsed.mode === 'motion_transfer') {
+    const mode = effectiveMode(parsed);
+    if (mode === 'motion_transfer') {
       return runMotionTransfer(parsed, primaryPhoto, ctx);
     }
-    if (parsed.mode === 'kling_omni') {
+    if (mode === 'kling_omni') {
       return runKlingOmni(parsed, primaryPhoto, ctx);
+    }
+    if (mode === 'seedance_omni') {
+      return runSeedanceOmni(parsed, primaryPhoto, ctx);
     }
     return runFaceSwap(parsed, primaryPhoto, ctx);
   },
 };
 
 type ParsedParams = z.infer<typeof paramsSchema>;
+
+function effectiveMode(parsed: Partial<ParsedParams>) {
+  return parsed.mode ?? parsed.default_mode ?? 'face_swap';
+}
 
 async function runFaceSwap(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
@@ -208,6 +221,36 @@ async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: Blo
   return providerResultToOutput(result, 'video');
 }
 
+async function runSeedanceOmni(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
+  const provider = ctx.getAIProvider();
+  const model = stringModel(parsed.seedance_model, 'seedance-2-omni');
+  const duration = await referenceDurationSec(parsed, 10, ctx);
+  const imageUrls = parsed.people_count === 'two'
+    ? [primaryPhoto, parsed.secondary_photo!]
+    : [primaryPhoto];
+  const baseParams = asObject(parsed);
+  const prompt = parsed.prompt
+    ?? (parsed.people_count === 'two' ? defaultDuoSeedanceOmniPrompt() : defaultSingleSeedanceOmniPrompt());
+
+  const result = await provider.textToVideo({
+    prompt,
+    durationSec: duration,
+    model,
+    params: {
+      ...baseParams,
+      mode: 'omni_reference',
+      image_urls: imageUrls,
+      video_urls: [parsed.reference_video],
+      duration,
+      aspect_ratio: parsed.aspect_ratio ?? '9:16',
+      resolution: parsed.resolution ?? '720p',
+    },
+    context: scaledContext(ctx.providerContext, ctx.reportProgress, 5, 95),
+  });
+  await ctx.reportProgress(100);
+  return providerResultToOutput(result, 'video');
+}
+
 async function referenceDurationSec(parsed: ParsedParams, fallback: number, ctx: BlockContext) {
   if (!parsed.duration_from_reference) return parsed.duration ?? fallback;
   try {
@@ -266,6 +309,26 @@ function defaultDuoKlingOmniPrompt() {
     'Preserve each identity separately: face shape, eyes, nose, mouth, eyebrows, hair, skin tone and natural expression.',
     'Do not swap sides, do not blend faces, do not copy identities from @video, no text, no watermark.',
     'Photorealistic vertical social video, stable identities across every frame, natural dance movement and believable lighting.',
+  ].join(' ');
+}
+
+function defaultSingleSeedanceOmniPrompt() {
+  return [
+    'Use the uploaded video as the reference for motion, timing, camera rhythm, framing and scene dynamics.',
+    'Use @image1 as the identity reference for the only main person and @video1 as the video reference.',
+    'Keep exactly one person in the result and preserve the uploaded identity consistently across all frames.',
+    'Do not copy the face from the reference video, do not add people, no text, no watermark.',
+    'Photorealistic vertical social video, natural movement, stable face, believable lighting.',
+  ].join(' ');
+}
+
+function defaultDuoSeedanceOmniPrompt() {
+  return [
+    'Use the uploaded video as the reference for motion, timing, camera rhythm, framing and scene dynamics.',
+    'Use @image1 as the identity reference for the LEFT person, @image2 as the identity reference for the RIGHT person and @video1 as the video reference.',
+    'Keep exactly two people in the result, matching the two positions from the reference video.',
+    'Preserve each identity separately, do not swap sides, do not blend faces, do not copy identities from the video.',
+    'Photorealistic vertical social video, stable identities across every frame, natural motion, no text, no watermark.',
   ].join(' ');
 }
 

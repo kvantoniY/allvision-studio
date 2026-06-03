@@ -849,7 +849,7 @@ const giftFactoryServices = [
     priceTokens: 39,
     priceCoinsStandard: 39,
     priceCoinsPro: 39,
-    costUsd: 0.08,
+    costUsd: 0.1,
     coverImage: image('gift-single-2017'),
     galleryImages: [image('gift-single-2017-1'), image('gift-single-2017-2')],
     previewImage: image('gift-single-2017-preview'),
@@ -878,7 +878,7 @@ const giftFactoryServices = [
         type: 'aspect_ratio',
         label: 'Формат кадра',
         required: false,
-        aspectOptions: ['1:1', '4:3', '3:4', '9:16'],
+        aspectOptions: ['1:1', '3:4', '9:16', '16:9'],
         defaultAspect: '3:4',
       },
     ],
@@ -888,12 +888,12 @@ const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.portrait}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
-          resolution: '2K',
+          quality: 'standard',
           prompt:
-            'Transform the person from the reference photo into ONE realistic solo smartphone photo in 2016-2017 post-Soviet (СНГ) style. Preserve the exact identity as the absolute priority: same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression. Do not invent a generic model face, do not change gender or age, do not add extra people, no text except a tiny optional date stamp in the corner. The person stands or sits casually in a courtyard between Soviet panel apartment blocks, parked cars, playground or benches, graffiti details, vivid crimson-magenta sunset / малиновый закат in the sky. Clothing vibe: Adidas-style sport tracksuit / олимпийка, dark hoodie, optional Thrasher-style hoodie, bucket hat or thin chain if natural. Lighting: realistic ambient dusk light with natural sky glow and soft distant phone-camera fill from normal distance, balanced exposure, real shadows, no close-range flash blast, no blown-out skin, no studio softbox, no glamour spotlight, no artificial rim light. Image quality: clear realistic phone snapshot, crisp facial details, visible hair strands and fabric texture, natural micro-contrast, mild sensor noise, subtle compression, slight chromatic aberration. Avoid dreamy blur, soap-smooth skin, CGI render, painterly look, fake bokeh, heavy HDR, excessive glow, beauty retouch, waxy face, deformed eyes or mouth. The final image should look like a believable real photo from a phone, atmospheric but sharp and natural.',
+            'GPT Image 2 edit. Create ONE photorealistic solo smartphone photo from the uploaded reference. Preserve the same person exactly: same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression. Do not re-age, beautify, change gender, invent a model face, duplicate the person or add other people. Style the scene as a believable 2016-2017 post-Soviet social-media photo: courtyard near panel apartment blocks, parked cars, benches or playground, crimson-magenta sunset, casual tracksuit or dark hoodie, optional bucket hat or thin chain only if natural. Phone snapshot realism: natural dusk light, slight on-camera fill, real shadows, visible skin texture, hair strands and fabric detail, mild sensor noise, subtle compression and chromatic aberration. Keep the face sharp and recognizable. No logos, text, watermark, glossy AI skin, fake bokeh, CGI, heavy HDR, glamour retouch, distorted face, deformed hands or extra faces.',
         },
       },
     ],
@@ -905,11 +905,11 @@ const giftFactoryServices = [
     description:
       'Загрузите фото 2–4 друзей — нейросеть соберёт одно групповое фото в духе 2016–2017: олимпийки и Thrasher, малиновый закат, дворы, телефонная резкость и живой вечерний свет без студийной обработки. Лица сохраняются с ваших фотографий.',
     category: ServiceCategory.NOSTALGIA,
-    // Себестоимость: nano-banana @2K ($0.08) ≈ 10 коинов
+    // Себестоимость: GPT Image 2 standard ≈ $0.10
     priceTokens: 49,
     priceCoinsStandard: 49,
     priceCoinsPro: 49,
-    costUsd: 0.08,
+    costUsd: 0.1,
     coverImage: image('gift-group-2017'),
     galleryImages: [image('gift-group-2017-1'), image('gift-group-2017-2')],
     previewImage: image('gift-group-2017-preview'),
@@ -971,23 +971,23 @@ const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.friend_1}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           image_urls: ['{{user.friend_2}}', '{{user.friend_3}}', '{{user.friend_4}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
-          resolution: '2K',
+          quality: 'standard',
           prompt:
-            'Combine the people from the provided reference photos into ONE single realistic group photo of friends hanging out together. CRITICAL COUNT RULE: generate EXACTLY one person for each provided reference image and no one else. If 2 reference photos are provided, the result must contain exactly 2 people; if 3 references are provided, exactly 3 people; if 4 references are provided, exactly 4 people. Never add background friends, strangers, duplicate bodies, extra faces, partial people, posters with faces, or crowd silhouettes. IDENTITY IS THE ABSOLUTE TOP PRIORITY: reproduce every person\'s face from their own reference photo with maximum likeness — same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression. Keep each person individually recognizable as the original reference, do not blend identities, do not swap faces between people, do not invent a generic face. Faces must be clear, sharp and correctly structured: detailed eyes, natural pupils, normal teeth and lips, realistic skin texture, real pores, slight imperfections, no plastic beauty filter, no waxy smoothing, no glossy AI skin, no over-smoothed or melted facial features. The photo should feel like a real casual 2016–2017 post-Soviet (СНГ) friend-group smartphone photo, not a studio shoot, not a premium fashion portrait and not an AI render. Clothing and vibe: Adidas-style sport tracksuits / олимпийки, dark hoodies, one optional Thrasher-style flame hoodie, bucket hats, thin chains, white sneakers, relaxed poses, friends standing or sitting close together. Environment: courtyard between Soviet panel apartment blocks, parked cars, playground or benches, graffiti details, vivid crimson-magenta sunset / малиновый закат in the sky. Lighting: realistic ambient dusk light with natural sky glow and soft distant phone-camera fill from normal distance, balanced exposure, real shadows, no close-range flash blast, no white blown-out faces, no studio softbox, no spotlight, no artificial rim light, no overexposed forehead or cheeks. Image quality: clear realistic phone snapshot, crisp but not over-sharpened, natural micro-contrast, visible fabric texture and hair strands, mild sensor noise, subtle compression, slight chromatic aberration, small yellow date stamp in a corner. Avoid dreamy blur, soap-smooth faces, CGI look, painterly rendering, fake bokeh, heavy HDR, excessive glow, glamour retouch. All faces clearly visible and recognizable, but the overall image remains candid, atmospheric and believable.',
+            'GPT Image 2 edit. Combine the provided reference photos into ONE photorealistic group smartphone photo in a 2016-2017 post-Soviet social-media style. Critical count rule: generate exactly one person for each provided reference image and no one else. If 2 references are provided, show exactly 2 people; if 3, exactly 3; if 4, exactly 4. Preserve each identity separately and clearly: same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression from that person\'s own reference. Do not blend identities, swap faces, duplicate people, add background friends, crowds, extra faces, posters with faces or partial bodies. Setting: friends standing or sitting close together in a courtyard near panel apartment blocks, parked cars, benches or playground, crimson-magenta sunset, casual 2017 streetwear, tracksuits, dark hoodies, white sneakers, relaxed candid poses. Phone snapshot realism: natural dusk light, slight on-camera fill, real shadows, sharp recognizable faces, skin texture, hair strands, fabric detail, mild sensor noise, subtle compression and chromatic aberration. No logos, text, watermark, glossy AI skin, beauty filter, CGI, fake bokeh, heavy HDR, distorted faces, deformed hands or extra people.',
         },
       },
     ],
   },
   {
     slug: 'face-in-trend-pro',
-    title: 'Я в трендовом видео/танце',
-    shortDesc: 'Загрузите фото и видео: перенесём лицо в ролик или повторим движения через Kling Motion Control',
+    title: 'Я в трендовом видео Kling 3.0',
+    shortDesc: 'Загрузите фото и видео до 15 сек: по умолчанию Kling 3.0 Motion Control, опционально face-swap',
     description:
-      'Загрузите фото и своё трендовое видео до 15 секунд. В режиме переноса лица Allvision вставит ваше лицо в исходный ролик. В режиме повторения движений Kling Motion Control оживит ваше фото по движениям из видео. Для чистого результата лицо должно быть хорошо видно, а в видео должен быть один главный человек.',
+      'Загрузите фото и своё трендовое видео до 15 секунд. По умолчанию Kling 3.0 Motion Control оживит фото по движениям из видео, длина результата будет равна длине видео-референса. Если нужно, можно выбрать face-swap: тогда лицо будет вставлено в исходный ролик. Финальный звук всегда берётся из загруженного видео-референса.',
     category: ServiceCategory.TRENDS_MEMES,
     // Себестоимость зависит от режима: Qubico face-swap или Kling Motion Control 3.0.
     priceTokens: 159,
@@ -1010,10 +1010,11 @@ const giftFactoryServices = [
         id: 'transferMode',
         type: 'select',
         label: 'Способ генерации',
-        required: true,
+        required: false,
+        hint: 'Если не выбирать режим, используется Kling 3.0 Motion Control.',
         options: [
-          { value: 'face_swap', label: 'Перенос лица в видео' },
-          { value: 'motion_transfer', label: 'Повторение движений с видео' },
+          { value: 'motion_transfer', label: 'Kling 3.0 Motion Control' },
+          { value: 'face_swap', label: 'Face-swap' },
         ],
       },
       {
@@ -1044,6 +1045,7 @@ const giftFactoryServices = [
         input: '{{user.face}}',
         params: {
           mode: '{{user.transferMode}}',
+          default_mode: 'motion_transfer',
           people_count: 'one',
           reference_video: '{{user.userVideo}}',
           primary_photo: '{{user.face}}',
@@ -1074,11 +1076,103 @@ const giftFactoryServices = [
     ],
   },
   {
-    slug: 'duo-trend-pro',
-    title: 'Мы в трендовом видео/танце',
-    shortDesc: 'Загрузите два фото и видео строго с двумя людьми: перенос лиц или повторение движений',
+    slug: 'face-in-trend-seedance-2',
+    title: 'Я в трендовом видео Seedance 2.0',
+    shortDesc: 'Загрузите фото и видео до 15 сек: по умолчанию Seedance 2, опционально face-swap',
     description:
-      'Услуга для трендов и танцев, где в кадре строго два человека. Загрузите два чётких фото и своё видео до 15 секунд. В режиме переноса лиц система последовательно заменит левое и правое лицо в ролике. В режиме повторения движений Allvision соберёт общий кадр с двумя людьми и передаст движение через Kling Motion Control.',
+      'Загрузите фото и своё трендовое видео до 15 секунд. По умолчанию Seedance 2 использует видео как референс движения, камеры и сцены, а фото — как референс личности. Длина результата равна длине видео-референса. Если нужно, можно выбрать face-swap. Финальный звук всегда берётся из загруженного видео-референса.',
+    category: ServiceCategory.TRENDS_MEMES,
+    priceTokens: 159,
+    priceCoinsStandard: 159,
+    priceCoinsPro: 159,
+    costUsd: 1.5,
+    coverImage: image('gift-trend-pro'),
+    galleryImages: [image('gift-trend-pro-1'), image('gift-trend-pro-2')],
+    previewImage: image('gift-trend-pro-preview'),
+    previewVideo: trendVideo(2),
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 8,
+    userInputForm: [
+      {
+        id: 'transferMode',
+        type: 'select',
+        label: 'Способ генерации',
+        required: false,
+        hint: 'Если не выбирать режим, используется Seedance 2.',
+        options: [
+          { value: 'seedance_omni', label: 'Seedance 2' },
+          { value: 'face_swap', label: 'Face-swap' },
+        ],
+      },
+      {
+        id: 'face',
+        type: 'photo',
+        label: 'Ваше фото',
+        required: true,
+        hint: 'Лучше фото человека по пояс или в полный рост, лицо открыто и хорошо видно.',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'userVideo',
+        type: 'video',
+        label: 'Ваше видео (тренд)',
+        required: true,
+        hint: 'Загрузите видео-тренд: MP4/MOV, до 15 сек',
+        maxSizeMb: 50,
+        maxDurationSec: 15,
+        allowedFormats: ['mp4', 'webm', 'mov'],
+        allowUserUpload: true,
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'trend-video-transfer',
+        input: '{{user.face}}',
+        params: {
+          mode: '{{user.transferMode}}',
+          default_mode: 'seedance_omni',
+          people_count: 'one',
+          reference_video: '{{user.userVideo}}',
+          primary_photo: '{{user.face}}',
+          duration_from_reference: true,
+          seedance_model: 'seedance-2-omni',
+          face_swap_model: 'qubico-video-toolkit',
+          aspect_ratio: '9:16',
+          resolution: '720p',
+          prompt:
+            'Use @video1 as the motion, timing, camera and scene reference. Use @image1 as the identity reference for the only main person. Keep exactly one person, preserve the uploaded identity consistently, do not copy the face from the source video, no text, no watermark. Photorealistic vertical social video with natural movement and stable face.',
+        },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'video-compose',
+        input: '{{step_1.output}}',
+        params: {
+          watermark: false,
+          title: 'Allvision Seedance trend',
+          audio_source: '{{user.userVideo}}',
+          audio_volume: 1,
+          audio_fade_in_sec: 0,
+          audio_fade_out_sec: 0,
+          audio_loop: false,
+          keep_original_audio: false,
+        },
+      },
+    ],
+  },
+  {
+    slug: 'duo-trend-pro',
+    title: 'Мы в трендовом видео Kling 3.0 (Motion control)',
+    shortDesc: 'Два фото и видео до 15 сек: по умолчанию Kling 3.0 Motion Control, опционально face-swap',
+    description:
+      'Загрузите два чётких фото и своё видео до 15 секунд, где в кадре строго два человека. По умолчанию Allvision соберёт общий кадр с двумя людьми и передаст движение через Kling 3.0 Motion Control. Если нужно, можно выбрать face-swap: система последовательно заменит левое и правое лицо в исходном ролике. Длина результата равна длине видео-референса, финальный звук всегда берётся из него.',
     category: ServiceCategory.TRENDS_MEMES,
     // Себестоимость зависит от режима: последовательный Qubico face-swap или Nano Banana + Kling Motion Control 3.0.
     priceTokens: 169,
@@ -1095,16 +1189,17 @@ const giftFactoryServices = [
     aiConfig: {},
     isActive: true,
     isFeatured: false,
-    sortOrder: 8,
+    sortOrder: 9,
     userInputForm: [
       {
         id: 'transferMode',
         type: 'select',
         label: 'Способ генерации',
-        required: true,
+        required: false,
+        hint: 'Если не выбирать режим, используется Kling 3.0 Motion Control.',
         options: [
-          { value: 'face_swap', label: 'Перенос лиц в видео' },
-          { value: 'motion_transfer', label: 'Повторение движений с видео' },
+          { value: 'motion_transfer', label: 'Kling 3.0 Motion Control' },
+          { value: 'face_swap', label: 'Face-swap' },
         ],
       },
       {
@@ -1144,6 +1239,7 @@ const giftFactoryServices = [
         input: '{{user.face_left}}',
         params: {
           mode: '{{user.transferMode}}',
+          default_mode: 'motion_transfer',
           people_count: 'two',
           reference_video: '{{user.userVideo}}',
           primary_photo: '{{user.face_left}}',
@@ -1179,10 +1275,10 @@ const giftFactoryServices = [
   },
   {
     slug: 'duo-trend-kling-omni',
-    title: 'Kling Omni: мы в трендовом видео',
-    shortDesc: 'Экспериментальный перенос двух лиц через Kling 3.0 Omni по двум фото и видео-референсу',
+    title: 'Мы в трендовом видео Kling 3.0 (Omni reference)',
+    shortDesc: 'Два фото и видео до 15 сек: по умолчанию Kling 3.0 Omni reference, опционально face-swap',
     description:
-      'Тестовая услуга для проверки Kling 3.0 Omni: загрузите два чётких фото и видео до 15 секунд, где в кадре строго два человека. Kling получает видео как референс движения, камеры и сцены, а два фото — как референсы лиц для левого и правого героя. Важно: этот режим умнее обычного face-swap, но может менее стабильно соблюдать левую/правую привязку, поэтому мы тестируем его отдельной услугой.',
+      'Загрузите два чётких фото и своё видео до 15 секунд, где в кадре строго два человека. По умолчанию Kling 3.0 Omni reference получает видео как референс движения, камеры и сцены, а два фото — как референсы лиц для левого и правого героя. Если нужно, можно выбрать face-swap. Длина результата равна длине видео-референса, финальный звук всегда берётся из него.',
     category: ServiceCategory.TRENDS_MEMES,
     priceTokens: 199,
     priceCoinsStandard: 199,
@@ -1198,8 +1294,19 @@ const giftFactoryServices = [
     aiConfig: {},
     isActive: true,
     isFeatured: false,
-    sortOrder: 9,
+    sortOrder: 10,
     userInputForm: [
+      {
+        id: 'transferMode',
+        type: 'select',
+        label: 'Способ генерации',
+        required: false,
+        hint: 'Если не выбирать режим, используется Kling 3.0 Omni reference.',
+        options: [
+          { value: 'kling_omni', label: 'Kling 3.0 Omni reference' },
+          { value: 'face_swap', label: 'Face-swap' },
+        ],
+      },
       {
         id: 'face_left',
         type: 'photo',
@@ -1236,12 +1343,14 @@ const giftFactoryServices = [
         blockSlug: 'trend-video-transfer',
         input: '{{user.face_left}}',
         params: {
-          mode: 'kling_omni',
+          mode: '{{user.transferMode}}',
+          default_mode: 'kling_omni',
           people_count: 'two',
           reference_video: '{{user.userVideo}}',
           primary_photo: '{{user.face_left}}',
           secondary_photo: '{{user.face_right}}',
           duration_from_reference: true,
+          face_swap_model: 'qubico-video-toolkit',
           kling_omni_model: 'kling-3-omni',
           aspect_ratio: '9:16',
           resolution: '720p',
@@ -1270,11 +1379,115 @@ const giftFactoryServices = [
     ],
   },
   {
+    slug: 'duo-trend-seedance-2',
+    title: 'Мы в трендовом видео Seedance 2.0',
+    shortDesc: 'Два фото и видео до 15 сек: по умолчанию Seedance 2, опционально face-swap',
+    description:
+      'Загрузите два чётких фото и своё видео до 15 секунд, где в кадре строго два человека. По умолчанию Seedance 2 использует видео как референс движения, камеры и сцены, а два фото — как референсы личностей для левого и правого героя. Если нужно, можно выбрать face-swap. Длина результата равна длине видео-референса, финальный звук всегда берётся из него.',
+    category: ServiceCategory.TRENDS_MEMES,
+    priceTokens: 189,
+    priceCoinsStandard: 189,
+    priceCoinsPro: 189,
+    costUsd: 1.9,
+    coverImage: image('gift-duo-kling-omni'),
+    galleryImages: [image('gift-duo-kling-omni-1'), image('gift-duo-kling-omni-2')],
+    previewImage: image('gift-duo-kling-omni-preview'),
+    previewVideo: trendVideo(3),
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 11,
+    userInputForm: [
+      {
+        id: 'transferMode',
+        type: 'select',
+        label: 'Способ генерации',
+        required: false,
+        hint: 'Если не выбирать режим, используется Seedance 2.',
+        options: [
+          { value: 'seedance_omni', label: 'Seedance 2' },
+          { value: 'face_swap', label: 'Face-swap' },
+        ],
+      },
+      {
+        id: 'face_left',
+        type: 'photo',
+        label: 'Фото для героя слева',
+        required: true,
+        hint: 'Чёткий портрет анфас: лицо открыто, без очков и сильной тени.',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'face_right',
+        type: 'photo',
+        label: 'Фото для героя справа',
+        required: true,
+        hint: 'Чёткий портрет анфас: лицо открыто, без очков и сильной тени.',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'userVideo',
+        type: 'video',
+        label: 'Видео с двумя людьми',
+        required: true,
+        hint: 'Важно: в видео должно быть строго 2 человека, левый и правый герой хорошо видны. MP4/MOV, до 15 сек.',
+        maxSizeMb: 50,
+        maxDurationSec: 15,
+        allowedFormats: ['mp4', 'webm', 'mov'],
+        allowUserUpload: true,
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'trend-video-transfer',
+        input: '{{user.face_left}}',
+        params: {
+          mode: '{{user.transferMode}}',
+          default_mode: 'seedance_omni',
+          people_count: 'two',
+          reference_video: '{{user.userVideo}}',
+          primary_photo: '{{user.face_left}}',
+          secondary_photo: '{{user.face_right}}',
+          duration_from_reference: true,
+          seedance_model: 'seedance-2-omni',
+          face_swap_model: 'qubico-video-toolkit',
+          target_faces_index_left: '0',
+          target_faces_index_right: '1',
+          aspect_ratio: '9:16',
+          resolution: '720p',
+          prompt:
+            'Use @video1 as the motion, timing, camera and scene reference. Use @image1 as the identity reference for the LEFT person and @image2 as the identity reference for the RIGHT person. Keep exactly two people, preserve left and right identities separately, do not swap sides, do not blend faces, do not copy identities from the source video, no text, no watermark. Photorealistic vertical social video with natural motion and stable faces.',
+        },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'video-compose',
+        input: '{{step_1.output}}',
+        params: {
+          watermark: false,
+          title: 'Allvision Seedance duo trend',
+          audio_source: '{{user.userVideo}}',
+          audio_volume: 1,
+          audio_fade_in_sec: 0,
+          audio_fade_out_sec: 0,
+          audio_loop: false,
+          keep_original_audio: false,
+        },
+      },
+    ],
+  },
+  {
     slug: 'toxis-dance',
     title: 'Танец токсиса',
-    shortDesc: 'Один танцевальный референс: перенос лица в видео или повторение движений',
+    shortDesc: 'Загрузите фото — под капотом Kling 3.0 Motion Control повторит танец токсиса',
     description:
-      'Загрузите фото и выберите способ генерации. В режиме переноса лица Allvision вставит ваше лицо в готовый танцевальный референс. В режиме повторения движений Kling Motion Control оживит ваше фото по движениям из этого танца. Референс можно заменить в админке при дублировании услуги.',
+      'Загрузите фото человека по пояс или в полный рост. Allvision использует готовый референс танца токсиса и Kling 3.0 Motion Control, чтобы оживить фото по этому движению. Длина результата равна длине референса, финальный звук берётся из него.',
     category: ServiceCategory.TRENDS_MEMES,
     priceTokens: 119,
     priceCoinsStandard: 119,
@@ -1290,24 +1503,14 @@ const giftFactoryServices = [
     aiConfig: {},
     isActive: true,
     isFeatured: false,
-    sortOrder: 10,
+    sortOrder: 12,
     userInputForm: [
-      {
-        id: 'transferMode',
-        type: 'select',
-        label: 'Способ генерации',
-        required: true,
-        options: [
-          { value: 'face_swap', label: 'Перенос лица в видео' },
-          { value: 'motion_transfer', label: 'Повторение движений с видео' },
-        ],
-      },
       {
         id: 'face',
         type: 'photo',
         label: 'Ваше фото',
         required: true,
-        hint: 'Для переноса лица нужен чёткий портрет. Для повторения движений лучше фото человека по пояс или в полный рост.',
+        hint: 'Лучше фото человека по пояс или в полный рост, лицо открыто и хорошо видно.',
         allowStudioAvatars: true,
         allowSystemLibrary: false,
       },
@@ -1318,7 +1521,8 @@ const giftFactoryServices = [
         blockSlug: 'trend-video-transfer',
         input: '{{user.face}}',
         params: {
-          mode: '{{user.transferMode}}',
+          mode: 'motion_transfer',
+          default_mode: 'motion_transfer',
           people_count: 'one',
           reference_video: trendVideo(1),
           primary_photo: '{{user.face}}',
@@ -1595,6 +1799,13 @@ const giftFactoryServices = [
       },
     ],
   },
+];
+
+const legacyTrendServiceSlugs = [
+  'face-in-trend',
+  'duo-reference-dance',
+  'repeat-motion-from-video',
+  'face-in-trend-lite',
 ];
 
 const trendSeed = [
@@ -2176,14 +2387,29 @@ async function seedPilotServices() {
   let created = 0;
   let patched = 0;
   for (const service of giftFactoryServices) {
+    if (legacyTrendServiceSlugs.includes(service.slug)) continue;
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
     if (existing) {
       // Always refresh seed services to canonical seed config (Pro-default, current prices, latest userInputForm).
       // Admin can override later through /admin/services UI; seed only runs at deploy time on system upgrades.
       const needsUpdate =
+        existing.title !== service.title ||
+        existing.shortDesc !== service.shortDesc ||
+        existing.description !== service.description ||
+        existing.category !== service.category ||
         existing.priceCoinsStandard !== service.priceCoinsStandard ||
         existing.priceCoinsPro !== service.priceCoinsPro ||
         existing.priceTokens !== service.priceTokens ||
+        existing.costUsd !== service.costUsd ||
+        existing.coverImage !== service.coverImage ||
+        JSON.stringify(existing.galleryImages) !== JSON.stringify(service.galleryImages) ||
+        existing.previewImage !== service.previewImage ||
+        existing.previewVideo !== service.previewVideo ||
+        existing.sortOrder !== service.sortOrder ||
+        existing.processingType !== service.processingType ||
+        existing.aiProvider !== service.aiProvider ||
+        existing.aiModel !== service.aiModel ||
+        JSON.stringify(existing.aiConfig) !== JSON.stringify(service.aiConfig) ||
         JSON.stringify(existing.userInputForm) !== JSON.stringify(service.userInputForm) ||
         JSON.stringify(existing.pipelineConfig) !== JSON.stringify(service.pipelineConfig) ||
         existing.isActive !== service.isActive ||
@@ -2193,16 +2419,27 @@ async function seedPilotServices() {
         await prisma.service.update({
           where: { slug: service.slug },
           data: {
+            title: service.title,
+            shortDesc: service.shortDesc,
+            description: service.description,
+            category: service.category,
             priceTokens: service.priceTokens,
             priceCoinsStandard: service.priceCoinsStandard,
             priceCoinsPro: service.priceCoinsPro,
+            costUsd: service.costUsd,
+            coverImage: service.coverImage,
+            galleryImages: service.galleryImages,
+            previewImage: service.previewImage,
             previewVideo: service.previewVideo,
+            processingType: service.processingType,
             userInputForm: service.userInputForm,
             pipelineConfig: service.pipelineConfig,
             isFeatured: service.isFeatured,
             isActive: service.isActive,
             aiProvider: service.aiProvider,
             aiModel: service.aiModel,
+            aiConfig: service.aiConfig,
+            sortOrder: service.sortOrder,
           },
         });
         patched += 1;
@@ -2212,7 +2449,17 @@ async function seedPilotServices() {
     await prisma.service.create({ data: service });
     created += 1;
   }
-  return { created, patched };
+  let legacyDeactivated = 0;
+  for (const slug of legacyTrendServiceSlugs) {
+    const existing = await prisma.service.findUnique({ where: { slug } });
+    if (!existing || (existing.isActive === false && existing.isFeatured === false)) continue;
+    await prisma.service.update({
+      where: { slug },
+      data: { isActive: false, isFeatured: false },
+    });
+    legacyDeactivated += 1;
+  }
+  return { created, patched, legacyDeactivated };
 }
 
 

@@ -101,6 +101,29 @@ describe('trend-video-transfer block', () => {
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://motion-transfer.mp4' }));
   });
 
+  it('uses default_mode when the user does not choose a transfer mode', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'motionTransfer');
+
+    await trendVideoTransferBlock.executor(
+      {
+        default_mode: 'motion_transfer',
+        people_count: 'one',
+        reference_video: 'https://cdn.test/default.mp4',
+        primary_photo: 'https://cdn.test/person.jpg',
+        duration: 6,
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      inputImageUrl: 'https://cdn.test/person.jpg',
+      drivingVideoUrl: 'https://cdn.test/default.mp4',
+      model: 'kling-motion-3.0-std',
+    }));
+  });
+
   it('runs two-person Kling Omni with image and video references', async () => {
     const provider = new StubAIProvider();
     const spy = jest.spyOn(provider, 'textToVideo');
@@ -128,6 +151,38 @@ describe('trend-video-transfer block', () => {
         aspect_ratio: '9:16',
         resolution: '720p',
         enable_audio: false,
+      }),
+    }));
+    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
+  });
+
+  it('runs two-person Seedance Omni with image and video references', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'textToVideo');
+
+    const output = await trendVideoTransferBlock.executor(
+      {
+        mode: 'seedance_omni',
+        people_count: 'two',
+        reference_video: 'https://cdn.test/duo.mp4',
+        primary_photo: 'https://cdn.test/left.jpg',
+        secondary_photo: 'https://cdn.test/right.jpg',
+        duration: 12,
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining('@image1'),
+      durationSec: 12,
+      model: 'seedance-2-omni',
+      params: expect.objectContaining({
+        mode: 'omni_reference',
+        image_urls: ['https://cdn.test/left.jpg', 'https://cdn.test/right.jpg'],
+        video_urls: ['https://cdn.test/duo.mp4'],
+        aspect_ratio: '9:16',
+        resolution: '720p',
       }),
     }));
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));

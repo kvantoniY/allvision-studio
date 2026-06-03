@@ -22,6 +22,7 @@ function fakeStorage() {
 function fakePublisher() {
   return {
     publishImageUrl: jest.fn(),
+    publishFileUrl: jest.fn(),
   } as never;
 }
 
@@ -112,6 +113,7 @@ describe('PiAPI provider safety', () => {
     const storage = fakeStorage();
     const publisher = {
       publishImageUrl: jest.fn().mockResolvedValue({ publicUrl: 'https://cdn.test/swap.jpg' }),
+      publishFileUrl: jest.fn().mockResolvedValue({ publicUrl: 'https://cdn.test/target.mp4' }),
     };
     const provider = new PiAPIProvider({
       apiKey: 'test-key',

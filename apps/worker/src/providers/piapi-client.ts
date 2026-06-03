@@ -112,6 +112,7 @@ export class PiAPIClient {
     imageUrls: string[];
     size: string;
     quality: string;
+    outputFormat?: string;
   }): Promise<{ url?: string; b64?: string }> {
     const useEdits = params.imageUrls.length > 0;
     const endpoint = `${this.baseUrl}/v1/images/${useEdits ? 'edits' : 'generations'}`;
@@ -123,6 +124,7 @@ export class PiAPIClient {
       form.append('n', '1');
       form.append('size', params.size);
       form.append('quality', params.quality);
+      if (params.outputFormat) form.append('output_format', params.outputFormat);
       form.append('response_format', 'url');
       for (const url of params.imageUrls) {
         const { buffer, contentType } = await this.download(url);
@@ -144,6 +146,7 @@ export class PiAPIClient {
           n: 1,
           size: params.size,
           quality: params.quality,
+          ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
           response_format: 'url',
         }),
       }, true);

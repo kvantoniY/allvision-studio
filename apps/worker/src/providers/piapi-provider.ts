@@ -156,18 +156,27 @@ export class PiAPIProvider implements AIProvider {
       // GPT Image идёт через OpenAI-совместимый эндпоинт (синхронно), а не unified task.
       if (input.model.startsWith('gpt-image')) {
         const aspect = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
-        const sizeByAspect: Record<string, string> = { '1:1': '1024x1024', '9:16': '1024x1536', '16:9': '1536x1024' };
-        const size = sizeByAspect[aspect ?? ''] ?? '1024x1024';
-        const quality = readString(input.params, 'quality') ?? 'high';
+        const size = gptImageSizeForAspect(aspect);
+        const quality = readString(input.params, 'quality') ?? 'standard';
+        const outputFormat = normalizeGptImageOutputFormat(readString(input.params, 'output_format'));
         const refs = [input.imageUrl, ...readStringList(input.params, 'image_urls')]
           .filter((url): url is string => typeof url === 'string' && url.length > 0);
-        const result = await this.client.generateGptImage({ model: input.model, prompt: input.prompt, imageUrls: refs, size, quality });
+        const result = await this.client.generateGptImage({
+          model: input.model,
+          prompt: input.prompt,
+          imageUrls: refs,
+          size,
+          quality,
+          outputFormat,
+        });
+        const outputExt = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
         let local;
         if (result.url) {
-          local = await this.persistProviderOutput(result.url, input.context, 'png');
+          local = await this.persistProviderOutput(result.url, input.context, outputExt);
         } else if (result.b64) {
-          const key = `outputs/${input.context.userId ?? 'unknown'}/${input.context.projectId}/${input.context.stepId}/result.png`;
-          local = await this.storage.upload({ key, body: Buffer.from(result.b64, 'base64'), contentType: 'image/png' });
+          const contentType = outputExt === 'png' ? 'image/png' : outputExt === 'webp' ? 'image/webp' : 'image/jpeg';
+          const key = `outputs/${input.context.userId ?? 'unknown'}/${input.context.projectId}/${input.context.stepId}/result.${outputExt}`;
+          local = await this.storage.upload({ key, body: Buffer.from(result.b64, 'base64'), contentType });
         } else {
           throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'GPT Image returned no image');
         }
@@ -177,7 +186,7 @@ export class PiAPIProvider implements AIProvider {
           outputUrl: local.url,
           costUsd: estimatedCost,
           durationMs,
-          meta: { model: input.model, provider: 'piapi', size },
+          meta: { model: input.model, provider: 'piapi', size, quality, outputFormat },
         };
       }
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
@@ -451,13 +460,18 @@ export class PiAPIProvider implements AIProvider {
     let completedTask: PiAPITaskStatus | undefined;
     try {
       const published = await this.publisher.publishImageUrl(input.swapImageUrl, 1);
+      const publishedTarget = await this.publisher.publishFileUrl(
+        input.targetVideoUrl,
+        1,
+        contentTypeForUrl(input.targetVideoUrl, 'video/mp4'),
+      );
       const aspectRatio = await this.resolveTargetVideoAspectRatio(input.targetVideoUrl, input.params);
       const payload = {
         model: 'Qubico/video-toolkit',
         task_type: 'face-swap',
         input: {
           swap_image: published.publicUrl,
-          target_video: input.targetVideoUrl,
+          target_video: publishedTarget.publicUrl,
           ...(readString(input.params, 'swap_faces_index') ? { swap_faces_index: readString(input.params, 'swap_faces_index') } : {}),
           ...(readString(input.params, 'target_faces_index') ? { target_faces_index: readString(input.params, 'target_faces_index') } : {}),
         },
@@ -640,6 +654,9 @@ export class PiAPIProvider implements AIProvider {
     let completedTask: PiAPITaskStatus | undefined;
     try {
       const publishedImage = await this.publisher.publishImageUrl(input.inputImageUrl, 1);
+      const publishedDrivingVideo = input.drivingVideoUrl
+        ? await this.publisher.publishFileUrl(input.drivingVideoUrl, 1, contentTypeForUrl(input.drivingVideoUrl, 'video/mp4'))
+        : undefined;
       const aspectRatio = await this.resolveImageAspectRatio(input.inputImageUrl, input.params);
       const isV3 = input.model.includes('3.0');
       const isPro = input.model.endsWith('-pro');
@@ -652,7 +669,7 @@ export class PiAPIProvider implements AIProvider {
         task_type: 'motion_control',
         input: {
           image_url: publishedImage.publicUrl,
-          ...(input.drivingVideoUrl ? { video_url: input.drivingVideoUrl } : {}),
+          ...(publishedDrivingVideo ? { video_url: publishedDrivingVideo.publicUrl } : {}),
           ...(presetMotion ? { preset_motion: presetMotion } : {}),
           prompt: input.prompt ?? '',
           duration: input.durationSec,
@@ -879,6 +896,24 @@ function normalizeAspectRatio(value: string | undefined): string | undefined {
   if (!value) return undefined;
   if (value === 'auto' || value === 'input') return 'auto';
   return SUPPORTED_ASPECT_RATIOS.has(value) ? value : undefined;
+}
+
+function gptImageSizeForAspect(aspect: string | undefined) {
+  const sizeByAspect: Record<string, string> = {
+    '1:1': '1024x1024',
+    '9:16': '1024x1536',
+    '3:4': '1024x1536',
+    '9:21': '1024x1536',
+    '16:9': '1536x1024',
+    '4:3': '1536x1024',
+    '21:9': '1536x1024',
+  };
+  return sizeByAspect[aspect ?? ''] ?? '1024x1024';
+}
+
+function normalizeGptImageOutputFormat(value: string | undefined): 'jpeg' | 'png' | 'webp' {
+  if (value === 'png' || value === 'webp') return value;
+  return 'jpeg';
 }
 
 function normalizeHailuoResolution(value: string | undefined): '768P' | '1080P' {

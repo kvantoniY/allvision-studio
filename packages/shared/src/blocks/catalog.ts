@@ -687,6 +687,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         negative_prompt: { type: 'string', title: 'Негативный промпт', description: 'Compatibility-поле. Nano Banana 2 в PiAPI его не принимает, поэтому worker не отправляет это поле.' },
         strength: { type: 'number', title: 'Сила обработки', minimum: 0, maximum: 1, description: 'Compatibility-поле. Для Nano Banana 2 не отправляется в PiAPI; оставлено для будущих моделей.' },
         output_format: { type: 'string', title: 'Формат результата', enum: ['jpg', 'png', 'webp'], default: 'jpg', description: 'Формат результата. jpg обычно дешевле хранить, png лучше для графики, webp экономит размер файла.' },
+        quality: { type: 'string', title: 'Качество GPT Image', enum: ['standard', 'high'], default: 'standard', description: 'Качество для GPT Image 2. Standard дешевле и используется по умолчанию.' },
         aspect_ratio: aspectRatioSchema,
         resolution: { type: 'string', title: 'Разрешение', enum: ['1K', '2K', '4K'], default: '1K', description: 'Разрешение результата Nano Banana 2. 1K дешевле всего; 4K стоит дороже и дольше обрабатывается.' },
         image_urls: { type: 'array', title: 'Image reference URLs', items: { type: 'string' }, description: 'Optional additional image references for Nano Banana 2.' },
@@ -787,14 +788,15 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
   {
     slug: 'trend-video-transfer',
     title: 'Trend video transfer router',
-    description: 'Runs video face swap, Kling Motion Control or Kling 3.0 Omni for one or two people using the same trend reference video.',
+    description: 'Runs video face swap, Kling Motion Control, Kling 3.0 Omni or Seedance 2.0 Omni for one or two people using the same trend reference video.',
     category: 'video',
-    useWhen: 'Use for trend/dance services where the user chooses between face transfer into a video, repeating motion from that video or experimental Kling Omni reference transfer.',
+    useWhen: 'Use for trend/dance services where the user chooses between face transfer into a video, repeating motion from that video, Kling Omni reference transfer or Seedance Omni reference transfer.',
     compatibleInputs: ['photo', 'two photos', 'trend video reference'],
-    examples: ['User photo + dance video -> face-swap, motion-transfer or Kling Omni.', 'Two user photos + two-person dance reference -> sequential face swap, duo motion-transfer or Kling Omni with two image references.'],
+    examples: ['User photo + dance video -> face-swap, motion-transfer, Kling Omni or Seedance Omni.', 'Two user photos + two-person dance reference -> sequential face swap, duo motion-transfer or Omni reference transfer with two image references.'],
     paramsSchema: objectSchema(
       {
-        mode: { type: 'string', title: 'Mode', enum: ['face_swap', 'motion_transfer', 'kling_omni'], default: 'face_swap' },
+        mode: { type: 'string', title: 'Mode', enum: ['face_swap', 'motion_transfer', 'kling_omni', 'seedance_omni'] },
+        default_mode: { type: 'string', title: 'Default mode', enum: ['face_swap', 'motion_transfer', 'kling_omni', 'seedance_omni'], default: 'face_swap' },
         people_count: { type: 'string', title: 'People count', enum: ['one', 'two'], default: 'one' },
         reference_video: {
           type: 'string',
@@ -816,6 +818,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         face_swap_model: { type: 'string', title: 'Face-swap model', default: 'qubico-video-toolkit' },
         motion_model: { type: 'string', title: 'Motion model', default: 'kling-motion-3.0-std' },
         kling_omni_model: { type: 'string', title: 'Kling Omni model', default: 'kling-3-omni' },
+        seedance_model: { type: 'string', title: 'Seedance Omni model', default: 'seedance-2-omni' },
         portrait_model: { type: 'string', title: 'Duo source image model', default: 'nano-banana' },
         estimatedFrames: { type: 'number', title: 'Estimated face-swap frames', minimum: 1 },
         swap_faces_index: { type: 'string', title: 'Swap face index' },
@@ -832,7 +835,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         prompt: promptSchema,
         duo_prompt: promptSchema,
       },
-      ['mode', 'people_count', 'reference_video'],
+      ['people_count', 'reference_video'],
     ),
     supportedModels: [
       {
@@ -842,7 +845,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         estimatedCostCoins: 160,
         estimatedCostUsd: 1.5,
         provider: 'piapi',
-        description: 'Internal router over Qubico face-swap, Nano Banana, Kling Motion Control and Kling 3.0 Omni.',
+        description: 'Internal router over Qubico face-swap, Nano Banana, Kling Motion Control, Kling 3.0 Omni and Seedance 2.0 Omni.',
         limits: { maxDurationSec: 15 },
       },
     ],
