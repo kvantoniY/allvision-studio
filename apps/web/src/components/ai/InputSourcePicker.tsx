@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
-import { useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
+import { type UserMediaAsset, useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { useUploadChatInputMutation } from '@/store/api/user-chat-api';
 
 export type SelectedInputSource = {
@@ -46,6 +46,21 @@ function isImageAsset(asset: { mimeType?: string | null }) {
   return !asset.mimeType || asset.mimeType.startsWith('image/');
 }
 
+function flattenStudioAssetChoices(items: UserMediaAsset[]): UserMediaAsset[] {
+  return items.flatMap((asset) => {
+    const choices: UserMediaAsset[] = isImageAsset(asset) ? [asset] : [];
+    for (const [index, variation] of (asset.variations ?? []).entries()) {
+      if (!isImageAsset(variation)) continue;
+      choices.push({
+        ...variation,
+        title: `${asset.title} · Вариация ${index + 1}`,
+        kind: asset.kind,
+      });
+    }
+    return choices;
+  });
+}
+
 export function InputSourcePicker({ mediaKind, value, required, compact, iconOnly, onChange }: InputSourcePickerProps) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<PickerTab>('upload');
@@ -58,7 +73,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
   });
 
   const studioItems = useMemo(
-    () => [...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])].filter(isImageAsset),
+    () => flattenStudioAssetChoices([...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])]),
     [avatars.data?.items, locations.data?.items],
   );
 

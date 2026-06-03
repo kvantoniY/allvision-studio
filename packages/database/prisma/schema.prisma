@@ -82,6 +82,7 @@ model Service {
   priceCoinsPro      Int?
   previewImage       String?
   previewVideo       String?
+  previewMode        String  @default("auto")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

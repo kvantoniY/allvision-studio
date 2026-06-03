@@ -28,6 +28,7 @@ export type UserMediaAsset = {
   mimeType: string;
   isActive: boolean;
   sortOrder: number;
+  variations?: UserMediaAsset[];
 };
 
 export type UserMediaAssetsQuery = {

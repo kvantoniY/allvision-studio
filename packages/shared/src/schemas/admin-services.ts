@@ -7,6 +7,9 @@ const booleanFromForm = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const previewModeSchema = z.enum(['auto', 'image', 'video']).default('auto');
+const previewUrlSchema = z.string().trim().min(1).max(2000).nullable().optional();
+
 // Category codes are validated against the ServiceCategoryDef table at runtime in the API layer,
 // not here. Schema just enforces shape: short ASCII identifier.
 export const adminServiceCategorySchema = z
@@ -87,6 +90,9 @@ export const createAdminServiceSchema = z.object({
   userInputForm: z.unknown(),
   priceCoinsStandard: z.coerce.number().int().min(1),
   priceCoinsPro: z.coerce.number().int().min(1),
+  previewImage: previewUrlSchema,
+  previewVideo: previewUrlSchema,
+  previewMode: previewModeSchema,
   isActive: booleanFromForm.optional().default(true),
   isFeatured: booleanFromForm.optional().default(false),
   sortOrder: z.coerce.number().int().min(0).optional(),

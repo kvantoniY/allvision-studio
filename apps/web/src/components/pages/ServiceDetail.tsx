@@ -38,7 +38,7 @@ import { useGetServiceQuery, useLaunchServiceMutation } from '@/store/api/servic
 import { type ProjectListItem, useListProjectsQuery } from '@/store/api/projects-api';
 import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
-import { useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
+import { type UserMediaAsset, useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import { cn } from '@/lib/utils';
@@ -265,6 +265,21 @@ function isImageAsset(asset: { mimeType?: string | null }) {
   return !asset.mimeType || asset.mimeType.startsWith('image/');
 }
 
+function flattenStudioAssetChoices(items: UserMediaAsset[]): MediaAssetOption[] {
+  return items.flatMap((asset) => {
+    const choices: MediaAssetOption[] = isImageAsset(asset) ? [asset] : [];
+    for (const [index, variation] of (asset.variations ?? []).entries()) {
+      if (!isImageAsset(variation)) continue;
+      choices.push({
+        ...variation,
+        title: `${asset.title} · Вариация ${index + 1}`,
+        kind: asset.kind,
+      });
+    }
+    return choices;
+  });
+}
+
 function useFileObjectUrl(file?: File) {
   const [url, setUrl] = useState<string | null>(null);
 
@@ -342,7 +357,7 @@ function ServicePhotoReferencesGroup({
     { skip: !libraryEnabled },
   );
   const studioAssets = useMemo(
-    () => (avatars.data?.items ?? []).filter(isImageAsset),
+    () => flattenStudioAssetChoices(avatars.data?.items ?? []),
     [avatars.data?.items],
   );
   const libraryAssets = useMemo(
@@ -508,7 +523,7 @@ function ServicePhotoInput({
   );
 
   const studioAssets = useMemo(
-    () => (avatars.data?.items ?? []).filter(isImageAsset),
+    () => flattenStudioAssetChoices(avatars.data?.items ?? []),
     [avatars.data?.items],
   );
   const libraryAssets = useMemo(
@@ -1117,12 +1132,15 @@ function projectFallbackPreviewUrl(project: ProjectListItem) {
 
 function projectServicePreviewUrl(project: ProjectListItem) {
   const service = project.service;
+  if (service?.previewMode === 'video' && service.previewVideo) return null;
   return mediaUrl(service?.previewImage ?? service?.coverImage ?? service?.galleryImages?.[0] ?? null)
     ?? projectFallbackPreviewUrl(project);
 }
 
 function projectServicePreviewVideoUrl(project: ProjectListItem) {
-  return mediaUrl(project.service?.previewVideo ?? null);
+  const service = project.service;
+  if (service?.previewMode === 'image') return null;
+  return mediaUrl(service?.previewVideo ?? null);
 }
 
 function GenerationServiceThumb({ project }: { project: ProjectListItem }) {
@@ -1563,7 +1581,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);
-  const previewVideo = selectedPreviewVideo ?? mediaUrl(service.previewVideo);
+  const previewVideo = selectedPreviewVideo ?? (service.previewMode === 'image' ? null : mediaUrl(service.previewVideo));
   const loginHref = `/login?redirect=/services/${service.slug}`;
 
   const setFieldValue = (id: string, value: string) => {

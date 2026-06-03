@@ -105,11 +105,16 @@ function previewFrom(service: PublicService) {
 function ServiceTile({ service }: { service: PublicService }) {
   const previewVideo = mediaUrl(service.previewVideo);
   const previewImage = previewFrom(service);
+  const showVideo = service.previewMode === 'video'
+    ? Boolean(previewVideo)
+    : service.previewMode === 'image'
+      ? false
+      : Boolean(previewVideo);
 
   return (
     <Link href={`/services/${service.slug}`} className="group block">
       <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 transition group-hover:border-amber-400/70">
-        {previewVideo ? (
+        {showVideo && previewVideo ? (
           <video
             src={previewVideo}
             muted

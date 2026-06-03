@@ -18,10 +18,12 @@ import {
   EditableText,
   HomeAdminToolbar,
   HomeMediaEditorModal,
+  HomeServiceSlotEditorModal,
   HomeTextEditorModal,
   type HomeEditorController,
   type HomeEditorPath,
   type HomeMediaEditState,
+  type HomeServiceSlotEditState,
   type HomeTextEditState,
 } from '@/components/pages/HomePageInlineEditor';
 import { useAuth } from '@/hooks/use-auth';
@@ -67,10 +69,16 @@ function mediaUrl(value?: string | null) {
 function serviceMedia(service?: PublicService): HomeMedia | null {
   if (!service) return null;
   const video = mediaUrl(service.previewVideo);
+  const image = mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]);
+  if (service.previewMode === 'image' && image) {
+    return { type: 'image', url: image, alt: service.title };
+  }
+  if (service.previewMode === 'video' && video) {
+    return { type: 'video', url: video, alt: service.title };
+  }
   if (video) {
     return { type: 'video', url: video, alt: service.title };
   }
-  const image = mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]);
   if (image) {
     return { type: 'image', url: image, alt: service.title };
   }
@@ -114,6 +122,7 @@ export function HomePageContent() {
   const [editMode, setEditMode] = useState(false);
   const [textEdit, setTextEdit] = useState<HomeTextEditState | null>(null);
   const [mediaEdit, setMediaEdit] = useState<HomeMediaEditState | null>(null);
+  const [serviceSlotEdit, setServiceSlotEdit] = useState<HomeServiceSlotEditState | null>(null);
   const isAdmin = user?.role === 'ADMIN';
 
   useEffect(() => {
@@ -132,6 +141,7 @@ export function HomePageContent() {
         saving: updateHomePageState.isLoading,
         openTextEditor: setTextEdit,
         openMediaEditor: setMediaEdit,
+        openServiceSlotEditor: setServiceSlotEdit,
       }
     : undefined;
 
@@ -184,6 +194,16 @@ export function HomePageContent() {
         onSave={(path, media) => {
           saveContentValue(path, media);
           setMediaEdit(null);
+        }}
+      />
+      <HomeServiceSlotEditorModal
+        edit={serviceSlotEdit}
+        services={allServices}
+        saving={updateHomePageState.isLoading}
+        onClose={() => setServiceSlotEdit(null)}
+        onSave={(path, serviceSlug) => {
+          saveContentValue(path, serviceSlug);
+          setServiceSlotEdit(null);
         }}
       />
     </main>
@@ -375,9 +395,9 @@ function TrendingServiceCard({
   service?: PublicService;
   isAuthed: boolean;
 }) {
-  const media = slot.media ?? serviceMedia(service);
-  const title = slot.title;
-  const description = slot.description;
+  const title = service?.title ?? slot.title ?? 'Услуга';
+  const description = service?.shortDesc ?? slot.description ?? 'Выберите услугу из каталога';
+  const media = serviceMedia(service) ?? slot.media ?? { type: 'image' as const, url: '/mock_preview.png', alt: title };
   const price = service ? giftServicePriceFrom(service) : null;
 
   return (
@@ -388,26 +408,38 @@ function TrendingServiceCard({
     >
       <article className="h-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/80 transition duration-300 hover:-translate-y-1 hover:border-amber-300/60">
         <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
-          <EditableMedia editor={editor} path={['trending', 'slots', slotIndex, 'media']} label={`Медиа карточки: ${title}`} media={media}>
-            <MediaBlock media={media} className="transition duration-500 group-hover:scale-105" />
-          </EditableMedia>
+          <MediaBlock media={media} className="transition duration-500 group-hover:scale-105" />
           <div className={cn('absolute left-3 top-3 rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur', toneClasses[slot.tone])}>
             Тренд
           </div>
+          {editor?.enabled && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                editor.openServiceSlotEditor({
+                  path: ['trending', 'slots', slotIndex, 'serviceSlug'],
+                  label: `Услуга карточки: ${title}`,
+                  value: slot.serviceSlug,
+                });
+              }}
+              className="absolute right-3 top-3 z-30 inline-flex items-center gap-2 rounded-full border border-amber-300/50 bg-slate-950/90 px-3 py-1.5 text-xs font-semibold text-amber-100 shadow-lg shadow-black/30 backdrop-blur transition hover:bg-amber-400 hover:text-slate-950"
+            >
+              <Library className="h-3.5 w-3.5" />
+              Услуга
+            </button>
+          )}
         </div>
         <div className="space-y-2.5 p-4">
           <div className="flex items-start justify-between gap-3">
             <h3 className="line-clamp-2 min-w-0 text-base font-bold text-white" {...fieldAttrs(`trending-services.${slot.slotId}`, 'title')}>
-              <EditableText editor={editor} path={['trending', 'slots', slotIndex, 'title']} label="Название трендовой карточки" value={title} multiline>
-                {title}
-              </EditableText>
+              {title}
             </h3>
             <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-amber-300 transition group-hover:translate-x-1" />
           </div>
           <p className="line-clamp-2 text-sm leading-5 text-slate-400" {...fieldAttrs(`trending-services.${slot.slotId}`, 'description')}>
-            <EditableText editor={editor} path={['trending', 'slots', slotIndex, 'description']} label="Описание трендовой карточки" value={description} multiline>
-              {description}
-            </EditableText>
+            {description}
           </p>
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="font-semibold text-amber-300">{price ? `от ${price} токенов` : 'быстрый старт'}</span>

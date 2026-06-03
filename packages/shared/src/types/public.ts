@@ -16,6 +16,7 @@ export type PublicService = {
   galleryImages: string[];
   previewImage: string | null;
   previewVideo: string | null;
+  previewMode: string;
   isFeatured: boolean;
   userInputForm?: unknown;
   processingType: ProcessingType;

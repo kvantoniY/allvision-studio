@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import type { HomeMedia } from '@/lib/home-landing-content';
+import type { PublicService } from '@allvision/shared';
 import {
   useCreateAdminMediaAssetMutation,
   useListAdminMediaAssetsQuery,
@@ -32,11 +33,18 @@ export type HomeMediaEditState = {
   media: HomeMedia;
 };
 
+export type HomeServiceSlotEditState = {
+  path: HomeEditorPath;
+  label: string;
+  value: string;
+};
+
 export type HomeEditorController = {
   enabled: boolean;
   saving: boolean;
   openTextEditor: (edit: HomeTextEditState) => void;
   openMediaEditor: (edit: HomeMediaEditState) => void;
+  openServiceSlotEditor: (edit: HomeServiceSlotEditState) => void;
 };
 
 export function HomeAdminToolbar({
@@ -370,6 +378,83 @@ export function HomeMediaEditorModal({
   );
 }
 
+export function HomeServiceSlotEditorModal({
+  edit,
+  services,
+  saving,
+  onClose,
+  onSave,
+}: {
+  edit: HomeServiceSlotEditState | null;
+  services: PublicService[];
+  saving: boolean;
+  onClose: () => void;
+  onSave: (path: HomeEditorPath, serviceSlug: string) => void;
+}) {
+  const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    if (edit) setSearch('');
+  }, [edit]);
+
+  if (!edit) return null;
+
+  const visible = services.filter((service) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return service.title.toLowerCase().includes(q) || service.slug.toLowerCase().includes(q);
+  });
+
+  return (
+    <EditorOverlay title={edit.label} onClose={onClose} wide>
+      <Input
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        className="mb-4 border-slate-700 bg-slate-950 text-slate-100"
+        placeholder="Поиск услуги"
+        autoFocus
+      />
+      <div className="grid max-h-[58vh] gap-3 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
+        {visible.map((service) => {
+          const media = serviceMediaFromPublicService(service);
+          const selected = service.slug === edit.value;
+          return (
+            <button
+              key={service.id}
+              type="button"
+              onClick={() => onSave(edit.path, service.slug)}
+              disabled={saving}
+              className={cn(
+                'overflow-hidden rounded-lg border bg-slate-950 text-left transition hover:border-amber-300',
+                selected ? 'border-amber-300 ring-1 ring-amber-300/40' : 'border-slate-800',
+              )}
+            >
+              <div className="aspect-[16/10] bg-slate-900">
+                {media?.type === 'video' ? (
+                  <video src={media.url} className="h-full w-full object-cover" muted preload="metadata" />
+                ) : media?.type === 'image' ? (
+                  <img src={media.url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full place-items-center text-xs text-slate-500">Нет превью</div>
+                )}
+              </div>
+              <div className="p-3">
+                <div className="line-clamp-1 text-sm font-semibold text-white">{service.title}</div>
+                <div className="mt-1 truncate text-xs text-slate-500">{service.slug}</div>
+              </div>
+            </button>
+          );
+        })}
+        {visible.length === 0 && (
+          <div className="rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-400">
+            Услуги не найдены.
+          </div>
+        )}
+      </div>
+    </EditorOverlay>
+  );
+}
+
 function EditorOverlay({
   title,
   wide,
@@ -421,4 +506,14 @@ function mediaFromAsset(asset: AdminMediaAsset): HomeMedia {
     url: asset.publicUrl,
     alt: asset.title,
   };
+}
+
+function serviceMediaFromPublicService(service: PublicService): HomeMedia | null {
+  const image = service.previewImage ?? service.coverImage ?? service.galleryImages[0];
+  const video = service.previewVideo;
+  if (service.previewMode === 'image' && image) return { type: 'image', url: image, alt: service.title };
+  if (service.previewMode === 'video' && video) return { type: 'video', url: video, alt: service.title };
+  if (video) return { type: 'video', url: video, alt: service.title };
+  if (image) return { type: 'image', url: image, alt: service.title };
+  return null;
 }

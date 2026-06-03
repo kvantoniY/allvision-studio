@@ -1,0 +1,2 @@
+ALTER TABLE "Service"
+ADD COLUMN "previewMode" TEXT NOT NULL DEFAULT 'auto';

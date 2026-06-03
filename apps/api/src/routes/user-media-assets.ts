@@ -84,35 +84,56 @@ function staticUrlForKey(key: string | null | undefined) {
   return `${baseUrl.replace(/\/+$/, '')}/static/${key.replace(/^\/+/, '')}`;
 }
 
-function selectAsset() {
+const assetBaseSelect = {
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  kind: true,
+  title: true,
+  description: true,
+  tags: true,
+  storageKey: true,
+  publicUrl: true,
+  thumbnailKey: true,
+  ownerUserId: true,
+  parentAssetId: true,
+  durationSec: true,
+  width: true,
+  height: true,
+  frameCount: true,
+  fileSize: true,
+  mimeType: true,
+  isActive: true,
+  sortOrder: true,
+} as const;
+
+function selectAsset(): Prisma.MediaAssetSelect {
   return {
-    id: true,
-    createdAt: true,
-    updatedAt: true,
-    kind: true,
-    title: true,
-    description: true,
-    tags: true,
-    storageKey: true,
-    publicUrl: true,
-    thumbnailKey: true,
-    ownerUserId: true,
-    parentAssetId: true,
-    durationSec: true,
-    width: true,
-    height: true,
-    frameCount: true,
-    fileSize: true,
-    mimeType: true,
-    isActive: true,
-    sortOrder: true,
+    ...assetBaseSelect,
     _count: { select: { variations: true } },
-  } as const;
+  };
 }
 
-function toAssetResponse<T extends { thumbnailKey: string | null; _count?: { variations: number } }>(asset: T) {
-  const { _count, ...rest } = asset;
-  return { ...rest, thumbnailUrl: staticUrlForKey(asset.thumbnailKey), variationsCount: _count?.variations ?? 0 };
+function selectAssetWithVariations(): Prisma.MediaAssetSelect {
+  return {
+    ...assetBaseSelect,
+    _count: { select: { variations: true } },
+    variations: {
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      select: selectAsset(),
+    },
+  };
+}
+
+function toAssetResponse<T extends { thumbnailKey: string | null; _count?: { variations: number }; variations?: Array<{ thumbnailKey: string | null; _count?: { variations: number } }> }>(asset: T): any {
+  const { _count, variations, ...rest } = asset;
+  return {
+    ...rest,
+    thumbnailUrl: staticUrlForKey(asset.thumbnailKey),
+    variationsCount: _count?.variations ?? 0,
+    ...(variations ? { variations: variations.map(toAssetResponse) } : {}),
+  };
 }
 
 function nanoBananaCostCoins() {
@@ -216,6 +237,7 @@ userMediaAssetsRouter.get('/', async (req: Request, res: Response, next: NextFun
     const query = listQuerySchema.parse(req.query);
     const where: Prisma.MediaAssetWhereInput = {
       ownerUserId: req.user!.id,
+      parentAssetId: null,
       ...(query.kind ? { kind: query.kind } : { kind: { in: [...USER_MEDIA_KINDS] } }),
       ...(query.tag ? { tags: { has: query.tag } } : {}),
       ...(query.search
@@ -233,7 +255,7 @@ userMediaAssetsRouter.get('/', async (req: Request, res: Response, next: NextFun
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
         skip: (query.page - 1) * query.limit,
         take: query.limit,
-        select: selectAsset(),
+        select: selectAssetWithVariations(),
       }),
       prisma.mediaAsset.count({ where }),
     ]);
@@ -433,7 +455,7 @@ userMediaAssetsRouter.get('/:id', async (req: Request, res: Response, next: Next
   try {
     const asset = await prisma.mediaAsset.findFirst({
       where: { id: req.params.id, ownerUserId: req.user!.id },
-      select: selectAsset(),
+      select: selectAssetWithVariations(),
     });
     if (!asset) throw new HttpError(404, 'MEDIA_ASSET_NOT_FOUND', 'Медиа-файл не найден');
     res.json({ asset: toAssetResponse(asset) });

@@ -209,14 +209,18 @@ describe('seed system users', () => {
     expect(mockMigrateMediaAssets).toHaveBeenCalledTimes(1);
   });
 
-  it('runs system users again when catalog is already populated', async () => {
+  it('runs system users again without seeding services on normal runs', async () => {
     setSystemEnv('readonly-secret');
     await runSeed();
     mockPrisma.user.findUnique.mockClear();
+    mockPrisma.service.create.mockClear();
+    mockPrisma.service.update.mockClear();
 
     await runSeed();
 
-    expect(mockState.services.size).toBeGreaterThan(0);
+    expect(mockState.services.size).toBe(0);
+    expect(mockPrisma.service.create).not.toHaveBeenCalled();
+    expect(mockPrisma.service.update).not.toHaveBeenCalled();
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: 'claude-readonly@allvision-pulse.ru' },
     });
@@ -242,7 +246,7 @@ describe('seed system users', () => {
     process.env.READONLY_ADMIN_PASSWORD = 'readonly-secret';
     await runSeed();
 
-    expect(mockState.services.size).toBeGreaterThan(0);
+    expect(mockState.services.size).toBe(0);
     expect(mockState.users.get('claude-readonly@allvision-pulse.ru')?.role).toBe('READONLY_ADMIN');
     expect(logSpy.mock.calls.flat().join('\n')).toContain(
       '[seed] system user ensured: claude-readonly@allvision-pulse.ru (role: READONLY_ADMIN)',

@@ -33,6 +33,7 @@ const publicServiceSelect = {
   galleryImages: true,
   previewImage: true,
   previewVideo: true,
+  previewMode: true,
   isFeatured: true,
   processingType: true,
   sortOrder: true,

@@ -3,7 +3,7 @@
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ImageIcon, Loader2, MapPin, Plus, Trash2, Upload, Wand2 } from 'lucide-react';
+import { ImageIcon, Loader2, MapPin, Plus, RotateCcw, Trash2, Upload, Video, Wand2 } from 'lucide-react';
 import { buildStylePresetPrompt, getBlockCatalogItem, type PublicStylePreset } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +16,8 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
 import { useGetStylePresetsQuery } from '@/store/api/public-api';
-import { useListProjectsQuery } from '@/store/api/projects-api';
+import { type ProjectListItem, useListProjectsQuery } from '@/store/api/projects-api';
+import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL } from '@/components/dashboard/labels';
 import {
   type UserMediaAsset,
   type UserMediaKind,
@@ -45,6 +46,13 @@ const kindLabels: Record<UserMediaKind, { title: string; empty: string; icon: ty
 
 const generationCost =
   getBlockCatalogItem('image-edit')?.supportedModels.find((model) => model.slug === 'nano-banana')?.estimatedCostCoins ?? 10;
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
+
+function mediaUrl(value?: string | null) {
+  if (!value) return null;
+  if (value.startsWith('/static/')) return `${API_URL}${value}`;
+  return value;
+}
 
 function apiErrorMessage(error: unknown) {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Операция не выполнена';
@@ -78,6 +86,10 @@ function assetRefsFromInputs(value: unknown): string[] {
   return refs;
 }
 
+function flattenAssets(items: UserMediaAsset[]) {
+  return items.flatMap((asset) => [asset, ...(asset.variations ?? [])]);
+}
+
 export default function StudioPage() {
   return (
     <AuthGuard>
@@ -95,7 +107,7 @@ function StudioContent() {
   const locations = useListUserMediaAssetsQuery({ kind: 'user-location', limit: 100 });
   const projects = useListProjectsQuery({ page: 1, limit: 30 });
   const assetTitleById = useMemo(
-    () => new Map([...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])].map((asset) => [asset.id, asset.title])),
+    () => new Map(flattenAssets([...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])]).map((asset) => [asset.id, asset.title])),
     [avatars.data?.items, locations.data?.items],
   );
 
@@ -157,6 +169,13 @@ function StudioContent() {
         />
       )}
       {tab === 'history' && (
+        <StudioHistory
+          projects={projects.data?.items ?? []}
+          isLoading={projects.isLoading}
+          assetTitleById={assetTitleById}
+        />
+      )}
+      {false && tab === 'history' && (
         <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
           <CardContent className="p-0">
             <div className="divide-y divide-slate-800">
@@ -187,6 +206,121 @@ function StudioContent() {
       {modal?.action === 'upload' && <UploadAssetModal kind={modal.kind} onClose={() => setModal(null)} />}
       {modal?.action === 'generate' && <GenerateAssetModal kind={modal.kind} onClose={() => setModal(null)} />}
       {modal?.action === 'variation' && <VariationAssetModal asset={modal.asset} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+function projectMedia(project: ProjectListItem): { type: 'image' | 'video'; url: string } | null {
+  const resultVideo = mediaUrl(project.resultVideo);
+  if (resultVideo) return { type: 'video', url: resultVideo };
+  if (project.resultThumbnail || project.resultImage) {
+    return { type: 'image', url: mediaUrl(project.resultThumbnail ?? project.resultImage)! };
+  }
+  const service = project.service;
+  const serviceImage = mediaUrl(service?.previewImage ?? service?.coverImage ?? service?.galleryImages?.[0] ?? null);
+  const serviceVideo = mediaUrl(service?.previewVideo ?? null);
+  if (service?.previewMode !== 'image' && serviceVideo) return { type: 'video', url: serviceVideo };
+  if (serviceImage) return { type: 'image', url: serviceImage };
+  const inputImage = mediaUrl(project.inputImages[0]);
+  if (inputImage) return { type: 'image', url: inputImage };
+  return null;
+}
+
+function retryHref(project: ProjectListItem) {
+  if (project.service?.slug) return `/services/${project.service.slug}`;
+  if (project.mode === 'free-chat') return '/ai';
+  if (project.mode === 'library-generation') return '/studio';
+  return '/services';
+}
+
+function projectModeLabel(project: ProjectListItem) {
+  if (project.mode === 'library-generation') return 'Генерация для Студии';
+  if (project.mode === 'free-chat') return 'Allvision AI';
+  return project.service?.title ?? 'Услуга';
+}
+
+function StudioHistory({
+  projects,
+  isLoading,
+  assetTitleById,
+}: {
+  projects: ProjectListItem[];
+  isLoading: boolean;
+  assetTitleById: Map<string, string>;
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Card key={index} className="h-64 min-w-0 border-slate-800 bg-slate-900" />
+        ))}
+      </div>
+    );
+  }
+
+  if (projects.length === 0) {
+    return (
+      <Card className="min-w-0 overflow-hidden border-dashed border-slate-800 bg-slate-900">
+        <CardContent className="p-6 text-sm text-slate-500">История пока пустая.</CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {projects.map((project) => {
+        const media = projectMedia(project);
+        const usedAssets = assetRefsFromInputs(project.userInputs)
+          .map((assetId) => assetTitleById.get(assetId))
+          .filter((title): title is string => Boolean(title));
+        return (
+          <Card key={project.id} className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+            <div className="relative aspect-video bg-slate-950">
+              <Link href={`/dashboard/projects/${project.id}`} className="block h-full">
+                {media?.type === 'video' ? (
+                  <video src={media.url} muted preload="metadata" className="h-full w-full object-cover" />
+                ) : media?.type === 'image' ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={media.url} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full place-items-center text-slate-600">
+                    <Video className="h-10 w-10" />
+                  </div>
+                )}
+              </Link>
+              <Badge className={cn('absolute right-2 top-2 rounded-md px-2 py-1 text-xs font-medium', PROJECT_STATUS_COLOR[project.status])}>
+                {PROJECT_STATUS_LABEL[project.status]}
+              </Badge>
+            </div>
+            <CardContent className="space-y-3 p-4">
+              <Link href={`/dashboard/projects/${project.id}`} className="block">
+                <div className="line-clamp-1 font-semibold text-white">{project.title}</div>
+                <div className="mt-1 text-xs text-slate-500">
+                  {formatDate(project.createdAt)} · {projectModeLabel(project)}
+                </div>
+              </Link>
+              <div className="space-y-1 text-xs text-slate-500">
+                <div>{project.tokensCost} токенов</div>
+                {usedAssets.length > 0 && <div className="line-clamp-1">Референс: {usedAssets.join(', ')}</div>}
+                {project.errorMessage && <div className="line-clamp-2 text-amber-200">{project.errorMessage}</div>}
+              </div>
+              {project.status === 'PROCESSING' && (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                  <div className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500" style={{ width: `${project.progress ?? 0}%` }} />
+                </div>
+              )}
+              {project.status === 'FAILED' && (
+                <Button asChild size="sm" variant="outline" className="w-full border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20">
+                  <Link href={retryHref(project)}>
+                    <RotateCcw className="h-4 w-4" />
+                    Повторить
+                  </Link>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }
@@ -253,9 +387,12 @@ function AssetSection({
 function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation: () => void }) {
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(asset.title);
+  const [selectedId, setSelectedId] = useState(asset.id);
   const [updateAsset] = useUpdateUserMediaAssetMutation();
   const [deleteAsset] = useDeleteUserMediaAssetMutation();
-  const isVideo = asset.mimeType.startsWith('video/');
+  const variants = [asset, ...(asset.variations ?? [])];
+  const selectedAsset = variants.find((item) => item.id === selectedId) ?? asset;
+  const isVideo = selectedAsset.mimeType.startsWith('video/');
 
   const save = async () => {
     try {
@@ -281,10 +418,10 @@ function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation:
     <Card className="group min-w-0 overflow-hidden border-slate-800 bg-slate-900">
       <div className="relative aspect-square bg-slate-950">
         {isVideo ? (
-          <video src={asset.publicUrl} className="h-full w-full object-cover" muted playsInline />
+          <video src={selectedAsset.publicUrl} className="h-full w-full object-cover" muted playsInline />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+          <img src={selectedAsset.thumbnailUrl || selectedAsset.publicUrl} alt="" className="h-full w-full object-cover" />
         )}
         <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/80 via-black/10 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
           <div className="flex w-full gap-2">
@@ -305,8 +442,27 @@ function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation:
           </div>
         ) : (
           <div>
-            <div className="truncate font-semibold text-white">{asset.title}</div>
-            <div className="mt-1 text-xs text-slate-500">{formatDate(asset.createdAt)} · {originLabel(asset)}</div>
+            <div className="truncate font-semibold text-white">{selectedAsset.title}</div>
+            <div className="mt-1 text-xs text-slate-500">{formatDate(selectedAsset.createdAt)} · {originLabel(selectedAsset)}</div>
+          </div>
+        )}
+        {variants.length > 1 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {variants.map((variant, index) => (
+              <button
+                key={variant.id}
+                type="button"
+                onClick={() => setSelectedId(variant.id)}
+                className={cn(
+                  'h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-slate-950',
+                  selectedId === variant.id ? 'border-violet-400 ring-1 ring-violet-400/50' : 'border-slate-800',
+                )}
+                title={index === 0 ? 'Основной образ' : `Вариация ${index}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={variant.thumbnailUrl || variant.publicUrl} alt="" className="h-full w-full object-cover" />
+              </button>
+            ))}
           </div>
         )}
         <Button type="button" variant="outline" size="sm" className="w-full" disabled>

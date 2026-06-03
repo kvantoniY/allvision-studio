@@ -17,6 +17,7 @@ export type ProjectService = {
   galleryImages?: string[];
   previewImage?: string | null;
   previewVideo?: string | null;
+  previewMode?: string | null;
 };
 
 export type ProjectDetails = Project & {

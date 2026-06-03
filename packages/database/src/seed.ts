@@ -2294,23 +2294,23 @@ async function ensureUser(options: EnsureUserOptions) {
 }
 
 async function ensureCatalog(options: SeedOptions) {
+  if (!options.includeDevCatalog) {
+    console.log('[seed] catalog seed disabled; services are managed through admin UI');
+    return;
+  }
+
   const serviceCountBefore = await prisma.service.count();
-  const pilotServices = await seedPilotServices();
 
   let legacyServices = 0;
   let trends = 0;
   let scenarioTemplateCount = 0;
-  if (options.includeDevCatalog) {
-    const devCatalog = await seedDevCatalog();
-    legacyServices = devCatalog.legacyServices;
-    trends = devCatalog.trends;
-    scenarioTemplateCount = devCatalog.scenarioTemplates;
-  }
+  const devCatalog = await seedDevCatalog();
+  legacyServices = devCatalog.legacyServices;
+  trends = devCatalog.trends;
+  scenarioTemplateCount = devCatalog.scenarioTemplates;
 
   if (
     serviceCountBefore > 0
-    && pilotServices.created === 0
-    && pilotServices.patched === 0
     && legacyServices === 0
     && trends === 0
     && scenarioTemplateCount === 0
@@ -2320,7 +2320,7 @@ async function ensureCatalog(options: SeedOptions) {
   }
 
   console.log(
-    `[seed] catalog ensured: ${pilotServices.created} pilot services created, ${pilotServices.patched} patched, ${legacyServices} legacy services, ${trends} trends, ${scenarioTemplateCount} scenario templates`,
+    `[seed] dev catalog ensured: ${legacyServices} legacy services, ${trends} trends, ${scenarioTemplateCount} scenario templates`,
   );
 }
 

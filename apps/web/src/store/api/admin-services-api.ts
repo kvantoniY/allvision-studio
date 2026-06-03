@@ -64,6 +64,7 @@ export type AdminService = {
   priceCoinsPro: number | null;
   previewImage: string | null;
   previewVideo: string | null;
+  previewMode: 'auto' | 'image' | 'video';
   coverImage: string | null;
   isActive: boolean;
   isFeatured: boolean;

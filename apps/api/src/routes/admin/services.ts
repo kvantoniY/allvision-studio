@@ -42,7 +42,8 @@ function storageKeyFromUrl(value: string | null | undefined): string | null {
   const marker = '/static/';
   const index = value.indexOf(marker);
   if (index === -1) return null;
-  return decodeURIComponent(value.slice(index + marker.length));
+  const key = decodeURIComponent(value.slice(index + marker.length));
+  return key.startsWith('service-assets/') ? key : null;
 }
 
 async function deleteStorageKey(key: string | null) {
@@ -175,6 +176,8 @@ adminServicesRouter.post('/', uploadServiceAssets, async (req: Request, res: Res
       ? await fileService.uploadServicePreview(previewVideo.buffer, previewVideo.mimetype, 'video')
       : undefined;
     if (video) uploaded.push(video);
+    const selectedPreviewImage = image?.url ?? body.previewImage ?? null;
+    const selectedPreviewVideo = video?.url ?? body.previewVideo ?? null;
 
     const categoryDef = await prisma.serviceCategoryDef.findUnique({ where: { code: body.category } });
     if (!categoryDef) {
@@ -194,7 +197,7 @@ adminServicesRouter.post('/', uploadServiceAssets, async (req: Request, res: Res
           category: body.category,
           priceTokens: body.priceCoinsStandard,
           costUsd: 0,
-          coverImage: image?.url ?? null,
+          coverImage: selectedPreviewImage,
           galleryImages: [],
           isActive: body.isActive,
           isFeatured: body.isFeatured,
@@ -207,8 +210,9 @@ adminServicesRouter.post('/', uploadServiceAssets, async (req: Request, res: Res
           userInputForm: body.userInputForm as Prisma.InputJsonValue,
           priceCoinsStandard: body.priceCoinsStandard,
           priceCoinsPro: body.priceCoinsPro,
-          previewImage: image?.url ?? null,
-          previewVideo: video?.url ?? null,
+          previewImage: selectedPreviewImage,
+          previewVideo: selectedPreviewVideo,
+          previewMode: body.previewMode,
         },
       });
       res.status(201).json({ service });
@@ -261,6 +265,7 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
     if (body.userInputForm !== undefined) data.userInputForm = body.userInputForm as Prisma.InputJsonValue;
     if (body.isActive !== undefined) data.isActive = body.isActive;
     if (body.isFeatured !== undefined) data.isFeatured = body.isFeatured;
+    if (body.previewMode !== undefined) data.previewMode = body.previewMode;
 
     if (previewImage) {
       const image = await fileService.uploadServicePreview(previewImage.buffer, previewImage.mimetype, 'image');
@@ -274,6 +279,13 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
       data.coverImage = null;
       const oldKey = storageKeyFromUrl(current.previewImage ?? current.coverImage);
       if (oldKey) oldKeys.push(oldKey);
+    } else if (body.previewImage !== undefined) {
+      data.previewImage = body.previewImage;
+      data.coverImage = body.previewImage;
+      if ((current.previewImage ?? null) !== (body.previewImage ?? null)) {
+        const oldKey = storageKeyFromUrl(current.previewImage ?? current.coverImage);
+        if (oldKey) oldKeys.push(oldKey);
+      }
     }
 
     if (previewVideo) {
@@ -286,6 +298,12 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
       data.previewVideo = null;
       const oldKey = storageKeyFromUrl(current.previewVideo);
       if (oldKey) oldKeys.push(oldKey);
+    } else if (body.previewVideo !== undefined) {
+      data.previewVideo = body.previewVideo;
+      if ((current.previewVideo ?? null) !== (body.previewVideo ?? null)) {
+        const oldKey = storageKeyFromUrl(current.previewVideo);
+        if (oldKey) oldKeys.push(oldKey);
+      }
     }
 
     try {

@@ -76,6 +76,10 @@ import {
   useTestRunAdminServiceMutation,
   useUpdateAdminServiceMutation,
 } from '@/store/api/admin-services-api';
+import {
+  type AdminMediaAsset,
+  useListAdminMediaAssetsQuery,
+} from '@/store/api/admin-media-assets-api';
 import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '@/store/api/admin-settings-api';
 import { useListAdminServiceCategoriesQuery } from '@/store/api/admin-service-categories-api';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
@@ -125,6 +129,7 @@ type FormDraft = {
   category: ServiceCategory;
   priceCoinsStandard: number;
   priceCoinsPro: number;
+  previewMode: 'auto' | 'image' | 'video';
   isActive: boolean;
   isFeatured: boolean;
   pipelineConfig: PipelineStep[];
@@ -179,6 +184,7 @@ function initialDraft(service?: AdminService): FormDraft {
     category: normaliseCategory(service?.category),
     priceCoinsStandard: pro,
     priceCoinsPro: pro,
+    previewMode: service?.previewMode ?? 'auto',
     isActive: service?.isActive ?? true,
     isFeatured: service?.isFeatured ?? false,
     pipelineConfig: normalisePipeline(service?.pipelineConfig),
@@ -569,6 +575,58 @@ function validationErrors(steps: PipelineStep[], fields: UserInputField[]) {
 function fileName(file: File | null) {
   if (!file) return null;
   return `${file.name} (${Math.round(file.size / 1024)} KB)`;
+}
+
+function PreviewAssetPicker({
+  assets,
+  isLoading,
+  selectedUrl,
+  onSelect,
+}: {
+  assets: AdminMediaAsset[];
+  isLoading?: boolean;
+  selectedUrl?: string | null;
+  onSelect: (asset: AdminMediaAsset) => void;
+}) {
+  return (
+    <div className="rounded-md border border-zinc-800 bg-zinc-950 p-2">
+      <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Медиа-библиотека</div>
+      {isLoading ? (
+        <div className="py-4 text-center text-xs text-slate-500">Загружаю медиа...</div>
+      ) : assets.length === 0 ? (
+        <div className="py-4 text-center text-xs text-slate-500">Нет подходящих файлов</div>
+      ) : (
+        <div className="grid max-h-44 gap-2 overflow-y-auto sm:grid-cols-2">
+          {assets.map((asset) => {
+            const selected = selectedUrl === asset.publicUrl;
+            return (
+              <button
+                key={asset.id}
+                type="button"
+                onClick={() => onSelect(asset)}
+                className={cn(
+                  'grid grid-cols-[56px_1fr] gap-2 rounded-md border bg-zinc-900 p-1.5 text-left transition hover:border-violet-400',
+                  selected ? 'border-violet-400 ring-1 ring-violet-400/40' : 'border-zinc-800',
+                )}
+              >
+                <div className="h-14 overflow-hidden rounded bg-black">
+                  {asset.mimeType.startsWith('video/') ? (
+                    <video src={asset.publicUrl} className="h-full w-full object-cover" muted preload="metadata" />
+                  ) : (
+                    <img src={asset.publicUrl} alt="" className="h-full w-full object-cover" />
+                  )}
+                </div>
+                <div className="min-w-0 self-center">
+                  <div className="truncate text-xs font-semibold text-slate-100">{asset.title}</div>
+                  <div className="mt-1 truncate text-[11px] text-slate-500">{asset.kind}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function buildMockUserInputs(fields: UserInputField[] | null | undefined) {
@@ -1761,6 +1819,8 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const [draft, setDraft] = useState<FormDraft>(() => initialDraft(service));
   const [previewImage, setPreviewImage] = useState<File | null>(null);
   const [previewVideo, setPreviewVideo] = useState<File | null>(null);
+  const [previewImageUrl, setPreviewImageUrl] = useState(service?.previewImage ?? '');
+  const [previewVideoUrl, setPreviewVideoUrl] = useState(service?.previewVideo ?? '');
   const [removeImage, setRemoveImage] = useState(false);
   const [removeVideo, setRemoveVideo] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -1771,6 +1831,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const [testRun, testRunState] = useTestRunAdminServiceMutation();
   const settings = useGetAdminSettingsQuery();
   const categoriesQuery = useListAdminServiceCategoriesQuery();
+  const mediaAssetsQuery = useListAdminMediaAssetsQuery({ page: 1, limit: 100, isActive: true });
   const availableCategories = categoriesQuery.data?.items ?? [];
   const categoriesLoading = categoriesQuery.isLoading;
   useEffect(() => {
@@ -1796,8 +1857,18 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
     () => serviceMargin(draft.priceCoinsPro, pricingSummary.pro.costUsd, usdToRub),
     [draft.priceCoinsPro, pricingSummary.pro.costUsd, usdToRub],
   );
-  const imagePreviewUrl = useMemo(() => (previewImage ? URL.createObjectURL(previewImage) : null), [previewImage]);
-  const videoPreviewUrl = useMemo(() => (previewVideo ? URL.createObjectURL(previewVideo) : null), [previewVideo]);
+  const imageObjectUrl = useMemo(() => (previewImage ? URL.createObjectURL(previewImage) : null), [previewImage]);
+  const videoObjectUrl = useMemo(() => (previewVideo ? URL.createObjectURL(previewVideo) : null), [previewVideo]);
+  const imagePreviewUrl = removeImage ? null : (imageObjectUrl ?? previewImageUrl) || null;
+  const videoPreviewUrl = removeVideo ? null : (videoObjectUrl ?? previewVideoUrl) || null;
+  const imageAssets = useMemo(
+    () => (mediaAssetsQuery.data?.items ?? []).filter((asset) => asset.mimeType.startsWith('image/')),
+    [mediaAssetsQuery.data?.items],
+  );
+  const videoAssets = useMemo(
+    () => (mediaAssetsQuery.data?.items ?? []).filter((asset) => asset.mimeType.startsWith('video/')),
+    [mediaAssetsQuery.data?.items],
+  );
 
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
@@ -1842,6 +1913,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         userInputForm: draft.userInputForm,
         priceCoinsStandard: draft.priceCoinsStandard,
         priceCoinsPro: draft.priceCoinsPro,
+        previewImage: removeImage ? null : previewImageUrl || undefined,
+        previewVideo: removeVideo ? null : previewVideoUrl || undefined,
+        previewMode: draft.previewMode,
         isActive: draft.isActive,
         isFeatured: draft.isFeatured,
       }),
@@ -1998,7 +2072,20 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
       </details>
 
-      <Section title="Превью" description="Картинка и/или видео. Если есть оба — на витрине показывается видео. Удалите ненужное, чтобы осталось то превью, которое нужно.">
+      <Section title="Превью" description="Картинка и/или видео. Можно хранить оба файла и выбрать, что показывать на витрине.">
+        <div className="mb-5 max-w-sm space-y-2">
+          <Label htmlFor="previewMode">Что показывать на превью</Label>
+          <select
+            id="previewMode"
+            value={draft.previewMode}
+            onChange={(event) => updateDraft({ previewMode: event.target.value as FormDraft['previewMode'] })}
+            className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+          >
+            <option value="auto">Авто: видео, если есть</option>
+            <option value="image">Фото превью</option>
+            <option value="video">Видео превью</option>
+          </select>
+        </div>
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-2">
               <Label htmlFor="previewImage">Превью-изображение</Label>
@@ -2019,12 +2106,23 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => { setPreviewImage(null); setRemoveImage(true); setDirty(true); }}
+                onClick={() => { setPreviewImage(null); setPreviewImageUrl(''); setRemoveImage(true); setDirty(true); }}
               >
                 <Trash2 className="h-4 w-4" />
                 Удалить изображение
               </Button>
             )}
+            <PreviewAssetPicker
+              assets={imageAssets}
+              isLoading={mediaAssetsQuery.isLoading}
+              selectedUrl={previewImageUrl}
+              onSelect={(asset) => {
+                setPreviewImage(null);
+                setPreviewImageUrl(asset.publicUrl);
+                setRemoveImage(false);
+                setDirty(true);
+              }}
+            />
           </div>
           <div className="space-y-2">
               <Label htmlFor="previewVideo">Превью-видео</Label>
@@ -2047,12 +2145,23 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => { setPreviewVideo(null); setRemoveVideo(true); setDirty(true); }}
+                onClick={() => { setPreviewVideo(null); setPreviewVideoUrl(''); setRemoveVideo(true); setDirty(true); }}
               >
                 <Trash2 className="h-4 w-4" />
                 Удалить видео
               </Button>
             )}
+            <PreviewAssetPicker
+              assets={videoAssets}
+              isLoading={mediaAssetsQuery.isLoading}
+              selectedUrl={previewVideoUrl}
+              onSelect={(asset) => {
+                setPreviewVideo(null);
+                setPreviewVideoUrl(asset.publicUrl);
+                setRemoveVideo(false);
+                setDirty(true);
+              }}
+            />
           </div>
         </div>
       </Section>

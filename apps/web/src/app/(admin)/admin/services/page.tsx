@@ -61,8 +61,14 @@ function apiErrorMessage(error: unknown) {
   return (error as ApiError)?.data?.error?.message ?? 'Операция не выполнена';
 }
 
-function previewUrl(service: AdminService) {
-  return service.previewImage ?? service.coverImage;
+function previewMedia(service: AdminService): { type: 'image' | 'video'; url: string } | null {
+  const image = service.previewImage ?? service.coverImage;
+  const video = service.previewVideo;
+  if (service.previewMode === 'image' && image) return { type: 'image', url: image };
+  if (service.previewMode === 'video' && video) return { type: 'video', url: video };
+  if (video) return { type: 'video', url: video };
+  if (image) return { type: 'image', url: image };
+  return null;
 }
 
 function patchData(value: Record<string, unknown>) {
@@ -304,11 +310,14 @@ export default function AdminServicesPage() {
               const pricing = summarizePipelinePricing(service.pipelineConfig, blocks, usdToRub);
               const effectivePrice = service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
               const margin = serviceMargin(effectivePrice, pricing.pro.costUsd, usdToRub);
+              const media = previewMedia(service);
               return (
               <tr key={service.id} className={cn('align-middle transition-colors hover:bg-zinc-900/70', marginRowClass(margin.marginPercent))}>
                 <td className="px-3 py-2.5">
-                  {previewUrl(service) ? (
-                    <img src={previewUrl(service)!} alt="" className="h-11 w-11 rounded-md object-cover" />
+                  {media?.type === 'video' ? (
+                    <video src={media.url} muted preload="metadata" className="h-11 w-11 rounded-md bg-black object-cover" />
+                  ) : media?.type === 'image' ? (
+                    <img src={media.url} alt="" className="h-11 w-11 rounded-md object-cover" />
                   ) : (
                     <div className="h-11 w-11 rounded-md bg-zinc-800" />
                   )}

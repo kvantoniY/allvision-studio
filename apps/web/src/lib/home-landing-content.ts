@@ -7,9 +7,9 @@ export type HomeMedia = {
 export type HomeTrendingSlot = {
   slotId: string;
   serviceSlug: string;
-  title: string;
-  description: string;
-  media: HomeMedia;
+  title?: string;
+  description?: string;
+  media?: HomeMedia;
   tone: 'violet' | 'amber' | 'cyan' | 'rose';
 };
 

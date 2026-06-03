@@ -62,6 +62,7 @@ const projectListSelect = {
       galleryImages: true,
       previewImage: true,
       previewVideo: true,
+      previewMode: true,
     },
   },
 } as const;
@@ -320,6 +321,7 @@ projectsRouter.get('/:id', requireAuth, async (req: Request, res: Response, next
             galleryImages: true,
             previewImage: true,
             previewVideo: true,
+            previewMode: true,
           },
         },
       },
