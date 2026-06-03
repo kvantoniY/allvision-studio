@@ -812,6 +812,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
           description: sourceSelect('image', 'Second person photo', 'Required when people_count is two.'),
         },
         duration: durationSchema,
+        duration_from_reference: { type: 'boolean', title: 'Use reference video duration', default: false },
         face_swap_model: { type: 'string', title: 'Face-swap model', default: 'qubico-video-toolkit' },
         motion_model: { type: 'string', title: 'Motion model', default: 'kling-motion-3.0-std' },
         kling_omni_model: { type: 'string', title: 'Kling Omni model', default: 'kling-3-omni' },

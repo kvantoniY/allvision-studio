@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { getBlockCatalogItem } from '@allvision/shared';
 import type { ProviderRunContext } from '../providers/ai-provider';
@@ -21,6 +22,7 @@ const paramsSchema = z.object({
   primary_photo: z.string().optional(),
   secondary_photo: z.string().optional(),
   duration: z.number().min(1).max(30).optional(),
+  duration_from_reference: z.boolean().optional(),
   face_swap_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   motion_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   kling_omni_model: z.union([z.string(), tierModelParamsSchema]).optional(),
@@ -79,7 +81,7 @@ async function runFaceSwap(parsed: ParsedParams, primaryPhoto: string, ctx: Bloc
   const provider = ctx.getAIProvider();
   const model = stringModel(parsed.face_swap_model, 'qubico-video-toolkit');
   const baseParams = asObject(parsed);
-  const duration = parsed.duration ?? 10;
+  const duration = await referenceDurationSec(parsed, 10, ctx);
   const estimatedFrames = parsed.estimatedFrames ?? Math.max(1, Math.ceil(duration * 24));
 
   if (parsed.people_count === 'two') {
@@ -133,7 +135,7 @@ async function runFaceSwap(parsed: ParsedParams, primaryPhoto: string, ctx: Bloc
 async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
   const motionModel = stringModel(parsed.motion_model, 'kling-motion-3.0-std');
-  const duration = parsed.duration ?? 5;
+  const duration = await referenceDurationSec(parsed, 5, ctx);
   const baseParams = asObject(parsed);
   let inputImageUrl = primaryPhoto;
 
@@ -166,7 +168,7 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
       duration,
       aspect_ratio: parsed.aspect_ratio ?? 'auto',
       resolution: parsed.resolution ?? '720p',
-      keep_original_sound: false,
+      keep_original_sound: true,
     },
     context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
   });
@@ -177,7 +179,7 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
 async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
   const model = stringModel(parsed.kling_omni_model, 'kling-3-omni');
-  const duration = parsed.duration ?? 10;
+  const duration = await referenceDurationSec(parsed, 10, ctx);
   const images = parsed.people_count === 'two'
     ? [primaryPhoto, parsed.secondary_photo!]
     : [primaryPhoto];
@@ -197,13 +199,24 @@ async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: Blo
       aspect_ratio: parsed.aspect_ratio ?? '9:16',
       resolution: parsed.resolution ?? '720p',
       enable_audio: parsed.enable_audio ?? false,
-      keep_original_audio: parsed.keep_original_audio ?? false,
+      keep_original_audio: parsed.keep_original_audio ?? true,
       prefer_multi_shots: parsed.prefer_multi_shots ?? false,
     },
     context: scaledContext(ctx.providerContext, ctx.reportProgress, 5, 95),
   });
   await ctx.reportProgress(100);
   return providerResultToOutput(result, 'video');
+}
+
+async function referenceDurationSec(parsed: ParsedParams, fallback: number, ctx: BlockContext) {
+  if (!parsed.duration_from_reference) return parsed.duration ?? fallback;
+  try {
+    const duration = await ffprobeVideoDuration(parsed.reference_video);
+    if (duration && duration > 0) return Math.max(1, Math.min(15, Math.ceil(duration)));
+  } catch (err) {
+    ctx.logger.warn('[trend-video-transfer] Failed to probe reference duration; using fallback duration', err);
+  }
+  return parsed.duration ?? fallback;
 }
 
 function stringModel(value: string | { standard: string; pro: string } | undefined, fallback: string) {
@@ -254,4 +267,53 @@ function defaultDuoKlingOmniPrompt() {
     'Do not swap sides, do not blend faces, do not copy identities from @video, no text, no watermark.',
     'Photorealistic vertical social video, stable identities across every frame, natural dance movement and believable lighting.',
   ].join(' ');
+}
+
+function ffprobeVideoDuration(url: string): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    };
+    const succeed = (value: number | undefined) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const child = spawn('ffprobe', [
+      '-v',
+      'error',
+      '-show_entries',
+      'format=duration',
+      '-of',
+      'json',
+      url,
+    ], { windowsHide: true });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      fail(new Error('ffprobe timed out'));
+    }, 10_000);
+    child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on('error', fail);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        fail(new Error(Buffer.concat(stderr).toString('utf8') || 'ffprobe failed'));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(Buffer.concat(stdout).toString('utf8')) as { format?: { duration?: string } };
+        const duration = Number(parsed.format?.duration);
+        succeed(Number.isFinite(duration) ? duration : undefined);
+      } catch (err) {
+        fail(err as Error);
+      }
+    });
+  });
 }

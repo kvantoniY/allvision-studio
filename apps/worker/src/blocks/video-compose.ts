@@ -123,7 +123,7 @@ function buildAudioFilter(params: ComposeParams): string {
   if (fadeOut > 0) {
     stages.push(`afade=t=out:st=videoEndMinusFade:d=${fadeOut.toFixed(3)}`);
   }
-  return stages.join(',');
+  return stages.join(',') || 'anull';
 }
 
 async function probeDurationSec(filePath: string): Promise<number | undefined> {
@@ -163,6 +163,42 @@ async function probeDurationSec(filePath: string): Promise<number | undefined> {
   });
 }
 
+async function probeHasAudioStream(filePath: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const child = spawn(
+      'ffprobe',
+      ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=index', '-of', 'json', filePath],
+      { windowsHide: true },
+    );
+    const stdout: Buffer[] = [];
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      resolve(false);
+    }, 5_000);
+    child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
+    child.on('error', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(false);
+    });
+    child.on('close', () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        const parsed = JSON.parse(Buffer.concat(stdout).toString('utf8')) as { streams?: unknown[] };
+        resolve(Array.isArray(parsed.streams) && parsed.streams.length > 0);
+      } catch {
+        resolve(false);
+      }
+    });
+  });
+}
+
 async function composeWithAudio(input: {
   videoPath: string;
   audioPath: string;
@@ -176,8 +212,9 @@ async function composeWithAudio(input: {
     ? filterRaw.replace('videoEndMinusFade', Math.max(0, videoDurationSec - fadeOut).toFixed(3))
     : filterRaw.replace(/,?afade=t=out:[^,]*/, '');
   const keepOriginal = input.params.keep_original_audio === true;
+  const shouldMixOriginal = keepOriginal && await probeHasAudioStream(input.videoPath);
 
-  const filterComplex = keepOriginal
+  const filterComplex = shouldMixOriginal
     ? `[1:a]${filterResolved}[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=2[aout]`
     : `[1:a]${filterResolved}[aout]`;
 
@@ -223,7 +260,7 @@ export const videoComposeBlock: BlockDefinition = {
     try {
       await ctx.reportProgress(25);
       videoPath = await downloadToTemp(videoUrl, '.mp4', ctx.logger);
-      audioPath = await downloadToTemp(audioUrl, '.mp3', ctx.logger);
+      audioPath = await downloadToTemp(audioUrl, '', ctx.logger);
       await ctx.reportProgress(50);
 
       outputDir = await fs.mkdtemp(path.join(os.tmpdir(), 'allvision-compose-out-'));
@@ -265,4 +302,3 @@ export const videoComposeBlock: BlockDefinition = {
     }
   },
 };
-
