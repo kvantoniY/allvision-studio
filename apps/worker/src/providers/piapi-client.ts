@@ -21,6 +21,7 @@ export interface PiAPIClientOptions {
   apiKey: string;
   baseUrl?: string;
   requestTimeoutMs?: number;
+  gptImageTimeoutMs?: number;
 }
 
 const TRANSIENT_RETRIES = 3;
@@ -30,11 +31,18 @@ export class PiAPIClient {
   private baseUrl: string;
   private apiKey: string;
   private requestTimeoutMs: number;
+  // GPT Image идёт синхронным запросом: ответ приходит только когда изображение
+  // уже сгенерировано, а это регулярно дольше обычных 30s. Поэтому отдельный,
+  // более щедрый таймаут, иначе AbortController рвёт соединение, а PiAPI всё
+  // равно успевает выполнить (и списать) задачу.
+  private gptImageTimeoutMs: number;
 
   constructor(options: PiAPIClientOptions) {
     this.apiKey = options.apiKey;
     this.baseUrl = (options.baseUrl ?? 'https://api.piapi.ai').replace(/\/+$/, '');
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
+    this.gptImageTimeoutMs = options.gptImageTimeoutMs
+      ?? (Number(process.env.PIAPI_GPT_IMAGE_TIMEOUT_MS) || 180_000);
   }
 
   async createTask(payload: unknown): Promise<{ taskId: string; raw: Record<string, unknown> }> {
@@ -135,7 +143,7 @@ export class PiAPIClient {
         method: 'POST',
         headers: { Authorization: `Bearer ${this.apiKey}` },
         body: form,
-      }, true);
+      }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
     } else {
       res = await this.fetchWithRetry(endpoint, {
         method: 'POST',
@@ -149,7 +157,7 @@ export class PiAPIClient {
           ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
           response_format: 'b64_json',
         }),
-      }, true);
+      }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
     }
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     const data = Array.isArray((json as { data?: unknown }).data)
@@ -178,11 +186,18 @@ export class PiAPIClient {
     return json as Record<string, unknown>;
   }
 
-  private async fetchWithRetry(url: string, init: RequestInit, parseErrorJson: boolean): Promise<Response> {
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    parseErrorJson: boolean,
+    opts?: { timeoutMs?: number; retries?: number },
+  ): Promise<Response> {
+    const timeoutMs = opts?.timeoutMs ?? this.requestTimeoutMs;
+    const retries = opts?.retries ?? TRANSIENT_RETRIES;
     let lastError: unknown;
-    for (let attempt = 0; attempt < TRANSIENT_RETRIES; attempt += 1) {
+    for (let attempt = 0; attempt < retries; attempt += 1) {
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const res = await fetch(url, { ...init, signal: controller.signal });
         if (res.ok) return res;
@@ -193,6 +208,11 @@ export class PiAPIClient {
         lastError = new ProviderError(`PIAPI_HTTP_${res.status}`, res.statusText, res.status);
       } catch (err) {
         if (err instanceof ProviderError && err.status && err.status < 500) throw err;
+        // Наш собственный таймаут (AbortController) не повторяем: задача могла уже
+        // уйти в работу на стороне PiAPI, а повтор привёл бы к двойному списанию.
+        if ((err as Error)?.name === 'AbortError') {
+          throw new ProviderError('PIAPI_TIMEOUT', `PiAPI request timed out after ${timeoutMs}ms`);
+        }
         lastError = err;
       } finally {
         clearTimeout(timer);

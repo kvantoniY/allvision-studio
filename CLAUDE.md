@@ -955,3 +955,20 @@ Video-effect блок и Kling AI Effects:
 - Audio файлы пользователей оседают в `user-uploads/user-inputs/...` без TTL-cleanup; нужен периодический job.
 - В Studio (`/studio`) не добавлена возможность сохранения пользовательских audio-треков как MediaAsset — пока user audio только разовый upload на услугу.
 - ServiceDetail.tsx: `description` `Недостаточно токенов` toast и пара legacy строк всё ещё используют «токены» вместо «коинов»; косметика без функциональной разницы.
+
+## Hotfix P9.1 ✅ — GPT Image 2 timeout
+
+Симптом: услуги на `gpt-image-2` (`single-photo-2017` «Фото в стиле 2к17», `group-photo-2017`) падали на сайте с `PIAPI_NETWORK_ERROR` («Не удалось связаться с AI-провайдером»), хотя в дашборде PiAPI задачи показывались как `Success` — причём по нескольку успешных генераций подряд за один пользовательский запуск.
+
+Причина: GPT Image идёт синхронным OpenAI-совместимым запросом (`/v1/images/generations|edits`), ответ приходит только после генерации изображения. Это регулярно дольше дефолтных 30s `requestTimeoutMs`. `AbortController` рвал соединение, `fetchWithRetry` повторял запрос (`TRANSIENT_RETRIES = 3`), каждый повтор создавал новую успешную (и платную) генерацию на стороне PiAPI, а worker в итоге кидал `PIAPI_NETWORK_ERROR` и возвращал коины.
+
+Фикс (`apps/worker/src/providers/piapi-client.ts`):
+
+- Добавлен отдельный `gptImageTimeoutMs` (env `PIAPI_GPT_IMAGE_TIMEOUT_MS`, по умолчанию `180000`); синхронные GPT Image вызовы используют его.
+- `fetchWithRetry` получил per-call опции `{ timeoutMs, retries }`; GPT Image зовётся с `retries: 1`.
+- Наш собственный таймаут (`AbortError`) теперь не повторяется, а сразу превращается в `PIAPI_TIMEOUT` — чтобы не плодить дублирующие платные генерации.
+- `PIAPI_GPT_IMAGE_TIMEOUT_MS` добавлен в `apps/worker/.env.example` и `infra/prod/.env.example`.
+
+Seed не трогался: услуги `single-photo-2017` / `group-photo-2017` уже корректно используют `gpt-image-2`.
+
+Проверки: `npm.cmd run build -w @allvision/worker` — зелёный; `npm.cmd test -w @allvision/worker -- --runInBand piapi-client` — 5 passed (добавлен тест на no-retry при abort); `blocks-registry asset-reference motion-transfer-block` — 8 passed.

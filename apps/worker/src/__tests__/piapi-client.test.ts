@@ -68,4 +68,23 @@ describe('PiAPIClient polling', () => {
     expect(request.response_format).toBe('b64_json');
     fetchSpy.mockRestore();
   });
+
+  it('does not retry a GPT Image request that aborts (avoids duplicate billing)', async () => {
+    const client = new PiAPIClient({ apiKey: 'test', baseUrl: 'https://api.test' });
+    const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockRejectedValue(abortError);
+
+    await expect(client.generateGptImage({
+      model: 'gpt-image-2',
+      prompt: 'test prompt',
+      imageUrls: [],
+      size: '1024x1024',
+      quality: 'standard',
+      outputFormat: 'jpeg',
+    })).rejects.toMatchObject({ code: 'PIAPI_TIMEOUT' });
+
+    // Один запрос, без повторов — иначе PiAPI сгенерировал бы лишнее изображение.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
 });
