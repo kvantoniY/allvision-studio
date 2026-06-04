@@ -972,3 +972,48 @@ Video-effect блок и Kling AI Effects:
 Seed не трогался: услуги `single-photo-2017` / `group-photo-2017` уже корректно используют `gpt-image-2`.
 
 Проверки: `npm.cmd run build -w @allvision/worker` — зелёный; `npm.cmd test -w @allvision/worker -- --runInBand piapi-client` — 5 passed (добавлен тест на no-retry при abort); `blocks-registry asset-reference motion-transfer-block` — 8 passed.
+
+## Этап P9.2 ✅ — Кинематограф: перенос в сцену + возврат tier-выбора
+
+4 новые услуги «перенос себя в фильм/мультфильм» + восстановление пользовательского выбора Standard/Pro.
+
+Новый блок `scene-transfer`:
+
+- Помещает 1–2 людей с фото в референс-сцену, которая может быть **фото-кадром ИЛИ видео-референсом** (`scene_mode: photo|video`). Это обобщение `trend-video-transfer` (тот работает только по видео).
+- Standard собирает на `kling-3-omni` (Kling 3.0 Omni: `images[]` + `video`), Pro — на `seedance-2-omni` (Seedance 2.0 Omni: `image_urls[]` + `video_urls[]`). Движок определяется по резолвнутому tier-моделью slug'у (`model: { standard: 'kling-3-omni', pro: 'seedance-2-omni' }` → runner резолвит в строку → блок роутит по `includes('seedance')`).
+- Фото-сцена добавляется отдельным image-референсом в конец `images`/`image_urls` (anchor `@image_N`/`@imageN`); видео-сцена идёт в `video`/`video_urls` (anchor `@video`/`@video1`).
+- Промпт собирается в `buildScenePrompt`: скрытый admin `base_prompt` + авто-anchor сцены + авто-блок под 1 или 2 персонажей (это и есть «2 промпта под капотом») + `user_prompt` (или `default_user_prompt`, если пользователь ничего не ввёл) + хвост про качество/без вотермарка. Anchors разные под Kling/Seedance.
+- Опциональная мультяшная стилизация: при `stylize_characters: true` каждое фото персонажа прогоняется отдельно через `gpt-image-2` (`stylize_prompt`) ДО видео-шага; результаты становятся identity-референсами. Один человек — один вызов, два — два (оптональный второй обрабатывается только при наличии).
+- `people_count: auto` определяет 1/2 по наличию `secondary_photo` (на рантайме `{{user.person2}}` резолвится в undefined, если фото не загружено).
+- Reuse провайдерных методов `textToVideo`/`imageEdit` (mock/stub/piapi) — новых методов в `AIProvider` не добавлялось. Блок зарегистрирован в `registry.ts` и в `PIAPI_BLOCKS`.
+
+4 услуги в seed (`giftFactoryServices`), все с tier-выбором Standard (Kling 3.0) / Pro (Seedance 2.0):
+
+- `me-in-movie` «Я в фильме» (CINEMA, инструмент): пользователь выбирает режим «По фото»/«По видео» (`scene_mode`), грузит scene_photo ИЛИ scene_video, person1 (обяз.) + person2 (опц.), свой `prompt` (опц.). Standard 120 / Pro 199.
+- `me-in-cartoon` «Я в мультфильме» (CINEMA, инструмент): то же + `stylize_characters: true` (gpt-image-2). Standard 140 / Pro 219.
+- `kid-in-blue-tractor` «Ребёнок в мультике Синий трактор» (KIDS_HEROES, шаблон): пользователь грузит только person1/person2; сцена и base_prompt зашиты админом (PLACEHOLDER `scene_image`), `stylize_characters: true`, без поля промпта. Standard 140 / Pro 219.
+- `me-in-harry-potter` «Я в сцене „Гарри Поттер“» (CINEMA, шаблон): как выше, но live-action (без стилизации). Standard 120 / Pro 199.
+- Имена услуг-шаблонов сделаны буквально по запросу пользователя; это РАСХОДИТСЯ с IP-стратегией CLAUDE.md (свои стилизованные миры) — осознанный выбор владельца, юр-риск на нём. Референсы сцен — picsum-плейсхолдеры (`image('cinema-*')`), владелец заменит на реальные кадр/видео и допишет промпты в админке.
+- Категория «Кинематограф» (`CINEMA`) добавлена миграцией `20260605120000_cinema_category` в `ServiceCategoryDef` (icon `Film`, sortOrder 5). `kid-in-blue-tractor` оставлен в `KIDS_HEROES` для дискаверабилити; остальные 3 — в `CINEMA`. Перемещается через `/admin/services`.
+
+Возврат выбора Standard/Pro (после P9, где tier-селектор был убран):
+
+- Сделано обратносовместимо: селектор и две цены показываются ТОЛЬКО когда в `userInputForm` услуги есть поле `tier`; услуги без него остаются в P9-логике «только Pro по `priceCoinsPro`».
+- `ServiceDetail.tsx`: новый `TierSelector` (две карточки с ценами `priceCoinsStandard`/`priceCoinsPro`), `tier` в стейте (default `standard`), цена и кнопка зависят от выбранного tier, выбранный tier уходит в FormData.
+- `POST /api/services/:slug/launch`: читает значение tier-поля → `selectedTier` (`standard`|`pro`) и списывает `priceCoinsStandard`/`priceCoinsPro` соответственно. Без tier-поля — прежний Pro-default. `selectedTier` уже корректно резолвит tier-объекты (`{standard,pro}`/`{{tier_model}}`) в pipeline-runner.
+
+Условная обязательность полей формы (`requiredWhen`):
+
+- В `userInputFieldSchema` добавлено `requiredWhen?: { field, value }`: поле обязательно, когда другое поле имеет заданное значение. Используется для `scene_photo` (обяз. при `scene_mode=photo`) и `scene_video` (обяз. при `scene_mode=video`), т.к. условного показа полей в форме нет.
+- Учитывается и на сервере (`fieldRequired` в `services.ts`), и на клиенте (`fieldIsRequired` в `validateClient`).
+- В `ServiceDetail` фото-поля теперь группируются по `mediaGroup`: персонажи (без группы) — в общий «Референсы N/M» пикер, `scene_photo` (mediaGroup `scene`) — отдельным аплоад-полем, чтобы кадр сцены не смешивался с лицами.
+
+Загрузка услуг в prod (важно): коммит `52073ac` отключил сидирование услуг на проде (`ensureCatalog` рано выходит при `!includeDevCatalog`), из-за чего `giftFactoryServices` перестали попадать в прод через `node packages/database/dist/seed.js` (prod CMD = `prisma migrate deploy && seed.js && ...`). В P9.2 добавлен **create-only** загрузчик `ensureGiftServices()`, вызываемый в `runSeed()` безусловно: создаёт только ОТСУТСТВУЮЩИЕ услуги из `giftFactoryServices` (включая 4 новые) и НИКОГДА не апдейтит/не удаляет существующие — admin-правки в `/admin/services` сохраняются. Тест-гард P7.1.1 («no services on normal runs») обновлён под новый контракт: create-missing-only + never-update + идемпотентность. Категория `CINEMA` приезжает миграцией `20260605120000_cinema_category`. Побочно загрузчик создаст и любые другие услуги из seed, которых сейчас нет в проде, но ничего существующего не трогает.
+
+Проверки P9.2: `npm.cmd run build` для shared/worker/api/web/database — зелёные; `npm.cmd test -w @allvision/shared` — 20 passed; `npm.cmd test -w @allvision/database -- seed` — 4 passed; worker `blocks-registry trend-video-transfer-block scene-transfer-block motion-transfer-block asset-reference text-to-video-block image-edit-block blocks-utils piapi-payloads piapi-provider-kling-omni` — 42 passed (добавлен `scene-transfer-block.test.ts`, 5 тестов; `blocks-registry` обновлён под 12 блоков). DB-backed `pipeline-runner`/`piapi-provider` локально не гоняются без Postgres `localhost:5433`.
+
+Технический долг P9.2:
+
+- Реальный PiAPI-смоук Kling 3.0 Omni / Seedance 2.0 Omni с фото-сценой (image как часть `images`/`image_urls` + @image_N anchor под локацию) не прогонялся — нужен перед платным запуском; payload-формат повторяет уже рабочие omni-вызовы из `trend-video-transfer`/`last-kiss-meteor`.
+- Плейсхолдер-сцены (`cinema-blue-tractor-scene`, `cinema-hp-scene`) и picsum-превью заменить на реальные брендовые ассеты; финальные base_prompt'ы шаблонов дописать в админке.
+- Для шаблонов сцена пока только photo-mode; admin может переключить `scene_mode: video` + `scene_video` (URL/asset) вручную.

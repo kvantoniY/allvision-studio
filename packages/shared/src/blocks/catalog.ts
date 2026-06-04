@@ -640,6 +640,10 @@ const motionTransferModels: ModelOption[] = [
   },
 ].map((model) => withPiAPICapability(model as ModelOption));
 
+const sceneTransferModels: ModelOption[] = textToVideoModels.filter(
+  (model) => model.slug === 'kling-3-omni' || model.slug === 'seedance-2-omni',
+);
+
 export const BLOCK_CATALOG: BlockCatalogItem[] = [
   {
     slug: 'image-restore',
@@ -849,6 +853,96 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         limits: { maxDurationSec: 15 },
       },
     ],
+  },
+  {
+    slug: 'scene-transfer',
+    title: 'Перенос в сцену (фильм/мультфильм)',
+    description: 'Реалистично помещает одного или двух людей с фото в референс-сцену: фото-кадр из фильма/мультфильма или видео-референс. Standard собирает сцену на Kling 3.0 Omni, Pro — на Seedance 2.0 Omni. Опционально предварительно стилизует персонажей под мультфильм через GPT Image 2. Промпт переноса формируется из скрытого admin base_prompt, авто-промпта под 1 или 2 персонажей и текста пользователя (или дефолтного промпта).',
+    category: 'video',
+    useWhen: 'Когда нужно перенести 1–2 людей в готовую сцену по фото-кадру или видео-референсу: «я в фильме», «я в мультфильме» и готовые шаблоны конкретных сцен.',
+    compatibleInputs: ['photo', 'two photos', 'scene image reference', 'scene video reference'],
+    examples: [
+      'Фото человека + кадр из кино -> Kling/Seedance помещает его в сцену.',
+      'Два фото детей + кадр из мультика -> GPT Image 2 стилизует персонажей, затем Omni собирает мультсцену.',
+    ],
+    paramsSchema: objectSchema(
+      {
+        model: modelTierObject,
+        scene_mode: {
+          type: 'string',
+          title: 'Режим референса сцены',
+          enum: ['photo', 'video'],
+          default: 'photo',
+          description: 'photo — сцена задаётся фото-кадром (scene_image), video — видео-референсом (scene_video). Для инструментов берётся из {{user.scene_mode}}, для шаблонов задаётся админом.',
+        },
+        scene_image: {
+          type: 'string',
+          title: 'Фото-кадр сцены',
+          description: sourceSelect('image', 'Фото-кадр сцены/локации', 'Картинка сцены (кадр фильма/мультфильма). Для шаблонов выбирайте из библиотеки/URL, для инструментов — {{user.scene_photo}}.'),
+        },
+        scene_video: {
+          type: 'string',
+          title: 'Видео-референс сцены',
+          description: sourceSelect('video', 'Видео-референс сцены/локации', 'Видео сцены: задаёт движение, камеру и атмосферу. Для шаблонов — из библиотеки/URL, для инструментов — {{user.scene_video}}.'),
+        },
+        primary_photo: {
+          type: 'string',
+          title: 'Фото первого персонажа',
+          description: sourceSelect('image', 'Фото первого/единственного человека', 'Обычно {{user.person1}}.'),
+        },
+        secondary_photo: {
+          type: 'string',
+          title: 'Фото второго персонажа (опц.)',
+          description: sourceSelect('image', 'Фото второго человека', 'Обычно {{user.person2}}. Если пусто — в сцене будет один человек.'),
+        },
+        people_count: {
+          type: 'string',
+          title: 'Количество людей',
+          enum: ['auto', 'one', 'two'],
+          default: 'auto',
+          description: 'auto определяет количество по наличию второго фото.',
+        },
+        stylize_characters: {
+          type: 'boolean',
+          title: 'Стилизовать персонажей под мультфильм',
+          default: false,
+          description: 'Если включено, каждое фото персонажа предварительно прогоняется через GPT Image 2 по stylize_prompt (для услуг с мультфильмом).',
+        },
+        stylize_model: {
+          type: 'string',
+          title: 'Модель стилизации',
+          default: 'gpt-image-2',
+          description: 'Модель image-edit для предварительной стилизации персонажей (обычно gpt-image-2).',
+        },
+        stylize_prompt: promptSchema,
+        base_prompt: {
+          type: 'string',
+          title: 'Базовый промпт (скрыт от пользователя)',
+          description: 'Админский промпт стиля/сцены. Подставляется в начало финального промпта. Пользователь его не видит.',
+        },
+        user_prompt: {
+          type: 'string',
+          title: 'Промпт пользователя',
+          description: 'Текст пользователя ({{user.prompt}}). Добавляется к базовому. Если пусто — берётся default_user_prompt.',
+        },
+        default_user_prompt: {
+          type: 'string',
+          title: 'Промпт по умолчанию',
+          description: 'Используется, когда промпт пользователя пустой (например, «оживи сцену»).',
+        },
+        duration: durationSchema,
+        aspect_ratio: aspectRatioSchema,
+        resolution: {
+          type: 'string',
+          title: 'Разрешение',
+          enum: ['720p', '1080p'],
+          default: '720p',
+          description: '1080p дороже и медленнее.',
+        },
+      },
+      [],
+    ),
+    supportedModels: sceneTransferModels,
   },
   {
     slug: 'video-compose',

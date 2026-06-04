@@ -55,6 +55,14 @@ export const userInputFieldSchema = z.object({
   ]),
   label: z.string().trim().min(1).max(120),
   required: z.boolean(),
+  // Conditional requirement: the field becomes required only when another field has a given value.
+  // Used e.g. for scene_photo (required when scene_mode === 'photo') / scene_video (scene_mode === 'video').
+  requiredWhen: z
+    .object({
+      field: z.string().trim().min(1).max(80),
+      value: z.string().trim().min(1).max(500),
+    })
+    .optional(),
   hint: z.string().trim().max(240).optional(),
   placeholder: z.string().trim().max(160).optional(),
   mediaKind: z.string().trim().min(1).max(80).optional(),

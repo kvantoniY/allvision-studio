@@ -146,6 +146,15 @@ function requiredMissing(value: unknown): boolean {
   return value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
 }
 
+// A field is required if it is statically required OR its requiredWhen condition matches another field's value.
+function fieldRequired(field: UserInputFieldInput, data: Record<string, unknown>): boolean {
+  if (field.requiredWhen) {
+    const current = data[field.requiredWhen.field];
+    if (current === field.requiredWhen.value) return true;
+  }
+  return field.required === true;
+}
+
 function assetReferenceId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const match = value.trim().match(/^asset:([a-zA-Z0-9_-]+)$/);
@@ -346,10 +355,13 @@ servicesRouter.post(
       const tierField = fields.find((field) => field.type === 'tier');
       const userId = req.user!.id;
 
-      // Always run services in Pro mode. Tier field, if present, is ignored from user input.
-      const tierValue: 'pro' = 'pro';
+      // Tier selection: when the form has a tier field, honor the customer's Standard/Pro choice.
+      // Without a tier field, services keep the P9 Pro-default behaviour.
+      let tierValue: 'standard' | 'pro' = 'pro';
       if (tierField) {
-        data[tierField.id] = 'pro';
+        const raw = data[tierField.id];
+        tierValue = raw === 'standard' ? 'standard' : 'pro';
+        data[tierField.id] = tierValue;
       }
 
       const assetInputs = new Map<string, UserInputAsset>();
@@ -357,7 +369,7 @@ servicesRouter.post(
         if (field.type === 'photo') {
           const hasFile = fileMap.has(field.id);
           const value = data[field.id];
-          if (field.required && !hasFile && requiredMissing(value)) {
+          if (fieldRequired(field, data) && !hasFile && requiredMissing(value)) {
             throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
           }
           if (!hasFile && !requiredMissing(value)) {
@@ -368,14 +380,14 @@ servicesRouter.post(
         }
 
         if (field.type === 'video') {
-          if (field.required && !fileMap.has(field.id)) {
+          if (fieldRequired(field, data) && !fileMap.has(field.id)) {
             throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
           }
           continue;
         }
 
         const value = data[field.id];
-        if (field.required && requiredMissing(value)) {
+        if (fieldRequired(field, data) && requiredMissing(value)) {
           throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
         }
         if (requiredMissing(value)) continue;
@@ -456,8 +468,10 @@ servicesRouter.post(
         }
       }
 
-      // All services run in Pro mode by default; price is taken from priceCoinsPro.
-      const tokensCost = service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
+      // Price follows the selected tier: Standard -> priceCoinsStandard, Pro -> priceCoinsPro.
+      const tokensCost = tierValue === 'standard'
+        ? (service.priceCoinsStandard ?? service.priceCoinsPro ?? service.priceTokens)
+        : (service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens);
       const inputImages = photoFields
         .map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id])
         .filter((value): value is string => typeof value === 'string');

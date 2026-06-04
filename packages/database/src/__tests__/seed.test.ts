@@ -209,16 +209,22 @@ describe('seed system users', () => {
     expect(mockMigrateMediaAssets).toHaveBeenCalledTimes(1);
   });
 
-  it('runs system users again without seeding services on normal runs', async () => {
+  it('creates missing gift services but never updates existing ones on normal runs', async () => {
     setSystemEnv('readonly-secret');
     await runSeed();
+    const sizeAfterFirst = mockState.services.size;
+    // Normal (prod) runs create the data-driven gift services that are missing, but never patch existing ones.
+    expect(sizeAfterFirst).toBeGreaterThan(0);
+    expect(mockPrisma.service.update).not.toHaveBeenCalled();
+
     mockPrisma.user.findUnique.mockClear();
     mockPrisma.service.create.mockClear();
     mockPrisma.service.update.mockClear();
 
     await runSeed();
 
-    expect(mockState.services.size).toBe(0);
+    // Idempotent: a second run neither re-creates nor updates existing services.
+    expect(mockState.services.size).toBe(sizeAfterFirst);
     expect(mockPrisma.service.create).not.toHaveBeenCalled();
     expect(mockPrisma.service.update).not.toHaveBeenCalled();
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
@@ -246,7 +252,6 @@ describe('seed system users', () => {
     process.env.READONLY_ADMIN_PASSWORD = 'readonly-secret';
     await runSeed();
 
-    expect(mockState.services.size).toBe(0);
     expect(mockState.users.get('claude-readonly@allvision-pulse.ru')?.role).toBe('READONLY_ADMIN');
     expect(logSpy.mock.calls.flat().join('\n')).toContain(
       '[seed] system user ensured: claude-readonly@allvision-pulse.ru (role: READONLY_ADMIN)',

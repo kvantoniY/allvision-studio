@@ -61,6 +61,7 @@ type UserInputField = {
   type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select';
   label?: string;
   required?: boolean;
+  requiredWhen?: { field: string; value: string };
   hint?: string;
   placeholder?: string;
   maxLength?: number;
@@ -128,6 +129,15 @@ function parseFields(value: unknown): UserInputField[] {
       type: typeof item.type === 'string' ? (item.type as UserInputField['type']) : 'text',
       label: typeof item.label === 'string' ? item.label : undefined,
       required: item.required === true,
+      requiredWhen:
+        item.requiredWhen && typeof item.requiredWhen === 'object' && !Array.isArray(item.requiredWhen)
+          && typeof (item.requiredWhen as Record<string, unknown>).field === 'string'
+          && typeof (item.requiredWhen as Record<string, unknown>).value === 'string'
+          ? {
+              field: String((item.requiredWhen as Record<string, unknown>).field),
+              value: String((item.requiredWhen as Record<string, unknown>).value),
+            }
+          : undefined,
       hint: typeof item.hint === 'string' ? item.hint : undefined,
       placeholder: typeof item.placeholder === 'string' ? item.placeholder : undefined,
       maxLength: typeof item.maxLength === 'number' ? item.maxLength : undefined,
@@ -164,6 +174,59 @@ function parseFields(value: unknown): UserInputField[] {
 
 function servicePrice(service: PublicService) {
   return service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
+}
+
+type ServiceTier = 'standard' | 'pro';
+
+function tierPrice(service: PublicService, tier: ServiceTier) {
+  return tier === 'standard'
+    ? (service.priceCoinsStandard ?? service.priceCoinsPro ?? service.priceTokens)
+    : (service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens);
+}
+
+function TierSelector({
+  field,
+  service,
+  value,
+  onChange,
+}: {
+  field: UserInputField;
+  service: PublicService;
+  value: ServiceTier;
+  onChange: (tier: ServiceTier) => void;
+}) {
+  const options = field.options && field.options.length > 0
+    ? field.options
+    : [
+        { value: 'standard', label: 'Стандарт' },
+        { value: 'pro', label: 'Pro' },
+      ];
+  return (
+    <div className="space-y-2">
+      <Label>{field.label ?? 'Качество'}</Label>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((option) => {
+          const tier: ServiceTier = option.value === 'standard' ? 'standard' : 'pro';
+          const active = value === tier;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(tier)}
+              className={cn(
+                'rounded-lg border p-3 text-left transition',
+                active ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500',
+              )}
+            >
+              <div className="text-sm font-semibold text-slate-100">{option.label}</div>
+              <div className="mt-1 text-xs font-bold text-amber-300">{tierPrice(service, tier)} коинов</div>
+            </button>
+          );
+        })}
+      </div>
+      {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+    </div>
+  );
 }
 
 function getErrorCode(error: unknown): string | undefined {
@@ -233,22 +296,30 @@ function projectWarningMessage(project: ProjectListItem) {
     ?? getUserFriendlyError(project.errorCode);
 }
 
+function fieldIsRequired(field: UserInputField, values: FormValues): boolean {
+  if (field.requiredWhen) {
+    if (values[field.requiredWhen.field] === field.requiredWhen.value) return true;
+  }
+  return field.required === true;
+}
+
 function validateClient(fields: UserInputField[], values: FormValues, files: FileValues) {
   const errors: string[] = [];
   for (const field of fields) {
     if (field.type === 'tier') continue;
+    const required = fieldIsRequired(field, values);
     if (field.type === 'photo' || field.type === 'audio' || field.type === 'video') {
-      if (field.required && !files[field.id] && !values[field.id]?.trim()) {
+      if (required && !files[field.id] && !values[field.id]?.trim()) {
         errors.push(`Загрузите файл: ${field.label ?? field.id}`);
       }
       continue;
     }
     if (field.type === 'avatar') {
-      if (field.required && !values[field.id]?.trim()) errors.push(`Выберите аватар: ${field.label ?? field.id}`);
+      if (required && !values[field.id]?.trim()) errors.push(`Выберите аватар: ${field.label ?? field.id}`);
       continue;
     }
     const value = values[field.id]?.trim();
-    if (field.required && !value) errors.push(`Заполните поле: ${field.label ?? field.id}`);
+    if (required && !value) errors.push(`Заполните поле: ${field.label ?? field.id}`);
     if (field.maxLength && value && value.length > field.maxLength) {
       errors.push(`Поле ${field.label ?? field.id} слишком длинное`);
     }
@@ -1551,6 +1622,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [launchService, launchState] = useLaunchServiceMutation();
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
+  const [tier, setTier] = useState<ServiceTier>('standard');
   const [mediaByKind, setMediaByKind] = useState<Record<string, MediaAssetOption[]>>({});
   const [activeView, setActiveView] = useState<ServiceDetailView>('service');
   const [expandedGenerationId, setExpandedGenerationId] = useState<string | null>(null);
@@ -1563,6 +1635,17 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const projects = useMemo(() => projectsQuery.data?.items ?? [], [projectsQuery.data?.items]);
   const fields = useMemo(() => parseFields(service?.userInputForm), [service?.userInputForm]);
   const photoFields = useMemo(() => fields.filter((field) => field.type === 'photo'), [fields]);
+  const tierField = useMemo(() => fields.find((field) => field.type === 'tier'), [fields]);
+  const photoGroups = useMemo(() => {
+    const buckets = new Map<string, UserInputField[]>();
+    for (const field of photoFields) {
+      const key = field.mediaGroup ?? '__default__';
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(field);
+      else buckets.set(key, [field]);
+    }
+    return Array.from(buckets.values());
+  }, [photoFields]);
   const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
 
   useEffect(() => {
@@ -1624,7 +1707,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     );
   }
 
-  const price = servicePrice(service);
+  const price = tierField ? tierPrice(service, tier) : servicePrice(service);
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);
@@ -1665,8 +1748,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     }
 
     const dataPayload: FormValues = { ...values };
-    const tierField = fields.find((field) => field.type === 'tier');
-    if (tierField) dataPayload[tierField.id] = 'pro';
+    if (tierField) dataPayload[tierField.id] = tier;
 
     // Fill defaults for duration/aspect_ratio if user did not touch the buttons
     for (const field of fields) {
@@ -1824,20 +1906,28 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
                   </div>
 
+                  {tierField && (
+                    <TierSelector field={tierField} service={service} value={tier} onChange={setTier} />
+                  )}
+
                   {fields
                     .filter((field) => field.type !== 'tier')
                     .map((field) => {
                       if (field.type === 'photo') {
                         if (photoFields[0]?.id !== field.id) return null;
                         return (
-                          <ServicePhotoReferencesGroup
-                            key="photo-references"
-                            fields={photoFields}
-                            values={values}
-                            files={files}
-                            onValueChange={setFieldValue}
-                            onFileChange={setFieldFile}
-                          />
+                          <div key="photo-references" className="space-y-5">
+                            {photoGroups.map((group) => (
+                              <ServicePhotoReferencesGroup
+                                key={group[0].id}
+                                fields={group}
+                                values={values}
+                                files={files}
+                                onValueChange={setFieldValue}
+                                onFileChange={setFieldFile}
+                              />
+                            ))}
+                          </div>
                         );
                       }
 

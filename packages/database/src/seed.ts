@@ -15,6 +15,7 @@ const ServiceCategory = {
   TRENDS_MEMES: 'TRENDS_MEMES',
   KIDS_HEROES: 'KIDS_HEROES',
   SPECIAL_OCCASIONS: 'SPECIAL_OCCASIONS',
+  CINEMA: 'CINEMA',
 } as const;
 import { migrateMediaAssets } from './migrate-media-assets';
 
@@ -1799,6 +1800,444 @@ const giftFactoryServices = [
       },
     ],
   },
+  {
+    slug: 'me-in-movie',
+    title: 'Я в фильме',
+    shortDesc: 'Перенесём вас (и друга) в любой кадр фильма по фото или видео',
+    description:
+      'Загрузите фото одного или двух людей и референс сцены — кадр из фильма или видео-референс. Нейросеть реалистично перенесёт персонажей в эту сцену. Можно описать, что происходит в кадре, или оставить поле пустым и просто оживить сцену. Standard собирает на Kling 3.0, Pro — на Seedance 2.0 (детальнее и дороже).',
+    category: ServiceCategory.CINEMA,
+    priceTokens: 120,
+    priceCoinsStandard: 120,
+    priceCoinsPro: 199,
+    costUsd: 2.0,
+    coverImage: image('gift-me-in-movie'),
+    galleryImages: [image('gift-me-in-movie-1'), image('gift-me-in-movie-2')],
+    previewImage: image('gift-me-in-movie-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 20,
+    userInputForm: [
+      {
+        id: 'tier',
+        type: 'tier',
+        label: 'Качество',
+        required: false,
+        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        options: [
+          { value: 'standard', label: 'Стандарт · Kling 3.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0' },
+        ],
+      },
+      {
+        id: 'person1',
+        type: 'photo',
+        label: 'Фото первого персонажа',
+        required: true,
+        hint: 'Чёткое фото лица или человека',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'person2',
+        type: 'photo',
+        label: 'Фото второго персонажа (необязательно)',
+        required: false,
+        hint: 'Добавьте, если в сцене должны быть два человека',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'scene_mode',
+        type: 'select',
+        label: 'Режим референса сцены',
+        required: true,
+        hint: 'По фото — загрузите кадр сцены, по видео — видео-референс',
+        options: [
+          { value: 'photo', label: 'По фото' },
+          { value: 'video', label: 'По видео' },
+        ],
+      },
+      {
+        id: 'scene_photo',
+        type: 'photo',
+        label: 'Фото-кадр сцены',
+        required: false,
+        requiredWhen: { field: 'scene_mode', value: 'photo' },
+        mediaGroup: 'scene',
+        hint: 'Кадр из фильма, куда перенести персонажей',
+        maxSizeMb: 10,
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowStudioAvatars: false,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'scene_video',
+        type: 'video',
+        label: 'Видео-референс сцены',
+        required: false,
+        requiredWhen: { field: 'scene_mode', value: 'video' },
+        hint: 'Видео сцены: движение, камера и атмосфера. MP4/MOV до 15 сек',
+        maxSizeMb: 50,
+        maxDurationSec: 15,
+        allowedFormats: ['mp4', 'webm', 'mov'],
+        allowUserUpload: true,
+      },
+      {
+        id: 'prompt',
+        type: 'textarea',
+        label: 'Что происходит в сцене (необязательно)',
+        required: false,
+        maxLength: 600,
+        placeholder: 'Например: персонажи идут по коридору и улыбаются',
+        hint: 'Опишите действие. Если оставить пустым — сцена просто оживёт.',
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['auto', '9:16', '16:9', '1:1'],
+        defaultAspect: 'auto',
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'scene-transfer',
+        input: '{{user.person1}}',
+        params: {
+          model: { standard: 'kling-3-omni', pro: 'seedance-2-omni' },
+          scene_mode: '{{user.scene_mode}}',
+          scene_image: '{{user.scene_photo}}',
+          scene_video: '{{user.scene_video}}',
+          primary_photo: '{{user.person1}}',
+          secondary_photo: '{{user.person2}}',
+          people_count: 'auto',
+          stylize_characters: false,
+          base_prompt:
+            'Photorealistic live-action cinematic film scene. Realistic lighting, depth of field, filmic color grading and believable physics, as if shot on a professional movie camera.',
+          user_prompt: '{{user.prompt}}',
+          default_user_prompt: 'Bring the scene to life with natural, subtle, believable motion.',
+          duration: 5,
+          aspect_ratio: '{{user.aspect}}',
+          resolution: '720p',
+        },
+      },
+    ],
+  },
+  {
+    slug: 'me-in-cartoon',
+    title: 'Я в мультфильме',
+    shortDesc: 'Превратим вас в мультяшку и перенесём в кадр мультфильма',
+    description:
+      'Загрузите фото одного или двух людей и референс сцены — кадр из мультфильма или видео-референс. Сначала персонажи стилизуются под мультфильм через GPT Image 2, затем переносятся в выбранную сцену. Можно описать действие или оставить поле пустым. Standard — Kling 3.0, Pro — Seedance 2.0.',
+    category: ServiceCategory.CINEMA,
+    priceTokens: 140,
+    priceCoinsStandard: 140,
+    priceCoinsPro: 219,
+    costUsd: 2.2,
+    coverImage: image('gift-me-in-cartoon'),
+    galleryImages: [image('gift-me-in-cartoon-1'), image('gift-me-in-cartoon-2')],
+    previewImage: image('gift-me-in-cartoon-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 21,
+    userInputForm: [
+      {
+        id: 'tier',
+        type: 'tier',
+        label: 'Качество',
+        required: false,
+        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        options: [
+          { value: 'standard', label: 'Стандарт · Kling 3.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0' },
+        ],
+      },
+      {
+        id: 'person1',
+        type: 'photo',
+        label: 'Фото первого персонажа',
+        required: true,
+        hint: 'Чёткое фото лица или человека',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'person2',
+        type: 'photo',
+        label: 'Фото второго персонажа (необязательно)',
+        required: false,
+        hint: 'Добавьте, если в сцене должны быть два героя',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'scene_mode',
+        type: 'select',
+        label: 'Режим референса сцены',
+        required: true,
+        hint: 'По фото — загрузите кадр мультфильма, по видео — видео-референс',
+        options: [
+          { value: 'photo', label: 'По фото' },
+          { value: 'video', label: 'По видео' },
+        ],
+      },
+      {
+        id: 'scene_photo',
+        type: 'photo',
+        label: 'Фото-кадр мультфильма',
+        required: false,
+        requiredWhen: { field: 'scene_mode', value: 'photo' },
+        mediaGroup: 'scene',
+        hint: 'Кадр из мультфильма, куда перенести героев',
+        maxSizeMb: 10,
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowStudioAvatars: false,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'scene_video',
+        type: 'video',
+        label: 'Видео-референс мультфильма',
+        required: false,
+        requiredWhen: { field: 'scene_mode', value: 'video' },
+        hint: 'Видео сцены мультфильма. MP4/MOV до 15 сек',
+        maxSizeMb: 50,
+        maxDurationSec: 15,
+        allowedFormats: ['mp4', 'webm', 'mov'],
+        allowUserUpload: true,
+      },
+      {
+        id: 'prompt',
+        type: 'textarea',
+        label: 'Что происходит в сцене (необязательно)',
+        required: false,
+        maxLength: 600,
+        placeholder: 'Например: герои весело бегут по полю',
+        hint: 'Опишите действие. Если оставить пустым — сцена просто оживёт.',
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['auto', '9:16', '16:9', '1:1'],
+        defaultAspect: 'auto',
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'scene-transfer',
+        input: '{{user.person1}}',
+        params: {
+          model: { standard: 'kling-3-omni', pro: 'seedance-2-omni' },
+          scene_mode: '{{user.scene_mode}}',
+          scene_image: '{{user.scene_photo}}',
+          scene_video: '{{user.scene_video}}',
+          primary_photo: '{{user.person1}}',
+          secondary_photo: '{{user.person2}}',
+          people_count: 'auto',
+          stylize_characters: true,
+          stylize_model: 'gpt-image-2',
+          stylize_prompt:
+            'Redraw this person as a friendly 2D animated cartoon character matching a bright modern cartoon style. Keep their recognizable face features, hairstyle and skin tone. Flat saturated colors, clean outlines, family-friendly, single character on a clean neutral background, no text, no watermark.',
+          base_prompt:
+            'Animated cartoon film scene in a consistent hand-drawn 2D style with flat bright colors, clean outlines and a playful family-friendly look. Keep the whole frame in the same cartoon style.',
+          user_prompt: '{{user.prompt}}',
+          default_user_prompt: 'Bring the cartoon scene to life with cheerful, natural motion.',
+          duration: 5,
+          aspect_ratio: '{{user.aspect}}',
+          resolution: '720p',
+        },
+      },
+    ],
+  },
+  {
+    slug: 'kid-in-blue-tractor',
+    title: 'Ребёнок в мультике Синий трактор',
+    shortDesc: 'Загрузите фото ребёнка — соберём его героем мультика',
+    description:
+      'Готовый шаблон: загрузите фото одного или двух детей, а сцену мультика мы уже подобрали. Дети стилизуются под мультфильм и переносятся в готовую сцену. Промпт оживления подбирается автоматически под одного или двух героев. Standard — Kling 3.0, Pro — Seedance 2.0.',
+    category: ServiceCategory.KIDS_HEROES,
+    priceTokens: 140,
+    priceCoinsStandard: 140,
+    priceCoinsPro: 219,
+    costUsd: 2.2,
+    coverImage: image('gift-kid-blue-tractor'),
+    galleryImages: [image('gift-kid-blue-tractor-1'), image('gift-kid-blue-tractor-2')],
+    previewImage: image('gift-kid-blue-tractor-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 22,
+    userInputForm: [
+      {
+        id: 'tier',
+        type: 'tier',
+        label: 'Качество',
+        required: false,
+        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        options: [
+          { value: 'standard', label: 'Стандарт · Kling 3.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0' },
+        ],
+      },
+      {
+        id: 'person1',
+        type: 'photo',
+        label: 'Фото первого ребёнка',
+        required: true,
+        hint: 'Чёткое фото лица',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'person2',
+        type: 'photo',
+        label: 'Фото второго ребёнка (необязательно)',
+        required: false,
+        hint: 'Добавьте, если героев должно быть двое',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['auto', '9:16', '16:9', '1:1'],
+        defaultAspect: '9:16',
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'scene-transfer',
+        input: '{{user.person1}}',
+        params: {
+          model: { standard: 'kling-3-omni', pro: 'seedance-2-omni' },
+          // PLACEHOLDER сцены: замените scene_image на реальный кадр мультика (URL или asset:ID) в админке.
+          scene_mode: 'photo',
+          scene_image: image('cinema-blue-tractor-scene'),
+          primary_photo: '{{user.person1}}',
+          secondary_photo: '{{user.person2}}',
+          people_count: 'auto',
+          stylize_characters: true,
+          stylize_model: 'gpt-image-2',
+          stylize_prompt:
+            'Redraw this child as a friendly 2D animated cartoon character in a bright preschool cartoon style. Keep recognizable face features, hairstyle and skin tone. Flat saturated colors, soft round shapes, clean outlines, family-friendly, single character on a clean neutral background, no text, no watermark.',
+          base_prompt:
+            'Bright 2D animated children cartoon scene in a sunny countryside meadow with a cheerful blue tractor, rolling green hills, flowers and a friendly farm. Flat saturated colors, simple clean outlines, soft round shapes, wholesome preschool animation style.',
+          default_user_prompt: 'Bring the cartoon scene to life with cheerful, gentle motion suitable for young children.',
+          duration: 5,
+          aspect_ratio: '{{user.aspect}}',
+          resolution: '720p',
+        },
+      },
+    ],
+  },
+  {
+    slug: 'me-in-harry-potter',
+    title: 'Я в сцене «Гарри Поттер»',
+    shortDesc: 'Готовый шаблон: загрузите фото — перенесём вас в волшебную сцену',
+    description:
+      'Готовый шаблон: загрузите фото одного или двух людей, а сцену мы уже подобрали. Персонажи реалистично переносятся в готовую киносцену. Промпт оживления подбирается автоматически под одного или двух героев. Standard — Kling 3.0, Pro — Seedance 2.0.',
+    category: ServiceCategory.CINEMA,
+    priceTokens: 120,
+    priceCoinsStandard: 120,
+    priceCoinsPro: 199,
+    costUsd: 2.0,
+    coverImage: image('gift-me-in-hp'),
+    galleryImages: [image('gift-me-in-hp-1'), image('gift-me-in-hp-2')],
+    previewImage: image('gift-me-in-hp-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 23,
+    userInputForm: [
+      {
+        id: 'tier',
+        type: 'tier',
+        label: 'Качество',
+        required: false,
+        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        options: [
+          { value: 'standard', label: 'Стандарт · Kling 3.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0' },
+        ],
+      },
+      {
+        id: 'person1',
+        type: 'photo',
+        label: 'Фото первого персонажа',
+        required: true,
+        hint: 'Чёткое фото лица или человека',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'person2',
+        type: 'photo',
+        label: 'Фото второго персонажа (необязательно)',
+        required: false,
+        hint: 'Добавьте, если в сцене должны быть два человека',
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['auto', '9:16', '16:9', '1:1'],
+        defaultAspect: '16:9',
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'scene-transfer',
+        input: '{{user.person1}}',
+        params: {
+          model: { standard: 'kling-3-omni', pro: 'seedance-2-omni' },
+          // PLACEHOLDER сцены: замените scene_image на реальный кадр сцены (URL или asset:ID) в админке.
+          scene_mode: 'photo',
+          scene_image: image('cinema-hp-scene'),
+          primary_photo: '{{user.person1}}',
+          secondary_photo: '{{user.person2}}',
+          people_count: 'auto',
+          stylize_characters: false,
+          base_prompt:
+            'Photorealistic cinematic fantasy film scene set in a grand magical castle with warm candlelight, old stone halls, floating candles and a wondrous wizarding-school atmosphere. Filmic lighting and color grading, realistic textures.',
+          default_user_prompt: 'Bring the scene to life with natural, subtle, believable motion.',
+          duration: 5,
+          aspect_ratio: '{{user.aspect}}',
+          resolution: '720p',
+        },
+      },
+    ],
+  },
 ];
 
 const legacyTrendServiceSlugs = [
@@ -2217,6 +2656,10 @@ export async function runSeed(options: SeedOptions = {}) {
   console.log('[seed] step 2/4: catalog (services, trends, scenarios)');
   await ensureCatalog(options);
 
+  console.log('[seed] gift services: ensuring data-driven catalog services exist');
+  const giftCreated = await ensureGiftServices();
+  console.log(`[seed] gift services: ${giftCreated} created (existing services left untouched)`);
+
   console.log('[seed] step 3/5: token packages');
   await ensureTokenPackages();
 
@@ -2290,6 +2733,26 @@ async function ensureUser(options: EnsureUserOptions) {
     },
   });
   console.log(`[seed] system user ensured: ${email} (role: ${options.role})`);
+  return created;
+}
+
+// Create-only loader for the data-driven gift-factory catalog. Runs on every seed (incl. prod deploy).
+// It intentionally NEVER updates or deletes existing services, so admin edits made in /admin/services
+// are preserved. Only services that are genuinely missing (e.g. freshly added to the seed array) are
+// created. This is how new catalog services land in prod without touching the existing ones.
+async function ensureGiftServices() {
+  let created = 0;
+  for (const service of giftFactoryServices) {
+    if (legacyTrendServiceSlugs.includes(service.slug)) continue;
+    const existing = await prisma.service.findUnique({
+      where: { slug: service.slug },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await prisma.service.create({ data: service });
+    console.log(`[seed] gift service created: ${service.slug}`);
+    created += 1;
+  }
   return created;
 }
 

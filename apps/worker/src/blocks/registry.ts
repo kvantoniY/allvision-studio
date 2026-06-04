@@ -8,6 +8,7 @@ import { motionTransferBlock } from './motion-transfer';
 import { videoComposeBlock } from './video-compose';
 import { textToVideoBlock } from './text-to-video';
 import { trendVideoTransferBlock } from './trend-video-transfer';
+import { sceneTransferBlock } from './scene-transfer';
 import { videoEffectBlock } from './video-effect';
 import { videoWatermarkRemoveBlock } from './video-watermark-remove';
 
@@ -21,6 +22,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'video-compose': videoComposeBlock,
   'text-to-video': textToVideoBlock,
   'trend-video-transfer': trendVideoTransferBlock,
+  'scene-transfer': sceneTransferBlock,
   'video-effect': videoEffectBlock,
   'video-watermark-remove': videoWatermarkRemoveBlock,
 };

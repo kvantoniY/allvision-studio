@@ -3,7 +3,7 @@ import { BLOCK_REGISTRY, getBlock, listBlocks } from '../blocks/registry';
 describe('blocks registry', () => {
   it('contains valid pipeline blocks', () => {
     const blocks = listBlocks();
-    expect(blocks).toHaveLength(11);
+    expect(blocks).toHaveLength(12);
     expect(Object.keys(BLOCK_REGISTRY).sort()).toEqual([
       'face-swap-video',
       'image-edit',
@@ -11,6 +11,7 @@ describe('blocks registry', () => {
       'image-to-video',
       'image-upscale',
       'motion-transfer',
+      'scene-transfer',
       'text-to-video',
       'trend-video-transfer',
       'video-compose',
