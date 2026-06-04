@@ -157,7 +157,7 @@ export class PiAPIProvider implements AIProvider {
       if (input.model.startsWith('gpt-image')) {
         const aspect = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
         const size = gptImageSizeForAspect(aspect);
-        const quality = readString(input.params, 'quality') ?? 'standard';
+        const quality = normalizeGptImageQuality(readString(input.params, 'quality'));
         const outputFormat = normalizeGptImageOutputFormat(readString(input.params, 'output_format'));
         const refs = [input.imageUrl, ...readStringList(input.params, 'image_urls')]
           .filter((url): url is string => typeof url === 'string' && url.length > 0);
@@ -914,6 +914,14 @@ function gptImageSizeForAspect(aspect: string | undefined) {
 function normalizeGptImageOutputFormat(value: string | undefined): 'jpeg' | 'png' | 'webp' {
   if (value === 'png' || value === 'webp') return value;
   return 'jpeg';
+}
+
+// gpt-image-1/2 quality is auto|high|medium|low. The legacy DALL·E value "standard" (and anything
+// else, e.g. an empty/old param) would 400, so map it to a valid value. "auto" lets the model decide.
+function normalizeGptImageQuality(value: string | undefined): 'auto' | 'high' | 'medium' | 'low' {
+  if (value === 'high' || value === 'medium' || value === 'low' || value === 'auto') return value;
+  if (value === 'standard') return 'medium';
+  return 'auto';
 }
 
 function normalizeHailuoResolution(value: string | undefined): '768P' | '1080P' {
