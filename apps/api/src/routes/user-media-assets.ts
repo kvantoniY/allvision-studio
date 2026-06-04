@@ -48,7 +48,7 @@ const updateSchema = z.object({
 const generateSchema = z.object({
   kind: z.enum(USER_MEDIA_KINDS),
   prompt: z.string().trim().min(8).max(2000),
-  model: z.literal('nano-banana').default('nano-banana'),
+  model: z.enum(['nano-banana', 'gpt-image-2']).default('nano-banana'),
   title: z.string().trim().min(1).max(160),
   aspectRatio: z.enum(['1:1', '9:16', '16:9', 'auto']).optional(),
   parentAssetId: z.string().trim().min(1).optional(),
@@ -136,8 +136,8 @@ function toAssetResponse<T extends { thumbnailKey: string | null; _count?: { var
   };
 }
 
-function nanoBananaCostCoins() {
-  const model = getBlockCatalogItem('image-edit')?.supportedModels.find((item) => item.slug === 'nano-banana');
+function imageEditModelCostCoins(slug: string) {
+  const model = getBlockCatalogItem('image-edit')?.supportedModels.find((item) => item.slug === slug);
   return model?.estimatedCostCoins ?? 10;
 }
 
@@ -269,7 +269,7 @@ userMediaAssetsRouter.post('/generate', async (req: Request, res: Response, next
   try {
     const body = generateSchema.parse(req.body);
     const userId = req.user!.id;
-    const tokensCost = applyModelPriceOverride('nano-banana', nanoBananaCostCoins(), await readModelPriceOverrides());
+    const tokensCost = applyModelPriceOverride(body.model, imageEditModelCostCoins(body.model), await readModelPriceOverrides());
     const aspectRatio = body.aspectRatio ?? (body.kind === 'user-avatar' ? '1:1' : '16:9');
     const parentAsset = body.parentAssetId
       ? await prisma.mediaAsset.findFirst({

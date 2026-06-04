@@ -50,7 +50,7 @@ export type GenerateUserMediaAssetBody = {
   kind: UserMediaKind;
   prompt: string;
   title: string;
-  model?: 'nano-banana';
+  model?: 'nano-banana' | 'gpt-image-2';
   aspectRatio?: '1:1' | '9:16' | '16:9' | 'auto';
   parentAssetId?: string;
 };

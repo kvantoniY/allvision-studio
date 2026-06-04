@@ -27,6 +27,7 @@ const paramsSchema = z.object({
   stylize_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   stylize_prompt: z.string().optional(),
   base_prompt: z.string().optional(),
+  character_prompt: z.string().optional(),
   user_prompt: z.string().optional(),
   default_user_prompt: z.string().optional(),
   duration: z.number().min(1).max(30).optional(),
@@ -95,6 +96,7 @@ export const sceneTransferBlock: BlockDefinition = {
       sceneMode: parsed.scene_mode,
       peopleCount: count,
       basePrompt: parsed.base_prompt,
+      characterPrompt: parsed.character_prompt,
       userPrompt,
     });
 
@@ -214,9 +216,10 @@ function buildScenePrompt(opts: {
   sceneMode: 'photo' | 'video';
   peopleCount: PeopleCount;
   basePrompt?: string;
+  characterPrompt?: string;
   userPrompt: string;
 }): string {
-  const { engine, sceneMode, peopleCount: count, basePrompt, userPrompt } = opts;
+  const { engine, sceneMode, peopleCount: count, basePrompt, characterPrompt, userPrompt } = opts;
   const img = (n: number) => (engine === 'seedance' ? `@image${n}` : `@image_${n}`);
   const vid = engine === 'seedance' ? '@video1' : '@video';
 
@@ -236,6 +239,7 @@ function buildScenePrompt(opts: {
     basePrompt?.trim(),
     sceneAnchor,
     people,
+    characterPrompt?.trim(),
     placement,
     userPrompt.trim(),
     'High quality, coherent and stable identities across every frame, believable motion, no text, no watermark, no extra people.',

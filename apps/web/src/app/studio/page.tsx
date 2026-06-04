@@ -531,6 +531,45 @@ function UploadAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: () 
   );
 }
 
+function AvatarModelPicker({
+  value,
+  onChange,
+}: {
+  value: 'nano-banana' | 'gpt-image-2';
+  onChange: (model: 'nano-banana' | 'gpt-image-2') => void;
+}) {
+  const options: Array<{ id: 'nano-banana' | 'gpt-image-2'; label: string }> = [
+    { id: 'nano-banana', label: 'Стандарт (Nano Banana)' },
+    { id: 'gpt-image-2', label: 'Чёткое фото (GPT Image 2)' },
+  ];
+  return (
+    <div className="space-y-2">
+      <Label>Движок генерации</Label>
+      <div className="grid grid-cols-2 gap-2">
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            type="button"
+            onClick={() => onChange(opt.id)}
+            className={`rounded-md border px-3 py-2 text-sm font-medium transition ${
+              value === opt.id
+                ? 'border-violet-500 bg-violet-500/10 text-white'
+                : 'border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+      {value === 'gpt-image-2' && (
+        <p className="text-xs leading-5 text-amber-300/80">
+          Делает резкое фронтальное лицо крупным планом с ровным светом — лучшая основа для будущих анимаций.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: () => void }) {
   const router = useRouter();
   const me = useGetMeQuery();
@@ -539,6 +578,7 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
   const [prompt, setPrompt] = useState('');
   const [title, setTitle] = useState('');
   const [aspectRatio, setAspectRatio] = useState<'1:1' | '9:16' | '16:9' | 'auto'>(kind === 'user-avatar' ? '1:1' : '16:9');
+  const [model, setModel] = useState<'nano-banana' | 'gpt-image-2'>('nano-banana');
   const [generate, state] = useGenerateUserMediaAssetMutation();
   const balance = me.data?.user.tokenBalance ?? 0;
   const canPay = balance >= generationCost;
@@ -556,7 +596,7 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
       return;
     }
     try {
-      const result = await generate({ kind, prompt: finalPrompt, title, aspectRatio }).unwrap();
+      const result = await generate({ kind, prompt: finalPrompt, title, aspectRatio, model: kind === 'user-avatar' ? model : 'nano-banana' }).unwrap();
       toast({ title: 'Генерация запущена' });
       onClose();
       router.push(`/dashboard/projects/${result.project.id}`);
@@ -596,6 +636,7 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
             </p>
           )}
         </div>
+        {kind === 'user-avatar' && <AvatarModelPicker value={model} onChange={setModel} />}
         <div className="space-y-2">
           <Label>Соотношение сторон</Label>
           <select
@@ -628,6 +669,7 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
   const [presetSlug, setPresetSlug] = useState<string>('none');
   const [prompt, setPrompt] = useState('');
   const [title, setTitle] = useState(`${asset.title} — вариация`);
+  const [model, setModel] = useState<'nano-banana' | 'gpt-image-2'>('nano-banana');
   const [generate, state] = useGenerateUserMediaAssetMutation();
   const balance = me.data?.user.tokenBalance ?? 0;
   const canPay = balance >= generationCost;
@@ -651,6 +693,7 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
         title,
         aspectRatio: asset.kind === 'user-avatar' ? '1:1' : '16:9',
         parentAssetId: asset.id,
+        model: asset.kind === 'user-avatar' ? model : 'nano-banana',
       }).unwrap();
       toast({ title: 'Вариация запущена' });
       onClose();
@@ -686,6 +729,7 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
           onSelect={setPresetSlug}
           isLoading={presets.isLoading}
         />
+        {asset.kind === 'user-avatar' && <AvatarModelPicker value={model} onChange={setModel} />}
         <div className="space-y-2">
           <Label>{promptRequired ? 'Свой промпт' : 'Дополнение к шаблону'}</Label>
           <Textarea

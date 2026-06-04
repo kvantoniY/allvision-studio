@@ -2078,7 +2078,9 @@ const giftFactoryServices = [
           people_count: 'auto',
           stylize_characters: false,
           base_prompt:
-            'Animated cartoon film scene in a consistent hand-drawn 2D style with flat bright colors, clean outlines and a playful family-friendly look. Keep the whole frame in the same cartoon style.',
+            'A 2D animated cartoon world as the background and environment: flat bright colors, clean outlines, playful family-friendly style. The cartoon styling applies to the background, props and any cartoon characters, NOT to the main referenced person.',
+          character_prompt:
+            'CHARACTER FIDELITY (most important): the referenced real person must stay fully photorealistic and instantly recognizable. Reproduce their exact face from the reference photo - face shape, eyes, eyebrows, nose, mouth, hairstyle, hair color, skin tone and age - with sharp, clearly defined, undistorted facial features. Do NOT cartoonify, stylize, smooth, beautify or simplify the person, and do not turn their body into a cartoon. Integrate them as a real person genuinely present inside the animated world: correct human scale next to the cartoon characters, feet on the ground, soft contact shadow, and lighting and colors that match the scene so they are not a flat pasted cutout. Keep motion natural and human - calm believable posture and gentle real movement, with no exaggerated cartoon gestures, no rubber-limb bending, no morphing and no jittery animation.',
           user_prompt: '{{user.prompt}}',
           default_user_prompt: 'Bring the cartoon scene to life with cheerful, natural motion.',
           duration: '{{user.duration}}',
@@ -2172,7 +2174,9 @@ const giftFactoryServices = [
           people_count: 'auto',
           stylize_characters: false,
           base_prompt:
-            'Bright 2D animated children cartoon scene in a sunny countryside meadow with a cheerful blue tractor, rolling green hills, flowers and a friendly farm. Flat saturated colors, simple clean outlines, soft round shapes, wholesome preschool animation style.',
+            'Bright 2D animated children cartoon scene in a sunny countryside meadow with a cheerful blue tractor, rolling green hills, flowers and a friendly farm. Flat saturated colors, simple clean outlines, soft round shapes, wholesome preschool animation style. The animated cartoon style applies to the background, props and cartoon characters, NOT to the main referenced child.',
+          character_prompt:
+            'CHARACTER FIDELITY (most important): the referenced real child must stay fully photorealistic and instantly recognizable. Reproduce their exact face from the reference photo - face shape, eyes, eyebrows, nose, mouth, hairstyle, hair color, skin tone and age - with sharp, clearly defined, undistorted facial features. Do NOT cartoonify, stylize, smooth, beautify or simplify the child, and do not turn their body into a cartoon. Integrate them as a real child genuinely present inside the animated world: correct human scale next to the cartoon characters, feet on the ground, soft contact shadow, and lighting and colors that match the scene so they are not a flat pasted cutout. Keep motion natural and human - calm believable posture and gentle real movement, with no exaggerated cartoon gestures, no rubber-limb bending, no morphing and no jittery animation.',
           default_user_prompt: 'Bring the cartoon scene to life with cheerful, gentle motion suitable for young children.',
           duration: '{{user.duration}}',
           aspect_ratio: '{{user.aspect}}',
@@ -2551,6 +2555,15 @@ const tokenPackages = [
 ];
 
 const stylePresets = [
+  {
+    slug: 'avatar-clean-face',
+    kind: 'user-avatar',
+    title: 'Чёткое фото для анимаций',
+    description: 'Резкое фронтальное лицо крупным планом с ровным светом — лучшая основа для услуг с анимацией. Лучше делать движком GPT Image 2.',
+    promptText:
+      'Create one sharp, photorealistic frontal headshot of the same person, looking straight at the camera. Preserve their exact identity: face shape, eyes, eyebrows, nose, mouth, hairstyle, hair color, skin tone and age. Face large and centered in the frame, neutral relaxed expression, eyes open. Even soft frontal lighting with no harsh shadows, clean neutral background, no glasses, no hat, nothing occluding the face. Maximum facial detail and clarity, natural skin texture, no beautify, no smoothing, no stylization. This image will be used as a high-quality reference face for future animations.',
+    sortOrder: 5,
+  },
   {
     slug: 'avatar-realistic-portrait',
     kind: 'user-avatar',
