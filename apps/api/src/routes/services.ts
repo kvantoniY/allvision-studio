@@ -420,6 +420,17 @@ servicesRouter.post(
             throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} aspect ratio is invalid`);
           }
         }
+        if (field.type === 'slides') {
+          if (!Array.isArray(value)) {
+            throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} must be an array of slide texts`);
+          }
+          const max = field.maxSlides ?? 10;
+          if (value.length < 1 || value.length > max) {
+            throw new HttpError(400, 'INVALID_SLIDES', `${field.id} must have between 1 and ${max} slides`);
+          }
+          const texts = value.map((item) => (typeof item === 'string' ? item.slice(0, field.maxLength ?? 600) : ''));
+          data[field.id] = texts;
+        }
       }
 
       const projectId = crypto.randomUUID();
@@ -469,9 +480,17 @@ servicesRouter.post(
       }
 
       // Price follows the selected tier: Standard -> priceCoinsStandard, Pro -> priceCoinsPro.
-      const tokensCost = tierValue === 'standard'
+      let tokensCost = tierValue === 'standard'
         ? (service.priceCoinsStandard ?? service.priceCoinsPro ?? service.priceTokens)
         : (service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens);
+
+      // Slides services are priced per slide: the tier price is the price of ONE slide.
+      const slidesField = fields.find((field) => field.type === 'slides');
+      if (slidesField) {
+        const slidesValue = data[slidesField.id];
+        const slideCount = Array.isArray(slidesValue) ? Math.max(1, slidesValue.length) : 1;
+        tokensCost *= slideCount;
+      }
       const inputImages = photoFields
         .map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id])
         .filter((value): value is string => typeof value === 'string');

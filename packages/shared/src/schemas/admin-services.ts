@@ -52,6 +52,7 @@ export const userInputFieldSchema = z.object({
     'duration',
     'aspect_ratio',
     'music-select',
+    'slides',
   ]),
   label: z.string().trim().min(1).max(120),
   required: z.boolean(),
@@ -92,6 +93,8 @@ export const userInputFieldSchema = z.object({
   })).optional(),
   durationOptions: z.array(z.number().int().min(1).max(60)).optional(),
   defaultDuration: z.number().int().min(1).max(60).optional(),
+  // For the 'slides' field type: max number of slides the user can add.
+  maxSlides: z.number().int().min(1).max(20).optional(),
   aspectOptions: z.array(z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4'])).optional(),
   defaultAspect: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
   allowUserUpload: z.boolean().optional(),

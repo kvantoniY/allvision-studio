@@ -59,7 +59,7 @@ type UserInputOption = {
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select';
+  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides';
   label?: string;
   required?: boolean;
   requiredWhen?: { field: string; value: string };
@@ -78,6 +78,7 @@ type UserInputField = {
   allowSystemLibrary?: boolean;
   durationOptions?: number[];
   defaultDuration?: number;
+  maxSlides?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;
@@ -135,6 +136,23 @@ function fieldVisible(field: UserInputField, values: FormValues): boolean {
   return values[field.visibleWhen.field] === field.visibleWhen.value;
 }
 
+function parseSlides(value?: string): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map((item) => (typeof item === 'string' ? item : ''));
+  } catch {
+    // ignore malformed JSON
+  }
+  return [];
+}
+
+function slideCount(fields: UserInputField[], values: FormValues): number {
+  const slidesField = fields.find((field) => field.type === 'slides');
+  if (!slidesField) return 0;
+  return Math.max(1, parseSlides(values[slidesField.id]).length);
+}
+
 function parseFields(value: unknown): UserInputField[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -163,6 +181,7 @@ function parseFields(value: unknown): UserInputField[] {
         ? item.durationOptions.filter((v): v is number => typeof v === 'number')
         : undefined,
       defaultDuration: typeof item.defaultDuration === 'number' ? item.defaultDuration : undefined,
+      maxSlides: typeof item.maxSlides === 'number' ? item.maxSlides : undefined,
       aspectOptions: Array.isArray(item.aspectOptions)
         ? (item.aspectOptions.filter((v) => typeof v === 'string') as UserInputField['aspectOptions'])
         : undefined,
@@ -179,7 +198,7 @@ function parseFields(value: unknown): UserInputField[] {
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides'].includes(item.type));
 }
 
 function servicePrice(service: PublicService) {
@@ -335,6 +354,13 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
     }
     if (field.type === 'avatar') {
       if (required && !values[field.id]?.trim()) errors.push(`Выберите аватар: ${field.label ?? field.id}`);
+      continue;
+    }
+    if (field.type === 'slides') {
+      const arr = parseSlides(values[field.id]);
+      if (required && (arr.length < 1 || arr.every((text) => !text.trim()))) {
+        errors.push(`Заполните текст хотя бы одного слайда: ${field.label ?? field.id}`);
+      }
       continue;
     }
     const value = values[field.id]?.trim();
@@ -972,6 +998,84 @@ function ServiceVideoInput({
   );
 }
 
+function SlidesInput({
+  field,
+  label,
+  required,
+  value,
+  onValueChange,
+}: {
+  field: UserInputField;
+  label: string;
+  required: ReactNode;
+  value?: string;
+  onValueChange: (id: string, value: string) => void;
+}) {
+  const max = field.maxSlides ?? 10;
+  const slides = useMemo(() => {
+    const parsed = parseSlides(value);
+    return parsed.length > 0 ? parsed : ['', '', ''];
+  }, [value]);
+  const count = slides.length;
+
+  const commit = (next: string[]) => onValueChange(field.id, JSON.stringify(next));
+  const setCount = (n: number) => {
+    const next = [...slides];
+    if (n > next.length) {
+      while (next.length < n) next.push('');
+    } else {
+      next.length = n;
+    }
+    commit(next);
+  };
+  const setText = (index: number, text: string) => {
+    const next = [...slides];
+    next[index] = text;
+    commit(next);
+  };
+
+  return (
+    <div className="space-y-3">
+      <Label>{label} {required}</Label>
+      <div className="space-y-1.5">
+        <div className="text-xs text-slate-400">Число слайдов</div>
+        <div className="flex flex-wrap gap-1.5">
+          {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setCount(n)}
+              className={cn(
+                'h-9 w-9 rounded-md border text-sm font-semibold transition',
+                count === n
+                  ? 'border-amber-400 bg-amber-400 text-slate-950'
+                  : 'border-slate-700 bg-slate-950 text-slate-100 hover:border-slate-500',
+              )}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-2.5">
+        {slides.map((text, index) => (
+          <div key={index} className="space-y-1">
+            <Label className="text-xs text-slate-400">Текст слайда {index + 1}</Label>
+            <Textarea
+              value={text}
+              rows={2}
+              maxLength={field.maxLength ?? 600}
+              placeholder={`Текст для слайда ${index + 1} (можно оставить пустым)`}
+              onChange={(event) => setText(index, event.target.value)}
+            />
+          </div>
+        ))}
+      </div>
+      {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+    </div>
+  );
+}
+
 function FieldControl({
   field,
   value,
@@ -1116,6 +1220,18 @@ function FieldControl({
         file={file}
         onValueChange={onValueChange}
         onFileChange={onFileChange}
+      />
+    );
+  }
+
+  if (field.type === 'slides') {
+    return (
+      <SlidesInput
+        field={field}
+        label={label}
+        required={required}
+        value={value}
+        onValueChange={onValueChange}
       />
     );
   }
@@ -1427,6 +1543,51 @@ function GenerationWarning({ project }: { project: ProjectListItem }) {
   );
 }
 
+function projectResultAssets(project: ProjectListItem): Array<{ type: 'image' | 'video'; url: string }> {
+  const raw = (project as unknown as { resultAssets?: unknown }).resultAssets;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((item): item is { type?: unknown; url?: unknown } => !!item && typeof item === 'object')
+    .filter((item) => typeof item.url === 'string')
+    .map((item) => ({ type: item.type === 'video' ? ('video' as const) : ('image' as const), url: item.url as string }));
+}
+
+function GenerationGallery({ assets }: { assets: Array<{ type: 'image' | 'video'; url: string }> }) {
+  return (
+    <div>
+      <div className="mb-2 text-sm font-medium text-slate-200">Слайды ({assets.length})</div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {assets.map((asset, index) => {
+          const url = mediaUrl(asset.url) ?? asset.url;
+          return (
+            <div key={index} className="group relative overflow-hidden rounded-md border border-slate-800 bg-slate-950">
+              {asset.type === 'video' ? (
+                <video src={url} controls preload="metadata" className="w-full bg-black" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={url} alt={`Слайд ${index + 1}`} className="w-full object-cover" />
+              )}
+              <div className="absolute left-1.5 top-1.5 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                {index + 1}
+              </div>
+              <a
+                href={url}
+                download
+                target="_blank"
+                rel="noopener"
+                className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-md bg-black/65 text-white opacity-0 transition hover:bg-black/85 group-hover:opacity-100"
+                title={`Скачать слайд ${index + 1}`}
+              >
+                <Download className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GenerationCard({
   project,
   expanded,
@@ -1439,6 +1600,8 @@ function GenerationCard({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const isActive = isActiveProjectStatus(project.status);
   const resultUrl = projectOutputUrl(project);
+  const galleryAssets = projectResultAssets(project);
+  const isGallery = project.status === 'COMPLETED' && galleryAssets.length > 1;
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
@@ -1471,7 +1634,11 @@ function GenerationCard({
 
       {expanded && (
         <div className="space-y-4 border-t border-slate-800 p-4">
-          <GenerationPreview project={project} expanded onOpenResult={() => setLightboxOpen(true)} />
+          {isGallery ? (
+            <GenerationGallery assets={galleryAssets} />
+          ) : (
+            <GenerationPreview project={project} expanded onOpenResult={() => setLightboxOpen(true)} />
+          )}
 
           {isActive && <GenerationProgress project={project} />}
 
@@ -1691,6 +1858,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
         if (field.defaultValue) def = field.defaultValue;
         else if (field.type === 'duration' && field.defaultDuration) def = String(field.defaultDuration);
         else if (field.type === 'aspect_ratio' && field.defaultAspect) def = field.defaultAspect;
+        else if (field.type === 'slides') def = JSON.stringify(['', '', '']);
         if (def !== undefined) {
           next[field.id] = def;
           changed = true;
@@ -1750,7 +1918,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     );
   }
 
-  const price = tierField ? tierPrice(service, tier) : servicePrice(service);
+  const basePrice = tierField ? tierPrice(service, tier) : servicePrice(service);
+  const slidesCount = slideCount(fields, values);
+  const price = slidesCount > 0 ? basePrice * slidesCount : basePrice;
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);
@@ -1805,8 +1975,13 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       }
     }
 
+    const payloadObj: Record<string, unknown> = { ...dataPayload };
+    for (const field of fields) {
+      if (field.type === 'slides') payloadObj[field.id] = parseSlides(dataPayload[field.id]);
+    }
+
     const formData = new FormData();
-    formData.append('data', JSON.stringify(dataPayload));
+    formData.append('data', JSON.stringify(payloadObj));
     for (const field of fields) {
       if (field.type !== 'photo' && field.type !== 'audio' && field.type !== 'video') continue;
       const file = files[field.id];

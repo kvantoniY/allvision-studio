@@ -950,6 +950,45 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
     supportedModels: sceneTransferModels,
   },
   {
+    slug: 'carousel-slides',
+    title: 'Карусель слайдов (пост)',
+    description: 'Генерирует набор слайдов для карусели-поста в едином стиле через GPT Image 2: размещает фото пользователя на каждом слайде и рендерит текст слайда прямо в изображение. Все слайды держат одну палитру, типографику и сетку (первый слайд используется как style-референс для остальных). Результат - несколько изображений (мульти-вывод).',
+    category: 'image',
+    useWhen: 'Когда нужен набор оформленных слайдов для поста-карусели: личный бренд, инфопост, продукт. Текст каждого слайда задаёт пользователь.',
+    compatibleInputs: ['photo', 'slide texts'],
+    examples: ['Фото эксперта + 5 текстов слайдов -> единый премиум-набор слайдов с человеком и текстом.'],
+    paramsSchema: objectSchema(
+      {
+        model: modelTierObject,
+        person_photo: {
+          type: 'string',
+          title: 'Фото человека',
+          description: sourceSelect('image', 'Фото человека для слайдов', 'Фото, которое размещается на каждом слайде. Обычно {{user.photo}}.'),
+        },
+        slides: {
+          type: 'array',
+          title: 'Тексты слайдов',
+          items: { type: 'string' },
+          description: 'Массив текстов слайдов. Обычно {{user.slides}} из поля типа slides. Длина массива = число слайдов.',
+        },
+        style_prompt: {
+          type: 'string',
+          title: 'Стиль карусели (admin)',
+          description: 'Скрытый промпт единого стиля: палитра, типографика, сетка, настроение. Применяется ко всем слайдам.',
+        },
+        aspect_ratio: {
+          type: 'string',
+          title: 'Формат кадра',
+          enum: ['1:1', '3:4', '9:16'],
+          default: '3:4',
+          description: 'Формат слайда. 3:4 и 9:16 — вертикальные (портрет), 1:1 — квадрат.',
+        },
+      },
+      [],
+    ),
+    supportedModels: imageEditModels.filter((model) => model.slug === 'gpt-image-2' || model.slug === 'nano-banana'),
+  },
+  {
     slug: 'video-compose',
     title: 'Финальная сборка видео',
     description: 'Локальный compose-шаг через ffmpeg: добавляет аудио-дорожку поверх сгенерированного видео, регулирует громкость, fade-in/fade-out, при необходимости зацикливает короткий трек. Используйте его в конце pipeline для оформления финального ролика. Платного AI-вызова нет.',

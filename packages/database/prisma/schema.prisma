@@ -155,6 +155,8 @@ model Project {
   resultImage     String?
   resultVideo     String?
   resultThumbnail String?
+  // Multi-output results (e.g. carousel slides). Array of { type, url, label? }.
+  resultAssets    Json?
 
   tokensCost   Int
   errorMessage String? @db.Text

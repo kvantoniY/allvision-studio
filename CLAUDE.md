@@ -1030,3 +1030,30 @@ Seed не трогался: услуги `single-photo-2017` / `group-photo-2017
 - Реальный PiAPI-смоук Kling 3.0 Omni / Seedance 2.0 Omni с фото-сценой (image как часть `images`/`image_urls` + @image_N anchor под локацию) не прогонялся — нужен перед платным запуском; payload-формат повторяет уже рабочие omni-вызовы из `trend-video-transfer`/`last-kiss-meteor`.
 - Плейсхолдер-сцены (`cinema-blue-tractor-scene`, `cinema-hp-scene`) и picsum-превью заменить на реальные брендовые ассеты; финальные base_prompt'ы шаблонов дописать в админке.
 - Для шаблонов сцена пока только photo-mode; admin может переключить `scene_mode: video` + `scene_video` (URL/asset) вручную.
+
+## Этап P9.3 ✅ — Мульти-вывод + услуга «Карусель для поста»
+
+GPT Image fix: `quality` для gpt-image-1/2 нормализуется (`normalizeGptImageQuality`): валидные `auto|high|medium|low`, `standard → medium`, остальное → `auto`. Раньше слали `standard` (значение DALL·E-3) → PiAPI HTTP 400 → общий «техническая ошибка» в Студии. Чинит Студию (GPT Image) и карусель.
+
+Мульти-вывод проекта:
+- `Project.resultAssets Json?` (миграция `20260605200000_project_result_assets`) — массив `{ type, url }` для услуг с несколькими результатами.
+- `pipeline-runner.normaliseFinalOutput` детектит `output.metadata.slides` (массив URL) и пишет в `resultAssets` (+ `resultImage`/`resultVideo` = первый как обложка). Обычные одно-результатные услуги не затронуты.
+- `resultAssets` добавлен в project list/status DTO; web `ProjectStatusResponse`/`ProjectListItem`.
+- `ServiceDetail` показывает галерею слайдов (`GenerationGallery`) для завершённого проекта с `resultAssets.length > 1`: сетка превью + скачать каждый.
+
+Блок `carousel-slides`:
+- Вход: 1 фото человека + массив текстов слайдов + единый `style_prompt`. На каждый слайд — отдельный вызов GPT Image 2; первый слайд становится style-референсом для остальных (`image_urls`), чтобы палитра/типографика/сетка не «прыгали». Текст слайда рендерится прямо в изображение. Выход: `{ type:'image', url: slides[0], metadata:{ slides:[...] } }`.
+- Зарегистрирован в `registry.ts` и `PIAPI_BLOCKS`; `blocks-registry` тест под 13 блоков; добавлен `carousel-slides-block.test.ts` (3 теста).
+
+Поле формы `slides`:
+- Новый тип поля `slides` (+ `maxSlides`) в `userInputFieldSchema`. `ServiceDetail.SlidesInput`: селектор числа слайдов (1..max) + динамические textarea на каждый слайд; значение хранится как JSON-массив строк; на сабмите конвертируется в массив в payload.
+- Launch валидирует `slides` (массив 1..maxSlides) и кладёт массив в `userInputs`; pipeline берёт `{{user.slides}}`.
+
+Послайдовая цена:
+- Услуги со `slides`-полем тарифицируются за слайд: `tokensCost = ценаTier × числоСлайдов` (launch), и цена в UI live-обновляется с числом слайдов.
+
+Услуга `carousel-post` («Карусель для поста», TRENDS_MEMES, 15 коинов/слайд, gpt-image-2, до 10 слайдов) добавлена в seed и в allowlist `NEW_SERVICE_SLUGS_TO_CREATE` (upsert на деплое).
+
+Проверки P9.3: билды shared/database/worker/api/web — зелёные; worker `blocks-registry scene-transfer-block carousel-slides-block` — passed (добавлен carousel тест, registry под 13); shared 20 / seed 4 — passed; `validatePipelineConfig` для carousel-post — OK.
+
+Технический долг P9.3: variable-цена реализована частным случаем по наличию `slides`-поля (не общий механизм); карточка товара (LLM + условная генерация + 4 разнородных вывода) — следующий этап (LLM отложён по решению владельца, промпты пока ручные).

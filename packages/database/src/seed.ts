@@ -2278,6 +2278,75 @@ const giftFactoryServices = [
       },
     ],
   },
+  {
+    slug: 'carousel-post',
+    title: 'Карусель для поста',
+    description:
+      'Загрузите своё фото и впишите текст для каждого слайда — GPT Image 2 соберёт набор слайдов в едином стиле, разместит вас на каждом и впечатает текст прямо в дизайн. Цена считается за слайд.',
+    shortDesc: 'Набор слайдов для поста-карусели в едином стиле с вашим фото',
+    category: ServiceCategory.TRENDS_MEMES,
+    // Себестоимость ~ gpt-image-2 за слайд ($0.1 ≈ 10 коинов) + маржа -> 15 коинов/слайд.
+    priceTokens: 15,
+    priceCoinsStandard: 15,
+    priceCoinsPro: 15,
+    costUsd: 0.1,
+    coverImage: image('gift-carousel-post'),
+    galleryImages: [image('gift-carousel-1'), image('gift-carousel-2')],
+    previewImage: image('gift-carousel-post-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 24,
+    userInputForm: [
+      {
+        id: 'photo',
+        type: 'photo',
+        label: 'Ваше фото',
+        required: true,
+        hint: 'Чёткое фото; будет размещено на каждом слайде',
+        maxSizeMb: 10,
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'slides',
+        type: 'slides',
+        label: 'Слайды',
+        required: true,
+        maxSlides: 10,
+        maxLength: 600,
+        hint: 'Выберите число слайдов и впишите текст каждого. Цена считается за слайд. Короткий текст читается лучше.',
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат слайда',
+        required: false,
+        aspectOptions: ['3:4', '1:1', '9:16'],
+        defaultAspect: '3:4',
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'carousel-slides',
+        input: '{{user.photo}}',
+        params: {
+          model: 'gpt-image-2',
+          person_photo: '{{user.photo}}',
+          slides: '{{user.slides}}',
+          style_prompt:
+            'Premium, modern personal-brand social-media carousel. Keep ONE consistent template across all slides: soft neutral cream and beige background with subtle warm gold accents, elegant serif headings paired with a clean sans-serif body, generous margins, a clear photo area for the person and a tidy text block. Cohesive, professional, aesthetic, editorial magazine-like layout, sharp readable typography.',
+          aspect_ratio: '{{user.aspect}}',
+        },
+      },
+    ],
+  },
 ];
 
 const legacyTrendServiceSlugs = [
@@ -2795,6 +2864,7 @@ const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
   'me-in-cartoon',
   'kid-in-blue-tractor',
   'me-in-harry-potter',
+  'carousel-post',
 ]);
 
 // Upsert loader for explicitly new/in-development data-driven services. Runs on every seed (incl. prod

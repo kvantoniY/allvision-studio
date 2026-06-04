@@ -36,6 +36,7 @@ export type ProjectStatusResponse = Pick<
   | 'resultImage'
   | 'resultVideo'
   | 'resultThumbnail'
+  | 'resultAssets'
   | 'errorMessage'
   | 'errorCode'
   | 'completedAt'

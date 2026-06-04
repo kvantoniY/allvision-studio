@@ -194,6 +194,7 @@ export async function runPipeline(
         resultImage: finalOutput.resultImage ?? null,
         resultVideo: finalOutput.resultVideo ?? null,
         resultThumbnail: finalOutput.resultThumbnail ?? null,
+        resultAssets: finalOutput.resultAssets ? toJson(finalOutput.resultAssets) : Prisma.JsonNull,
         stepProgress: toJson(stepProgress),
       },
     });
@@ -616,10 +617,25 @@ function normaliseFinalOutput(output: unknown): {
   resultImage?: string;
   resultVideo?: string;
   resultThumbnail?: string;
+  resultAssets?: Array<{ type: 'image' | 'video'; url: string }>;
 } {
   if (!output || typeof output !== 'object') return {};
   const value = output as Partial<BlockOutput> & Record<string, unknown>;
   const url = typeof value.url === 'string' ? value.url : undefined;
+
+  // Multi-output blocks (e.g. carousel-slides) expose a list of result URLs in metadata.slides.
+  const metadata = value.metadata && typeof value.metadata === 'object' ? (value.metadata as Record<string, unknown>) : undefined;
+  const slides = Array.isArray(metadata?.slides)
+    ? (metadata!.slides as unknown[]).filter((item): item is string => typeof item === 'string' && item.length > 0)
+    : [];
+  if (slides.length > 0) {
+    const type = value.type === 'video' ? 'video' : 'image';
+    return {
+      ...(type === 'video' ? { resultVideo: slides[0] } : { resultImage: slides[0] }),
+      resultAssets: slides.map((slideUrl) => ({ type, url: slideUrl })),
+    };
+  }
+
   if (value.type === 'image' && url) return { resultImage: url };
   if (value.type === 'video' && url) return { resultVideo: url };
   return {
