@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { getBlockCatalogItem } from '@allvision/shared';
 import type { ProviderRunContext } from '../providers/ai-provider';
@@ -74,7 +75,7 @@ export const sceneTransferBlock: BlockDefinition = {
     let secondaryRef = parsed.secondary_photo;
     let videoFrom = 5;
     if (parsed.stylize_characters) {
-      const stylizeModel = stringModel(parsed.stylize_model, 'gpt-image-2');
+      const stylizeModel = stringModel(parsed.stylize_model, 'nano-banana');
       const stylizePrompt = parsed.stylize_prompt?.trim() || defaultStylizePrompt();
       const firstTo = count === 'two' ? 20 : 36;
       primaryRef = (await stylizeCharacter(ctx, stylizeModel, stylizePrompt, primaryRef, parsed, 3, firstTo)).outputUrl;
@@ -86,7 +87,7 @@ export const sceneTransferBlock: BlockDefinition = {
 
     const model = stringModel(parsed.model, 'kling-3-omni');
     const engine = resolveEngine(model);
-    const duration = parsed.duration ?? 5;
+    const duration = await resolveDuration(parsed, ctx);
     const characterRefs = count === 'two' ? [primaryRef, secondaryRef!] : [primaryRef];
     const userPrompt = parsed.user_prompt?.trim() || parsed.default_user_prompt?.trim() || defaultUserPrompt();
     const prompt = buildScenePrompt({
@@ -252,6 +253,67 @@ function defaultStylizePrompt() {
     'Redraw this person as a friendly 2D animated cartoon character while keeping their recognizable face features, hairstyle and skin tone.',
     'Flat bright colors, clean hand-drawn animation style, family-friendly, single character on a clean neutral background, no text, no watermark.',
   ].join(' ');
+}
+
+// Photo scene: user picks the duration (max 15s). Video scene: the result length matches the
+// reference video, so we probe its duration with ffprobe (clamped to the model's 3-15s range).
+async function resolveDuration(parsed: ParsedParams, ctx: BlockContext): Promise<number> {
+  if (parsed.scene_mode === 'video' && parsed.scene_video && process.env.NODE_ENV !== 'test') {
+    try {
+      const probed = await ffprobeVideoDuration(parsed.scene_video);
+      if (probed && probed > 0) return Math.max(3, Math.min(15, Math.ceil(probed)));
+    } catch (err) {
+      ctx.logger.warn('[scene-transfer] failed to probe scene_video duration; using fallback', err);
+    }
+    return Math.max(3, Math.min(15, parsed.duration ?? 10));
+  }
+  return Math.max(1, Math.min(15, parsed.duration ?? 5));
+}
+
+function ffprobeVideoDuration(url: string): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    };
+    const succeed = (value: number | undefined) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const child = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'json',
+      url,
+    ], { windowsHide: true });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      fail(new Error('ffprobe timed out'));
+    }, 10_000);
+    child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
+    child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on('error', fail);
+    child.on('close', (code) => {
+      if (code !== 0) {
+        fail(new Error(Buffer.concat(stderr).toString('utf8') || 'ffprobe failed'));
+        return;
+      }
+      try {
+        const parsed = JSON.parse(Buffer.concat(stdout).toString('utf8')) as { format?: { duration?: string } };
+        const duration = Number(parsed.format?.duration);
+        succeed(Number.isFinite(duration) ? duration : undefined);
+      } catch (err) {
+        fail(err as Error);
+      }
+    });
+  });
 }
 
 function scaledContext(

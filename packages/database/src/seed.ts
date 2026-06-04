@@ -1828,10 +1828,10 @@ const giftFactoryServices = [
         type: 'tier',
         label: 'Качество',
         required: false,
-        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        hint: 'Пока доступен только Стандарт (Kling 3.0). Pro (Seedance 2.0) — скоро.',
         options: [
           { value: 'standard', label: 'Стандарт · Kling 3.0' },
-          { value: 'pro', label: 'Pro · Seedance 2.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0', disabled: true },
         ],
       },
       {
@@ -1857,6 +1857,7 @@ const giftFactoryServices = [
         type: 'select',
         label: 'Режим референса сцены',
         required: true,
+        defaultValue: 'photo',
         hint: 'По фото — загрузите кадр сцены, по видео — видео-референс',
         options: [
           { value: 'photo', label: 'По фото' },
@@ -1869,6 +1870,7 @@ const giftFactoryServices = [
         label: 'Фото-кадр сцены',
         required: false,
         requiredWhen: { field: 'scene_mode', value: 'photo' },
+        visibleWhen: { field: 'scene_mode', value: 'photo' },
         mediaGroup: 'scene',
         hint: 'Кадр из фильма, куда перенести персонажей',
         maxSizeMb: 10,
@@ -1882,6 +1884,7 @@ const giftFactoryServices = [
         label: 'Видео-референс сцены',
         required: false,
         requiredWhen: { field: 'scene_mode', value: 'video' },
+        visibleWhen: { field: 'scene_mode', value: 'video' },
         hint: 'Видео сцены: движение, камера и атмосфера. MP4/MOV до 15 сек',
         maxSizeMb: 50,
         maxDurationSec: 15,
@@ -1896,6 +1899,16 @@ const giftFactoryServices = [
         maxLength: 600,
         placeholder: 'Например: персонажи идут по коридору и улыбаются',
         hint: 'Опишите действие. Если оставить пустым — сцена просто оживёт.',
+      },
+      {
+        id: 'duration',
+        type: 'duration',
+        label: 'Длительность видео',
+        required: false,
+        visibleWhen: { field: 'scene_mode', value: 'photo' },
+        hint: 'Только для режима «По фото». В режиме «По видео» длина = длине видео-референса.',
+        durationOptions: [5, 8, 10, 15],
+        defaultDuration: 5,
       },
       {
         id: 'aspect',
@@ -1924,7 +1937,7 @@ const giftFactoryServices = [
             'Photorealistic live-action cinematic film scene. Realistic lighting, depth of field, filmic color grading and believable physics, as if shot on a professional movie camera.',
           user_prompt: '{{user.prompt}}',
           default_user_prompt: 'Bring the scene to life with natural, subtle, believable motion.',
-          duration: 5,
+          duration: '{{user.duration}}',
           aspect_ratio: '{{user.aspect}}',
           resolution: '720p',
         },
@@ -1959,10 +1972,10 @@ const giftFactoryServices = [
         type: 'tier',
         label: 'Качество',
         required: false,
-        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        hint: 'Пока доступен только Стандарт (Kling 3.0). Pro (Seedance 2.0) — скоро.',
         options: [
           { value: 'standard', label: 'Стандарт · Kling 3.0' },
-          { value: 'pro', label: 'Pro · Seedance 2.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0', disabled: true },
         ],
       },
       {
@@ -1988,6 +2001,7 @@ const giftFactoryServices = [
         type: 'select',
         label: 'Режим референса сцены',
         required: true,
+        defaultValue: 'photo',
         hint: 'По фото — загрузите кадр мультфильма, по видео — видео-референс',
         options: [
           { value: 'photo', label: 'По фото' },
@@ -2000,6 +2014,7 @@ const giftFactoryServices = [
         label: 'Фото-кадр мультфильма',
         required: false,
         requiredWhen: { field: 'scene_mode', value: 'photo' },
+        visibleWhen: { field: 'scene_mode', value: 'photo' },
         mediaGroup: 'scene',
         hint: 'Кадр из мультфильма, куда перенести героев',
         maxSizeMb: 10,
@@ -2013,6 +2028,7 @@ const giftFactoryServices = [
         label: 'Видео-референс мультфильма',
         required: false,
         requiredWhen: { field: 'scene_mode', value: 'video' },
+        visibleWhen: { field: 'scene_mode', value: 'video' },
         hint: 'Видео сцены мультфильма. MP4/MOV до 15 сек',
         maxSizeMb: 50,
         maxDurationSec: 15,
@@ -2027,6 +2043,16 @@ const giftFactoryServices = [
         maxLength: 600,
         placeholder: 'Например: герои весело бегут по полю',
         hint: 'Опишите действие. Если оставить пустым — сцена просто оживёт.',
+      },
+      {
+        id: 'duration',
+        type: 'duration',
+        label: 'Длительность видео',
+        required: false,
+        visibleWhen: { field: 'scene_mode', value: 'photo' },
+        hint: 'Только для режима «По фото». В режиме «По видео» длина = длине видео-референса.',
+        durationOptions: [5, 8, 10, 15],
+        defaultDuration: 5,
       },
       {
         id: 'aspect',
@@ -2051,14 +2077,14 @@ const giftFactoryServices = [
           secondary_photo: '{{user.person2}}',
           people_count: 'auto',
           stylize_characters: true,
-          stylize_model: 'gpt-image-2',
+          stylize_model: 'nano-banana',
           stylize_prompt:
             'Redraw this person as a friendly 2D animated cartoon character matching a bright modern cartoon style. Keep their recognizable face features, hairstyle and skin tone. Flat saturated colors, clean outlines, family-friendly, single character on a clean neutral background, no text, no watermark.',
           base_prompt:
             'Animated cartoon film scene in a consistent hand-drawn 2D style with flat bright colors, clean outlines and a playful family-friendly look. Keep the whole frame in the same cartoon style.',
           user_prompt: '{{user.prompt}}',
           default_user_prompt: 'Bring the cartoon scene to life with cheerful, natural motion.',
-          duration: 5,
+          duration: '{{user.duration}}',
           aspect_ratio: '{{user.aspect}}',
           resolution: '720p',
         },
@@ -2093,10 +2119,10 @@ const giftFactoryServices = [
         type: 'tier',
         label: 'Качество',
         required: false,
-        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        hint: 'Пока доступен только Стандарт (Kling 3.0). Pro (Seedance 2.0) — скоро.',
         options: [
           { value: 'standard', label: 'Стандарт · Kling 3.0' },
-          { value: 'pro', label: 'Pro · Seedance 2.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0', disabled: true },
         ],
       },
       {
@@ -2116,6 +2142,14 @@ const giftFactoryServices = [
         hint: 'Добавьте, если героев должно быть двое',
         allowStudioAvatars: true,
         allowSystemLibrary: false,
+      },
+      {
+        id: 'duration',
+        type: 'duration',
+        label: 'Длительность видео',
+        required: false,
+        durationOptions: [5, 8, 10, 15],
+        defaultDuration: 5,
       },
       {
         id: 'aspect',
@@ -2140,13 +2174,13 @@ const giftFactoryServices = [
           secondary_photo: '{{user.person2}}',
           people_count: 'auto',
           stylize_characters: true,
-          stylize_model: 'gpt-image-2',
+          stylize_model: 'nano-banana',
           stylize_prompt:
             'Redraw this child as a friendly 2D animated cartoon character in a bright preschool cartoon style. Keep recognizable face features, hairstyle and skin tone. Flat saturated colors, soft round shapes, clean outlines, family-friendly, single character on a clean neutral background, no text, no watermark.',
           base_prompt:
             'Bright 2D animated children cartoon scene in a sunny countryside meadow with a cheerful blue tractor, rolling green hills, flowers and a friendly farm. Flat saturated colors, simple clean outlines, soft round shapes, wholesome preschool animation style.',
           default_user_prompt: 'Bring the cartoon scene to life with cheerful, gentle motion suitable for young children.',
-          duration: 5,
+          duration: '{{user.duration}}',
           aspect_ratio: '{{user.aspect}}',
           resolution: '720p',
         },
@@ -2181,10 +2215,10 @@ const giftFactoryServices = [
         type: 'tier',
         label: 'Качество',
         required: false,
-        hint: 'Стандарт — Kling 3.0, Pro — Seedance 2.0 (детальнее и дороже).',
+        hint: 'Пока доступен только Стандарт (Kling 3.0). Pro (Seedance 2.0) — скоро.',
         options: [
           { value: 'standard', label: 'Стандарт · Kling 3.0' },
-          { value: 'pro', label: 'Pro · Seedance 2.0' },
+          { value: 'pro', label: 'Pro · Seedance 2.0', disabled: true },
         ],
       },
       {
@@ -2204,6 +2238,14 @@ const giftFactoryServices = [
         hint: 'Добавьте, если в сцене должны быть два человека',
         allowStudioAvatars: true,
         allowSystemLibrary: false,
+      },
+      {
+        id: 'duration',
+        type: 'duration',
+        label: 'Длительность видео',
+        required: false,
+        durationOptions: [5, 8, 10, 15],
+        defaultDuration: 5,
       },
       {
         id: 'aspect',
@@ -2231,7 +2273,7 @@ const giftFactoryServices = [
           base_prompt:
             'Photorealistic cinematic fantasy film scene set in a grand magical castle with warm candlelight, old stone halls, floating candles and a wondrous wizarding-school atmosphere. Filmic lighting and color grading, realistic textures.',
           default_user_prompt: 'Bring the scene to life with natural, subtle, believable motion.',
-          duration: 5,
+          duration: '{{user.duration}}',
           aspect_ratio: '{{user.aspect}}',
           resolution: '720p',
         },
@@ -2656,9 +2698,9 @@ export async function runSeed(options: SeedOptions = {}) {
   console.log('[seed] step 2/4: catalog (services, trends, scenarios)');
   await ensureCatalog(options);
 
-  console.log('[seed] gift services: ensuring data-driven catalog services exist');
-  const giftCreated = await ensureGiftServices();
-  console.log(`[seed] gift services: ${giftCreated} created (existing services left untouched)`);
+  console.log('[seed] gift services: ensuring allowlisted data-driven catalog services');
+  const gift = await ensureGiftServices();
+  console.log(`[seed] gift services: ${gift.created} created, ${gift.updated} refreshed (non-allowlisted services left untouched)`);
 
   console.log('[seed] step 3/5: token packages');
   await ensureTokenPackages();
@@ -2748,22 +2790,56 @@ const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
   'me-in-harry-potter',
 ]);
 
-// Create-only loader for explicitly new data-driven services. Runs on every seed (incl. prod deploy).
-// Creates only the missing services listed in NEW_SERVICE_SLUGS_TO_CREATE; never touches anything else.
+// Upsert loader for explicitly new/in-development data-driven services. Runs on every seed (incl. prod
+// deploy). It only touches the slugs in NEW_SERVICE_SLUGS_TO_CREATE — creating them if missing and
+// refreshing them to the canonical seed config if present (these are actively iterated and not yet
+// admin-tuned). Everything OUTSIDE this allowlist is never created, updated or deleted, so admin edits
+// and intentionally-removed services are preserved. Clear this list once the services are stable.
 async function ensureGiftServices() {
   let created = 0;
+  let updated = 0;
   for (const service of giftFactoryServices) {
     if (!NEW_SERVICE_SLUGS_TO_CREATE.has(service.slug)) continue;
     const existing = await prisma.service.findUnique({
       where: { slug: service.slug },
       select: { id: true },
     });
-    if (existing) continue;
-    await prisma.service.create({ data: service });
-    console.log(`[seed] gift service created: ${service.slug}`);
-    created += 1;
+    if (existing) {
+      await prisma.service.update({
+        where: { slug: service.slug },
+        data: {
+          title: service.title,
+          shortDesc: service.shortDesc,
+          description: service.description,
+          category: service.category,
+          priceTokens: service.priceTokens,
+          priceCoinsStandard: service.priceCoinsStandard,
+          priceCoinsPro: service.priceCoinsPro,
+          costUsd: service.costUsd,
+          coverImage: service.coverImage,
+          galleryImages: service.galleryImages,
+          previewImage: service.previewImage,
+          previewVideo: service.previewVideo,
+          processingType: service.processingType,
+          userInputForm: service.userInputForm,
+          pipelineConfig: service.pipelineConfig,
+          isActive: service.isActive,
+          isFeatured: service.isFeatured,
+          aiProvider: service.aiProvider,
+          aiModel: service.aiModel,
+          aiConfig: service.aiConfig,
+          sortOrder: service.sortOrder,
+        },
+      });
+      console.log(`[seed] gift service refreshed: ${service.slug}`);
+      updated += 1;
+    } else {
+      await prisma.service.create({ data: service });
+      console.log(`[seed] gift service created: ${service.slug}`);
+      created += 1;
+    }
   }
-  return created;
+  return { created, updated };
 }
 
 async function ensureCatalog(options: SeedOptions) {

@@ -54,6 +54,7 @@ type ServiceDetailProps = {
 type UserInputOption = {
   value: string;
   label: string;
+  disabled?: boolean;
 };
 
 type UserInputField = {
@@ -62,6 +63,8 @@ type UserInputField = {
   label?: string;
   required?: boolean;
   requiredWhen?: { field: string; value: string };
+  visibleWhen?: { field: string; value: string };
+  defaultValue?: string;
   hint?: string;
   placeholder?: string;
   maxLength?: number;
@@ -120,6 +123,18 @@ function previewImage(service: PublicService) {
   return mediaUrl(service.previewImage ?? service.coverImage ?? service.galleryImages[0]) ?? '/mock_preview.png';
 }
 
+function parseCondition(value: unknown): { field: string; value: string } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.field !== 'string' || typeof record.value !== 'string') return undefined;
+  return { field: record.field, value: record.value };
+}
+
+function fieldVisible(field: UserInputField, values: FormValues): boolean {
+  if (!field.visibleWhen) return true;
+  return values[field.visibleWhen.field] === field.visibleWhen.value;
+}
+
 function parseFields(value: unknown): UserInputField[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -129,15 +144,9 @@ function parseFields(value: unknown): UserInputField[] {
       type: typeof item.type === 'string' ? (item.type as UserInputField['type']) : 'text',
       label: typeof item.label === 'string' ? item.label : undefined,
       required: item.required === true,
-      requiredWhen:
-        item.requiredWhen && typeof item.requiredWhen === 'object' && !Array.isArray(item.requiredWhen)
-          && typeof (item.requiredWhen as Record<string, unknown>).field === 'string'
-          && typeof (item.requiredWhen as Record<string, unknown>).value === 'string'
-          ? {
-              field: String((item.requiredWhen as Record<string, unknown>).field),
-              value: String((item.requiredWhen as Record<string, unknown>).value),
-            }
-          : undefined,
+      requiredWhen: parseCondition(item.requiredWhen),
+      visibleWhen: parseCondition(item.visibleWhen),
+      defaultValue: typeof item.defaultValue === 'string' ? item.defaultValue : undefined,
       hint: typeof item.hint === 'string' ? item.hint : undefined,
       placeholder: typeof item.placeholder === 'string' ? item.placeholder : undefined,
       maxLength: typeof item.maxLength === 'number' ? item.maxLength : undefined,
@@ -166,6 +175,7 @@ function parseFields(value: unknown): UserInputField[] {
             .map((option) => ({
               value: String(option.value ?? ''),
               label: String(option.label ?? option.value ?? ''),
+              disabled: option.disabled === true,
             }))
         : undefined,
     }))
@@ -208,18 +218,26 @@ function TierSelector({
         {options.map((option) => {
           const tier: ServiceTier = option.value === 'standard' ? 'standard' : 'pro';
           const active = value === tier;
+          const disabled = option.disabled === true;
           return (
             <button
               key={option.value}
               type="button"
-              onClick={() => onChange(tier)}
+              disabled={disabled}
+              onClick={() => !disabled && onChange(tier)}
               className={cn(
                 'rounded-lg border p-3 text-left transition',
-                active ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500',
+                disabled
+                  ? 'cursor-not-allowed border-slate-800 bg-slate-950/50 opacity-50'
+                  : active
+                    ? 'border-amber-400 bg-amber-400/10'
+                    : 'border-slate-700 bg-slate-950 hover:border-slate-500',
               )}
             >
               <div className="text-sm font-semibold text-slate-100">{option.label}</div>
-              <div className="mt-1 text-xs font-bold text-amber-300">{tierPrice(service, tier)} коинов</div>
+              <div className="mt-1 text-xs font-bold text-amber-300">
+                {disabled ? 'скоро' : `${tierPrice(service, tier)} коинов`}
+              </div>
             </button>
           );
         })}
@@ -307,6 +325,7 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
   const errors: string[] = [];
   for (const field of fields) {
     if (field.type === 'tier') continue;
+    if (!fieldVisible(field, values)) continue;
     const required = fieldIsRequired(field, values);
     if (field.type === 'photo' || field.type === 'audio' || field.type === 'video') {
       if (required && !files[field.id] && !values[field.id]?.trim()) {
@@ -1657,6 +1676,28 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     setExpandedGenerationId((current) => current ?? latest.id);
   }, [projects]);
 
+  // Prefill default values (e.g. scene_mode -> "photo", duration/aspect defaults) when the service loads,
+  // so conditional fields (visibleWhen) render correctly from the first paint.
+  useEffect(() => {
+    if (fields.length === 0) return;
+    setValues((current) => {
+      const next = { ...current };
+      let changed = false;
+      for (const field of fields) {
+        if (next[field.id] !== undefined && next[field.id] !== '') continue;
+        let def: string | undefined;
+        if (field.defaultValue) def = field.defaultValue;
+        else if (field.type === 'duration' && field.defaultDuration) def = String(field.defaultDuration);
+        else if (field.type === 'aspect_ratio' && field.defaultAspect) def = field.defaultAspect;
+        if (def !== undefined) {
+          next[field.id] = def;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [fields]);
+
   useEffect(() => {
     const specs = new Map<string, { kind: string; group?: string }>();
     for (const field of fields) {
@@ -1911,13 +1952,16 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   )}
 
                   {fields
-                    .filter((field) => field.type !== 'tier')
+                    .filter((field) => field.type !== 'tier' && fieldVisible(field, values))
                     .map((field) => {
                       if (field.type === 'photo') {
                         if (photoFields[0]?.id !== field.id) return null;
+                        const visibleGroups = photoGroups
+                          .map((group) => group.filter((item) => fieldVisible(item, values)))
+                          .filter((group) => group.length > 0);
                         return (
                           <div key="photo-references" className="space-y-5">
-                            {photoGroups.map((group) => (
+                            {visibleGroups.map((group) => (
                               <ServicePhotoReferencesGroup
                                 key={group[0].id}
                                 fields={group}

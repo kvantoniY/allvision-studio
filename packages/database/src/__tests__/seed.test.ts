@@ -209,12 +209,13 @@ describe('seed system users', () => {
     expect(mockMigrateMediaAssets).toHaveBeenCalledTimes(1);
   });
 
-  it('creates missing gift services but never updates existing ones on normal runs', async () => {
+  it('creates allowlisted gift services on first run and refreshes them idempotently', async () => {
     setSystemEnv('readonly-secret');
     await runSeed();
     const sizeAfterFirst = mockState.services.size;
-    // Normal (prod) runs create the data-driven gift services that are missing, but never patch existing ones.
+    // Normal (prod) runs create the allowlisted data-driven services that are missing.
     expect(sizeAfterFirst).toBeGreaterThan(0);
+    // On the first run they are created, not updated.
     expect(mockPrisma.service.update).not.toHaveBeenCalled();
 
     mockPrisma.user.findUnique.mockClear();
@@ -223,10 +224,10 @@ describe('seed system users', () => {
 
     await runSeed();
 
-    // Idempotent: a second run neither re-creates nor updates existing services.
+    // Second run: nothing new created and the service count is stable; allowlisted services are
+    // refreshed in place (update), but no services are added or removed.
     expect(mockState.services.size).toBe(sizeAfterFirst);
     expect(mockPrisma.service.create).not.toHaveBeenCalled();
-    expect(mockPrisma.service.update).not.toHaveBeenCalled();
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { email: 'claude-readonly@allvision-pulse.ru' },
     });

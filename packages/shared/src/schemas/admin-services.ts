@@ -63,6 +63,16 @@ export const userInputFieldSchema = z.object({
       value: z.string().trim().min(1).max(500),
     })
     .optional(),
+  // Conditional visibility: the field is shown only when another field has a given value.
+  // Used for scene_photo / scene_video / duration that depend on scene_mode.
+  visibleWhen: z
+    .object({
+      field: z.string().trim().min(1).max(80),
+      value: z.string().trim().min(1).max(500),
+    })
+    .optional(),
+  // Initial value used to prefill the field on the public form (e.g. scene_mode defaults to "photo").
+  defaultValue: z.string().trim().min(1).max(500).optional(),
   hint: z.string().trim().max(240).optional(),
   placeholder: z.string().trim().max(160).optional(),
   mediaKind: z.string().trim().min(1).max(80).optional(),
@@ -77,6 +87,8 @@ export const userInputFieldSchema = z.object({
   options: z.array(z.object({
     label: z.string().trim().min(1).max(120),
     value: z.string().trim().min(1).max(500),
+    // Renders the option as visible-but-non-selectable (e.g. temporarily disabled Pro tier).
+    disabled: z.boolean().optional(),
   })).optional(),
   durationOptions: z.array(z.number().int().min(1).max(60)).optional(),
   defaultDuration: z.number().int().min(1).max(60).optional(),
