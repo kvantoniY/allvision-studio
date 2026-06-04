@@ -1983,7 +1983,7 @@ const giftFactoryServices = [
         type: 'photo',
         label: 'Фото первого персонажа',
         required: true,
-        hint: 'Чёткое фото лица или человека',
+        hint: 'Загрузите обычное фото. Хотите эффект сильнее? Сделайте мультяшную вариацию фото в Студии и выберите её здесь — так получится реалистичнее.',
         allowStudioAvatars: true,
         allowSystemLibrary: false,
       },
@@ -2076,10 +2076,7 @@ const giftFactoryServices = [
           primary_photo: '{{user.person1}}',
           secondary_photo: '{{user.person2}}',
           people_count: 'auto',
-          stylize_characters: true,
-          stylize_model: 'nano-banana',
-          stylize_prompt:
-            'Redraw this person as a friendly 2D animated cartoon character matching a bright modern cartoon style. Keep their recognizable face features, hairstyle and skin tone. Flat saturated colors, clean outlines, family-friendly, single character on a clean neutral background, no text, no watermark.',
+          stylize_characters: false,
           base_prompt:
             'Animated cartoon film scene in a consistent hand-drawn 2D style with flat bright colors, clean outlines and a playful family-friendly look. Keep the whole frame in the same cartoon style.',
           user_prompt: '{{user.prompt}}',
@@ -2130,7 +2127,7 @@ const giftFactoryServices = [
         type: 'photo',
         label: 'Фото первого ребёнка',
         required: true,
-        hint: 'Чёткое фото лица',
+        hint: 'Загрузите обычное фото ребёнка. Хотите эффект сильнее? Сделайте мультяшную вариацию фото в Студии и выберите её здесь — так получится реалистичнее.',
         allowStudioAvatars: true,
         allowSystemLibrary: false,
       },
@@ -2173,10 +2170,7 @@ const giftFactoryServices = [
           primary_photo: '{{user.person1}}',
           secondary_photo: '{{user.person2}}',
           people_count: 'auto',
-          stylize_characters: true,
-          stylize_model: 'nano-banana',
-          stylize_prompt:
-            'Redraw this child as a friendly 2D animated cartoon character in a bright preschool cartoon style. Keep recognizable face features, hairstyle and skin tone. Flat saturated colors, soft round shapes, clean outlines, family-friendly, single character on a clean neutral background, no text, no watermark.',
+          stylize_characters: false,
           base_prompt:
             'Bright 2D animated children cartoon scene in a sunny countryside meadow with a cheerful blue tractor, rolling green hills, flowers and a friendly farm. Flat saturated colors, simple clean outlines, soft round shapes, wholesome preschool animation style.',
           default_user_prompt: 'Bring the cartoon scene to life with cheerful, gentle motion suitable for young children.',

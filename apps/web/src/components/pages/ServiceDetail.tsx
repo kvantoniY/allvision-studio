@@ -477,6 +477,7 @@ function ServicePhotoReferencesGroup({
   const canAdd = Boolean(nextField);
   const title = fields.length > 1 ? 'Референсы' : (fields[0]?.label ?? 'Фото');
   const firstRequired = fields.some((field) => field.required);
+  const groupHint = fields.find((field) => field.hint)?.hint;
   const nextInputId = nextField ? `${nextField.id}-reference-upload` : undefined;
 
   const clearField = (field: UserInputField) => {
@@ -505,6 +506,7 @@ function ServicePhotoReferencesGroup({
         <p className="mt-1 text-xs leading-5 text-slate-500">
           {filled.length}/{fields.length} добавлено
         </p>
+        {groupHint && <p className="mt-1 text-xs leading-5 text-amber-300/80">{groupHint}</p>}
       </div>
 
       <div className="flex flex-wrap gap-3">
