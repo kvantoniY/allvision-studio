@@ -2736,14 +2736,24 @@ async function ensureUser(options: EnsureUserOptions) {
   return created;
 }
 
-// Create-only loader for the data-driven gift-factory catalog. Runs on every seed (incl. prod deploy).
-// It intentionally NEVER updates or deletes existing services, so admin edits made in /admin/services
-// are preserved. Only services that are genuinely missing (e.g. freshly added to the seed array) are
-// created. This is how new catalog services land in prod without touching the existing ones.
+// Explicit allowlist of services this stage is allowed to create on a normal (prod) run.
+// IMPORTANT: keep this scoped to genuinely NEW services only. The catalog is otherwise managed
+// through /admin/services, and the admin intentionally deletes services they do not want — so this
+// loader must never re-create anything outside this list, and never updates/deletes existing rows.
+// When adding a future batch of services, add their slugs here for that deploy, then clear the list.
+const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
+  'me-in-movie',
+  'me-in-cartoon',
+  'kid-in-blue-tractor',
+  'me-in-harry-potter',
+]);
+
+// Create-only loader for explicitly new data-driven services. Runs on every seed (incl. prod deploy).
+// Creates only the missing services listed in NEW_SERVICE_SLUGS_TO_CREATE; never touches anything else.
 async function ensureGiftServices() {
   let created = 0;
   for (const service of giftFactoryServices) {
-    if (legacyTrendServiceSlugs.includes(service.slug)) continue;
+    if (!NEW_SERVICE_SLUGS_TO_CREATE.has(service.slug)) continue;
     const existing = await prisma.service.findUnique({
       where: { slug: service.slug },
       select: { id: true },
