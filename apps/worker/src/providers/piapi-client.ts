@@ -222,7 +222,9 @@ export class PiAPIClient {
     }
 
     if (lastError instanceof ProviderError) throw lastError;
-    throw new ProviderError('PIAPI_NETWORK_ERROR', (lastError as Error)?.message ?? 'PiAPI network error');
+    const err = lastError as (Error & { cause?: { code?: string; message?: string } }) | undefined;
+    const cause = err?.cause ? ` (cause: ${err.cause.code ?? err.cause.message ?? String(err.cause)})` : '';
+    throw new ProviderError('PIAPI_NETWORK_ERROR', `${err?.message ?? 'PiAPI network error'}${cause}`);
   }
 }
 

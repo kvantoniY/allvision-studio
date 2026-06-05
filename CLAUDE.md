@@ -1100,3 +1100,17 @@ GPT Image 2 настоящая причина (PIAPI_NETWORK_ERROR в услуг
 - Комбинированная `product-card` переведена в `isActive:false` (скрыта), оставлена в seed/allowlist чтобы upsert деактивировал её на проде. `product-cover`/`product-ad` добавлены в allowlist.
 
 Проверки P9.4.1: билды shared/database/worker/api/web — зелёные; worker `piapi-client product-card-block carousel-slides-block blocks-registry image-edit-block` — 17 passed; shared/seed — passed; `validatePipelineConfig` для product-cover/product-ad — OK.
+
+## Этап P9.4.2 ✅ — GPT Image sync эндпоинт ненадёжен -> услуги на Nano Banana
+
+Диагностика по проду (SSH worker-логи): после фикса P9.4.1 скачивание референса больше не падает; теперь падает САМ вызов `generateGptImage` → `fetchWithRetry` с `PIAPI_NETWORK_ERROR: fetch failed`. Ручной `fetch` к `https://api.piapi.ai/v1/images/generations` из контейнера воркера ВИСНЕТ (нет ответа). Вывод: синхронный OpenAI-совместимый эндпоинт gpt-image держит соединение на всю генерацию, и оно рвётся (NAT/gateway long-connection drop) — при этом createTask-модели (nano-banana, omni) отвечают мгновенно и поллятся, поэтому работают. Доки PiAPI (сверены) не дают async/task-API пути для gpt-image — только синхронные `/v1/images/*`.
+
+Решение: услуги переведены с `gpt-image-2` на `nano-banana` (async unified task API, проверенно стабилен):
+- `carousel-slides` блок default модель и `carousel-post` seed → `nano-banana`.
+- `product-card` блок cover default и `product-cover` seed `cover_model` → `nano-banana`.
+- Студия: `AvatarModelPicker` по умолчанию уже `nano-banana`; опция GPT Image помечена «(бета)» с предупреждением о сбоях провайдера.
+- В `PIAPI_NETWORK_ERROR` добавлен `cause` (ECONNRESET/UND_ERR/…) для будущей диагностики.
+
+gpt-image остаётся выбираемой моделью в каталоге/админке (вдруг провайдер починит/через другой egress), но дефолты услуг — nano-banana. Технический долг: услуги `single-photo-2017`/`group-photo-2017` всё ещё на `gpt-image-2` (не в allowlist, меняются в админке); если будут падать — переключить на nano-banana в `/admin/services`. Для точного текста на слайдах карусели (слабое место nano-banana) — на будущее overlay текста через ffmpeg/canvas.
+
+Проверки P9.4.2: билды shared/database/worker/api/web — зелёные; worker `carousel-slides-block product-card-block piapi-client blocks-registry` — 14 passed; seed — passed.

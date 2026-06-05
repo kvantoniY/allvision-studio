@@ -540,7 +540,7 @@ function AvatarModelPicker({
 }) {
   const options: Array<{ id: 'nano-banana' | 'gpt-image-2'; label: string }> = [
     { id: 'nano-banana', label: 'Стандарт (Nano Banana)' },
-    { id: 'gpt-image-2', label: 'Чёткое фото (GPT Image 2)' },
+    { id: 'gpt-image-2', label: 'GPT Image 2 (бета)' },
   ];
   return (
     <div className="space-y-2">
@@ -563,7 +563,7 @@ function AvatarModelPicker({
       </div>
       {value === 'gpt-image-2' && (
         <p className="text-xs leading-5 text-amber-300/80">
-          Делает резкое фронтальное лицо крупным планом с ровным светом — лучшая основа для будущих анимаций.
+          Бета: у GPT Image сейчас бывают сбои у провайдера. Если генерация не проходит — выберите «Стандарт (Nano Banana)».
         </p>
       )}
     </div>
