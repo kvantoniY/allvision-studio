@@ -53,6 +53,7 @@ export const userInputFieldSchema = z.object({
     'aspect_ratio',
     'music-select',
     'slides',
+    'multiselect',
   ]),
   label: z.string().trim().min(1).max(120),
   required: z.boolean(),
@@ -90,6 +91,10 @@ export const userInputFieldSchema = z.object({
     value: z.string().trim().min(1).max(500),
     // Renders the option as visible-but-non-selectable (e.g. temporarily disabled Pro tier).
     disabled: z.boolean().optional(),
+    // Per-option price (coins) for 'multiselect' fields; total cost = sum of selected options.
+    priceCoins: z.number().int().min(0).optional(),
+    // Optional helper text shown under a multiselect option.
+    hint: z.string().trim().max(240).optional(),
   })).optional(),
   durationOptions: z.array(z.number().int().min(1).max(60)).optional(),
   defaultDuration: z.number().int().min(1).max(60).optional(),

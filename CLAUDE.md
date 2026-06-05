@@ -1057,3 +1057,31 @@ GPT Image fix: `quality` для gpt-image-1/2 нормализуется (`norma
 Проверки P9.3: билды shared/database/worker/api/web — зелёные; worker `blocks-registry scene-transfer-block carousel-slides-block` — passed (добавлен carousel тест, registry под 13); shared 20 / seed 4 — passed; `validatePipelineConfig` для carousel-post — OK.
 
 Технический долг P9.3: variable-цена реализована частным случаем по наличию `slides`-поля (не общий механизм); карточка товара (LLM + условная генерация + 4 разнородных вывода) — следующий этап (LLM отложён по решению владельца, промпты пока ручные).
+
+## Этап P9.4 ✅ — Услуга «Карточка товара» (условный мульти-вывод)
+
+Блок `product-card` (один блок = условный роутер, как trend-video-transfer):
+- Вход: 1–3 фото товара (`photo1` обяз. + `photo2/3` опц.), `product_name`, массив `outputs` (галочки).
+- Условно генерирует только выбранное и возвращает **лейблованный мульти-вывод** `metadata.assets = [{type,url,label}]`:
+  - `cover` — обложка (gpt-image-2 по фото).
+  - `animation` — лёгкая анимация товара (image-to-video, по умолчанию kling-3-pro; вход — обложка, если она есть, иначе photo1).
+  - `ad` — рекламный ролик (seedance-2-omni, `image_urls` = фото товара).
+- `description` пока недоступен (нужна текстовая модель) — в форме это отключённая галочка «скоро».
+- Промпты обложки/анимации/рекламы имеют дефолты в блоке + admin-переопределение (`cover_prompt`/`animation_prompt`/`ad_prompt`), `product_name` подставляется. Зарегистрирован в `registry.ts` и `PIAPI_BLOCKS`; `blocks-registry` под 14 блоков; `product-card-block.test.ts` (4 теста).
+
+Лейблованный мульти-вывод:
+- `pipeline-runner.normaliseFinalOutput` теперь сначала читает `metadata.assets` (массив `{type,url,label}`) → `resultAssets` с лейблами; затем `metadata.slides` (P9.3). Обложка = первый ассет.
+- `GenerationGallery` показывает лейбл («Обложка»/«Анимация»/«Реклама») вместо номера, если он есть.
+
+Поле формы `multiselect` (галочки):
+- Новый тип `multiselect` + у опций `priceCoins`/`disabled`/`hint`. `MultiSelectInput`: чекбоксы, disabled-опции серые («скоро»), цена на опцию. Значение — JSON-массив выбранных, на сабмите конвертируется в массив.
+- Launch валидирует `multiselect` (массив из разрешённых, не-disabled значений; required → ≥1).
+
+Пооутпутная цена:
+- Если есть priced `multiselect`-поле, `tokensCost = сумма priceCoins выбранных опций` (launch), и цена в UI live-суммируется. Карточка товара: cover 15 / animation 60 / ad 120 коинов.
+
+Услуга `product-card` («Карточка товара», TRENDS_MEMES, default галочка cover) добавлена в seed и allowlist.
+
+Проверки P9.4: билды shared/database/worker/api/web — зелёные; worker `blocks-registry product-card-block carousel-slides-block scene-transfer-block` — passed (registry под 14, +`product-card-block.test.ts` 4 теста); shared/seed — passed; `validatePipelineConfig` для product-card — OK.
+
+Технический долг P9.4: описание товара ждёт LLM (галочка disabled); пооутпутная/послайдовая цена — частные случаи в launch и UI (по наличию `multiselect`/`slides` поля), не общий движок; реальный PiAPI-смоук Seedance-omni для рекламы товара и kling-3-pro анимации не прогонялся.

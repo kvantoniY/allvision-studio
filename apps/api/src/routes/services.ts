@@ -431,6 +431,17 @@ servicesRouter.post(
           const texts = value.map((item) => (typeof item === 'string' ? item.slice(0, field.maxLength ?? 600) : ''));
           data[field.id] = texts;
         }
+        if (field.type === 'multiselect') {
+          if (!Array.isArray(value)) {
+            throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} must be an array`);
+          }
+          const allowed = new Set((field.options ?? []).filter((option) => !option.disabled).map((option) => option.value));
+          const picked = value.filter((item): item is string => typeof item === 'string' && allowed.has(item));
+          if (field.required && picked.length < 1) {
+            throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
+          }
+          data[field.id] = picked;
+        }
       }
 
       const projectId = crypto.randomUUID();
@@ -490,6 +501,20 @@ servicesRouter.post(
         const slidesValue = data[slidesField.id];
         const slideCount = Array.isArray(slidesValue) ? Math.max(1, slidesValue.length) : 1;
         tokensCost *= slideCount;
+      }
+
+      // Priced multiselect (e.g. product-card outputs): total = sum of selected options' priceCoins.
+      const pricedMultiselect = fields.find(
+        (field) => field.type === 'multiselect' && (field.options ?? []).some((option) => typeof option.priceCoins === 'number'),
+      );
+      if (pricedMultiselect) {
+        const pickedValue = data[pricedMultiselect.id];
+        const pickedSet = new Set(Array.isArray(pickedValue) ? pickedValue.filter((item): item is string => typeof item === 'string') : []);
+        let sum = 0;
+        for (const option of pricedMultiselect.options ?? []) {
+          if (!option.disabled && pickedSet.has(option.value)) sum += option.priceCoins ?? 0;
+        }
+        if (sum > 0) tokensCost = sum;
       }
       const inputImages = photoFields
         .map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id])

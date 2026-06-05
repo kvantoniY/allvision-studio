@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   AlertTriangle,
+  Check,
   ChevronDown,
   ChevronRight,
   Download,
@@ -55,11 +56,13 @@ type UserInputOption = {
   value: string;
   label: string;
   disabled?: boolean;
+  priceCoins?: number;
+  hint?: string;
 };
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides';
+  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides' | 'multiselect';
   label?: string;
   required?: boolean;
   requiredWhen?: { field: string; value: string };
@@ -153,6 +156,21 @@ function slideCount(fields: UserInputField[], values: FormValues): number {
   return Math.max(1, parseSlides(values[slidesField.id]).length);
 }
 
+// Sum of selected option prices for a priced multiselect field (e.g. product-card outputs).
+// Returns null when there is no priced multiselect field.
+function multiselectPrice(fields: UserInputField[], values: FormValues): number | null {
+  const field = fields.find(
+    (item) => item.type === 'multiselect' && (item.options ?? []).some((option) => typeof option.priceCoins === 'number'),
+  );
+  if (!field) return null;
+  const selected = new Set(parseSlides(values[field.id]));
+  let sum = 0;
+  for (const option of field.options ?? []) {
+    if (!option.disabled && selected.has(option.value)) sum += option.priceCoins ?? 0;
+  }
+  return sum;
+}
+
 function parseFields(value: unknown): UserInputField[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -195,10 +213,12 @@ function parseFields(value: unknown): UserInputField[] {
               value: String(option.value ?? ''),
               label: String(option.label ?? option.value ?? ''),
               disabled: option.disabled === true,
+              priceCoins: typeof option.priceCoins === 'number' ? option.priceCoins : undefined,
+              hint: typeof option.hint === 'string' ? option.hint : undefined,
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides', 'multiselect'].includes(item.type));
 }
 
 function servicePrice(service: PublicService) {
@@ -361,6 +381,11 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
       if (required && (arr.length < 1 || arr.every((text) => !text.trim()))) {
         errors.push(`Заполните текст хотя бы одного слайда: ${field.label ?? field.id}`);
       }
+      continue;
+    }
+    if (field.type === 'multiselect') {
+      const arr = parseSlides(values[field.id]);
+      if (required && arr.length < 1) errors.push(`Выберите хотя бы один вариант: ${field.label ?? field.id}`);
       continue;
     }
     const value = values[field.id]?.trim();
@@ -1076,6 +1101,76 @@ function SlidesInput({
   );
 }
 
+function MultiSelectInput({
+  field,
+  label,
+  required,
+  value,
+  onValueChange,
+}: {
+  field: UserInputField;
+  label: string;
+  required: ReactNode;
+  value?: string;
+  onValueChange: (id: string, value: string) => void;
+}) {
+  const options = field.options ?? [];
+  const selected = parseSlides(value);
+  const toggle = (optionValue: string) => {
+    const set = new Set(selected);
+    if (set.has(optionValue)) set.delete(optionValue);
+    else set.add(optionValue);
+    const ordered = options.map((option) => option.value).filter((optionValue2) => set.has(optionValue2));
+    onValueChange(field.id, JSON.stringify(ordered));
+  };
+  return (
+    <div className="space-y-2">
+      <Label>{label} {required}</Label>
+      <div className="space-y-2">
+        {options.map((option) => {
+          const checked = selected.includes(option.value);
+          const disabled = option.disabled === true;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              disabled={disabled}
+              onClick={() => !disabled && toggle(option.value)}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-md border p-3 text-left transition',
+                disabled
+                  ? 'cursor-not-allowed border-slate-800 bg-slate-950/50 opacity-50'
+                  : checked
+                    ? 'border-amber-400 bg-amber-400/10'
+                    : 'border-slate-700 bg-slate-950 hover:border-slate-500',
+              )}
+            >
+              <span
+                className={cn(
+                  'grid h-5 w-5 shrink-0 place-items-center rounded border',
+                  checked ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-600 text-transparent',
+                )}
+              >
+                <Check className="h-3.5 w-3.5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-slate-100">
+                  {option.label}{disabled ? ' · скоро' : ''}
+                </span>
+                {option.hint && <span className="mt-0.5 block text-xs leading-4 text-slate-500">{option.hint}</span>}
+              </span>
+              {typeof option.priceCoins === 'number' && !disabled && (
+                <span className="shrink-0 text-xs font-bold text-amber-300">{option.priceCoins} коинов</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+    </div>
+  );
+}
+
 function FieldControl({
   field,
   value,
@@ -1227,6 +1322,18 @@ function FieldControl({
   if (field.type === 'slides') {
     return (
       <SlidesInput
+        field={field}
+        label={label}
+        required={required}
+        value={value}
+        onValueChange={onValueChange}
+      />
+    );
+  }
+
+  if (field.type === 'multiselect') {
+    return (
+      <MultiSelectInput
         field={field}
         label={label}
         required={required}
@@ -1543,19 +1650,24 @@ function GenerationWarning({ project }: { project: ProjectListItem }) {
   );
 }
 
-function projectResultAssets(project: ProjectListItem): Array<{ type: 'image' | 'video'; url: string }> {
+function projectResultAssets(project: ProjectListItem): Array<{ type: 'image' | 'video'; url: string; label?: string }> {
   const raw = (project as unknown as { resultAssets?: unknown }).resultAssets;
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter((item): item is { type?: unknown; url?: unknown } => !!item && typeof item === 'object')
+    .filter((item): item is { type?: unknown; url?: unknown; label?: unknown } => !!item && typeof item === 'object')
     .filter((item) => typeof item.url === 'string')
-    .map((item) => ({ type: item.type === 'video' ? ('video' as const) : ('image' as const), url: item.url as string }));
+    .map((item) => ({
+      type: item.type === 'video' ? ('video' as const) : ('image' as const),
+      url: item.url as string,
+      ...(typeof item.label === 'string' ? { label: item.label } : {}),
+    }));
 }
 
-function GenerationGallery({ assets }: { assets: Array<{ type: 'image' | 'video'; url: string }> }) {
+function GenerationGallery({ assets }: { assets: Array<{ type: 'image' | 'video'; url: string; label?: string }> }) {
+  const labeled = assets.some((asset) => asset.label);
   return (
     <div>
-      <div className="mb-2 text-sm font-medium text-slate-200">Слайды ({assets.length})</div>
+      <div className="mb-2 text-sm font-medium text-slate-200">{labeled ? 'Результаты' : 'Слайды'} ({assets.length})</div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {assets.map((asset, index) => {
           const url = mediaUrl(asset.url) ?? asset.url;
@@ -1565,10 +1677,10 @@ function GenerationGallery({ assets }: { assets: Array<{ type: 'image' | 'video'
                 <video src={url} controls preload="metadata" className="w-full bg-black" />
               ) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={url} alt={`Слайд ${index + 1}`} className="w-full object-cover" />
+                <img src={url} alt={asset.label ?? `Слайд ${index + 1}`} className="w-full object-cover" />
               )}
               <div className="absolute left-1.5 top-1.5 rounded bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                {index + 1}
+                {asset.label ?? index + 1}
               </div>
               <a
                 href={url}
@@ -1920,7 +2032,8 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
   const basePrice = tierField ? tierPrice(service, tier) : servicePrice(service);
   const slidesCount = slideCount(fields, values);
-  const price = slidesCount > 0 ? basePrice * slidesCount : basePrice;
+  const msPrice = multiselectPrice(fields, values);
+  const price = msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : basePrice;
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);
@@ -1977,7 +2090,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
     const payloadObj: Record<string, unknown> = { ...dataPayload };
     for (const field of fields) {
-      if (field.type === 'slides') payloadObj[field.id] = parseSlides(dataPayload[field.id]);
+      if (field.type === 'slides' || field.type === 'multiselect') {
+        payloadObj[field.id] = parseSlides(dataPayload[field.id]);
+      }
     }
 
     const formData = new FormData();

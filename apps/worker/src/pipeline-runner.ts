@@ -617,14 +617,34 @@ function normaliseFinalOutput(output: unknown): {
   resultImage?: string;
   resultVideo?: string;
   resultThumbnail?: string;
-  resultAssets?: Array<{ type: 'image' | 'video'; url: string }>;
+  resultAssets?: Array<{ type: 'image' | 'video'; url: string; label?: string }>;
 } {
   if (!output || typeof output !== 'object') return {};
   const value = output as Partial<BlockOutput> & Record<string, unknown>;
   const url = typeof value.url === 'string' ? value.url : undefined;
 
-  // Multi-output blocks (e.g. carousel-slides) expose a list of result URLs in metadata.slides.
   const metadata = value.metadata && typeof value.metadata === 'object' ? (value.metadata as Record<string, unknown>) : undefined;
+
+  // Heterogeneous labeled multi-output (e.g. product-card): metadata.assets = [{ type, url, label }].
+  const labeled = Array.isArray(metadata?.assets)
+    ? (metadata!.assets as unknown[])
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .filter((item) => typeof item.url === 'string')
+        .map((item) => ({
+          type: item.type === 'video' ? ('video' as const) : ('image' as const),
+          url: item.url as string,
+          ...(typeof item.label === 'string' ? { label: item.label } : {}),
+        }))
+    : [];
+  if (labeled.length > 0) {
+    const cover = labeled[0];
+    return {
+      ...(cover.type === 'video' ? { resultVideo: cover.url } : { resultImage: cover.url }),
+      resultAssets: labeled,
+    };
+  }
+
+  // Homogeneous multi-output (e.g. carousel-slides): metadata.slides = [url, ...].
   const slides = Array.isArray(metadata?.slides)
     ? (metadata!.slides as unknown[]).filter((item): item is string => typeof item === 'string' && item.length > 0)
     : [];

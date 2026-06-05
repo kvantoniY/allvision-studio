@@ -10,6 +10,7 @@ import { textToVideoBlock } from './text-to-video';
 import { trendVideoTransferBlock } from './trend-video-transfer';
 import { sceneTransferBlock } from './scene-transfer';
 import { carouselSlidesBlock } from './carousel-slides';
+import { productCardBlock } from './product-card';
 import { videoEffectBlock } from './video-effect';
 import { videoWatermarkRemoveBlock } from './video-watermark-remove';
 
@@ -25,6 +26,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'trend-video-transfer': trendVideoTransferBlock,
   'scene-transfer': sceneTransferBlock,
   'carousel-slides': carouselSlidesBlock,
+  'product-card': productCardBlock,
   'video-effect': videoEffectBlock,
   'video-watermark-remove': videoWatermarkRemoveBlock,
 };
