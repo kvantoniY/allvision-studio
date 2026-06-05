@@ -1085,3 +1085,18 @@ GPT Image fix: `quality` для gpt-image-1/2 нормализуется (`norma
 Проверки P9.4: билды shared/database/worker/api/web — зелёные; worker `blocks-registry product-card-block carousel-slides-block scene-transfer-block` — passed (registry под 14, +`product-card-block.test.ts` 4 теста); shared/seed — passed; `validatePipelineConfig` для product-card — OK.
 
 Технический долг P9.4: описание товара ждёт LLM (галочка disabled); пооутпутная/послайдовая цена — частные случаи в launch и UI (по наличию `multiselect`/`slides` поля), не общий движок; реальный PiAPI-смоук Seedance-omni для рекламы товара и kling-3-pro анимации не прогонялся.
+
+## Этап P9.4.1 ✅ — Фикс GPT Image 2 (референсы) + сплит карточки товара
+
+GPT Image 2 настоящая причина (PIAPI_NETWORK_ERROR в услугах, хотя на PiAPI задачи проходят, а в чате gpt-image работает):
+- Edits-эндпоинт `/v1/images/edits` (multipart, поле `image`) требует, чтобы БАЙТЫ референса держал сам воркер. Раньше воркер HTTP-скачивал входной `/static`-URL (`this.client.download(publicUrl)`) — а изнутри контейнера достучаться до собственного публичного домена не получается (loopback падает) → PIAPI_NETWORK_ERROR. Nano Banana и чат работают, потому что там воркер ПУБЛИКУЕТ URL, а скачивает его PiAPI, не воркер.
+- Фикс: `PiAPIProvider.readImageRefBytes(url)` — для своих `/static/<key>` URL читает файл напрямую из общего локального тома uploads (`UPLOADS_DIR`), а не по HTTP; для внешних URL остаётся `client.download`. `generateGptImage` теперь принимает `images: {buffer,contentType}[]` вместо `imageUrls`.
+- Документация PiAPI (https://piapi.ai/docs/gpt-image/gpt-image-api) подтвердила: endpoint/multipart/Bearer — верны; quality допускает `low|standard|high|auto`. Поэтому `normalizeGptImageQuality` исправлен: `standard` валиден (раньше ошибочно мапили в `medium`, которого в списке нет), `medium → high`, прочее → `auto`.
+
+Карточка товара разделена на 2 услуги (общий блок `product-card`):
+- В блок добавлены аддитивные пользовательские стили `cover_style`/`animation_style`/`ad_style`: добавляются к базовому admin-промпту, не заменяя каркас. Так каркас «снять рекламу по референсу» остаётся под капотом, а юзер пишет только стиль.
+- `product-cover` («Обложка товара»): фото 1–3 + название + `multiselect` [cover 15 / animation 60]. Обложка GPT Image 2, опц. лёгкая анимация (kling-3-pro). Цена за выбранное.
+- `product-ad` («Рекламное видео товара»): фото 1–3 + опц. название + `style` (textarea, пусто → дефолтный стиль) + формат + длительность. В pipeline `outputs: ['ad']` зашит, `ad_style: '{{user.style}}'`, `ad_model: seedance-2-omni`. Фиксированная цена 120. Юзер не пишет «сделай видео по референсу» — каркас в блоке.
+- Комбинированная `product-card` переведена в `isActive:false` (скрыта), оставлена в seed/allowlist чтобы upsert деактивировал её на проде. `product-cover`/`product-ad` добавлены в allowlist.
+
+Проверки P9.4.1: билды shared/database/worker/api/web — зелёные; worker `piapi-client product-card-block carousel-slides-block blocks-registry image-edit-block` — 17 passed; shared/seed — passed; `validatePipelineConfig` для product-cover/product-ad — OK.

@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import { resolveWorkspacePath } from '../utils/paths';
 import { estimateModelCostUsd, type StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
 import { PiAPIClient, type PiAPITaskStatus } from './piapi-client';
@@ -161,10 +163,14 @@ export class PiAPIProvider implements AIProvider {
         const outputFormat = normalizeGptImageOutputFormat(readString(input.params, 'output_format'));
         const refs = [input.imageUrl, ...readStringList(input.params, 'image_urls')]
           .filter((url): url is string => typeof url === 'string' && url.length > 0);
+        // GPT Image edits send the reference as a multipart file, so the WORKER must hold the bytes.
+        // Read them from the shared local uploads volume when the URL is our own /static URL, instead of
+        // HTTP-fetching the public domain from inside the container (that loopback fails -> network error).
+        const images = await Promise.all(refs.map((url) => this.readImageRefBytes(url)));
         const result = await this.client.generateGptImage({
           model: input.model,
           prompt: input.prompt,
-          imageUrls: refs,
+          images,
           size,
           quality,
           outputFormat,
@@ -731,6 +737,26 @@ export class PiAPIProvider implements AIProvider {
     this.logger.info(message);
   }
 
+  // Returns the bytes of a reference image. For our own /static URLs it reads the file directly from
+  // the shared local uploads volume (the worker cannot reliably fetch its own public domain from inside
+  // the container). For external URLs it HTTP-downloads as before.
+  private async readImageRefBytes(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const key = localStaticKey(url);
+    if (key) {
+      try {
+        const rootDir = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
+        const target = path.resolve(rootDir, key);
+        if (target === rootDir || target.startsWith(rootDir + path.sep)) {
+          const buffer = await fs.readFile(target);
+          return { buffer, contentType: imageContentTypeForPath(target) };
+        }
+      } catch (err) {
+        this.logger.warn('[piapi] local read of gpt-image reference failed; falling back to HTTP download', err);
+      }
+    }
+    return this.client.download(url);
+  }
+
   private async persistProviderOutput(
     providerUrl: string,
     context: ProviderRunContext,
@@ -916,11 +942,28 @@ function normalizeGptImageOutputFormat(value: string | undefined): 'jpeg' | 'png
   return 'jpeg';
 }
 
-// gpt-image-1/2 quality is auto|high|medium|low. The legacy DALL·E value "standard" (and anything
-// else, e.g. an empty/old param) would 400, so map it to a valid value. "auto" lets the model decide.
-function normalizeGptImageQuality(value: string | undefined): 'auto' | 'high' | 'medium' | 'low' {
-  if (value === 'high' || value === 'medium' || value === 'low' || value === 'auto') return value;
-  if (value === 'standard') return 'medium';
+// Maps our own public "/static/<key>" URL to the storage key so the worker can read the file locally.
+function localStaticKey(url: string): string | null {
+  const marker = '/static/';
+  const index = url.indexOf(marker);
+  if (index === -1) return null;
+  const key = decodeURIComponent(url.slice(index + marker.length).replace(/^\/+/, ''));
+  if (!key || key.includes('..')) return null;
+  return key;
+}
+
+function imageContentTypeForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.png') return 'image/png';
+  if (ext === '.webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
+// PiAPI gpt-image quality allows: low | standard | high | auto (per the PiAPI GPT Image docs).
+// Anything else falls back to "auto".
+function normalizeGptImageQuality(value: string | undefined): 'auto' | 'high' | 'standard' | 'low' {
+  if (value === 'high' || value === 'standard' || value === 'low' || value === 'auto') return value;
+  if (value === 'medium') return 'high';
   return 'auto';
 }
 

@@ -117,12 +117,12 @@ export class PiAPIClient {
   async generateGptImage(params: {
     model: string;
     prompt: string;
-    imageUrls: string[];
+    images: Array<{ buffer: Buffer; contentType: string }>;
     size: string;
     quality: string;
     outputFormat?: string;
   }): Promise<{ url?: string; b64?: string }> {
-    const useEdits = params.imageUrls.length > 0;
+    const useEdits = params.images.length > 0;
     const endpoint = `${this.baseUrl}/v1/images/${useEdits ? 'edits' : 'generations'}`;
     let res: Response;
     if (useEdits) {
@@ -134,10 +134,10 @@ export class PiAPIClient {
       form.append('quality', params.quality);
       if (params.outputFormat) form.append('output_format', params.outputFormat);
       form.append('response_format', 'b64_json');
-      for (const url of params.imageUrls) {
-        const { buffer, contentType } = await this.download(url);
+      for (const image of params.images) {
+        const contentType = image.contentType || 'image/png';
         const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-        form.append('image', new Blob([new Uint8Array(buffer)], { type: contentType || 'image/png' }), `ref.${ext}`);
+        form.append('image', new Blob([new Uint8Array(image.buffer)], { type: contentType }), `ref.${ext}`);
       }
       res = await this.fetchWithRetry(endpoint, {
         method: 'POST',

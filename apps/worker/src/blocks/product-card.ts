@@ -22,11 +22,14 @@ const paramsSchema = z.object({
   outputs: z.union([z.array(z.string()), z.string()]).optional(),
   cover_model: modelParam,
   cover_prompt: z.string().optional(),
+  cover_style: z.string().optional(),
   animation_model: modelParam,
   animation_prompt: z.string().optional(),
+  animation_style: z.string().optional(),
   animation_duration: z.number().min(1).max(30).optional(),
   ad_model: modelParam,
   ad_prompt: z.string().optional(),
+  ad_style: z.string().optional(),
   ad_duration: z.number().min(1).max(30).optional(),
   aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
 });
@@ -80,7 +83,7 @@ export const productCardBlock: BlockDefinition = {
     if (outputs.includes('cover')) {
       const result = await provider.imageEdit({
         imageUrl: photos[0],
-        prompt: composeCoverPrompt(parsed.cover_prompt, productName),
+        prompt: composeCoverPrompt(parsed.cover_prompt, productName, parsed.cover_style),
         model: stringModel(parsed.cover_model, 'gpt-image-2'),
         params: {
           image_urls: photos.slice(1),
@@ -97,7 +100,7 @@ export const productCardBlock: BlockDefinition = {
     if (outputs.includes('animation')) {
       const result = await provider.imageToVideo({
         imageUrl: coverUrl ?? photos[0],
-        prompt: composeAnimationPrompt(parsed.animation_prompt, productName),
+        prompt: composeAnimationPrompt(parsed.animation_prompt, productName, parsed.animation_style),
         durationSec: parsed.animation_duration ?? 5,
         model: stringModel(parsed.animation_model, 'kling-3-pro'),
         params: {
@@ -111,7 +114,7 @@ export const productCardBlock: BlockDefinition = {
 
     if (outputs.includes('ad')) {
       const result = await provider.textToVideo({
-        prompt: composeAdPrompt(parsed.ad_prompt, productName),
+        prompt: composeAdPrompt(parsed.ad_prompt, productName, parsed.ad_style),
         durationSec: parsed.ad_duration ?? 8,
         model: stringModel(parsed.ad_model, 'seedance-2-omni'),
         params: {
@@ -156,26 +159,29 @@ function normaliseOutputs(value: unknown): string[] {
   return KNOWN_OUTPUTS.filter((key) => list.includes(key));
 }
 
-function composeCoverPrompt(adminPrompt: string | undefined, name: string): string {
+function composeCoverPrompt(adminPrompt: string | undefined, name: string, style?: string): string {
   return [
     adminPrompt?.trim() || 'Clean premium e-commerce product cover. The product is the hero: centered, sharp and well-lit on a tasteful studio background, professional product photography, high detail.',
     name ? `Product: "${name}".` : '',
+    style?.trim() ? `Style: ${style.trim()}.` : '',
     'Keep the EXACT product from the reference photos - same shape, color, logo, materials and details. Realistic textures, high quality, no invented text, no watermark.',
   ].filter(Boolean).join(' ');
 }
 
-function composeAnimationPrompt(adminPrompt: string | undefined, name: string): string {
+function composeAnimationPrompt(adminPrompt: string | undefined, name: string, style?: string): string {
   return [
     adminPrompt?.trim() || 'Gentle premium product showcase: slow smooth rotation and a subtle camera move revealing the product from different angles, clean studio lighting.',
     name ? `Product: "${name}".` : '',
+    style?.trim() ? `Style: ${style.trim()}.` : '',
     'Keep the product shape, color and details stable and realistic. No morphing, no distortion, no text, no watermark.',
   ].filter(Boolean).join(' ');
 }
 
-function composeAdPrompt(adminPrompt: string | undefined, name: string): string {
+function composeAdPrompt(adminPrompt: string | undefined, name: string, style?: string): string {
   return [
-    adminPrompt?.trim() || 'Cinematic premium product advertisement: dynamic shots of the product from different angles, beautiful lighting, macro detail of textures and materials, elegant motion and professional commercial editing rhythm.',
+    adminPrompt?.trim() || 'Cinematic premium product advertisement video: dynamic shots of the product from different angles, beautiful lighting, macro detail of textures and materials, elegant motion and professional commercial editing rhythm, with footage-like camera work.',
     name ? `Product: "${name}".` : '',
+    style?.trim() ? `Desired style and mood: ${style.trim()}.` : '',
     'Feature the EXACT product from the reference images - keep its shape, color, logo and details accurate. Photorealistic premium commercial look, no on-screen text, no watermark.',
   ].filter(Boolean).join(' ');
 }

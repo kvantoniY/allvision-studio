@@ -57,7 +57,7 @@ describe('PiAPIClient polling', () => {
     const result = await client.generateGptImage({
       model: 'gpt-image-2',
       prompt: 'test prompt',
-      imageUrls: [],
+      images: [],
       size: '1024x1024',
       quality: 'standard',
       outputFormat: 'jpeg',
@@ -77,7 +77,7 @@ describe('PiAPIClient polling', () => {
     await expect(client.generateGptImage({
       model: 'gpt-image-2',
       prompt: 'test prompt',
-      imageUrls: [],
+      images: [],
       size: '1024x1024',
       quality: 'standard',
       outputFormat: 'jpeg',
