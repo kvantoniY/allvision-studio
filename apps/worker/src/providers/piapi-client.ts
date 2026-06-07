@@ -154,9 +154,38 @@ export class PiAPIClient {
     };
   }
 
+  // The gateway intermittently resets the long-held gpt-image edit connection (ECONNRESET ~15s) while
+  // the generation takes ~60-100s. It is intermittent (some succeed), so retry the whole request a few
+  // times on connection resets. Each attempt is a fresh connection with TCP keepalive.
+  private async gptImageEditViaHttps(params: {
+    model: string;
+    prompt: string;
+    images: Array<{ buffer: Buffer; contentType: string }>;
+    size: string;
+    quality: string;
+    outputFormat?: string;
+  }): Promise<{ url?: string; b64?: string }> {
+    const maxAttempts = 4;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await this.gptImageEditOnce(params);
+      } catch (err) {
+        lastError = err;
+        const message = err instanceof Error ? err.message : String(err);
+        const resettable = err instanceof ProviderError
+          && err.code === 'PIAPI_NETWORK_ERROR'
+          && /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED/i.test(message);
+        if (!resettable || attempt === maxAttempts) throw err;
+        await delay(1000 * attempt);
+      }
+    }
+    throw lastError;
+  }
+
   // Raw https multipart POST to /v1/images/edits. Sends the whole body with a fixed Content-Length
   // (not chunked/streamed) and enables TCP keepalive, which fixes the ~15s ECONNRESET seen with fetch.
-  private gptImageEditViaHttps(params: {
+  private gptImageEditOnce(params: {
     model: string;
     prompt: string;
     images: Array<{ buffer: Buffer; contentType: string }>;
@@ -227,7 +256,7 @@ export class PiAPIClient {
       );
       // TCP keepalive so the gateway does not treat the long wait for the response as idle.
       req.on('socket', (socket) => {
-        socket.setKeepAlive(true, 10_000);
+        socket.setKeepAlive(true, 5_000);
       });
       req.on('timeout', () => {
         req.destroy(new ProviderError('PIAPI_TIMEOUT', `gpt-image edit timed out after ${this.gptImageTimeoutMs}ms`));

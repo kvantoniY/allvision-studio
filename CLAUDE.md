@@ -1122,3 +1122,11 @@ gpt-image остаётся выбираемой моделью в каталог
 Фикс (`PiAPIClient.gptImageEditViaHttps`): edit-запрос теперь идёт через встроенный `node:https` — multipart собирается в один Buffer и отправляется с явным `Content-Length` (как JSON-генерация, не chunked/streamed) + TCP keepalive (`socket.setKeepAlive(true, 10s)`). Generation остался на fetch (работает). Без новых зависимостей (undici в Node 22 не requireable из CJS). gpt-image остаётся в чате Allvision AI и услугах 2к17 для теста; если edit заработает — вернём gpt-image в карусель/обложку (сейчас они на nano-banana).
 
 Проверки P9.4.3: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client blocks-registry` — 7 passed.
+
+## Этап P9.4.4 ✅ — gpt-image edit: ретраи на ECONNRESET (интермиттентный обрыв)
+
+Лог чата: edit идёт через https-путь (P9.4.3), но иногда падает `gpt-image edit: read ECONNRESET`. При этом часть задач завершается (job 94 — 96с успех) → обрыв **интермиттентный**. Причина: Node `setKeepAlive(enable, delay)` задаёт только начальную задержку (TCP_KEEPIDLE), а интервал (TCP_KEEPINTVL) остаётся OS-дефолтным (~75с), поэтому после первого keepalive-зонда возникает длинный простой и шлюз рвёт соединение во время ожидания ~60-100с ответа.
+
+Фикс: `gptImageEditViaHttps` теперь оборачивает `gptImageEditOnce` в ретраи (до 4 попыток) именно на connection-reset (`ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED`); каждая попытка — свежее соединение с keepalive (начальный зонд снижен до 5с). Так как обрыв интермиттентный, несколько попыток обычно дают успешную. Прочие ошибки (HTTP 4xx, timeout) не ретраятся. Минус: при обрыве PiAPI мог успеть сгенерировать (списание у провайдера), так что ретраи могут стоить лишних генераций в флапающие периоды — это плата за работоспособность edit; пользовательские коины при этом не дублируются (одна job).
+
+Проверки P9.4.4: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client` — 5 passed.
