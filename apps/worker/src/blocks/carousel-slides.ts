@@ -41,7 +41,7 @@ export const carouselSlidesBlock: BlockDefinition = {
     const slides = normaliseSlides(parsed.slides);
     if (slides.length === 0) throw new Error('carousel-slides requires at least one slide');
 
-    const model = stringModel(parsed.model, 'nano-banana');
+    const model = stringModel(parsed.model, 'gpt-image-2');
     const aspect = parsed.aspect_ratio ?? '3:4';
     const provider = ctx.getAIProvider();
     const total = slides.length;

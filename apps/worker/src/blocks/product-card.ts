@@ -84,7 +84,7 @@ export const productCardBlock: BlockDefinition = {
       const result = await provider.imageEdit({
         imageUrl: photos[0],
         prompt: composeCoverPrompt(parsed.cover_prompt, productName, parsed.cover_style),
-        model: stringModel(parsed.cover_model, 'nano-banana'),
+        model: stringModel(parsed.cover_model, 'gpt-image-2'),
         params: {
           image_urls: photos.slice(1),
           output_format: 'jpg',

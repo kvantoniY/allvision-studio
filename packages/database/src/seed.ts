@@ -2337,7 +2337,7 @@ const giftFactoryServices = [
         blockSlug: 'carousel-slides',
         input: '{{user.photo}}',
         params: {
-          model: 'nano-banana',
+          model: 'gpt-image-2',
           person_photo: '{{user.photo}}',
           slides: '{{user.slides}}',
           style_prompt:
@@ -2504,7 +2504,7 @@ const giftFactoryServices = [
           photo3: '{{user.photo3}}',
           product_name: '{{user.product_name}}',
           outputs: '{{user.outputs}}',
-          cover_model: 'nano-banana',
+          cover_model: 'gpt-image-2',
           animation_model: 'kling-3-pro',
           animation_duration: 5,
           aspect_ratio: '{{user.aspect}}',
