@@ -1114,3 +1114,11 @@ GPT Image 2 настоящая причина (PIAPI_NETWORK_ERROR в услуг
 gpt-image остаётся выбираемой моделью в каталоге/админке (вдруг провайдер починит/через другой egress), но дефолты услуг — nano-banana. Технический долг: услуги `single-photo-2017`/`group-photo-2017` всё ещё на `gpt-image-2` (не в allowlist, меняются в админке); если будут падать — переключить на nano-banana в `/admin/services`. Для точного текста на слайдах карусели (слабое место nano-banana) — на будущее overlay текста через ffmpeg/canvas.
 
 Проверки P9.4.2: билды shared/database/worker/api/web — зелёные; worker `carousel-slides-block product-card-block piapi-client blocks-registry` — 14 passed; seed — passed.
+
+## Этап P9.4.3 ✅ — Фикс gpt-image EDIT (ECONNRESET на 15с)
+
+Диагностика по проду: ручной тест показал, что gpt-image GENERATION (JSON) доживает до ~60с и возвращает 200, а EDIT (multipart `/v1/images/edits`) стабильно падает `ECONNRESET` на ~15с — для обоих имён модели (gpt-image-2 и gpt-image-2-preview), значит дело не в имени. JSON пережил 60с простоя → это не общий idle-таймаут, а специфика того, как fetch/undici шлёт multipart (поток без чистого Content-Length, шлюз рвёт на 15с).
+
+Фикс (`PiAPIClient.gptImageEditViaHttps`): edit-запрос теперь идёт через встроенный `node:https` — multipart собирается в один Buffer и отправляется с явным `Content-Length` (как JSON-генерация, не chunked/streamed) + TCP keepalive (`socket.setKeepAlive(true, 10s)`). Generation остался на fetch (работает). Без новых зависимостей (undici в Node 22 не requireable из CJS). gpt-image остаётся в чате Allvision AI и услугах 2к17 для теста; если edit заработает — вернём gpt-image в карусель/обложку (сейчас они на nano-banana).
+
+Проверки P9.4.3: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client blocks-registry` — 7 passed.

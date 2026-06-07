@@ -1,3 +1,5 @@
+import https from 'node:https';
+import crypto from 'node:crypto';
 import { ProviderError } from './provider-errors';
 
 export interface PiAPITaskStatus {
@@ -122,43 +124,25 @@ export class PiAPIClient {
     quality: string;
     outputFormat?: string;
   }): Promise<{ url?: string; b64?: string }> {
-    const useEdits = params.images.length > 0;
-    const endpoint = `${this.baseUrl}/v1/images/${useEdits ? 'edits' : 'generations'}`;
-    let res: Response;
-    if (useEdits) {
-      const form = new FormData();
-      form.append('model', params.model);
-      form.append('prompt', params.prompt);
-      form.append('n', '1');
-      form.append('size', params.size);
-      form.append('quality', params.quality);
-      if (params.outputFormat) form.append('output_format', params.outputFormat);
-      form.append('response_format', 'b64_json');
-      for (const image of params.images) {
-        const contentType = image.contentType || 'image/png';
-        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
-        form.append('image', new Blob([new Uint8Array(image.buffer)], { type: contentType }), `ref.${ext}`);
-      }
-      res = await this.fetchWithRetry(endpoint, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-        body: form,
-      }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
-    } else {
-      res = await this.fetchWithRetry(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
-        body: JSON.stringify({
-          model: params.model,
-          prompt: params.prompt,
-          n: 1,
-          size: params.size,
-          quality: params.quality,
-          ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
-          response_format: 'b64_json',
-        }),
-      }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
+    // Edits go through a raw https request (multipart with an explicit Content-Length + TCP keepalive).
+    // The undici/fetch multipart upload was being reset by the gateway at ~15s (ECONNRESET) while the
+    // generation waits ~60s; a clean, complete, content-length request behaves like the JSON one.
+    if (params.images.length > 0) {
+      return this.gptImageEditViaHttps(params);
     }
+    const res = await this.fetchWithRetry(`${this.baseUrl}/v1/images/generations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({
+        model: params.model,
+        prompt: params.prompt,
+        n: 1,
+        size: params.size,
+        quality: params.quality,
+        ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
+        response_format: 'b64_json',
+      }),
+    }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     const data = Array.isArray((json as { data?: unknown }).data)
       ? (json as { data: Array<Record<string, unknown>> }).data
@@ -168,6 +152,93 @@ export class PiAPIClient {
       url: typeof first.url === 'string' ? first.url : undefined,
       b64: typeof first.b64_json === 'string' ? first.b64_json : undefined,
     };
+  }
+
+  // Raw https multipart POST to /v1/images/edits. Sends the whole body with a fixed Content-Length
+  // (not chunked/streamed) and enables TCP keepalive, which fixes the ~15s ECONNRESET seen with fetch.
+  private gptImageEditViaHttps(params: {
+    model: string;
+    prompt: string;
+    images: Array<{ buffer: Buffer; contentType: string }>;
+    size: string;
+    quality: string;
+    outputFormat?: string;
+  }): Promise<{ url?: string; b64?: string }> {
+    const boundary = `----allvision${crypto.randomBytes(12).toString('hex')}`;
+    const crlf = '\r\n';
+    const chunks: Buffer[] = [];
+    const field = (name: string, value: string) => {
+      chunks.push(Buffer.from(`--${boundary}${crlf}Content-Disposition: form-data; name="${name}"${crlf}${crlf}${value}${crlf}`, 'utf8'));
+    };
+    field('model', params.model);
+    field('prompt', params.prompt);
+    field('n', '1');
+    field('size', params.size);
+    field('quality', params.quality);
+    if (params.outputFormat) field('output_format', params.outputFormat);
+    field('response_format', 'b64_json');
+    for (const image of params.images) {
+      const contentType = image.contentType || 'image/png';
+      const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+      chunks.push(Buffer.from(`--${boundary}${crlf}Content-Disposition: form-data; name="image"; filename="ref.${ext}"${crlf}Content-Type: ${contentType}${crlf}${crlf}`, 'utf8'));
+      chunks.push(image.buffer);
+      chunks.push(Buffer.from(crlf, 'utf8'));
+    }
+    chunks.push(Buffer.from(`--${boundary}--${crlf}`, 'utf8'));
+    const body = Buffer.concat(chunks);
+    const url = new URL(`${this.baseUrl}/v1/images/edits`);
+
+    return new Promise((resolve, reject) => {
+      const req = https.request(
+        {
+          method: 'POST',
+          hostname: url.hostname,
+          port: url.port || 443,
+          path: url.pathname + url.search,
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            'Content-Length': body.length,
+          },
+          timeout: this.gptImageTimeoutMs,
+        },
+        (res) => {
+          const data: Buffer[] = [];
+          res.on('data', (chunk) => data.push(Buffer.from(chunk)));
+          res.on('end', () => {
+            const text = Buffer.concat(data).toString('utf8');
+            const status = res.statusCode ?? 0;
+            if (status >= 400) {
+              reject(new ProviderError(`PIAPI_HTTP_${status}`, text.slice(0, 400) || `gpt-image edit HTTP ${status}`, status));
+              return;
+            }
+            try {
+              const json = JSON.parse(text) as { data?: Array<Record<string, unknown>> };
+              const first = Array.isArray(json.data) ? json.data[0] ?? {} : {};
+              resolve({
+                url: typeof first.url === 'string' ? first.url : undefined,
+                b64: typeof first.b64_json === 'string' ? (first.b64_json as string) : undefined,
+              });
+            } catch {
+              reject(new ProviderError('PIAPI_BAD_RESPONSE', 'gpt-image edit returned non-JSON'));
+            }
+          });
+        },
+      );
+      // TCP keepalive so the gateway does not treat the long wait for the response as idle.
+      req.on('socket', (socket) => {
+        socket.setKeepAlive(true, 10_000);
+      });
+      req.on('timeout', () => {
+        req.destroy(new ProviderError('PIAPI_TIMEOUT', `gpt-image edit timed out after ${this.gptImageTimeoutMs}ms`));
+      });
+      req.on('error', (err) => {
+        if (err instanceof ProviderError) reject(err);
+        else reject(new ProviderError('PIAPI_NETWORK_ERROR', `gpt-image edit: ${(err as Error).message}`));
+      });
+      req.write(body);
+      req.end();
+    });
   }
 
   private async requestJson(path: string, init: RequestInit): Promise<Record<string, unknown>> {
