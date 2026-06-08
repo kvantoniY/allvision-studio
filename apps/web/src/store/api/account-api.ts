@@ -53,6 +53,10 @@ export const accountApi = createApi({
       query: (body) => ({ url: '/profile', method: 'PATCH', body }),
       invalidatesTags: ['User', 'Dashboard'],
     }),
+    uploadProfileAvatar: build.mutation<UpdateProfileResponse & { avatar: string }, FormData>({
+      query: (body) => ({ url: '/profile/avatar', method: 'POST', body }),
+      invalidatesTags: ['User', 'Dashboard'],
+    }),
     changePassword: build.mutation<{ ok: true }, ChangeAccountPasswordInput>({
       query: (body) => ({ url: '/profile/password', method: 'POST', body }),
     }),
@@ -67,6 +71,7 @@ export const {
   useGetTransactionsQuery,
   useGetPaymentsQuery,
   useUpdateProfileMutation,
+  useUploadProfileAvatarMutation,
   useChangePasswordMutation,
   useDeleteAccountMutation,
 } = accountApi;

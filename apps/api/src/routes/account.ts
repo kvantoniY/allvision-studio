@@ -4,9 +4,13 @@ import {
   changeAccountPasswordSchema,
   deleteAccountSchema,
 } from '@allvision/shared';
+import { prisma } from '@allvision/database';
 import { requireAuth } from '../middleware/auth';
+import { uploadProfileAvatar } from '../middleware/upload';
 import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
+import { HttpError } from '../utils/http-error';
 import * as account from '../services/account-service';
+import * as fileService from '../services/file-service';
 
 export const accountRouter = Router();
 
@@ -55,6 +59,26 @@ accountRouter.patch('/profile', async (req: Request, res: Response, next: NextFu
   }
 });
 
+accountRouter.post('/profile/avatar', uploadProfileAvatar, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!req.file) throw new HttpError(400, 'FILE_REQUIRED', 'Image file is required');
+    const userId = req.user!.id;
+    const current = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { avatar: true },
+    });
+    const uploaded = await fileService.uploadProfileAvatar(userId, req.file.buffer, req.file.mimetype);
+    const user = await account.updateProfile(userId, { avatar: uploaded.url });
+    const oldKey = profileAvatarStorageKey(current?.avatar, userId);
+    if (oldKey && oldKey !== uploaded.key) {
+      fileService.deleteFile(oldKey).catch(() => undefined);
+    }
+    res.json({ user, avatar: uploaded.url });
+  } catch (e) {
+    next(e);
+  }
+});
+
 accountRouter.post('/profile/password', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { oldPassword, newPassword } = changeAccountPasswordSchema.parse(req.body);
@@ -65,6 +89,26 @@ accountRouter.post('/profile/password', async (req: Request, res: Response, next
     next(e);
   }
 });
+
+function profileAvatarStorageKey(value: string | null | undefined, userId: string): string | null {
+  if (!value) return null;
+  let raw = value.trim();
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      raw = new URL(raw).pathname;
+    } catch {
+      return null;
+    }
+  }
+  raw = raw.replace(/^\/+/, '');
+  if (raw.startsWith('static/')) raw = raw.slice('static/'.length);
+  try {
+    raw = decodeURIComponent(raw);
+  } catch {
+    return null;
+  }
+  return raw.startsWith(`user-uploads/profile/${userId}/`) ? raw : null;
+}
 
 accountRouter.delete('/', async (req: Request, res: Response, next: NextFunction) => {
   try {

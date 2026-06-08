@@ -117,7 +117,7 @@ export function estimateStepCostUsd(
   const params = asRecord(step.params);
   const model = selectModel(block, params, tier);
   if (!model) return { model: undefined, costUsd: 0 };
-  return { model, costUsd: estimateModelCostUsd(model, params) };
+  return { model, costUsd: estimateStepModelCostUsd(step.blockSlug, model, params) };
 }
 
 export function estimateModelCostUsd(model: ModelOption, params: Record<string, unknown> = {}) {
@@ -173,6 +173,56 @@ export function estimateModelCostUsd(model: ModelOption, params: Record<string, 
   }
 
   return model.estimatedCostUsd ?? 0;
+}
+
+function estimateStepModelCostUsd(blockSlug: string, model: ModelOption, params: Record<string, unknown>) {
+  if (blockSlug === 'carousel-slides') {
+    const slides = normaliseStringList(params.slides);
+    const count = Math.max(1, slides.length || 1);
+    return estimateModelCostUsd(model, params) * count;
+  }
+
+  if (blockSlug === 'product-card') {
+    const outputs = normaliseProductOutputs(params.outputs);
+    const selected = outputs.length > 0 ? outputs : ['cover'];
+    return selected.reduce((sum, output) => {
+      if (output === 'cover') return sum + 0.1;
+      if (output === 'animation') {
+        const duration = positiveNumber(params.animation_duration) ?? 5;
+        return sum + 1.3 * Math.max(1, Math.ceil(duration / 5));
+      }
+      if (output === 'ad') {
+        const duration = positiveNumber(params.ad_duration) ?? 8;
+        return sum + 0.2 * duration;
+      }
+      return sum;
+    }, 0);
+  }
+
+  return estimateModelCostUsd(model, params);
+}
+
+function normaliseStringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean);
+  if (typeof value !== 'string') return [];
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes('{{')) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) return parsed.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean);
+  } catch {
+    return [trimmed];
+  }
+  return [];
+}
+
+function normaliseProductOutputs(value: unknown): string[] {
+  const known = ['cover', 'animation', 'ad'];
+  const list = normaliseStringList(value);
+  if (list.length === 1 && list[0].includes(',')) {
+    return list[0].split(',').map((item) => item.trim()).filter((item) => known.includes(item));
+  }
+  return known.filter((item) => list.includes(item));
 }
 
 function summarizeTier(

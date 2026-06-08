@@ -134,6 +134,21 @@ export async function uploadUserImage(
   return { url, key, dimensions: processed.dimensions };
 }
 
+export async function uploadProfileAvatar(
+  userId: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; key: string; dimensions: { width: number; height: number } }> {
+  const processed = await validateAndProcessImage(buffer);
+  const key = `user-uploads/profile/${userId}/${crypto.randomUUID()}.${ext(processed.contentType)}`;
+  const { url } = await getStorageProvider().upload({
+    key,
+    body: processed.buffer,
+    contentType: processed.contentType,
+  });
+  return { url, key, dimensions: processed.dimensions };
+}
+
 export async function uploadResult(
   buffer: Buffer,
   contentType: string,

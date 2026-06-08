@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getBlockCatalogItem } from '@allvision/shared';
+import { getBlockCatalogItem, usdToTokens } from '@allvision/shared';
 import type { ProviderRunContext } from '../providers/ai-provider';
 import type { BlockContext, BlockDefinition, BlockOutput } from './types';
 import {
@@ -31,7 +31,7 @@ export const carouselSlidesBlock: BlockDefinition = {
     const parsed = paramsSchema.partial().safeParse(params);
     const slides = parsed.success ? normaliseSlides(parsed.data.slides) : [];
     const count = Math.max(1, slides.length || 1);
-    return count * 10; // ~gpt-image-2 per slide
+    return count * usdToTokens(0.1); // ~gpt-image-2 per slide
   },
   async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);

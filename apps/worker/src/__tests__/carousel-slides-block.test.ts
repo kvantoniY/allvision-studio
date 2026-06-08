@@ -1,3 +1,4 @@
+import { usdToTokens } from '@allvision/shared';
 import { carouselSlidesBlock } from '../blocks/carousel-slides';
 import { StubAIProvider } from '../providers/stub-ai-provider';
 
@@ -13,6 +14,11 @@ function ctx(provider = new StubAIProvider()) {
 }
 
 describe('carousel-slides block', () => {
+  it('estimates cost per slide', () => {
+    expect(carouselSlidesBlock.estimatedCostCoins({ slides: ['one', 'two', 'three'] })).toBe(3 * usdToTokens(0.1));
+    expect(carouselSlidesBlock.estimatedCostCoins({ slides: [] })).toBe(usdToTokens(0.1));
+  });
+
   it('generates one image per slide and returns them in metadata.slides', async () => {
     const provider = new StubAIProvider();
     const spy = jest.spyOn(provider, 'imageEdit');

@@ -27,9 +27,14 @@ export type UserInputField = {
     | 'audio'
     | 'duration'
     | 'aspect_ratio'
-    | 'music-select';
+    | 'music-select'
+    | 'slides'
+    | 'multiselect';
   label: string;
   required: boolean;
+  requiredWhen?: { field: string; value: string };
+  visibleWhen?: { field: string; value: string };
+  defaultValue?: string;
   hint?: string;
   placeholder?: string;
   maxLength?: number;
@@ -41,9 +46,10 @@ export type UserInputField = {
   allowStudioAvatars?: boolean;
   allowSystemLibrary?: boolean;
   avatarTypes?: string[];
-  options?: Array<{ label: string; value: string }>;
+  options?: Array<{ label: string; value: string; disabled?: boolean; priceCoins?: number; hint?: string }>;
   durationOptions?: number[];
   defaultDuration?: number;
+  maxSlides?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;

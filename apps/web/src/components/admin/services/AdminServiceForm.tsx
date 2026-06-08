@@ -100,6 +100,8 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
   duration: 'Длительность (секунды)',
   aspect_ratio: 'Формат кадра',
   'music-select': 'Музыка из библиотеки',
+  slides: 'Слайды карусели',
+  multiselect: 'Чекбоксы с ценами',
 };
 
 const fieldTypeHints: Partial<Record<UserInputField['type'], string>> = {
@@ -114,6 +116,8 @@ const fieldTypeHints: Partial<Record<UserInputField['type'], string>> = {
   duration: 'Кнопки выбора длительности результата в секундах.',
   aspect_ratio: 'Кнопки выбора формата кадра (9:16, 16:9 и т.д.).',
   'music-select': 'Выбор фоновой музыки из медиа-библиотеки.',
+  slides: 'Пользователь добавляет несколько текстов слайдов; итоговая цена может считаться за каждый слайд.',
+  multiselect: 'Несколько чекбоксов. У каждого варианта можно задать отдельную цену в токенах.',
 };
 
 type AdminServiceFormProps = {
@@ -289,6 +293,10 @@ function capabilityParamMap(models: ModelOption[]) {
 
 function shouldShowParamForModels(block: BlockCatalogItem, key: string, schema: JsonSchemaObject, models: ModelOption[]) {
   if (key === 'model' || isTierModelSchema(schema)) return true;
+  const lowerKey = key.toLowerCase();
+  if (lowerKey.includes('prompt')) return true;
+  if (block.slug === 'product-card' || block.slug === 'carousel-slides') return true;
+  if (lowerKey.endsWith('_model')) return true;
   if (models.length === 0 || models.some((model) => model.provider !== 'piapi')) return true;
   const coreKeys = new Set(['prompt', 'duration', 'aspect_ratio', 'input_image', 'video_url', 'target_video', 'estimatedFrames', 'title', 'music']);
   if (coreKeys.has(key) || block.paramsSchema.required?.includes(key)) return true;
@@ -522,27 +530,6 @@ function canonicalisePipelineConfig(steps: PipelineStep[]) {
   }));
 }
 
-function stepCost(step: PipelineStep, block: BlockCatalogItem | undefined, tier: 'standard' | 'pro') {
-  if (!block) return 0;
-  const params = isRecord(step.params) ? step.params : {};
-  const modelParam = params.model;
-  let modelSlug: string | undefined;
-  if (typeof modelParam === 'string') modelSlug = modelParam;
-  if (isRecord(modelParam) && typeof modelParam[tier] === 'string') modelSlug = modelParam[tier];
-  const model =
-    block.supportedModels.find((item) => item.slug === modelSlug) ??
-    block.supportedModels.find((item) => item.tierHint === tier) ??
-    block.supportedModels.find((item) => item.tierHint === 'both') ??
-    block.supportedModels[0];
-  const base = model?.estimatedCostCoins ?? 0;
-  const duration = typeof params.duration === 'number' && params.duration > 5 ? Math.ceil(params.duration / 5) : 1;
-  return Math.ceil(base * duration);
-}
-
-function calculateCost(steps: PipelineStep[], blocks: BlockCatalogItem[] | undefined, tier: 'standard' | 'pro') {
-  return steps.reduce((sum, step) => sum + stepCost(step, blockBySlug(blocks, step.blockSlug), tier), 0);
-}
-
 function pipelineSentence(steps: PipelineStep[], blocks: BlockCatalogItem[] | undefined) {
   if (steps.length === 0) return 'Пайплайн пустой';
   return steps
@@ -636,6 +623,14 @@ export function buildMockUserInputs(fields: UserInputField[] | null | undefined)
       if (field.type === 'photo') return [field.id, 'mock://admin-test/photo.jpg'];
       if (field.type === 'avatar') return [field.id, 'mock-avatar-admin'];
       if (field.type === 'select') return [field.id, field.options?.[0]?.value ?? 'mock-option'];
+      if (field.type === 'multiselect') {
+        const picked = (field.options ?? [])
+          .filter((option) => option.disabled !== true)
+          .slice(0, 1)
+          .map((option) => option.value);
+        return [field.id, picked.length ? picked : ['option_1']];
+      }
+      if (field.type === 'slides') return [field.id, ['Слайд 1', 'Слайд 2', 'Слайд 3']];
       if (field.type === 'tier') return [field.id, 'standard'];
       return [field.id, field.placeholder || field.label || 'Test value'];
     }),
@@ -945,10 +940,11 @@ function BlockParamsForm({
         const sourceMeta = parseSourceSelectDescription(schema.description);
         const label = sourceMeta?.label ?? schema.title ?? key;
         const description = sourceMeta?.description ?? schema.description;
+        const fieldValue = value[key] ?? schema.default;
 
         if (key === 'model' || isTierModelSchema(schema)) {
           // Single-tier: Pro is the only tier shipped. Mirror selection into { standard, pro } for backend compat.
-          const current = value[key];
+          const current = fieldValue;
           let modelSlug = '';
           if (typeof current === 'string') modelSlug = current;
           else if (isRecord(current) && typeof current.pro === 'string') modelSlug = current.pro;
@@ -987,9 +983,9 @@ function BlockParamsForm({
 
         if (sourceMeta) {
           const sourceValue =
-            block.slug === 'motion-transfer' && key === 'video_url' && value[key] === undefined
+            block.slug === 'motion-transfer' && key === 'video_url' && fieldValue === undefined
               ? selectValue(value.driving_video)
-              : selectValue(value[key]);
+              : selectValue(fieldValue);
           return (
             <div key={key} className="md:col-span-2">
               <SourceSelector
@@ -1010,7 +1006,7 @@ function BlockParamsForm({
             <div key={key} className="space-y-2">
               <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
               <select
-                value={selectValue(value[key])}
+                value={selectValue(fieldValue)}
                 onChange={(event) => update(key, coerceBySchema(event.target.value, schema))}
                 className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
               >
@@ -1030,7 +1026,7 @@ function BlockParamsForm({
             <label key={key} className="flex items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm">
               <input
                 type="checkbox"
-                checked={Boolean(value[key])}
+                checked={Boolean(fieldValue)}
                 onChange={(event) => update(key, event.target.checked)}
                 className="h-4 w-4"
               />
@@ -1047,7 +1043,7 @@ function BlockParamsForm({
               <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
               <Input
                 type="number"
-                value={selectValue(value[key])}
+                value={selectValue(fieldValue)}
                 onChange={(event) => update(key, event.target.value === '' ? undefined : Number(event.target.value))}
               />
               {description && <p className="text-xs text-slate-500">{description}</p>}
@@ -1060,9 +1056,9 @@ function BlockParamsForm({
           <div key={key} className={cn('space-y-2', isPrompt && 'md:col-span-2')}>
             <FieldLabel help={fieldHelp(key, schema)}>{label}</FieldLabel>
             {isPrompt ? (
-              <Textarea value={selectValue(value[key])} rows={3} onChange={(event) => update(key, event.target.value)} />
+              <Textarea value={selectValue(fieldValue)} rows={3} onChange={(event) => update(key, event.target.value)} />
             ) : (
-              <Input value={selectValue(value[key])} onChange={(event) => update(key, event.target.value)} />
+              <Input value={selectValue(fieldValue)} onChange={(event) => update(key, event.target.value)} />
             )}
             {description && <p className="text-xs text-slate-500">{description}</p>}
           </div>
@@ -1337,6 +1333,8 @@ function UserInputFormBuilder({
       ...(type === 'duration' ? { durationOptions: [5, 8, 10], defaultDuration: 5 } : {}),
       ...(type === 'aspect_ratio' ? { aspectOptions: ['auto', '9:16', '16:9', '1:1'], defaultAspect: 'auto' } : {}),
       ...(type === 'select' ? { options: [{ label: 'Вариант 1', value: 'option_1' }] } : {}),
+      ...(type === 'multiselect' ? { options: [{ label: 'Вариант 1', value: 'option_1', priceCoins: 1 }] } : {}),
+      ...(type === 'slides' ? { maxSlides: 10, maxLength: 600 } : {}),
       ...(type === 'photo'
         ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'], allowStudioAvatars: true, allowSystemLibrary: false }
         : {}),
@@ -1581,6 +1579,19 @@ function UserInputFormBuilder({
                                 />
                               </label>
                             )}
+                            {field.type === 'slides' && (
+                              <label className="flex items-center gap-2">
+                                Макс. слайдов
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={20}
+                                  value={field.maxSlides ?? ''}
+                                  onChange={(event) => updateField(index, { maxSlides: event.target.value ? Number(event.target.value) : undefined })}
+                                  className="h-8 w-24"
+                                />
+                              </label>
+                            )}
                             {field.type === 'aspect_ratio' && (
                               <label className="flex items-center gap-2">
                                 Опции (через запятую)
@@ -1599,12 +1610,12 @@ function UserInputFormBuilder({
                               </label>
                             )}
                           </div>
-                          {field.type === 'select' && (
+                          {(field.type === 'select' || field.type === 'multiselect') && (
                             <div className="space-y-2">
-                              <FieldLabel help="Список вариантов, которые увидит пользователь. «Подпись» — то, что видит пользователь; «значение» — то, что уходит в pipeline.">Варианты списка</FieldLabel>
+                              <FieldLabel help="Список вариантов, которые увидит пользователь. «Подпись» — то, что видит пользователь; «значение» — то, что уходит в pipeline. Для multiselect можно задать цену каждого варианта.">Варианты списка</FieldLabel>
                               <div className="space-y-2">
                                 {(field.options ?? []).map((option, optionIndex) => (
-                                  <div key={optionIndex} className="flex items-center gap-2">
+                                  <div key={optionIndex} className="grid gap-2 rounded-md border border-zinc-800 bg-zinc-900 p-2 md:grid-cols-[1fr_180px_auto]">
                                     <Input
                                       value={option.label}
                                       placeholder="Подпись для пользователя"
@@ -1615,26 +1626,75 @@ function UserInputFormBuilder({
                                         updateField(index, { options });
                                       }}
                                     />
-                                    <Input
-                                      value={option.value}
-                                      placeholder="значение"
-                                      className="font-mono"
-                                      onChange={(event) => {
-                                        const options = (field.options ?? []).map((item, current) =>
-                                          current === optionIndex ? { ...item, value: event.target.value } : item,
-                                        );
-                                        updateField(index, { options });
-                                      }}
-                                    />
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => updateField(index, { options: (field.options ?? []).filter((_item, current) => current !== optionIndex) })}
-                                      aria-label="Удалить вариант"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
+                                    <div className="flex gap-2">
+                                      <Input
+                                        value={option.value}
+                                        placeholder="значение"
+                                        className="font-mono"
+                                        onChange={(event) => {
+                                          const options = (field.options ?? []).map((item, current) =>
+                                            current === optionIndex ? { ...item, value: event.target.value } : item,
+                                          );
+                                          updateField(index, { options });
+                                        }}
+                                      />
+                                      {field.type === 'multiselect' && (
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          value={option.priceCoins ?? ''}
+                                          placeholder="цена"
+                                          title="Цена варианта, токены"
+                                          onChange={(event) => {
+                                            const options = (field.options ?? []).map((item, current) =>
+                                              current === optionIndex
+                                                ? { ...item, priceCoins: event.target.value ? Number(event.target.value) : undefined }
+                                                : item,
+                                            );
+                                            updateField(index, { options });
+                                          }}
+                                        />
+                                      )}
+                                    </div>
+                                    <div className="flex items-center justify-end gap-2">
+                                      {field.type === 'multiselect' && (
+                                        <label className="flex items-center gap-1 text-xs text-slate-400">
+                                          <input
+                                            type="checkbox"
+                                            checked={option.disabled === true}
+                                            onChange={(event) => {
+                                              const options = (field.options ?? []).map((item, current) =>
+                                                current === optionIndex ? { ...item, disabled: event.target.checked || undefined } : item,
+                                              );
+                                              updateField(index, { options });
+                                            }}
+                                          />
+                                          выкл.
+                                        </label>
+                                      )}
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => updateField(index, { options: (field.options ?? []).filter((_item, current) => current !== optionIndex) })}
+                                        aria-label="Удалить вариант"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                    {field.type === 'multiselect' && (
+                                      <Input
+                                        value={option.hint ?? ''}
+                                        placeholder="подсказка под вариантом"
+                                        className="md:col-span-3"
+                                        onChange={(event) => {
+                                          const options = (field.options ?? []).map((item, current) =>
+                                            current === optionIndex ? { ...item, hint: event.target.value || undefined } : item,
+                                          );
+                                          updateField(index, { options });
+                                        }}
+                                      />
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -1644,7 +1704,11 @@ function UserInputFormBuilder({
                                 size="sm"
                                 onClick={() => {
                                   const options = [...(field.options ?? [])];
-                                  options.push({ label: `Вариант ${options.length + 1}`, value: `option_${options.length + 1}` });
+                                  options.push({
+                                    label: `Вариант ${options.length + 1}`,
+                                    value: `option_${options.length + 1}`,
+                                    ...(field.type === 'multiselect' ? { priceCoins: 1 } : {}),
+                                  });
                                   updateField(index, { options });
                                 }}
                               >
@@ -1675,7 +1739,7 @@ function UserInputFormBuilder({
             className="h-10 min-w-[220px] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 md:flex-none"
           >
             <option value="">Выберите тип поля…</option>
-            {(['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
+            {(['text', 'textarea', 'photo', 'video', 'select', 'multiselect', 'slides', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
               <option key={type} value={type}>
                 {fieldTypeLabels[type]}
               </option>
@@ -1847,9 +1911,12 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const isCreate = mode === 'create';
   const isBusy = createState.isLoading || updateState.isLoading;
   const errors = useMemo(() => validationErrors(draft.pipelineConfig, draft.userInputForm), [draft.pipelineConfig, draft.userInputForm]);
-  const costStandard = useMemo(() => calculateCost(draft.pipelineConfig, blocks, 'standard'), [draft.pipelineConfig, blocks]);
-  const costPro = useMemo(() => calculateCost(draft.pipelineConfig, blocks, 'pro'), [draft.pipelineConfig, blocks]);
+  const hasSlidesPricing = draft.userInputForm.some((field) => field.type === 'slides');
+  const hasPricedMultiselect = draft.userInputForm.some(
+    (field) => field.type === 'multiselect' && (field.options ?? []).some((option) => typeof option.priceCoins === 'number'),
+  );
   const pricingSummary = useMemo(() => summarizePipelinePricing(draft.pipelineConfig, blocks, usdToRub), [draft.pipelineConfig, blocks, usdToRub]);
+  const costPro = pricingSummary.pro.costCoins;
   const standardMargin = useMemo(
     () => serviceMargin(draft.priceCoinsStandard, pricingSummary.standard.costUsd, usdToRub),
     [draft.priceCoinsStandard, pricingSummary.standard.costUsd, usdToRub],
@@ -2167,10 +2234,10 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
       </Section>
 
-      <Section title="Цена" description="Себестоимость считается по блокам и выбранным моделям.">
+      <Section title="Цена" description="Себестоимость считается по блокам и выбранным моделям. Для карусели основная цена считается за один слайд; для чекбоксов с ценами итог берётся из выбранных вариантов.">
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="space-y-2">
-            <Label htmlFor="pricePro">Цена услуги, коины</Label>
+            <Label htmlFor="pricePro">{hasSlidesPricing ? 'Цена за 1 слайд, токены' : hasPricedMultiselect ? 'Резервная цена услуги, токены' : 'Цена услуги, токены'}</Label>
             <Input
               id="pricePro"
               type="number"
@@ -2181,6 +2248,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
                 updateDraft({ priceCoinsPro: next, priceCoinsStandard: next });
               }}
             />
+            {hasPricedMultiselect && (
+              <p className="text-xs text-slate-500">Для этой услуги итоговая цена берётся из цен выбранных чекбоксов в форме пользователя.</p>
+            )}
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
             <div className="text-sm text-slate-400">Себестоимость</div>

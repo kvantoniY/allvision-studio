@@ -6,7 +6,7 @@ import { authApi } from './auth-api';
 
 export type ProjectSummary = Pick<
   Project,
-  'id' | 'status' | 'progress' | 'tokensCost' | 'createdAt' | 'serviceId' | 'title'
+  'id' | 'status' | 'progress' | 'tokensCost' | 'createdAt' | 'expiresAt' | 'serviceId' | 'title'
 >;
 
 export type ProjectService = {
@@ -40,6 +40,7 @@ export type ProjectStatusResponse = Pick<
   | 'errorMessage'
   | 'errorCode'
   | 'completedAt'
+  | 'expiresAt'
 > & {
   stepProgress?: Array<{
     stepId: string;

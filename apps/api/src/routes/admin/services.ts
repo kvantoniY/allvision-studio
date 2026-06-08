@@ -7,6 +7,7 @@ import {
   validatePipelineConfig,
   validateUserInputForm,
   formatAdminServiceValidationError,
+  generationExpiresAt,
   type CreateAdminServiceInput,
   type UpdateAdminServiceInput,
 } from '@allvision/shared';
@@ -477,6 +478,7 @@ adminServicesRouter.post('/:id/test-run', async (req: Request, res: Response, ne
         selectedTier,
         userInputs: userInputs as Prisma.InputJsonValue,
         stepProgress: [],
+        expiresAt: generationExpiresAt(),
       },
       select: { id: true },
     });

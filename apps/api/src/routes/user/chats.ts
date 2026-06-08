@@ -37,6 +37,7 @@ const projectSelect = {
   userInputs: true,
   createdAt: true,
   completedAt: true,
+  expiresAt: true,
 } satisfies Prisma.ProjectSelect;
 
 function previewFromProject(project: {

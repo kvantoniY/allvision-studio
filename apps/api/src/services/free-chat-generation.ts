@@ -1,5 +1,5 @@
 import { Prisma, prisma } from '@allvision/database';
-import { estimateChatGenerationPriceCoins, getChatModel, type ChatAspectRatio } from '@allvision/shared';
+import { estimateChatGenerationPriceCoins, generationExpiresAt, getChatModel, type ChatAspectRatio } from '@allvision/shared';
 import { z } from 'zod';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
@@ -403,6 +403,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
           tokensCost,
           pipelineSnapshot: pipelineSnapshot as Prisma.InputJsonValue,
           selectedTier: 'standard',
+          expiresAt: generationExpiresAt(),
           userInputs: {
             chatGeneration: removeUndefined({
               modelSlug: model.slug,
@@ -428,6 +429,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
           progress: true,
           tokensCost: true,
           createdAt: true,
+          expiresAt: true,
           serviceId: true,
           title: true,
         },

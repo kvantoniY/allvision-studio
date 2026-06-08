@@ -2994,7 +2994,7 @@ export async function runSeed(options: SeedOptions = {}) {
 
   console.log('[seed] gift services: ensuring allowlisted data-driven catalog services');
   const gift = await ensureGiftServices();
-  console.log(`[seed] gift services: ${gift.created} created, ${gift.updated} refreshed (non-allowlisted services left untouched)`);
+  console.log(`[seed] gift services: ${gift.created} created, ${gift.skipped} existing skipped (admin edits preserved)`);
 
   console.log('[seed] step 3/5: token packages');
   await ensureTokenPackages();
@@ -3088,14 +3088,12 @@ const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
   'product-ad',
 ]);
 
-// Upsert loader for explicitly new/in-development data-driven services. Runs on every seed (incl. prod
-// deploy). It only touches the slugs in NEW_SERVICE_SLUGS_TO_CREATE — creating them if missing and
-// refreshing them to the canonical seed config if present (these are actively iterated and not yet
-// admin-tuned). Everything OUTSIDE this allowlist is never created, updated or deleted, so admin edits
-// and intentionally-removed services are preserved. Clear this list once the services are stable.
+// Additive loader for explicitly new data-driven services. It creates allowlisted services only when
+// they are missing. Existing rows are never updated here: prices, covers, prompts and pipeline are
+// managed from /admin/services and must survive deploy-time seed runs.
 async function ensureGiftServices() {
   let created = 0;
-  let updated = 0;
+  let skipped = 0;
   for (const service of giftFactoryServices) {
     if (!NEW_SERVICE_SLUGS_TO_CREATE.has(service.slug)) continue;
     const existing = await prisma.service.findUnique({
@@ -3103,41 +3101,15 @@ async function ensureGiftServices() {
       select: { id: true },
     });
     if (existing) {
-      await prisma.service.update({
-        where: { slug: service.slug },
-        data: {
-          title: service.title,
-          shortDesc: service.shortDesc,
-          description: service.description,
-          category: service.category,
-          priceTokens: service.priceTokens,
-          priceCoinsStandard: service.priceCoinsStandard,
-          priceCoinsPro: service.priceCoinsPro,
-          costUsd: service.costUsd,
-          coverImage: service.coverImage,
-          galleryImages: service.galleryImages,
-          previewImage: service.previewImage,
-          previewVideo: service.previewVideo,
-          processingType: service.processingType,
-          userInputForm: service.userInputForm,
-          pipelineConfig: service.pipelineConfig,
-          isActive: service.isActive,
-          isFeatured: service.isFeatured,
-          aiProvider: service.aiProvider,
-          aiModel: service.aiModel,
-          aiConfig: service.aiConfig,
-          sortOrder: service.sortOrder,
-        },
-      });
-      console.log(`[seed] gift service refreshed: ${service.slug}`);
-      updated += 1;
-    } else {
-      await prisma.service.create({ data: service });
-      console.log(`[seed] gift service created: ${service.slug}`);
-      created += 1;
+      console.log(`[seed] gift service exists, skipped: ${service.slug}`);
+      skipped += 1;
+      continue;
     }
+    await prisma.service.create({ data: service });
+    console.log(`[seed] gift service created: ${service.slug}`);
+    created += 1;
   }
-  return { created, updated };
+  return { created, skipped };
 }
 
 async function ensureCatalog(options: SeedOptions) {
@@ -3181,27 +3153,24 @@ async function ensureTokenPackages() {
 }
 
 async function ensureStylePresets() {
-  let ensured = 0;
+  let created = 0;
+  let skipped = 0;
   for (const preset of stylePresets) {
-    await prisma.stylePreset.upsert({
-      where: { slug: preset.slug },
-      update: {
-        kind: preset.kind,
-        title: preset.title,
-        description: preset.description,
-        promptText: preset.promptText,
-        sortOrder: preset.sortOrder,
-        isActive: true,
-      },
-      create: {
+    const existing = await prisma.stylePreset.findUnique({ where: { slug: preset.slug }, select: { id: true } });
+    if (existing) {
+      skipped += 1;
+      continue;
+    }
+    await prisma.stylePreset.create({
+      data: {
         ...preset,
         thumbnail: null,
         isActive: true,
       },
     });
-    ensured += 1;
+    created += 1;
   }
-  console.log(`[seed] style presets: ${ensured} ensured`);
+  console.log(`[seed] style presets: ${created} created, ${skipped} existing skipped`);
 }
 
 async function ensureMediaAssetsMigration() {
@@ -3232,81 +3201,18 @@ async function seedDevUser() {
 
 async function seedPilotServices() {
   let created = 0;
-  let patched = 0;
+  let skipped = 0;
   for (const service of giftFactoryServices) {
     if (legacyTrendServiceSlugs.includes(service.slug)) continue;
     const existing = await prisma.service.findUnique({ where: { slug: service.slug } });
     if (existing) {
-      // Always refresh seed services to canonical seed config (Pro-default, current prices, latest userInputForm).
-      // Admin can override later through /admin/services UI; seed only runs at deploy time on system upgrades.
-      const needsUpdate =
-        existing.title !== service.title ||
-        existing.shortDesc !== service.shortDesc ||
-        existing.description !== service.description ||
-        existing.category !== service.category ||
-        existing.priceCoinsStandard !== service.priceCoinsStandard ||
-        existing.priceCoinsPro !== service.priceCoinsPro ||
-        existing.priceTokens !== service.priceTokens ||
-        existing.costUsd !== service.costUsd ||
-        existing.coverImage !== service.coverImage ||
-        JSON.stringify(existing.galleryImages) !== JSON.stringify(service.galleryImages) ||
-        existing.previewImage !== service.previewImage ||
-        existing.previewVideo !== service.previewVideo ||
-        existing.sortOrder !== service.sortOrder ||
-        existing.processingType !== service.processingType ||
-        existing.aiProvider !== service.aiProvider ||
-        existing.aiModel !== service.aiModel ||
-        JSON.stringify(existing.aiConfig) !== JSON.stringify(service.aiConfig) ||
-        JSON.stringify(existing.userInputForm) !== JSON.stringify(service.userInputForm) ||
-        JSON.stringify(existing.pipelineConfig) !== JSON.stringify(service.pipelineConfig) ||
-        existing.isActive !== service.isActive ||
-        existing.isFeatured !== service.isFeatured;
-
-      if (needsUpdate) {
-        await prisma.service.update({
-          where: { slug: service.slug },
-          data: {
-            title: service.title,
-            shortDesc: service.shortDesc,
-            description: service.description,
-            category: service.category,
-            priceTokens: service.priceTokens,
-            priceCoinsStandard: service.priceCoinsStandard,
-            priceCoinsPro: service.priceCoinsPro,
-            costUsd: service.costUsd,
-            coverImage: service.coverImage,
-            galleryImages: service.galleryImages,
-            previewImage: service.previewImage,
-            previewVideo: service.previewVideo,
-            processingType: service.processingType,
-            userInputForm: service.userInputForm,
-            pipelineConfig: service.pipelineConfig,
-            isFeatured: service.isFeatured,
-            isActive: service.isActive,
-            aiProvider: service.aiProvider,
-            aiModel: service.aiModel,
-            aiConfig: service.aiConfig,
-            sortOrder: service.sortOrder,
-          },
-        });
-        patched += 1;
-      }
+      skipped += 1;
       continue;
     }
     await prisma.service.create({ data: service });
     created += 1;
   }
-  let legacyDeactivated = 0;
-  for (const slug of legacyTrendServiceSlugs) {
-    const existing = await prisma.service.findUnique({ where: { slug } });
-    if (!existing || (existing.isActive === false && existing.isFeatured === false)) continue;
-    await prisma.service.update({
-      where: { slug },
-      data: { isActive: false, isFeatured: false },
-    });
-    legacyDeactivated += 1;
-  }
-  return { created, patched, legacyDeactivated };
+  return { created, patched: 0, skipped, legacyDeactivated: 0 };
 }
 
 

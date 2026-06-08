@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
-import type { StorageProvider } from '@allvision/shared';
+import { generationExpiresAt, type StorageProvider } from '@allvision/shared';
 import sharp from 'sharp';
 import { getAIProvider, getStorageProvider } from './providers';
 import type { PipelineProviderMode } from './providers';
@@ -183,12 +183,14 @@ export async function runPipeline(
         storage,
       });
     }
+    const completedAt = new Date();
     await prisma.project.update({
       where: { id: params.generationId },
       data: {
         status: ProjectStatus.COMPLETED,
         progress: 100,
-        completedAt: new Date(),
+        completedAt,
+        expiresAt: project.mode === 'library-generation' ? null : generationExpiresAt(completedAt),
         errorMessage: null,
         errorCode: null,
         resultImage: finalOutput.resultImage ?? null,

@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { ImageIcon, Video } from 'lucide-react';
 import type { Project } from '@allvision/shared';
 import { Card, CardContent } from '@/components/ui/card';
+import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { cn } from '@/lib/utils';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDate } from './labels';
 
@@ -48,6 +49,9 @@ export function ProjectCard({ project }: { project: Project }) {
               <span>{formatDate(project.createdAt)}</span>
               <span>{project.tokensCost} токен.</span>
             </div>
+            {project.status === 'COMPLETED' && (
+              <GenerationRetentionNotice expiresAt={project.expiresAt} compact className="mt-2" />
+            )}
             {project.status === 'PROCESSING' && (
               <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
                 <div

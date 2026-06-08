@@ -51,6 +51,7 @@ import {
   useGetPaymentsQuery,
   useGetTransactionsQuery,
   useUpdateProfileMutation,
+  useUploadProfileAvatarMutation,
 } from '@/store/api/account-api';
 import {
   invalidatePaymentSideEffects,
@@ -61,7 +62,6 @@ import {
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
 import {
   type UserMediaAsset,
-  useCreateUserMediaAssetMutation,
   useListUserMediaAssetsQuery,
 } from '@/store/api/user-media-assets-api';
 import { clearUser } from '@/store/slices/auth-slice';
@@ -569,7 +569,7 @@ function AvatarManager({ user }: { user: ProfileUser }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 8 });
-  const [createAsset, uploadState] = useCreateUserMediaAssetMutation();
+  const [uploadProfileAvatar, uploadState] = useUploadProfileAvatarMutation();
   const [updateProfile, avatarState] = useUpdateProfileMutation();
   const [previewAvatar, setPreviewAvatar] = useState(user.avatar);
   const busy = uploadState.isLoading || avatarState.isLoading;
@@ -601,16 +601,10 @@ function AvatarManager({ user }: { user: ProfileUser }) {
 
     const form = new FormData();
     form.append('file', file);
-    form.append('data', JSON.stringify({
-      kind: 'user-avatar',
-      title: file.name.replace(/\.[^.]+$/, '') || 'Аватар профиля',
-      tags: ['profile-avatar'],
-    }));
 
     try {
-      const result = await createAsset(form).unwrap();
-      await updateProfile({ avatar: result.asset.publicUrl }).unwrap();
-      setPreviewAvatar(result.asset.publicUrl);
+      const result = await uploadProfileAvatar(form).unwrap();
+      setPreviewAvatar(result.user.avatar);
       dispatch(authApi.util.invalidateTags(['Me']));
       toast({ title: 'Аватар обновлён' });
     } catch (error) {

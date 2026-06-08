@@ -1,6 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, prisma } from '@allvision/database';
-import { createProjectSchema, listProjectsQuerySchema, QUEUE_NAMES } from '@allvision/shared';
+import { createProjectSchema, generationExpiresAt, listProjectsQuerySchema, QUEUE_NAMES } from '@allvision/shared';
 import { requireAuth } from '../middleware/auth';
 import { projectCreateLimiter } from '../middleware/rate-limit';
 import { uploadSinglePhoto } from '../middleware/upload';
@@ -26,6 +26,7 @@ const projectCreateSelect = {
   progress: true,
   tokensCost: true,
   createdAt: true,
+  expiresAt: true,
   serviceId: true,
   title: true,
 } as const;
@@ -54,6 +55,7 @@ const projectListSelect = {
   stepProgress: true,
   createdAt: true,
   completedAt: true,
+  expiresAt: true,
   service: {
     select: {
       slug: true,
@@ -174,6 +176,7 @@ projectsRouter.post(
               userId,
               trendId: trend?.id,
               title: projectTitle(autoServiceSlug, trend?.title),
+              expiresAt: generationExpiresAt(),
             },
             select: projectCreateSelect,
           });
@@ -294,6 +297,7 @@ projectsRouter.get('/:id/status', requireAuth, async (req: Request, res: Respons
         errorMessage: true,
         errorCode: true,
         completedAt: true,
+        expiresAt: true,
         stepProgress: true,
       },
     });

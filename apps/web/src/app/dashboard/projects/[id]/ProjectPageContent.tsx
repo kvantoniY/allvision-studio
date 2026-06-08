@@ -24,6 +24,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import {
   type ProjectDetails,
@@ -207,6 +208,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const errorCode = live?.errorCode ?? project.errorCode;
   const friendlyError = projectFailureMessage(errorCode, errorMessage);
   const completedAt = live?.completedAt ?? project.completedAt;
+  const expiresAt = live?.expiresAt ?? project.expiresAt;
   const inputImage = project.inputImages?.[0];
   const resultUrl = resultImage ?? resultVideo ?? resultThumbnail;
   const retryHref = retryHrefFor(project);
@@ -301,6 +303,8 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
               </div>
             </CardContent>
           </Card>
+
+          <GenerationRetentionNotice expiresAt={expiresAt} />
 
           <TooltipProvider>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -485,6 +489,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                     <div className="grid h-64 place-items-center text-slate-500">Результат пока недоступен</div>
                   )}
                 </div>
+                <GenerationRetentionNotice expiresAt={expiresAt} />
                 <div className="flex flex-col gap-3 sm:flex-row">
                   {resultUrl && (
                     <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">

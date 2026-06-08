@@ -10,6 +10,7 @@ import { processCharacterNsfw } from './processors/character-nsfw';
 import { processEpisode } from './processors/episode';
 import { processServicePipeline } from './processors/service-pipeline';
 import { initialiseWorkerProviders } from './providers';
+import { startGenerationRetentionCleanup } from './services/generation-retention';
 
 const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
 const CONCURRENCY = 2;
@@ -42,10 +43,12 @@ export function queueConcurrencyFor(name: QueueName) {
 }
 
 let workers: Worker[] = [];
+let stopRetentionCleanup: (() => void) | undefined;
 
 let readyCount = 0;
 export async function start() {
   await initialiseWorkerProviders();
+  stopRetentionCleanup = startGenerationRetentionCleanup();
   connection = new IORedis(redisUrl, { maxRetriesPerRequest: null, lazyConnect: false });
   workers = queues.map(([name, processor]) => {
     const concurrency = queueConcurrencyFor(name);
@@ -87,6 +90,7 @@ async function shutdown(signal: string) {
   }, 5000);
   timer.unref();
   try {
+    stopRetentionCleanup?.();
     await Promise.all(workers.map((w) => w.close()));
     await connection?.quit();
     log('Worker stopped');

@@ -19,6 +19,7 @@ export type ChatProjectState = {
   userInputs: unknown;
   createdAt: string;
   completedAt: string | null;
+  expiresAt: string | null;
   modelSlug: string | null;
   category: string | null;
   prompt: string;

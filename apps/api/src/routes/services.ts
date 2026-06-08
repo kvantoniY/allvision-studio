@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, prisma } from '@allvision/database';
-import { userInputFormSchema, type UserInputFieldInput } from '@allvision/shared';
+import { generationExpiresAt, userInputFormSchema, type UserInputFieldInput } from '@allvision/shared';
 import { requireAuth } from '../middleware/auth';
 import { uploadServiceLaunchInputs } from '../middleware/upload';
 import { HttpError } from '../utils/http-error';
@@ -505,14 +505,16 @@ servicesRouter.post(
 
       // Priced multiselect (e.g. product-card outputs): total = sum of selected options' priceCoins.
       const pricedMultiselect = fields.find(
-        (field) => field.type === 'multiselect' && (field.options ?? []).some((option) => typeof option.priceCoins === 'number'),
+        (field) => field.type === 'multiselect',
       );
       if (pricedMultiselect) {
         const pickedValue = data[pricedMultiselect.id];
         const pickedSet = new Set(Array.isArray(pickedValue) ? pickedValue.filter((item): item is string => typeof item === 'string') : []);
         let sum = 0;
         for (const option of pricedMultiselect.options ?? []) {
-          if (!option.disabled && pickedSet.has(option.value)) sum += option.priceCoins ?? 0;
+          if (!option.disabled && pickedSet.has(option.value)) {
+            sum += option.priceCoins ?? 0;
+          }
         }
         if (sum > 0) tokensCost = sum;
       }
@@ -551,6 +553,7 @@ servicesRouter.post(
               selectedTier: tierValue,
               userInputs: userInputs as Prisma.InputJsonValue,
               stepProgress: stepProgress as Prisma.InputJsonValue,
+              expiresAt: generationExpiresAt(),
             },
             select: {
               id: true,
@@ -558,6 +561,7 @@ servicesRouter.post(
               progress: true,
               tokensCost: true,
               createdAt: true,
+              expiresAt: true,
               serviceId: true,
               title: true,
             },

@@ -1,5 +1,5 @@
 import { CharacterStatus, EpisodeStatus, prisma, ProjectStatus } from '@allvision/database';
-import { CHARACTER_SLOT_PRICE_TOKENS } from '@allvision/shared';
+import { CHARACTER_SLOT_PRICE_TOKENS, generationExpiresAt } from '@allvision/shared';
 
 export async function updateProjectProgress(
   projectId: string,
@@ -22,12 +22,14 @@ export interface ProjectResult {
 }
 
 export async function markProjectCompleted(projectId: string, result: ProjectResult) {
+  const completedAt = new Date();
   await prisma.project.update({
     where: { id: projectId },
     data: {
       status: ProjectStatus.COMPLETED,
       progress: 100,
-      completedAt: new Date(),
+      completedAt,
+      expiresAt: generationExpiresAt(completedAt),
       resultImage: result.resultImage ?? null,
       resultVideo: result.resultVideo ?? null,
       resultThumbnail: result.resultThumbnail ?? null,

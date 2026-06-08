@@ -18,6 +18,7 @@ import { useGetMeQuery } from '@/store/api/auth-api';
 import { useGetStylePresetsQuery } from '@/store/api/public-api';
 import { type ProjectListItem, useListProjectsQuery } from '@/store/api/projects-api';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL } from '@/components/dashboard/labels';
+import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import {
   type UserMediaAsset,
   type UserMediaKind,
@@ -305,6 +306,9 @@ function StudioHistory({
                 {usedAssets.length > 0 && <div className="line-clamp-1">Референс: {usedAssets.join(', ')}</div>}
                 {project.errorMessage && <div className="line-clamp-2 text-amber-200">{project.errorMessage}</div>}
               </div>
+              {project.status === 'COMPLETED' && (
+                <GenerationRetentionNotice expiresAt={project.expiresAt} compact />
+              )}
               {project.status === 'PROCESSING' && (
                 <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
                   <div className="h-full bg-gradient-to-r from-violet-500 to-fuchsia-500" style={{ width: `${project.progress ?? 0}%` }} />

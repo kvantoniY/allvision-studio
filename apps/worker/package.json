@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "jest --runInBand",
+    "cleanup:generations": "tsx scripts/cleanup-generations.ts",
     "smoke:piapi": "tsx scripts/smoke-piapi.ts"
   },
   "dependencies": {

@@ -172,6 +172,7 @@ model Project {
 
   createdAt   DateTime  @default(now())
   completedAt DateTime?
+  expiresAt   DateTime?
 
   user        User         @relation(fields: [userId], references: [id])
   service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
@@ -180,6 +181,7 @@ model Project {
   chatMessages ChatMessage[]
 
   @@index([userId, mode])
+  @@index([expiresAt])
 }
 
 model Chat {

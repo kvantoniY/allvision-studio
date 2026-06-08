@@ -1,3 +1,4 @@
+import { usdToTokens } from '@allvision/shared';
 import { productCardBlock } from '../blocks/product-card';
 import { StubAIProvider } from '../providers/stub-ai-provider';
 
@@ -13,6 +14,12 @@ function ctx(provider = new StubAIProvider()) {
 }
 
 describe('product-card block', () => {
+  it('estimates only selected output costs', () => {
+    expect(productCardBlock.estimatedCostCoins({ outputs: ['cover'] })).toBe(usdToTokens(0.1));
+    expect(productCardBlock.estimatedCostCoins({ outputs: ['animation'], animation_duration: 10 })).toBe(usdToTokens(2.6));
+    expect(productCardBlock.estimatedCostCoins({ outputs: [] })).toBe(usdToTokens(0.1));
+  });
+
   it('only generates the selected outputs and returns labeled assets', async () => {
     const provider = new StubAIProvider();
     const edit = jest.spyOn(provider, 'imageEdit');

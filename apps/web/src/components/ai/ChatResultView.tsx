@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/store/api/user-chat-api';
@@ -207,6 +208,10 @@ function MessageCard({
             downloadUrl={resultUrl}
             onClose={() => setLightboxOpen(false)}
           />
+        )}
+
+        {status === 'COMPLETED' && (
+          <GenerationRetentionNotice expiresAt={project.expiresAt} />
         )}
 
         <div className="flex flex-wrap gap-3">

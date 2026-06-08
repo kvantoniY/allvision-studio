@@ -42,6 +42,7 @@ import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import { type UserMediaAsset, useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import { cn } from '@/lib/utils';
 
@@ -1734,6 +1735,9 @@ function GenerationCard({
             </Badge>
           </div>
           <div className="mt-1 text-xs text-slate-500">{formatDateTime(project.createdAt)}</div>
+          {project.status === 'COMPLETED' && (
+            <GenerationRetentionNotice expiresAt={project.expiresAt} compact className="mt-1" />
+          )}
         </div>
         <div className="shrink-0 text-right text-xs text-slate-500">{project.tokensCost} коинов</div>
       </button>
@@ -1757,7 +1761,8 @@ function GenerationCard({
           {project.status === 'FAILED' && <GenerationWarning project={project} />}
 
           {project.status === 'COMPLETED' && (
-            <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <GenerationRetentionNotice expiresAt={project.expiresAt} className="sm:basis-full" />
               {resultUrl && (
                 <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
                   <a href={resultUrl} download target="_blank" rel="noopener">

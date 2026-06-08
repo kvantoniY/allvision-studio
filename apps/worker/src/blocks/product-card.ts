@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { getBlockCatalogItem } from '@allvision/shared';
+import { getBlockCatalogItem, usdToTokens } from '@allvision/shared';
 import type { ProviderRunContext } from '../providers/ai-provider';
 import type { BlockContext, BlockDefinition, BlockOutput } from './types';
 import {
@@ -47,9 +47,15 @@ export const productCardBlock: BlockDefinition = {
   estimatedCostCoins: (params) => {
     const parsed = paramsSchema.partial().safeParse(params);
     const outputs = parsed.success ? normaliseOutputs(parsed.data.outputs) : [];
-    const perOutput: Record<string, number> = { cover: 15, animation: 60, ad: 120 };
+    const animationDuration = parsed.success ? parsed.data.animation_duration ?? 5 : 5;
+    const adDuration = parsed.success ? parsed.data.ad_duration ?? 8 : 8;
+    const perOutput: Record<string, number> = {
+      cover: usdToTokens(0.1),
+      animation: usdToTokens(1.3 * Math.max(1, Math.ceil(animationDuration / 5))),
+      ad: usdToTokens(0.2 * adDuration),
+    };
     const total = outputs.reduce((sum, key) => sum + (perOutput[key] ?? 0), 0);
-    return total > 0 ? total : 15;
+    return total > 0 ? total : perOutput.cover;
   },
   async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);
