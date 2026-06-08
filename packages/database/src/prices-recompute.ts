@@ -3,11 +3,13 @@ import { prisma } from './index';
 
 const PRICING_MARGIN_DEFAULT = 0.8;
 const PRICING_USD_TO_RUB_DEFAULT = 80;
+const PRICING_RUB_PER_TOKEN_DEFAULT = 18;
 
 export type PriceRecomputeOptions = {
   apply?: boolean;
   margin?: number;
   usdToRub?: number;
+  rubPerToken?: number;
   log?: (message: string) => void;
   prismaClient?: typeof prisma;
 };
@@ -31,6 +33,7 @@ export async function runPricesRecompute(options: PriceRecomputeOptions = {}) {
   const apply = options.apply ?? false;
   const margin = options.margin ?? Number(process.env.PRICING_MARGIN_DEFAULT ?? PRICING_MARGIN_DEFAULT);
   const usdToRub = options.usdToRub ?? Number(process.env.PRICING_USD_TO_RUB ?? PRICING_USD_TO_RUB_DEFAULT);
+  const rubPerToken = options.rubPerToken ?? Number(process.env.PRICING_RUB_PER_TOKEN ?? PRICING_RUB_PER_TOKEN_DEFAULT);
   const { priceForMargin, summarizePipelinePricing } = loadSharedPricing();
 
   const services = await client.service.findMany({
@@ -49,11 +52,11 @@ export async function runPricesRecompute(options: PriceRecomputeOptions = {}) {
   const changes: PriceRecomputeChange[] = [];
 
   for (const service of services) {
-    const pricing = summarizePipelinePricing(service.pipelineConfig, undefined, usdToRub);
+    const pricing = summarizePipelinePricing(service.pipelineConfig, undefined, usdToRub, rubPerToken);
     const oldStandard = service.priceCoinsStandard ?? service.priceTokens ?? 0;
     const oldPro = service.priceCoinsPro ?? oldStandard;
-    const newStandard = Math.max(10, priceForMargin(pricing.standard.costUsd, margin, usdToRub));
-    const newPro = Math.max(newStandard, priceForMargin(pricing.pro.costUsd, margin, usdToRub));
+    const newStandard = Math.max(1, priceForMargin(pricing.standard.costUsd, margin, usdToRub, rubPerToken));
+    const newPro = Math.max(newStandard, priceForMargin(pricing.pro.costUsd, margin, usdToRub, rubPerToken));
     const changed = oldStandard !== newStandard || oldPro !== newPro;
 
     const change = {
@@ -89,13 +92,13 @@ export async function runPricesRecompute(options: PriceRecomputeOptions = {}) {
     }
   }
 
-  log(`[prices] ${apply ? 'applied' : 'dry-run'}; services=${services.length}; changed=${changes.filter((item) => item.changed).length}; margin=${margin}; usdToRub=${usdToRub}`);
-  return { apply, margin, usdToRub, changes };
+  log(`[prices] ${apply ? 'applied' : 'dry-run'}; services=${services.length}; changed=${changes.filter((item) => item.changed).length}; margin=${margin}; usdToRub=${usdToRub}; rubPerToken=${rubPerToken}`);
+  return { apply, margin, usdToRub, rubPerToken, changes };
 }
 
 function loadSharedPricing(): {
-  priceForMargin: (costUsd: number, margin: number, usdToRub: number) => number;
-  summarizePipelinePricing: (steps: unknown, blocks?: unknown, usdToRub?: number) => {
+  priceForMargin: (costUsd: number, margin: number, usdToRub: number, rubPerToken?: number) => number;
+  summarizePipelinePricing: (steps: unknown, blocks?: unknown, usdToRub?: number, rubPerToken?: number) => {
     standard: { costUsd: number };
     pro: { costUsd: number };
   };
@@ -107,7 +110,7 @@ function loadSharedPricing(): {
 }
 
 function parseArgs(argv: string[]) {
-  const result: { apply: boolean; margin?: number; usdToRub?: number } = { apply: false };
+  const result: { apply: boolean; margin?: number; usdToRub?: number; rubPerToken?: number } = { apply: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--apply') result.apply = true;
@@ -121,6 +124,11 @@ function parseArgs(argv: string[]) {
       index += 1;
     }
     if (arg.startsWith('--usd-to-rub=')) result.usdToRub = Number(arg.slice('--usd-to-rub='.length));
+    if (arg === '--rub-per-token') {
+      result.rubPerToken = Number(argv[index + 1]);
+      index += 1;
+    }
+    if (arg.startsWith('--rub-per-token=')) result.rubPerToken = Number(arg.slice('--rub-per-token='.length));
   }
   return result;
 }

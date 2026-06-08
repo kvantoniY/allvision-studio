@@ -68,9 +68,9 @@ describe('CHAT_MODELS', () => {
     );
   });
 
-  it('applies admin model prices without going below model cost', () => {
+  it('applies admin model prices down to one token', () => {
     const base = estimateChatGenerationCostCoins('nano-banana');
     expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': base + 50 } })).toBe(base + 50);
-    expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(base);
+    expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(1);
   });
 });

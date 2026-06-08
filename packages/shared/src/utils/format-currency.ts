@@ -1,3 +1,5 @@
+import { PRICING_RUB_PER_TOKEN_DEFAULT, tokensToRub } from '../constants/pricing';
+
 export type MoneyAmount = {
   usd?: number | null;
   coins?: number | null;
@@ -8,20 +10,22 @@ export type FormatMoneyOptions = {
   primary: 'usd' | 'coins' | 'rub';
   showAll?: boolean;
   usdToRub?: number;
+  rubPerToken?: number;
 };
 
 export function usdToRub(usd: number, rate = 80) {
   return Math.round(usd * rate);
 }
 
-export function coinsToRub(coins: number) {
-  return Math.round(coins);
+export function coinsToRub(coins: number, rubPerToken = PRICING_RUB_PER_TOKEN_DEFAULT) {
+  return tokensToRub(coins, rubPerToken);
 }
 
 export function formatMoney(amount: MoneyAmount, opts: FormatMoneyOptions) {
   const showAll = opts.showAll ?? false;
   const rate = Number.isFinite(opts.usdToRub) ? opts.usdToRub! : 80;
-  const rub = amount.rub ?? (typeof amount.usd === 'number' ? usdToRub(amount.usd, rate) : typeof amount.coins === 'number' ? coinsToRub(amount.coins) : undefined);
+  const rubPerToken = Number.isFinite(opts.rubPerToken) ? opts.rubPerToken! : PRICING_RUB_PER_TOKEN_DEFAULT;
+  const rub = amount.rub ?? (typeof amount.usd === 'number' ? usdToRub(amount.usd, rate) : typeof amount.coins === 'number' ? coinsToRub(amount.coins, rubPerToken) : undefined);
   const parts: string[] = [];
 
   const pushUsd = () => {

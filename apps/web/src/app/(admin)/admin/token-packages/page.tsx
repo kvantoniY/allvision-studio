@@ -19,7 +19,7 @@ import {
 } from '@/store/api/admin-token-packages-api';
 
 const defaultFeatures = [
-  '1 токен = 1 ₽ для автоматических услуг',
+  '1 токен = 18 ₽ для автоматических услуг',
   'Списание только после запуска обработки',
   'Подходит для фото, анимаций и трендов',
 ];
@@ -41,9 +41,9 @@ type Draft = {
 const emptyDraft: Draft = {
   title: '',
   subtitle: '',
-  tokens: 100,
-  priceRub: 99,
-  originalPriceRub: '',
+  tokens: 16,
+  priceRub: 289,
+  originalPriceRub: '349',
   bonus: 0,
   badgeText: '',
   featuresText: defaultFeatures.join('\n'),

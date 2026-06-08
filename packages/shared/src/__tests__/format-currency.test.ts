@@ -6,7 +6,7 @@ describe('formatMoney', () => {
   });
 
   it('formats coins with RUB secondary', () => {
-    expect(formatMoney({ coins: 40 }, { primary: 'coins', showAll: true })).toBe('40 токенов · ~40 ₽');
+    expect(formatMoney({ coins: 40 }, { primary: 'coins', showAll: true })).toBe('40 токенов · ~720 ₽');
   });
 
   it('handles singular coin forms and missing amounts', () => {

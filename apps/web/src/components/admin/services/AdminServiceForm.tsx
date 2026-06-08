@@ -774,7 +774,8 @@ function ModelPriceEditor({
   onSave: (slug: string, priceCoins: number) => Promise<void>;
   disabled?: boolean;
 }) {
-  const minimum = minimumModelPriceCoins(model);
+  const cost = minimumModelPriceCoins(model);
+  const floor = cost > 0 ? 1 : 0;
   const effective = effectiveModelPriceCoins(model, overrides);
   const [draft, setDraft] = useState(String(effective));
 
@@ -783,7 +784,7 @@ function ModelPriceEditor({
   }, [effective]);
 
   const parsed = Number(draft);
-  const nextPrice = Number.isFinite(parsed) ? Math.max(minimum, Math.ceil(parsed)) : minimum;
+  const nextPrice = Number.isFinite(parsed) ? Math.max(floor, Math.ceil(parsed)) : floor;
   const changed = nextPrice !== effective;
 
   return (
@@ -794,7 +795,7 @@ function ModelPriceEditor({
           <Input
             id={`model-price-${model.slug}`}
             type="number"
-            min={minimum}
+            min={floor}
             step={1}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -812,14 +813,14 @@ function ModelPriceEditor({
         <Button
           type="button"
           variant="ghost"
-          disabled={disabled || effective === minimum}
-          onClick={() => onSave(model.slug, minimum)}
+          disabled={disabled || effective === cost}
+          onClick={() => onSave(model.slug, cost)}
         >
           Сбросить
         </Button>
       </div>
       <div className="mt-2 text-xs text-slate-500">
-        Минимум {formatMoney({ coins: minimum }, { primary: 'coins', showAll: true, usdToRub })}
+        Расчётная себестоимость {formatMoney({ coins: cost }, { primary: 'coins', showAll: true, usdToRub })}
         {model.estimatedCostUsd ? ` · себестоимость ${formatMoney({ usd: model.estimatedCostUsd }, { primary: 'usd', showAll: true, usdToRub })}` : ''}
       </div>
     </div>
@@ -2066,7 +2067,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           </div>
           {proMargin.profitCoins < 0 && (
             <div className="rounded-md border border-red-700 bg-red-950/60 p-3 font-medium text-red-100">
-              Услуга убыточна на {formatMoney({ rub: Math.abs(proMargin.profitCoins) }, { primary: 'rub' })} за каждую генерацию. Поднимите цену.
+              Услуга убыточна на {formatMoney({ coins: Math.abs(proMargin.profitCoins) }, { primary: 'rub' })} за каждую генерацию. Поднимите цену.
             </div>
           )}
         </div>

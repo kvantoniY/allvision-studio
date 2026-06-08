@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
-import type { PublicService } from '@allvision/shared';
+import { tokensToRub, type PublicService } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardFooter, CardHeader } from '@/components/ui/card';
@@ -52,7 +52,7 @@ export function ServiceCard({ service, detailed = false, className }: ServiceCar
               {isRubPrice ? `от ${service.priceTokens} ₽/мин` : `${service.priceTokens} токенов`}
             </span>
             <span className="text-sm text-slate-500">
-              {isRubPrice ? 'по заявке' : isFairyTale ? 'видео от 4990 ₽' : `≈ ${service.priceTokens} ₽`}
+              {isRubPrice ? 'по заявке' : isFairyTale ? 'видео от 4990 ₽' : `≈ ${tokensToRub(service.priceTokens)} ₽`}
             </span>
           </div>
         </div>

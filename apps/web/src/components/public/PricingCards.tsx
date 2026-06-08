@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { TokenIcon } from '@/components/ui/token-icon';
 
 const DEFAULT_PACKAGE_FEATURES = [
-  '1 токен = 1 ₽ для автоматических услуг',
+  '1 токен = 18 ₽ для автоматических услуг',
   'Списание только после запуска обработки',
   'Подходит для фото, анимаций и трендов',
 ];

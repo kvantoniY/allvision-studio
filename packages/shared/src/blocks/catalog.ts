@@ -1,5 +1,6 @@
 import type { BlockCatalogItem, JsonSchemaObject, ModelOption } from './types';
 import { getPiAPIModelCapability } from '../piapi/capabilities';
+import { usdToTokens } from '../constants/pricing';
 
 function objectSchema(
   properties: Record<string, JsonSchemaObject | Record<string, unknown>>,
@@ -14,8 +15,7 @@ function objectSchema(
 }
 
 function coins(usd: number) {
-  if (!Number.isFinite(usd) || usd <= 0) return 0;
-  return Math.ceil((usd * 80) / 10) * 10;
+  return usdToTokens(usd);
 }
 
 function unique<T>(items: T[]): T[] {
@@ -846,7 +846,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         slug: 'trend-video-transfer-router',
         title: 'Trend Video Transfer Router',
         tierHint: 'both',
-        estimatedCostCoins: 160,
+        estimatedCostCoins: coins(1.5),
         estimatedCostUsd: 1.5,
         provider: 'piapi',
         description: 'Internal router over Qubico face-swap, Nano Banana, Kling Motion Control, Kling 3.0 Omni and Seedance 2.0 Omni.',
@@ -1028,7 +1028,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         slug: 'product-card-router',
         title: 'Product Card Router',
         tierHint: 'both',
-        estimatedCostCoins: 150,
+        estimatedCostCoins: coins(1.8),
         estimatedCostUsd: 1.8,
         provider: 'piapi',
         description: 'Внутренний роутер: GPT Image 2 (обложка), image-to-video (анимация), Seedance (реклама). Считается только выбранное.',

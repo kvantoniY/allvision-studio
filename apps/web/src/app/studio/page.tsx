@@ -4,7 +4,7 @@ import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ImageIcon, Loader2, MapPin, Plus, RotateCcw, Trash2, Upload, Video, Wand2 } from 'lucide-react';
-import { buildStylePresetPrompt, getBlockCatalogItem, type PublicStylePreset } from '@allvision/shared';
+import { buildStylePresetPrompt, getBlockCatalogItem, tokensToRub, type PublicStylePreset } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,6 +46,7 @@ const kindLabels: Record<UserMediaKind, { title: string; empty: string; icon: ty
 
 const generationCost =
   getBlockCatalogItem('image-edit')?.supportedModels.find((model) => model.slug === 'nano-banana')?.estimatedCostCoins ?? 10;
+const generationCostRub = tokensToRub(generationCost);
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 function mediaUrl(value?: string | null) {
@@ -609,7 +610,7 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
     <Modal title="Создать образ" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
-          Стоимость: {generationCost} токенов · ~{generationCost} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
+          Стоимость: {generationCost} токенов · ~{generationCostRub} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
         </div>
         <div className="space-y-2">
           <Label>Название</Label>
@@ -717,7 +718,7 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
           </div>
         </div>
         <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
-          Стоимость: {generationCost} токенов · ~{generationCost} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
+          Стоимость: {generationCost} токенов · ~{generationCostRub} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
         </div>
         <div className="space-y-2">
           <Label>Название</Label>

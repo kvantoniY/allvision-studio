@@ -1,8 +1,14 @@
 import { BLOCK_CATALOG, getBlockCatalogItem } from './catalog';
 import type { BlockCatalogItem, ModelOption } from './types';
+import {
+  PRICING_RUB_PER_TOKEN_DEFAULT,
+  PRICING_USD_TO_RUB_DEFAULT,
+  rubToTokens,
+  usdToTokens,
+} from '../constants/pricing';
 
-export const PRICING_USD_TO_RUB_DEFAULT = 80;
 export const PRICING_MARGIN_DEFAULT = 0.8;
+export { PRICING_RUB_PER_TOKEN_DEFAULT, PRICING_USD_TO_RUB_DEFAULT };
 
 export type PipelineStepLike = {
   id?: string;
@@ -43,33 +49,47 @@ export type ServiceMargin = {
 };
 
 export function roundCoinsToTen(value: number) {
+  return roundCoinsUp(value);
+}
+
+export function roundCoinsUp(value: number) {
   if (!Number.isFinite(value) || value <= 0) return 0;
-  return Math.ceil(value / 10) * 10;
+  return Math.ceil(value);
 }
 
-export function costUsdToCoins(value: number, usdToRub = PRICING_USD_TO_RUB_DEFAULT) {
-  return roundCoinsToTen(value * usdToRub);
+export function costUsdToCoins(
+  value: number,
+  usdToRub = PRICING_USD_TO_RUB_DEFAULT,
+  rubPerToken = PRICING_RUB_PER_TOKEN_DEFAULT,
+) {
+  return usdToTokens(value, usdToRub, rubPerToken);
 }
 
-export function priceForMargin(costUsd: number, margin = PRICING_MARGIN_DEFAULT, usdToRub = PRICING_USD_TO_RUB_DEFAULT) {
-  return roundCoinsToTen(costUsd * usdToRub * (1 + margin));
+export function priceForMargin(
+  costUsd: number,
+  margin = PRICING_MARGIN_DEFAULT,
+  usdToRub = PRICING_USD_TO_RUB_DEFAULT,
+  rubPerToken = PRICING_RUB_PER_TOKEN_DEFAULT,
+) {
+  return rubToTokens(costUsd * usdToRub * (1 + margin), rubPerToken);
 }
 
 export function serviceMargin(
   priceCoins: number | null | undefined,
   costUsd: number,
   usdToRub = PRICING_USD_TO_RUB_DEFAULT,
+  rubPerToken = PRICING_RUB_PER_TOKEN_DEFAULT,
 ): ServiceMargin {
   const price = priceCoins ?? 0;
-  const rawCostCoins = costUsd * usdToRub;
-  const costCoins = costUsdToCoins(costUsd, usdToRub);
+  const rawCostCoins = (costUsd * usdToRub) / rubPerToken;
+  const costCoins = costUsdToCoins(costUsd, usdToRub, rubPerToken);
   const profitCoins = price - rawCostCoins;
   return {
     priceCoins: price,
     costUsd,
     costCoins,
     profitCoins,
-    profitUsd: profitCoins / usdToRub,
+    profitUsd: (profitCoins * rubPerToken) / usdToRub,
     marginPercent: price > 0 ? (profitCoins / price) * 100 : null,
   };
 }
@@ -78,11 +98,12 @@ export function summarizePipelinePricing(
   steps: unknown,
   blocks: BlockCatalogItem[] = BLOCK_CATALOG,
   usdToRub = PRICING_USD_TO_RUB_DEFAULT,
+  rubPerToken = PRICING_RUB_PER_TOKEN_DEFAULT,
 ): PipelinePricingSummary {
   const parsed = parseSteps(steps);
   return {
-    standard: summarizeTier(parsed, 'standard', blocks, usdToRub),
-    pro: summarizeTier(parsed, 'pro', blocks, usdToRub),
+    standard: summarizeTier(parsed, 'standard', blocks, usdToRub, rubPerToken),
+    pro: summarizeTier(parsed, 'pro', blocks, usdToRub, rubPerToken),
   };
 }
 
@@ -159,6 +180,7 @@ function summarizeTier(
   tier: TierName,
   blocks: BlockCatalogItem[],
   usdToRub: number,
+  rubPerToken: number,
 ): PipelineTierCost {
   const breakdown = steps.map((step, index) => {
     const { model, costUsd } = estimateStepCostUsd(step, tier, blocks);
@@ -168,14 +190,14 @@ function summarizeTier(
       modelSlug: model?.slug ?? null,
       modelTitle: model?.title ?? null,
       costUsd,
-      costCoins: costUsdToCoins(costUsd, usdToRub),
+      costCoins: costUsdToCoins(costUsd, usdToRub, rubPerToken),
     };
   });
   const costUsd = breakdown.reduce((sum, item) => sum + item.costUsd, 0);
   return {
     tier,
     costUsd,
-    costCoins: costUsdToCoins(costUsd, usdToRub),
+    costCoins: costUsdToCoins(costUsd, usdToRub, rubPerToken),
     steps: breakdown,
   };
 }

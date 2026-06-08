@@ -16,7 +16,7 @@ function authCookie(userId: string, role: 'USER' | 'ADMIN') {
 }
 
 beforeAll(async () => {
-  await prisma.setting.deleteMany({ where: { key: 'USD_TO_RUB' } });
+  await prisma.setting.deleteMany({ where: { key: { in: ['USD_TO_RUB', 'MODEL_PRICE_OVERRIDES'] } } });
   const [admin, user] = await Promise.all([
     prisma.user.create({ data: { email: ADMIN_EMAIL, passwordHash: 'hash', role: 'ADMIN', tokenBalance: 0 } }),
     prisma.user.create({ data: { email: USER_EMAIL, passwordHash: 'hash', role: 'USER', tokenBalance: 0 } }),
@@ -26,7 +26,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await prisma.setting.deleteMany({ where: { key: 'USD_TO_RUB' } });
+  await prisma.setting.deleteMany({ where: { key: { in: ['USD_TO_RUB', 'MODEL_PRICE_OVERRIDES'] } } });
   await prisma.user.deleteMany({ where: { email: { in: [ADMIN_EMAIL, USER_EMAIL] } } });
   await prisma.$disconnect();
 });
@@ -57,5 +57,18 @@ describe('/api/admin/settings', () => {
 
     const row = await prisma.setting.findUnique({ where: { key: 'USD_TO_RUB' } });
     expect(row?.value).toBe('92.5');
+  });
+
+  it('allows model price overrides below calculated model cost', async () => {
+    const res = await request(app)
+      .patch('/api/admin/settings')
+      .set('Cookie', authCookie(adminUserId, 'ADMIN'))
+      .send({ modelPriceOverrides: { 'nano-banana': 1 } });
+
+    expect(res.status).toBe(200);
+    expect(res.body.settings.modelPriceOverrides).toEqual({ 'nano-banana': 1 });
+
+    const row = await prisma.setting.findUnique({ where: { key: 'MODEL_PRICE_OVERRIDES' } });
+    expect(row?.value).toBe(JSON.stringify({ 'nano-banana': 1 }));
   });
 });

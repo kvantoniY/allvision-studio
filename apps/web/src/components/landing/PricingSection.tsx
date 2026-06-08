@@ -14,7 +14,7 @@ export function PricingSection() {
         <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Токены</p>
         <h2 className="mt-3 text-3xl font-bold md:text-5xl">Простая и честная оплата</h2>
         <p className="mt-4 text-lg leading-8 text-muted-foreground">
-          Покупайте токены пакетами — 1 токен = 1 ₽. Ручные заказы оцениваются отдельно и согласуются до оплаты.
+          Покупайте токены пакетами — 1 токен = 18 ₽. Ручные заказы оцениваются отдельно и согласуются до оплаты.
         </p>
       </Reveal>
 

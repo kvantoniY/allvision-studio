@@ -29,15 +29,14 @@ export function normaliseModelPriceOverrides(value: unknown): ModelPriceOverride
   }
   if (!isRecord(source)) return {};
 
-  const minimums = modelMinimumPrices();
+  const supportedSlugs = modelMinimumPrices();
   const result: ModelPriceOverrides = {};
   for (const [slug, rawPrice] of Object.entries(source)) {
-    const minimum = minimums.get(slug);
-    if (minimum === undefined) continue;
+    if (!supportedSlugs.has(slug)) continue;
     const price = typeof rawPrice === 'number' ? rawPrice : Number(rawPrice);
     if (!Number.isFinite(price)) continue;
     const rounded = Math.ceil(price);
-    if (rounded > minimum) result[slug] = rounded;
+    if (rounded >= 1) result[slug] = rounded;
   }
   return result;
 }

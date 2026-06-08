@@ -21,7 +21,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { serviceMargin, summarizePipelinePricing, type ServiceMargin } from '@allvision/shared';
+import { formatMoney, serviceMargin, summarizePipelinePricing, type ServiceMargin } from '@allvision/shared';
 import {
   buildMockUserInputs,
   PipelineTestPanel,
@@ -117,9 +117,9 @@ function PricingMetric({ label, value, sub }: { label: string; value: string; su
 function PricingCell({ margin, usdToRub }: { margin: ServiceMargin; usdToRub: number }) {
   return (
     <div className="flex items-center gap-4">
-      <PricingMetric label="Цена" value={`${margin.priceCoins} ток.`} sub={`~${margin.priceCoins.toLocaleString('ru-RU')} ₽`} />
+      <PricingMetric label="Цена" value={`${margin.priceCoins} ток.`} sub={formatMoney({ coins: margin.priceCoins }, { primary: 'rub' })} />
       <PricingMetric label="Себест." value={formatUsd(margin.costUsd)} sub={formatRub(margin.costUsd * usdToRub)} />
-      <PricingMetric label="Прибыль" value={formatUsd(margin.profitUsd)} sub={formatRub(margin.profitCoins)} />
+      <PricingMetric label="Прибыль" value={formatUsd(margin.profitUsd)} sub={formatMoney({ coins: margin.profitCoins }, { primary: 'rub' })} />
       <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold', marginBadgeClass(margin.marginPercent))}>
         {formatMargin(margin.marginPercent)}
       </span>

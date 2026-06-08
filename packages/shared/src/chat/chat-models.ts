@@ -194,7 +194,8 @@ export function estimateChatGenerationCostCoins(
 export function applyModelPriceOverride(modelSlug: string, costCoins: number, priceOverrides?: ModelPriceOverrides) {
   const override = priceOverrides?.[modelSlug];
   if (typeof override !== 'number' || !Number.isFinite(override)) return costCoins;
-  return Math.max(costCoins, Math.ceil(override));
+  const rounded = Math.ceil(override);
+  return rounded >= 1 ? rounded : costCoins;
 }
 
 export function estimateChatGenerationPriceCoins(
