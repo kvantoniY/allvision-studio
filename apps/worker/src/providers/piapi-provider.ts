@@ -1,6 +1,10 @@
 import { spawn } from 'node:child_process';
+import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 import { resolveWorkspacePath } from '../utils/paths';
 import { estimateModelCostUsd, type StorageProvider } from '@allvision/shared';
@@ -14,6 +18,29 @@ type Logger = {
   info: (message: string, meta?: unknown) => void;
   warn: (message: string, meta?: unknown) => void;
   error: (message: string, meta?: unknown) => void;
+};
+
+type VideoUpscalePostprocessSettings = {
+  enabled: boolean;
+  profile: 'natural' | 'strong' | 'max' | 'custom' | 'off';
+  sharpness: number;
+  contrast: number;
+  clarity: number;
+};
+
+type PersistedVideoOutput = {
+  url: string;
+  key: string;
+  postprocess?: {
+    enabled: boolean;
+    applied: boolean;
+    profile: VideoUpscalePostprocessSettings['profile'];
+    sharpness: number;
+    contrast: number;
+    clarity: number;
+    filter?: string;
+    fallbackReason?: string;
+  };
 };
 
 export interface PiAPIProviderOptions {
@@ -42,6 +69,7 @@ const VIDEO_UPSCALE_MODEL = 'video-upscale-2x';
 const VIDEO_UPSCALE_COST_PER_FRAME_USD = 0.0003;
 const VIDEO_UPSCALE_MAX_FRAMES = 240;
 const VIDEO_UPSCALE_ESTIMATE_FPS = 16;
+const VIDEO_UPSCALE_POSTPROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_UPSTREAM_BUSY_ATTEMPTS = 3;
@@ -679,7 +707,8 @@ export class PiAPIProvider implements AIProvider {
       if (!completed.outputUrl) {
         throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI video-upscale task completed without video URL');
       }
-      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
+      const postprocessSettings = videoUpscalePostprocessSettings(input.params);
+      const local = await this.persistVideoUpscaleOutput(completed.outputUrl, input.context, postprocessSettings);
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
       await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
@@ -694,6 +723,7 @@ export class PiAPIProvider implements AIProvider {
           provider: 'piapi',
           estimatedFrames: frames,
           scale: '2x',
+          postprocess: local.postprocess,
         },
       };
     } catch (err) {
@@ -838,6 +868,99 @@ export class PiAPIProvider implements AIProvider {
     });
   }
 
+  private async persistVideoUpscaleOutput(
+    providerUrl: string,
+    context: ProviderRunContext,
+    settings: VideoUpscalePostprocessSettings,
+  ): Promise<PersistedVideoOutput> {
+    if (!settings.enabled) {
+      const raw = await this.persistProviderOutput(providerUrl, context, 'mp4');
+      return {
+        ...raw,
+        postprocess: { enabled: false, applied: false, profile: settings.profile, sharpness: settings.sharpness, contrast: settings.contrast, clarity: settings.clarity },
+      };
+    }
+
+    const filter = videoUpscalePostprocessFilter(settings);
+    try {
+      const processed = await this.postProcessAndPersistVideo(providerUrl, context, filter);
+      return {
+        ...processed,
+        postprocess: {
+          enabled: true,
+          applied: true,
+          profile: settings.profile,
+          sharpness: settings.sharpness,
+          contrast: settings.contrast,
+          clarity: settings.clarity,
+          filter,
+        },
+      };
+    } catch (err) {
+      this.logger.warn('[piapi] video upscale postprocess failed; returning raw upscaled output', err);
+      const raw = await this.persistProviderOutput(providerUrl, context, 'mp4');
+      return {
+        ...raw,
+        postprocess: {
+          enabled: true,
+          applied: false,
+          profile: settings.profile,
+          sharpness: settings.sharpness,
+          contrast: settings.contrast,
+          clarity: settings.clarity,
+          filter,
+          fallbackReason: (err as Error).message,
+        },
+      };
+    }
+  }
+
+  private async postProcessAndPersistVideo(
+    providerUrl: string,
+    context: ProviderRunContext,
+    filter: string,
+  ): Promise<{ url: string; key: string }> {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'allvision-video-upscale-'));
+    const inputPath = path.join(dir, 'upscaled-source.mp4');
+    const outputPath = path.join(dir, 'enhanced-output.mp4');
+    try {
+      await downloadUrlToFile(providerUrl, inputPath);
+      await runFfmpeg([
+        '-y',
+        '-i',
+        inputPath,
+        '-map',
+        '0:v:0',
+        '-map',
+        '0:a?',
+        '-vf',
+        filter,
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '18',
+        '-pix_fmt',
+        'yuv420p',
+        '-c:a',
+        'copy',
+        '-movflags',
+        '+faststart',
+        outputPath,
+      ], VIDEO_UPSCALE_POSTPROCESS_TIMEOUT_MS);
+
+      const key = `outputs/${context.userId ?? 'unknown'}/${context.projectId}/${context.stepId}/result.mp4`;
+      return this.storage.upload({
+        key,
+        body: createReadStream(outputPath),
+        contentType: 'video/mp4',
+      });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    }
+  }
+
   private async resolveImageAspectRatio(imageUrl: string, params: Record<string, unknown> | undefined) {
     const requested = normalizeAspectRatio(readString(params, 'aspect_ratio'));
     if (requested && requested !== 'auto') return requested;
@@ -962,6 +1085,96 @@ export class PiAPIProvider implements AIProvider {
 
     await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, error);
   }
+}
+
+async function downloadUrlToFile(url: string, targetPath: string): Promise<void> {
+  const response = await fetch(url);
+  if (!response.ok || !response.body) {
+    throw new ProviderError('VIDEO_POSTPROCESS_DOWNLOAD_FAILED', `Failed to download video for postprocess: ${response.status}`);
+  }
+  await pipeline(Readable.fromWeb(response.body as never), createWriteStream(targetPath));
+}
+
+function runFfmpeg(args: string[], timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('ffmpeg', args, { windowsHide: true });
+    const stderr: Buffer[] = [];
+    let settled = false;
+    let timedOut = false;
+
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (error) reject(error);
+      else resolve();
+    };
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+    }, timeoutMs);
+
+    child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
+    child.on('error', (error) => finish(error));
+    child.on('close', (code) => {
+      if (timedOut) {
+        finish(new ProviderError('VIDEO_POSTPROCESS_TIMEOUT', `ffmpeg postprocess timed out after ${timeoutMs}ms`));
+        return;
+      }
+      if (code === 0) {
+        finish();
+        return;
+      }
+      const details = Buffer.concat(stderr).toString('utf8').slice(-2000);
+      finish(new ProviderError('VIDEO_POSTPROCESS_FAILED', `ffmpeg postprocess exited with code ${code}: ${details}`));
+    });
+  });
+}
+
+function videoUpscalePostprocessSettings(params: Record<string, unknown> | undefined): VideoUpscalePostprocessSettings {
+  const explicitEnabled = readBoolean(params, 'postprocess');
+  const rawProfile = readString(params, 'postprocess_profile');
+  const profile = rawProfile === 'natural' || rawProfile === 'strong' || rawProfile === 'max' || rawProfile === 'custom' || rawProfile === 'off'
+    ? rawProfile
+    : 'strong';
+
+  if (explicitEnabled === false || profile === 'off') {
+    return { enabled: false, profile: 'off', sharpness: 0, contrast: 0, clarity: 0 };
+  }
+
+  const defaults: Record<Exclude<VideoUpscalePostprocessSettings['profile'], 'off'>, Omit<VideoUpscalePostprocessSettings, 'enabled' | 'profile'>> = {
+    natural: { sharpness: 60, contrast: 10, clarity: 50 },
+    strong: { sharpness: 100, contrast: 20, clarity: 100 },
+    max: { sharpness: 100, contrast: 25, clarity: 100 },
+    custom: { sharpness: 100, contrast: 20, clarity: 100 },
+  };
+  const activeProfile = profile as Exclude<VideoUpscalePostprocessSettings['profile'], 'off'>;
+  const base = defaults[activeProfile];
+
+  return {
+    enabled: explicitEnabled ?? true,
+    profile: activeProfile,
+    sharpness: clamp(readNumber(params, 'sharpness') ?? base.sharpness, 0, 100),
+    contrast: clamp(readNumber(params, 'contrast') ?? base.contrast, 0, 50),
+    clarity: clamp(readNumber(params, 'clarity') ?? base.clarity, 0, 100),
+  };
+}
+
+function videoUpscalePostprocessFilter(settings: VideoUpscalePostprocessSettings): string {
+  const contrast = roundFilterNumber(1 + settings.contrast / 100);
+  const saturation = roundFilterNumber(1 + Math.min(settings.contrast, 25) / 500);
+  const lumaAmount = roundFilterNumber(0.2 + (settings.sharpness / 100) * 0.8);
+  const chromaAmount = roundFilterNumber((settings.clarity / 100) * 0.45);
+  return `eq=contrast=${contrast}:saturation=${saturation},unsharp=7:7:${lumaAmount}:3:3:${chromaAmount}`;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function roundFilterNumber(value: number) {
+  return Number(value.toFixed(2)).toString();
 }
 
 function readNumber(source: Record<string, unknown> | undefined, key: string): number | undefined {

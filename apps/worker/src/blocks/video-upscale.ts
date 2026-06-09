@@ -19,6 +19,11 @@ const paramsSchema = z.object({
   video_url: z.string().optional(),
   duration: z.number().min(1).max(15).optional(),
   estimatedFrames: z.number().min(10).max(240).optional(),
+  postprocess: z.boolean().optional(),
+  postprocess_profile: z.enum(['natural', 'strong', 'max', 'custom', 'off']).optional(),
+  sharpness: z.number().min(0).max(100).optional(),
+  contrast: z.number().min(0).max(50).optional(),
+  clarity: z.number().min(0).max(100).optional(),
 });
 
 export const videoUpscaleBlock: BlockDefinition = {
