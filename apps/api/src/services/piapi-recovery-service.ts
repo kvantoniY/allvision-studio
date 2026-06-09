@@ -2,7 +2,7 @@ import path from 'node:path';
 import { Prisma, prisma } from '@allvision/database';
 import { generationExpiresAt } from '@allvision/shared';
 import { getStorageProvider } from '../providers';
-import { PiAPIAccountClient } from './piapi-client';
+import { PiAPIAccountClient, type PiAPIHistoryTask } from './piapi-client';
 import { logger } from '../utils/logger';
 
 type RecoveryRef = {
@@ -55,6 +55,8 @@ async function recoverPiAPIProject(projectId: string, userId?: string): Promise<
       mode: true,
       status: true,
       aiProviderJobId: true,
+      pipelineSnapshot: true,
+      createdAt: true,
       stepProgress: true,
     },
   });
@@ -62,15 +64,24 @@ async function recoverPiAPIProject(projectId: string, userId?: string): Promise<
   if (!project || !RECOVERABLE_PROJECT_STATUSES.has(project.status)) return false;
   if (project.mode === 'library-generation') return false;
 
-  const refs = await recoveryRefs(project.id, project.aiProviderJobId, project.stepProgress);
-  if (refs.length === 0) return false;
-
   const apiKey = process.env.PIAPI_API_KEY;
   if (!apiKey) return false;
   const client = new PiAPIAccountClient({
     apiKey,
     baseUrl: process.env.PIAPI_BASE_URL ?? 'https://api.piapi.ai',
   });
+  const refs = await recoveryRefs(project.id, project.aiProviderJobId, project.stepProgress);
+  const historyRef = await gptImageHistoryRecoveryRef(client, {
+    id: project.id,
+    pipelineSnapshot: project.pipelineSnapshot,
+    stepProgress: project.stepProgress,
+    createdAt: project.createdAt,
+  }).catch((err) => {
+    logger.warn(`[piapi-recovery] GPT Image history lookup failed for project=${project.id}`, err);
+    return undefined;
+  });
+  if (historyRef) refs.unshift(historyRef);
+  if (refs.length === 0) return false;
 
   for (const ref of refs) {
     const providerUrl = ref.recoverableOutputUrl ?? (ref.taskId ? await completedTaskOutput(client, ref.taskId) : undefined);
@@ -166,6 +177,155 @@ async function recoveryRefs(projectId: string, aiProviderJobId: string | null, s
   }
 
   return refs;
+}
+
+async function gptImageHistoryRecoveryRef(
+  client: PiAPIAccountClient,
+  project: { id: string; pipelineSnapshot: unknown; stepProgress: unknown; createdAt: Date },
+): Promise<RecoveryRef | undefined> {
+  const step = activeGptImageStep(project.pipelineSnapshot, project.stepProgress);
+  if (!step) return undefined;
+
+  const log = await prisma.aIUsageLog.findFirst({
+    where: {
+      projectId: project.id,
+      provider: 'piapi',
+      blockSlug: step.blockSlug,
+      model: { startsWith: 'gpt-image' },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, createdAt: true },
+  });
+  const startTimeSec = Math.max(0, Math.floor((project.createdAt.getTime() - 60_000) / 1000));
+  const endTimeSec = Math.ceil(((log?.createdAt ?? new Date()).getTime() + 10 * 60_000) / 1000);
+  const fetched: Array<PiAPIHistoryTask & { historyFilter?: string }> = [];
+
+  for (const modelFilter of ['gpts', undefined]) {
+    try {
+      const history = await client.getUserTaskHistory({
+        page: 1,
+        pageSize: 50,
+        model: modelFilter,
+        startTimeSec,
+        endTimeSec,
+      });
+      fetched.push(...history.tasks.map((task) => ({ ...task, historyFilter: modelFilter ?? 'all' })));
+    } catch (err) {
+      logger.warn(`[piapi-recovery] GPT Image history lookup failed for filter=${modelFilter ?? 'all'}`, err);
+    }
+  }
+
+  const unique = uniqueHistoryTasks(fetched)
+    .filter((task) => task.status === 'completed' && task.outputUrl)
+    .filter((task) => isGptImageHistoryCandidate(task, step.model, startTimeSec));
+  const promptMatches = unique
+    .filter((task) => normalisePrompt(historyPrompt(task)) === normalisePrompt(step.prompt))
+    .sort(sortHistoryNewestFirst);
+  const recovered = promptMatches[0]
+    ?? (() => {
+      const promptless = unique
+        .filter((task) => !historyPrompt(task) && task.historyFilter === 'gpts')
+        .sort(sortHistoryNewestFirst);
+      return promptless.length === 1 ? promptless[0] : undefined;
+    })();
+
+  if (!recovered?.outputUrl) return undefined;
+  return {
+    logId: log?.id,
+    taskId: recovered.taskId,
+    blockSlug: step.blockSlug,
+    recoverableOutputUrl: recovered.outputUrl,
+  };
+}
+
+function activeGptImageStep(
+  pipelineSnapshot: unknown,
+  stepProgress: unknown,
+): { stepId: string; blockSlug: string; prompt: string; model: string } | undefined {
+  if (!Array.isArray(pipelineSnapshot)) return undefined;
+  const activeId = activeStepId(stepProgress);
+  const candidates = pipelineSnapshot
+    .filter((item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === 'object' && !Array.isArray(item)
+    )
+    .map((step) => {
+      const params = readObject(step, ['params']);
+      const blockSlug = readString(step, ['blockSlug']);
+      const stepId = readString(step, ['id']);
+      const prompt = params ? readString(params, ['prompt']) : undefined;
+      const model = params ? readStepModel(params.model) : undefined;
+      return stepId && blockSlug === 'image-edit' && prompt && model?.startsWith('gpt-image')
+        ? { stepId, blockSlug, prompt, model }
+        : undefined;
+    })
+    .filter((item): item is { stepId: string; blockSlug: string; prompt: string; model: string } => Boolean(item));
+
+  return candidates.find((step) => step.stepId === activeId) ?? candidates[0];
+}
+
+function activeStepId(stepProgress: unknown): string | undefined {
+  if (!Array.isArray(stepProgress)) return undefined;
+  const active = stepProgress.find((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+    const status = (item as Record<string, unknown>).status;
+    return status === 'processing' || status === 'failed';
+  });
+  if (!active || typeof active !== 'object' || Array.isArray(active)) return undefined;
+  return readString(active as Record<string, unknown>, ['stepId']);
+}
+
+function readStepModel(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const standard = typeof record.standard === 'string' && record.standard.length > 0 ? record.standard : undefined;
+  const pro = typeof record.pro === 'string' && record.pro.length > 0 ? record.pro : undefined;
+  return [standard, pro].find((model) => model?.startsWith('gpt-image')) ?? standard ?? pro;
+}
+
+function uniqueHistoryTasks<T extends PiAPIHistoryTask>(tasks: T[]): T[] {
+  const seen = new Set<string>();
+  return tasks.filter((task) => {
+    const key = task.taskId ?? task.outputUrl;
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isGptImageHistoryCandidate(task: PiAPIHistoryTask, expectedModel: string, startedAtSec: number) {
+  if (task.createdAt && Math.floor(task.createdAt.getTime() / 1000) < startedAtSec) return false;
+  if (task.outputUrl && /\.(mp4|mov|webm)(?:$|\?)/i.test(task.outputUrl)) return false;
+
+  const modelText = [
+    task.model,
+    task.taskType,
+    readString(task.input ?? {}, ['model']),
+    readString(task.raw, ['model']),
+    readString(task.raw, ['data', 'model']),
+    readString(task.raw, ['input', 'model']),
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (!modelText) return true;
+  return modelText.includes(expectedModel.toLowerCase()) || modelText.includes('gpt');
+}
+
+function historyPrompt(task: PiAPIHistoryTask): string | undefined {
+  return readString(task.input ?? {}, ['prompt'])
+    ?? readString(task.raw, ['prompt'])
+    ?? readString(task.raw, ['input', 'prompt'])
+    ?? readString(task.raw, ['request', 'prompt'])
+    ?? readString(task.raw, ['request', 'input', 'prompt'])
+    ?? readString(task.raw, ['data', 'input', 'prompt']);
+}
+
+function normalisePrompt(value: string | undefined) {
+  return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function sortHistoryNewestFirst(a: PiAPIHistoryTask, b: PiAPIHistoryTask) {
+  return (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0);
 }
 
 async function completedTaskOutput(client: PiAPIAccountClient, taskId: string): Promise<string | undefined> {

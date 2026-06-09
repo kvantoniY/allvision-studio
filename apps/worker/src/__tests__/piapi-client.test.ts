@@ -45,10 +45,10 @@ describe('PiAPIClient polling', () => {
     })).toBeCloseTo(0.06);
   });
 
-  it('requests GPT Image output as base64 to avoid a second provider download', async () => {
+  it('requests GPT Image output as URL to avoid large long-held responses', async () => {
     const client = new PiAPIClient({ apiKey: 'test', baseUrl: 'https://api.test' });
     const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
-      data: [{ b64_json: Buffer.from('image').toString('base64') }],
+      data: [{ url: 'https://image.test/result.jpg' }],
     }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
@@ -63,9 +63,47 @@ describe('PiAPIClient polling', () => {
       outputFormat: 'jpeg',
     });
 
-    expect(result.b64).toBe(Buffer.from('image').toString('base64'));
+    expect(result.url).toBe('https://image.test/result.jpg');
     const request = JSON.parse(fetchSpy.mock.calls[0][1]?.body as string) as Record<string, unknown>;
-    expect(request.response_format).toBe('b64_json');
+    expect(request.response_format).toBe('url');
+    fetchSpy.mockRestore();
+  });
+
+  it('normalises GPT Image records from PiAPI user history', async () => {
+    const client = new PiAPIClient({ apiKey: 'test', baseUrl: 'https://api.test' });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      data: {
+        items: [
+          {
+            task_id: 'history-task-1',
+            model: 'gpts',
+            status: 'success',
+            input: { model: 'gpt-image-2', prompt: 'test prompt' },
+            output: { data: [{ url: 'https://image.test/history.jpg' }] },
+            meta: { created_at: 1_770_000_000 },
+          },
+        ],
+      },
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const history = await client.getUserTaskHistory({
+      model: 'gpts',
+      startTimeSec: 1,
+      endTimeSec: 2,
+      pageSize: 50,
+    });
+
+    expect(history.tasks[0]).toEqual(expect.objectContaining({
+      taskId: 'history-task-1',
+      model: 'gpts',
+      status: 'completed',
+      input: { model: 'gpt-image-2', prompt: 'test prompt' },
+      outputUrl: 'https://image.test/history.jpg',
+    }));
+    expect(fetchSpy.mock.calls[0][0]).toBe('https://api.test/api/open/tasks/histories?page=1&page_size=50&model=gpts&start_time=1&end_time=2');
     fetchSpy.mockRestore();
   });
 

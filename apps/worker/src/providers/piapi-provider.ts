@@ -10,7 +10,7 @@ import { prisma } from '@allvision/database';
 import { resolveWorkspacePath } from '../utils/paths';
 import { estimateModelCostUsd, type StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
-import { PiAPIClient, type PiAPITaskStatus } from './piapi-client';
+import { PiAPIClient, type PiAPIHistoryTask, type PiAPITaskStatus } from './piapi-client';
 import { ProviderError } from './provider-errors';
 import type { FilePublisher } from './file-publisher';
 import { createAIUsageLog } from './usage-limits';
@@ -73,6 +73,7 @@ const VIDEO_UPSCALE_ESTIMATE_FPS = 16;
 const VIDEO_UPSCALE_POSTPROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
+const PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS = 3 * 60 * 1000;
 const PIAPI_UPSTREAM_BUSY_ATTEMPTS = 3;
 const DEFAULT_PIAPI_UPSTREAM_BUSY_RETRY_DELAY_MS = 15_000;
 const NANO_BANANA_COST_USD: Record<string, number> = {
@@ -218,7 +219,26 @@ export class PiAPIProvider implements AIProvider {
           size,
           quality,
           outputFormat,
+        }).catch(async (err) => {
+          const recovered = isRecoverableGptImageTransportError(err)
+            ? await this.recoverGptImageFromHistory({
+              context: input.context,
+              model: input.model,
+              prompt: input.prompt,
+              startedAt,
+              estimatedCost,
+              outputFormat,
+              size,
+              quality,
+              originalError: err,
+            })
+            : undefined;
+          if (recovered) return { recovered };
+          throw err;
         });
+        if ('recovered' in result) {
+          return result.recovered;
+        }
         const outputExt = outputFormat === 'jpeg' ? 'jpg' : outputFormat;
         let local;
         if (result.url) {
@@ -845,6 +865,111 @@ export class PiAPIProvider implements AIProvider {
     this.logger.info(message);
   }
 
+  private async recoverGptImageFromHistory(params: {
+    context: ProviderRunContext;
+    model: string;
+    prompt: string;
+    startedAt: number;
+    estimatedCost: number;
+    outputFormat: 'jpeg' | 'png' | 'webp';
+    size: string;
+    quality: string;
+    originalError: unknown;
+  }): Promise<ProviderResult | undefined> {
+    const recoveryMs = gptImageHistoryRecoveryMs();
+    if (recoveryMs <= 0) return undefined;
+
+    const startedAtSec = Math.max(0, Math.floor((params.startedAt - 60_000) / 1000));
+    const deadline = Date.now() + recoveryMs;
+    let delayMs = 0;
+
+    this.logger.warn('[piapi] GPT Image response lost; trying history recovery', {
+      projectId: params.context.projectId,
+      model: params.model,
+      error: (params.originalError as Error).message,
+    });
+
+    while (Date.now() <= deadline) {
+      if (delayMs > 0) {
+        await delay(Math.min(delayMs, Math.max(0, deadline - Date.now())));
+      }
+      await params.context.reportProgress?.(95);
+
+      const task = await this.findGptImageHistoryTask({
+        model: params.model,
+        prompt: params.prompt,
+        startedAtSec,
+      }).catch((err) => {
+        this.logger.warn('[piapi] GPT Image history lookup failed', err);
+        return undefined;
+      });
+
+      if (task?.outputUrl) {
+        const outputExt = params.outputFormat === 'jpeg' ? 'jpg' : params.outputFormat;
+        const local = await this.persistProviderOutput(task.outputUrl, params.context, outputExt);
+        const durationMs = Date.now() - params.startedAt;
+        await this.logUsage(params.context, params.model, task.taskId, 'success', params.estimatedCost, durationMs, undefined, task.outputUrl);
+        return {
+          outputUrl: local.url,
+          costUsd: params.estimatedCost,
+          durationMs,
+          meta: {
+            model: params.model,
+            provider: 'piapi',
+            recovered: true,
+            piapiTaskId: task.taskId,
+            piapiUrl: task.outputUrl,
+            size: params.size,
+            quality: params.quality,
+            outputFormat: params.outputFormat,
+          },
+        };
+      }
+
+      delayMs = delayMs === 0 ? 10_000 : Math.min(30_000, Math.round(delayMs * 1.5));
+    }
+
+    return undefined;
+  }
+
+  private async findGptImageHistoryTask(params: {
+    model: string;
+    prompt: string;
+    startedAtSec: number;
+  }): Promise<PiAPIHistoryTask | undefined> {
+    const endTimeSec = Math.ceil((Date.now() + 60_000) / 1000);
+    const fetched: Array<PiAPIHistoryTask & { historyFilter?: string }> = [];
+
+    for (const modelFilter of ['gpts', undefined]) {
+      try {
+        const history = await this.client.getUserTaskHistory({
+          page: 1,
+          pageSize: 50,
+          model: modelFilter,
+          startTimeSec: params.startedAtSec,
+          endTimeSec,
+        });
+        fetched.push(...history.tasks.map((task) => ({ ...task, historyFilter: modelFilter ?? 'all' })));
+      } catch (err) {
+        this.logger.warn(`[piapi] GPT Image history lookup failed for filter=${modelFilter ?? 'all'}`, err);
+      }
+    }
+
+    const unique = uniqueHistoryTasks(fetched)
+      .filter((task) => task.status === 'completed' && task.outputUrl)
+      .filter((task) => isGptImageHistoryCandidate(task, params.model, params.startedAtSec));
+
+    const promptMatches = unique
+      .filter((task) => normalisePrompt(historyPrompt(task)) === normalisePrompt(params.prompt))
+      .sort(sortHistoryNewestFirst);
+    if (promptMatches[0]) return promptMatches[0];
+
+    const promptless = unique
+      .filter((task) => !historyPrompt(task) && task.historyFilter === 'gpts')
+      .sort(sortHistoryNewestFirst);
+    return promptless.length === 1 ? promptless[0] : undefined;
+  }
+
   // Returns the bytes of a reference image. For our own /static URLs it reads the file directly from
   // the shared local uploads volume (the worker cannot reliably fetch its own public domain from inside
   // the container). For external URLs it HTTP-downloads as before.
@@ -1207,6 +1332,75 @@ function readBoolean(source: Record<string, unknown> | undefined, key: string): 
   if (value === 'true') return true;
   if (value === 'false') return false;
   return undefined;
+}
+
+function gptImageHistoryRecoveryMs() {
+  const value = Number(process.env.PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS);
+  return Number.isFinite(value) ? value : PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS;
+}
+
+function isRecoverableGptImageTransportError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (error instanceof ProviderError) {
+    return error.code === 'PIAPI_TIMEOUT'
+      || error.code === 'PIAPI_NETWORK_ERROR'
+      || (typeof error.status === 'number' && error.status >= 520 && error.status <= 524)
+      || /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED/i.test(message);
+  }
+  return /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED|timed out/i.test(message);
+}
+
+function uniqueHistoryTasks<T extends PiAPIHistoryTask>(tasks: T[]): T[] {
+  const seen = new Set<string>();
+  return tasks.filter((task) => {
+    const key = task.taskId ?? task.outputUrl;
+    if (!key) return true;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function isGptImageHistoryCandidate(task: PiAPIHistoryTask, expectedModel: string, startedAtSec: number) {
+  if (task.createdAt && Math.floor(task.createdAt.getTime() / 1000) < startedAtSec) return false;
+  if (task.outputUrl && /\.(mp4|mov|webm)(?:$|\?)/i.test(task.outputUrl)) return false;
+
+  const modelText = [
+    task.model,
+    task.taskType,
+    readNestedString(task.input, ['model']),
+    readNestedString(task.raw, ['model']),
+    readNestedString(task.raw, ['data', 'model']),
+    readNestedString(task.raw, ['input', 'model']),
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (!modelText) return true;
+  return modelText.includes(expectedModel.toLowerCase()) || modelText.includes('gpt');
+}
+
+function historyPrompt(task: PiAPIHistoryTask): string | undefined {
+  return readNestedString(task.input, ['prompt'])
+    ?? readNestedString(task.raw, ['prompt'])
+    ?? readNestedString(task.raw, ['input', 'prompt'])
+    ?? readNestedString(task.raw, ['request', 'prompt'])
+    ?? readNestedString(task.raw, ['request', 'input', 'prompt'])
+    ?? readNestedString(task.raw, ['data', 'input', 'prompt']);
+}
+
+function normalisePrompt(value: string | undefined) {
+  return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function sortHistoryNewestFirst(a: PiAPIHistoryTask, b: PiAPIHistoryTask) {
+  return (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0);
+}
+
+function readNestedString(source: Record<string, unknown> | undefined, pathParts: string[]): string | undefined {
+  const value = pathParts.reduce<unknown>((current, part) => {
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    return (current as Record<string, unknown>)[part];
+  }, source);
+  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
 }
 
 function normalizeAspectRatio(value: string | undefined): string | undefined {

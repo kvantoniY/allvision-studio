@@ -13,6 +13,17 @@ export interface PiAPITaskStatus {
   errorMessage?: string;
 }
 
+export interface PiAPIHistoryTask {
+  taskId?: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  model?: string;
+  taskType?: string;
+  input?: Record<string, unknown>;
+  outputUrl?: string;
+  createdAt?: Date;
+  raw: Record<string, unknown>;
+}
+
 export interface PiAPIPollOptions {
   timeoutMs: number;
   expectedDurationMs: number;
@@ -107,6 +118,27 @@ export class PiAPIClient {
     return { equivalentUsd, raw };
   }
 
+  async getUserTaskHistory(params: {
+    page?: number;
+    pageSize?: number;
+    model?: string;
+    startTimeSec?: number;
+    endTimeSec?: number;
+  } = {}): Promise<{ tasks: PiAPIHistoryTask[]; raw: Record<string, unknown> }> {
+    const query = new URLSearchParams();
+    query.set('page', String(params.page ?? 1));
+    query.set('page_size', String(params.pageSize ?? 20));
+    if (params.model) query.set('model', params.model);
+    if (params.startTimeSec) query.set('start_time', String(params.startTimeSec));
+    if (params.endTimeSec) query.set('end_time', String(params.endTimeSec));
+
+    const raw = await this.requestJson(`/api/open/tasks/histories?${query.toString()}`, { method: 'GET' });
+    return {
+      raw,
+      tasks: extractHistoryRecords(raw).map(normaliseHistoryTask),
+    };
+  }
+
   async download(url: string): Promise<{ buffer: Buffer; contentType: string }> {
     const res = await this.fetchWithRetry(url, { method: 'GET', headers: {} }, false);
     const contentType = res.headers.get('content-type')?.split(';')[0]?.trim() ?? 'application/octet-stream';
@@ -140,23 +172,16 @@ export class PiAPIClient {
         size: params.size,
         quality: params.quality,
         ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
-        response_format: 'b64_json',
+        response_format: 'url',
       }),
     }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    const data = Array.isArray((json as { data?: unknown }).data)
-      ? (json as { data: Array<Record<string, unknown>> }).data
-      : [];
-    const first = data[0] ?? {};
-    return {
-      url: typeof first.url === 'string' ? first.url : undefined,
-      b64: typeof first.b64_json === 'string' ? first.b64_json : undefined,
-    };
+    return readGptImageResult(json);
   }
 
   // The gateway intermittently resets the long-held gpt-image edit connection (ECONNRESET ~15s) while
-  // the generation takes ~60-100s. It is intermittent (some succeed), so retry the whole request a few
-  // times on connection resets. Each attempt is a fresh connection with TCP keepalive.
+  // the generation takes ~60-100s. Do not retry by default: the upstream may already be rendering and a
+  // fresh POST can double-charge. The provider recovers completed outputs through PiAPI history instead.
   private async gptImageEditViaHttps(params: {
     model: string;
     prompt: string;
@@ -165,7 +190,7 @@ export class PiAPIClient {
     quality: string;
     outputFormat?: string;
   }): Promise<{ url?: string; b64?: string }> {
-    const maxAttempts = 4;
+    const maxAttempts = Number(process.env.PIAPI_GPT_IMAGE_EDIT_RETRIES) || 1;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
@@ -210,7 +235,7 @@ export class PiAPIClient {
     field('size', params.size);
     field('quality', params.quality);
     if (params.outputFormat) field('output_format', params.outputFormat);
-    field('response_format', 'b64_json');
+    field('response_format', 'url');
     for (const image of params.images) {
       const contentType = image.contentType || 'image/png';
       const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
@@ -247,12 +272,8 @@ export class PiAPIClient {
               return;
             }
             try {
-              const json = JSON.parse(text) as { data?: Array<Record<string, unknown>> };
-              const first = Array.isArray(json.data) ? json.data[0] ?? {} : {};
-              resolve({
-                url: typeof first.url === 'string' ? first.url : undefined,
-                b64: typeof first.b64_json === 'string' ? (first.b64_json as string) : undefined,
-              });
+              const json = JSON.parse(text) as Record<string, unknown>;
+              resolve(readGptImageResult(json));
             } catch {
               reject(new ProviderError('PIAPI_BAD_RESPONSE', 'gpt-image edit returned non-JSON'));
             }
@@ -377,6 +398,105 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
 
 // Классифицирует провал задачи PiAPI. Модерация контента важнее общего кода,
 // чтобы пользователь видел понятную причину, а не "задача не выполнена".
+function normaliseHistoryTask(raw: Record<string, unknown>): PiAPIHistoryTask {
+  const data = readObject(raw, ['data']) ?? raw;
+  const input = readObject(data, ['input'])
+    ?? readObject(data, ['request', 'input'])
+    ?? readObject(data, ['request']);
+  const statusRaw = readString(data, ['status'])
+    ?? readString(data, ['task_status'])
+    ?? readString(raw, ['status'])
+    ?? 'processing';
+  return {
+    taskId: readString(data, ['task_id'])
+      ?? readString(data, ['id'])
+      ?? readString(raw, ['task_id'])
+      ?? readString(raw, ['id']),
+    status: mapStatus(statusRaw),
+    model: readString(data, ['model'])
+      ?? readString(input ?? {}, ['model'])
+      ?? readString(raw, ['model']),
+    taskType: readString(data, ['task_type'])
+      ?? readString(raw, ['task_type']),
+    input,
+    outputUrl: findOutputUrl(data) ?? findOutputUrl(raw),
+    createdAt: readDate(data, [
+      ['meta', 'created_at'],
+      ['created_at'],
+      ['createdAt'],
+      ['created_time'],
+      ['create_time'],
+      ['created'],
+    ]),
+    raw,
+  };
+}
+
+function extractHistoryRecords(raw: Record<string, unknown>): Record<string, unknown>[] {
+  const candidates = [
+    readPath(raw, ['data', 'items']),
+    readPath(raw, ['data', 'records']),
+    readPath(raw, ['data', 'list']),
+    readPath(raw, ['data', 'tasks']),
+    readPath(raw, ['data', 'histories']),
+    readPath(raw, ['data', 'data']),
+    readPath(raw, ['items']),
+    readPath(raw, ['records']),
+    readPath(raw, ['list']),
+    readPath(raw, ['tasks']),
+    readPath(raw, ['histories']),
+    readPath(raw, ['data']),
+  ];
+
+  for (const value of candidates) {
+    if (!Array.isArray(value)) continue;
+    const records = value.filter((item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === 'object' && !Array.isArray(item)
+    );
+    if (records.length > 0) return records;
+  }
+
+  return [];
+}
+
+function readGptImageResult(json: Record<string, unknown>): { url?: string; b64?: string } {
+  const data = Array.isArray(json.data) ? json.data : [];
+  const first = data.find((item) => item && typeof item === 'object' && !Array.isArray(item)) as Record<string, unknown> | undefined;
+  return {
+    url: first ? readString(first, ['url']) : undefined,
+    b64: first ? readString(first, ['b64_json']) : undefined,
+  };
+}
+
+function findOutputUrl(data: Record<string, unknown>): string | undefined {
+  return findFirstString(data, [
+    ['output', 'video_url'],
+    ['output', 'image_url'],
+    ['output', 'url'],
+    ['output', 'result_url'],
+    ['output', 'result'],
+    ['output', 'video'],
+    ['output', 'image'],
+    ['response', 'url'],
+    ['result', 'url'],
+    ['output_url'],
+    ['video_url'],
+    ['image_url'],
+    ['result_url'],
+    ['url'],
+  ]) ?? findFirstArrayString(data, [
+    ['output', 'image_urls'],
+    ['output', 'video_urls'],
+    ['image_urls'],
+    ['video_urls'],
+  ]) ?? findFirstArrayObjectString(data, [
+    ['output', 'data'],
+    ['response', 'data'],
+    ['result', 'data'],
+    ['data'],
+  ]) ?? readKlingWorkUrl(data);
+}
+
 function classifyFailureCode(errorCode: string | undefined, errorMessage: string | undefined): string {
   const text = `${errorCode ?? ''} ${errorMessage ?? ''}`.toLowerCase();
   if (/10001|upstream.*busy|too many requests|rate limit|try again later|temporar(?:y|ily).*busy|overloaded/.test(text)) {
@@ -476,6 +596,43 @@ function findFirstArrayString(source: Record<string, unknown>, paths: string[][]
     if (Array.isArray(value)) {
       const found = value.find((item): item is string => typeof item === 'string' && item.length > 0);
       if (found) return found;
+    }
+  }
+  return undefined;
+}
+
+function findFirstArrayObjectString(source: Record<string, unknown>, paths: string[][]): string | undefined {
+  for (const path of paths) {
+    const value = readPath(source, path);
+    if (!Array.isArray(value)) continue;
+    for (const item of value) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      const record = item as Record<string, unknown>;
+      const url = readString(record, ['url'])
+        ?? readString(record, ['image_url'])
+        ?? readString(record, ['video_url'])
+        ?? readString(record, ['result_url']);
+      if (url) return url;
+    }
+  }
+  return undefined;
+}
+
+function readDate(source: Record<string, unknown>, paths: string[][]): Date | undefined {
+  for (const path of paths) {
+    const value = readPath(source, path);
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const ms = value < 10_000_000_000 ? value * 1000 : value;
+      return new Date(ms);
+    }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric)) {
+        const ms = numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+        return new Date(ms);
+      }
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) return new Date(parsed);
     }
   }
   return undefined;
