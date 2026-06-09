@@ -37,7 +37,7 @@ export interface PiAPIClientOptions {
   gptImageTimeoutMs?: number;
 }
 
-const TRANSIENT_RETRIES = 3;
+const TRANSIENT_RETRIES = 2;
 const PIAPI_COST_UNITS_PER_USD = 10_000_000;
 
 export class PiAPIClient {
@@ -62,7 +62,7 @@ export class PiAPIClient {
     const raw = await this.requestJson('/api/v1/task', {
       method: 'POST',
       body: JSON.stringify(payload),
-    });
+    }, { retries: 1 });
     const taskId = readString(raw, ['task_id'])
       ?? readString(raw, ['data', 'task_id'])
       ?? readString(raw, ['task', 'id'])
@@ -296,7 +296,11 @@ export class PiAPIClient {
     });
   }
 
-  private async requestJson(path: string, init: RequestInit): Promise<Record<string, unknown>> {
+  private async requestJson(
+    path: string,
+    init: RequestInit,
+    opts?: { timeoutMs?: number; retries?: number },
+  ): Promise<Record<string, unknown>> {
     const res = await this.fetchWithRetry(`${this.baseUrl}${path}`, {
       ...init,
       headers: {
@@ -304,7 +308,7 @@ export class PiAPIClient {
         'X-API-Key': this.apiKey,
         ...(init.headers ?? {}),
       },
-    }, true);
+    }, true, opts);
     const json = await res.json().catch(() => ({}));
     if (!json || typeof json !== 'object' || Array.isArray(json)) {
       throw new ProviderError('PIAPI_BAD_RESPONSE', 'PiAPI returned non-object JSON');
@@ -382,7 +386,8 @@ function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAP
   const progress = readNumber(data, ['progress']) ?? readNumber(data, ['meta', 'progress']);
   const errorMessage = readString(data, ['error', 'message'])
     ?? readString(data, ['error_message'])
-    ?? readString(data, ['message']);
+    ?? readString(data, ['message'])
+    ?? findFirstArrayString(data, [['logs']]);
   const errorCode = readCode(data, ['error', 'code']) ?? readCode(data, ['error_code']);
   return {
     taskId,

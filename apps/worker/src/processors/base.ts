@@ -51,6 +51,7 @@ export async function markProjectFailed(
       select: { id: true, userId: true, tokensCost: true, status: true },
     });
     if (!project) return;
+    if (project.status === ProjectStatus.COMPLETED) return;
 
     await tx.project.update({
       where: { id: projectId },
@@ -63,23 +64,34 @@ export async function markProjectFailed(
       },
     });
 
-    if (refundTokens && project.tokensCost > 0) {
-      const user = await tx.user.update({
-        where: { id: project.userId },
-        data: { tokenBalance: { increment: project.tokensCost } },
-        select: { tokenBalance: true },
-      });
+    if (!refundTokens || project.status === ProjectStatus.FAILED || project.tokensCost <= 0) return;
 
-      await tx.tokenTransaction.create({
-        data: {
-          userId: project.userId,
-          amount: project.tokensCost,
-          reason: 'refund',
-          refId: projectId,
-          balanceAfter: user.tokenBalance,
-        },
-      });
-    }
+    const existingRefund = await tx.tokenTransaction.findFirst({
+      where: {
+        userId: project.userId,
+        refId: projectId,
+        reason: 'refund',
+        amount: project.tokensCost,
+      },
+      select: { id: true },
+    });
+    if (existingRefund) return;
+
+    const user = await tx.user.update({
+      where: { id: project.userId },
+      data: { tokenBalance: { increment: project.tokensCost } },
+      select: { tokenBalance: true },
+    });
+
+    await tx.tokenTransaction.create({
+      data: {
+        userId: project.userId,
+        amount: project.tokensCost,
+        reason: 'refund',
+        refId: projectId,
+        balanceAfter: user.tokenBalance,
+      },
+    });
   });
 }
 

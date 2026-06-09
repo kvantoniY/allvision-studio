@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
-import { generationExpiresAt, type StorageProvider } from '@allvision/shared';
+import { generationExpiresAt, getUserFriendlyError, type StorageProvider } from '@allvision/shared';
 import sharp from 'sharp';
 import { getAIProvider, getStorageProvider } from './providers';
 import type { PipelineProviderMode } from './providers';
@@ -10,7 +10,7 @@ import { markProjectFailed } from './processors/base';
 import { getBlock } from './blocks/registry';
 import type { BlockDefinition, BlockLogger, BlockOutput } from './blocks/types';
 import { logger as defaultLogger } from './utils/logger';
-import { isProviderUserSafeError, ProviderError, providerUnavailableMessage } from './providers/provider-errors';
+import { ProviderError } from './providers/provider-errors';
 import { resolveWorkspacePath } from './utils/paths';
 
 export type PipelineTier = 'standard' | 'pro';
@@ -235,14 +235,14 @@ export async function runPipeline(
         stepProgress,
       };
     }
+    const userVisibleMessage = errorCode
+      ? getUserFriendlyError(errorCode)
+      : (err as Error).message;
     if (activeIndex >= 0) {
-      const userSafeMessage = isProviderUserSafeError(err)
-        ? providerUnavailableMessage
-        : (err as Error).message;
       stepProgress[activeIndex] = {
         ...stepProgress[activeIndex],
         status: 'failed',
-        errorMessage: userSafeMessage,
+        errorMessage: userVisibleMessage,
       };
       await prisma.project.update({
         where: { id: params.generationId },
@@ -252,7 +252,7 @@ export async function runPipeline(
     logger.error(`[pipeline] Project ${params.generationId} failed`, err);
     await markProjectFailed(
       params.generationId,
-      isProviderUserSafeError(err) ? providerUnavailableMessage : (err as Error).message,
+      userVisibleMessage,
       { refundTokens: true, errorCode },
     );
     throw err;

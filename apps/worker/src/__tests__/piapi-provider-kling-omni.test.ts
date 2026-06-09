@@ -13,7 +13,6 @@ const logger = {
 
 afterEach(() => {
   delete process.env.ALLOW_REAL_PIAPI_IN_TEST;
-  delete process.env.PIAPI_UPSTREAM_BUSY_RETRY_DELAY_MS;
   jest.clearAllMocks();
 });
 
@@ -87,9 +86,8 @@ describe('PiAPI provider Kling Omni references', () => {
     });
   });
 
-  it('recreates text-to-video task when PiAPI upstream is busy', async () => {
+  it('fails text-to-video task immediately when PiAPI upstream is busy', async () => {
     process.env.ALLOW_REAL_PIAPI_IN_TEST = 'true';
-    process.env.PIAPI_UPSTREAM_BUSY_RETRY_DELAY_MS = '0';
     const storage = {
       upload: jest.fn().mockResolvedValue({ url: 'https://local.test/result.mp4', key: 'outputs/result.mp4' }),
       getSignedUrl: jest.fn(),
@@ -108,26 +106,16 @@ describe('PiAPI provider Kling Omni references', () => {
       logger,
     });
     const client = {
-      createTask: jest.fn()
-        .mockResolvedValueOnce({ taskId: 'busy-task', raw: {} })
-        .mockResolvedValueOnce({ taskId: 'success-task', raw: {} }),
-      pollUntilDone: jest.fn()
-        .mockRejectedValueOnce(new ProviderError(
-          'PIAPI_UPSTREAM_BUSY',
-          'Internal upstream is busy (too many requests). Please try again later.',
-        ))
-        .mockResolvedValueOnce({
-          taskId: 'success-task',
-          status: 'completed',
-          outputUrl: 'https://piapi.test/output.mp4',
-          actualCostUsd: 0.25,
-          raw: {},
-        }),
+      createTask: jest.fn().mockResolvedValue({ taskId: 'busy-task', raw: {} }),
+      pollUntilDone: jest.fn().mockRejectedValue(new ProviderError(
+        'PIAPI_UPSTREAM_BUSY',
+        'Internal upstream is busy (too many requests). Please try again later.',
+      )),
       download: jest.fn().mockResolvedValue({ buffer: Buffer.from('video'), contentType: 'video/mp4' }),
     };
     (provider as unknown as { client: typeof client }).client = client;
 
-    await provider.textToVideo({
+    await expect(provider.textToVideo({
       prompt: 'Use @image_1 and @video.',
       durationSec: 10,
       model: 'kling-3-omni',
@@ -143,13 +131,9 @@ describe('PiAPI provider Kling Omni references', () => {
         blockSlug: 'trend-video-transfer',
         stepId: 'step_kling',
       },
-    });
+    })).rejects.toMatchObject({ code: 'PIAPI_UPSTREAM_BUSY' });
 
-    expect(client.createTask).toHaveBeenCalledTimes(2);
-    expect(client.pollUntilDone).toHaveBeenCalledTimes(2);
-    expect(logger.warn).toHaveBeenCalledWith(
-      '[piapi] kling-3-omni upstream busy; retrying text-to-video task',
-      { attempt: 1, maxAttempts: 3 },
-    );
+    expect(client.createTask).toHaveBeenCalledTimes(1);
+    expect(client.pollUntilDone).toHaveBeenCalledTimes(1);
   });
 });

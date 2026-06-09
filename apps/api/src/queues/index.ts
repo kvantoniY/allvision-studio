@@ -74,7 +74,10 @@ export async function addServicePipelineJob(data: ServicePipelineJobData, opts?:
   return getQueue(QUEUE_NAMES.SERVICE_PIPELINE).add(
     QUEUE_NAMES.SERVICE_PIPELINE,
     data,
-    opts,
+    {
+      attempts: 1,
+      ...opts,
+    },
   );
 }
 

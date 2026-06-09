@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { Prisma, prisma } from '@allvision/database';
-import { generationExpiresAt } from '@allvision/shared';
+import { Prisma, ProjectStatus, prisma } from '@allvision/database';
+import { generationExpiresAt, getUserFriendlyError } from '@allvision/shared';
 import { getStorageProvider } from '../providers';
 import { PiAPIAccountClient, type PiAPIHistoryTask } from './piapi-client';
 import { logger } from '../utils/logger';
@@ -84,7 +84,16 @@ async function recoverPiAPIProject(projectId: string, userId?: string): Promise<
   if (refs.length === 0) return false;
 
   for (const ref of refs) {
-    const providerUrl = ref.recoverableOutputUrl ?? (ref.taskId ? await completedTaskOutput(client, ref.taskId) : undefined);
+    const task: NormalizedPiAPITask | undefined = ref.recoverableOutputUrl
+      ? { status: 'completed', outputUrl: ref.recoverableOutputUrl }
+      : ref.taskId ? await piapiTaskState(client, ref.taskId) : undefined;
+    if (!task) continue;
+    if (task.status === 'failed') {
+      await markPiAPIProjectFailed(project, ref, task);
+      return true;
+    }
+
+    const providerUrl = task.status === 'completed' ? task.outputUrl : undefined;
     if (!providerUrl) continue;
 
     const outputType = inferOutputType(ref.blockSlug, providerUrl);
@@ -140,6 +149,84 @@ async function recoverPiAPIProject(projectId: string, userId?: string): Promise<
   }
 
   return false;
+}
+
+async function markPiAPIProjectFailed(
+  project: { id: string; userId: string; stepProgress: unknown },
+  ref: RecoveryRef,
+  task: NormalizedPiAPITask,
+) {
+  const failedAt = new Date();
+  const errorCode = classifyPiAPIFailure(task.errorCode, task.errorMessage);
+  const errorMessage = getUserFriendlyError(errorCode);
+  const nextStepProgress = failStepProgress(project.stepProgress, ref, errorMessage);
+
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.project.findUnique({
+      where: { id: project.id },
+      select: { id: true, userId: true, tokensCost: true, status: true },
+    });
+    if (!current) return;
+    if (current.status === ProjectStatus.COMPLETED) return;
+
+    await tx.project.update({
+      where: { id: project.id },
+      data: {
+        status: ProjectStatus.FAILED,
+        completedAt: failedAt,
+        expiresAt: generationExpiresAt(failedAt),
+        errorCode,
+        errorMessage,
+        stepProgress: nextStepProgress.length > 0 ? nextStepProgress as Prisma.InputJsonValue : Prisma.JsonNull,
+      },
+    });
+
+    if (ref.logId) {
+      await tx.aIUsageLog.updateMany({
+        where: { id: ref.logId },
+        data: {
+          status: 'failed',
+          errorCode,
+          errorMessage: task.errorMessage ?? errorMessage,
+        },
+      });
+    }
+
+    if (current.status === ProjectStatus.FAILED || current.tokensCost <= 0) return;
+
+    const existingRefund = await tx.tokenTransaction.findFirst({
+      where: {
+        userId: current.userId,
+        refId: project.id,
+        reason: 'refund',
+        amount: current.tokensCost,
+      },
+      select: { id: true },
+    });
+    if (existingRefund) return;
+
+    const user = await tx.user.update({
+      where: { id: current.userId },
+      data: { tokenBalance: { increment: current.tokensCost } },
+      select: { tokenBalance: true },
+    });
+
+    await tx.tokenTransaction.create({
+      data: {
+        userId: current.userId,
+        amount: current.tokensCost,
+        reason: 'refund',
+        refId: project.id,
+        balanceAfter: user.tokenBalance,
+      },
+    });
+  });
+
+  logger.warn(`[piapi-recovery] project=${project.id} marked failed from taskId=${ref.taskId ?? 'unknown'}`, {
+    errorCode,
+    providerErrorCode: task.errorCode,
+    providerErrorMessage: task.errorMessage,
+  });
 }
 
 async function recoveryRefs(projectId: string, aiProviderJobId: string | null, stepProgress: unknown): Promise<RecoveryRef[]> {
@@ -328,11 +415,9 @@ function sortHistoryNewestFirst(a: PiAPIHistoryTask, b: PiAPIHistoryTask) {
   return (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0);
 }
 
-async function completedTaskOutput(client: PiAPIAccountClient, taskId: string): Promise<string | undefined> {
+async function piapiTaskState(client: PiAPIAccountClient, taskId: string): Promise<NormalizedPiAPITask> {
   const raw = await client.getTask(taskId);
-  const task = normaliseTask(raw);
-  if (task.status !== 'completed') return undefined;
-  return task.outputUrl;
+  return normaliseTask(raw);
 }
 
 async function materialiseProviderOutput(params: {
@@ -373,6 +458,41 @@ function recoverStepProgress(stepProgress: unknown, ref: RecoveryRef, output: Re
     }
     return step;
   });
+}
+
+function failStepProgress(stepProgress: unknown, ref: RecoveryRef, errorMessage: string) {
+  if (!Array.isArray(stepProgress)) return [];
+  let failed = false;
+  return stepProgress.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const step = item as Record<string, unknown>;
+    const shouldFail = !failed && (
+      (ref.blockSlug && step.blockSlug === ref.blockSlug)
+      || step.status === 'processing'
+      || step.status === 'pending'
+      || step.status === 'failed'
+    );
+    if (!shouldFail) return step;
+    failed = true;
+    return {
+      ...step,
+      status: 'failed',
+      progress: typeof step.progress === 'number' ? step.progress : 100,
+      errorMessage,
+    };
+  });
+}
+
+function classifyPiAPIFailure(errorCode: string | undefined, errorMessage: string | undefined): string {
+  const text = `${errorCode ?? ''} ${errorMessage ?? ''}`.toLowerCase();
+  if (/10001|upstream.*busy|too many requests|rate limit|try again later|temporar(?:y|ily).*busy|overloaded/.test(text)) {
+    return 'PIAPI_UPSTREAM_BUSY';
+  }
+  if (/violat|community guidelines|moderat|nsfw|content policy|policy violation|safety policy|unsafe content/.test(text)) {
+    return 'CONTENT_MODERATION';
+  }
+  if (errorCode && /^PIAPI_[A-Z0-9_]+$/.test(errorCode)) return errorCode;
+  return 'PIAPI_TASK_FAILED';
 }
 
 function inferOutputType(blockSlug: string | null | undefined, providerUrl: string): 'image' | 'video' {
@@ -417,7 +537,8 @@ function normaliseTask(raw: Record<string, unknown>): NormalizedPiAPITask {
     errorCode: readCode(data, ['error', 'code']) ?? readCode(data, ['error_code']),
     errorMessage: readString(data, ['error', 'message'])
       ?? readString(data, ['error_message'])
-      ?? readString(data, ['message']),
+      ?? readString(data, ['message'])
+      ?? findFirstArrayString(data, [['logs']]),
   };
 }
 
