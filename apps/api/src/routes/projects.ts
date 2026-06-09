@@ -9,12 +9,14 @@ import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
 import * as queues from '../queues';
 import * as support from '../services/support-service';
+import { tryRecoverPiAPIProject } from '../services/piapi-recovery-service';
 
 export const projectsRouter = Router();
 
 type AutoServiceSlug = 'photo-restore' | 'photo-animate' | 'trends';
 
 const supportedAutoServices = new Set<string>(['photo-restore', 'photo-animate', 'trends']);
+const piapiRecoveryStatuses = new Set(['PENDING', 'PROCESSING', 'FAILED']);
 const serviceQueueName: Record<AutoServiceSlug, typeof QUEUE_NAMES.PHOTO_RESTORE | typeof QUEUE_NAMES.PHOTO_ANIMATE | typeof QUEUE_NAMES.TREND> = {
   'photo-restore': QUEUE_NAMES.PHOTO_RESTORE,
   'photo-animate': QUEUE_NAMES.PHOTO_ANIMATE,
@@ -266,7 +268,7 @@ projectsRouter.get('/', requireAuth, async (req: Request, res: Response, next: N
       ...(query.serviceSlug ? { service: { slug: query.serviceSlug } } : {}),
     };
 
-    const [items, total] = await prisma.$transaction([
+    let [items, total] = await prisma.$transaction([
       prisma.project.findMany({
         where,
         select: projectListSelect,
@@ -277,6 +279,20 @@ projectsRouter.get('/', requireAuth, async (req: Request, res: Response, next: N
       prisma.project.count({ where }),
     ]);
 
+    const recovered = await recoverVisiblePiAPIProjects(items, req.user!.id);
+    if (recovered) {
+      [items, total] = await prisma.$transaction([
+        prisma.project.findMany({
+          where,
+          select: projectListSelect,
+          orderBy: { createdAt: 'desc' },
+          skip: (query.page - 1) * query.limit,
+          take: query.limit,
+        }),
+        prisma.project.count({ where }),
+      ]);
+    }
+
     res.json({ items, total, page: query.page, limit: query.limit });
   } catch (err) {
     next(err);
@@ -285,7 +301,7 @@ projectsRouter.get('/', requireAuth, async (req: Request, res: Response, next: N
 
 projectsRouter.get('/:id/status', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const project = await prisma.project.findFirst({
+    let project = await prisma.project.findFirst({
       where: { id: req.params.id, userId: req.user!.id },
       select: {
         id: true,
@@ -307,11 +323,46 @@ projectsRouter.get('/:id/status', requireAuth, async (req: Request, res: Respons
       throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Project not found');
     }
 
+    if (piapiRecoveryStatuses.has(project.status)) {
+      const recovered = await tryRecoverPiAPIProject(project.id, req.user!.id);
+      if (recovered) {
+        project = await prisma.project.findFirst({
+          where: { id: req.params.id, userId: req.user!.id },
+          select: {
+            id: true,
+            status: true,
+            progress: true,
+            resultImage: true,
+            resultVideo: true,
+            resultThumbnail: true,
+            resultAssets: true,
+            errorMessage: true,
+            errorCode: true,
+            completedAt: true,
+            expiresAt: true,
+            stepProgress: true,
+          },
+        });
+      }
+    }
+
     res.json(project);
   } catch (err) {
     next(err);
   }
 });
+
+async function recoverVisiblePiAPIProjects(items: Array<{ id: string; status: string }>, userId: string) {
+  const candidates = items
+    .filter((item) => piapiRecoveryStatuses.has(item.status))
+    .slice(0, 5);
+  if (candidates.length === 0) return false;
+
+  const results = await Promise.allSettled(
+    candidates.map((item) => tryRecoverPiAPIProject(item.id, userId)),
+  );
+  return results.some((result) => result.status === 'fulfilled' && result.value);
+}
 
 projectsRouter.post('/:id/report', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {

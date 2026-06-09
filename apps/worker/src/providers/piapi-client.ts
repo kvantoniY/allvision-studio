@@ -44,7 +44,7 @@ export class PiAPIClient {
     this.baseUrl = (options.baseUrl ?? 'https://api.piapi.ai').replace(/\/+$/, '');
     this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
     this.gptImageTimeoutMs = options.gptImageTimeoutMs
-      ?? (Number(process.env.PIAPI_GPT_IMAGE_TIMEOUT_MS) || 180_000);
+      ?? (Number(process.env.PIAPI_GPT_IMAGE_TIMEOUT_MS) || 300_000);
   }
 
   async createTask(payload: unknown): Promise<{ taskId: string; raw: Record<string, unknown> }> {
@@ -173,11 +173,16 @@ export class PiAPIClient {
       } catch (err) {
         lastError = err;
         const message = err instanceof Error ? err.message : String(err);
-        const resettable = err instanceof ProviderError
-          && err.code === 'PIAPI_NETWORK_ERROR'
-          && /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED/i.test(message);
-        if (!resettable || attempt === maxAttempts) throw err;
-        await delay(1000 * attempt);
+        const retryable = err instanceof ProviderError && (
+          (err.code === 'PIAPI_NETWORK_ERROR' && /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED/i.test(message))
+          || err.code === 'PIAPI_TIMEOUT'
+          || err.status === 520
+          || err.status === 522
+          || err.status === 523
+          || err.status === 524
+        );
+        if (!retryable || attempt === maxAttempts) throw err;
+        await delay(1500 * attempt);
       }
     }
     throw lastError;
@@ -401,13 +406,16 @@ export function extractPiAPIActualCostUsd(raw: Record<string, unknown>): number 
 
 function readKlingWorkUrl(source: Record<string, unknown>): string | undefined {
   const output = readObject(source, ['output']);
-  const works = output?.works;
+  const works = Array.isArray(output?.works) ? output?.works : source.works;
   if (!Array.isArray(works)) return undefined;
   const first = works.find((item) => item && typeof item === 'object') as Record<string, unknown> | undefined;
   if (!first) return undefined;
   return readString(first, ['video', 'resource_without_watermark'])
     ?? readString(first, ['video', 'resource'])
-    ?? readString(first, ['cover', 'resource']);
+    ?? readString(first, ['cover', 'resource'])
+    ?? readString(first, ['resource_without_watermark'])
+    ?? readString(first, ['resource'])
+    ?? readString(first, ['url']);
 }
 
 function mapStatus(value: string): PiAPITaskStatus['status'] {

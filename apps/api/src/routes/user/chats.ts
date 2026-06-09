@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { HttpError } from '../../utils/http-error';
 import { createFreeChatProject, parseChatGenerationMeta, titleFromPrompt } from '../../services/free-chat-generation';
+import { tryRecoverPiAPIProject } from '../../services/piapi-recovery-service';
 
 export const userChatsRouter = Router();
 
@@ -21,6 +22,8 @@ const createChatSchema = z.object({
 const updateChatSchema = z.object({
   title: z.string().trim().min(1).max(120),
 });
+
+const piapiRecoveryStatuses = new Set(['PENDING', 'PROCESSING', 'FAILED']);
 
 const projectSelect = {
   id: true,
@@ -85,7 +88,7 @@ userChatsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
   try {
     const query = listQuerySchema.parse(req.query);
     const where = { userId: req.user!.id, deletedAt: null };
-    const [items, total] = await prisma.$transaction([
+    let [items, total] = await prisma.$transaction([
       prisma.chat.findMany({
         where,
         orderBy: { updatedAt: 'desc' },
@@ -102,6 +105,30 @@ userChatsRouter.get('/', async (req: Request, res: Response, next: NextFunction)
       }),
       prisma.chat.count({ where }),
     ]);
+
+    const recovered = await recoverChatMessageProjects(
+      items.flatMap((chat) => chat.messages.map((message) => message.project)),
+      req.user!.id,
+    );
+    if (recovered) {
+      [items, total] = await prisma.$transaction([
+        prisma.chat.findMany({
+          where,
+          orderBy: { updatedAt: 'desc' },
+          skip: query.offset,
+          take: query.limit,
+          include: {
+            _count: { select: { messages: true } },
+            messages: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              include: { project: { select: projectSelect } },
+            },
+          },
+        }),
+        prisma.chat.count({ where }),
+      ]);
+    }
 
     res.json({
       items: items.map((chat) => {
@@ -143,12 +170,21 @@ userChatsRouter.post('/', async (req: Request, res: Response, next: NextFunction
 userChatsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const chat = await requireChat(req.params.id, req.user!.id);
-    const messages = await prisma.chatMessage.findMany({
+    let messages = await prisma.chatMessage.findMany({
       where: { chatId: chat.id },
       orderBy: { createdAt: 'desc' },
       take: 100,
       include: { project: { select: projectSelect } },
     });
+    const recovered = await recoverChatMessageProjects(messages.map((message) => message.project), req.user!.id);
+    if (recovered) {
+      messages = await prisma.chatMessage.findMany({
+        where: { chatId: chat.id },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
+        include: { project: { select: projectSelect } },
+      });
+    }
     res.json({
       chat,
       messages: messages.reverse().map(toMessageResponse),
@@ -157,6 +193,15 @@ userChatsRouter.get('/:id', async (req: Request, res: Response, next: NextFuncti
     next(err);
   }
 });
+
+async function recoverChatMessageProjects(items: Array<{ id: string; status: string }>, userId: string) {
+  const candidates = items
+    .filter((item) => piapiRecoveryStatuses.has(item.status))
+    .slice(0, 5);
+  if (candidates.length === 0) return false;
+  const results = await Promise.allSettled(candidates.map((item) => tryRecoverPiAPIProject(item.id, userId)));
+  return results.some((result) => result.status === 'fulfilled' && result.value);
+}
 
 userChatsRouter.patch('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {

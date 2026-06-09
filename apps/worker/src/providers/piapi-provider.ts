@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
+import { prisma } from '@allvision/database';
 import { resolveWorkspacePath } from '../utils/paths';
 import { estimateModelCostUsd, type StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
@@ -160,6 +161,17 @@ export class PiAPIProvider implements AIProvider {
     timer.unref();
   }
 
+  private async createTask(payload: unknown, context: ProviderRunContext) {
+    const created = await this.client.createTask(payload);
+    await prisma.project.update({
+      where: { id: context.projectId },
+      data: { aiProviderJobId: created.taskId },
+    }).catch((err) => {
+      this.logger.warn(`[piapi] Failed to remember taskId=${created.taskId} for project=${context.projectId}`, err);
+    });
+    return created;
+  }
+
   async imageRestore(): Promise<ProviderResult> {
     throw new ProviderError('IMAGE_RESTORE_NOT_REAL', 'image-restore is mock-only in P6');
   }
@@ -242,7 +254,7 @@ export class PiAPIProvider implements AIProvider {
         strength: input.strength,
         params: input.params,
       });
-      const created = await this.client.createTask(payload);
+      const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_IMAGE_EDIT_TIMEOUT_MS,
@@ -313,7 +325,7 @@ export class PiAPIProvider implements AIProvider {
         aspectRatio,
         params: input.params,
       });
-      const created = await this.client.createTask(payload);
+      const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
@@ -416,7 +428,7 @@ export class PiAPIProvider implements AIProvider {
     let lastError: unknown;
     for (let attempt = 1; attempt <= PIAPI_UPSTREAM_BUSY_ATTEMPTS; attempt += 1) {
       try {
-        const created = await this.client.createTask(payload);
+        const created = await this.createTask(payload, context);
         onTaskId(created.taskId);
         return await this.client.pollUntilDone(created.taskId, {
           timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
@@ -514,7 +526,7 @@ export class PiAPIProvider implements AIProvider {
           ...(readString(input.params, 'target_faces_index') ? { target_faces_index: readString(input.params, 'target_faces_index') } : {}),
         },
       };
-      const created = await this.client.createTask(payload);
+      const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
@@ -582,7 +594,7 @@ export class PiAPIProvider implements AIProvider {
           ...(aspectRatio && aspectRatio !== 'auto' ? { aspect_ratio: aspectRatio } : {}),
         },
       };
-      const created = await this.client.createTask(payload);
+      const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
@@ -636,7 +648,7 @@ export class PiAPIProvider implements AIProvider {
     let completedTask: PiAPITaskStatus | undefined;
     try {
       const payload = buildWatermarkPayload(input.videoUrl, input.durationSec);
-      const created = await this.client.createTask(payload);
+      const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
@@ -696,7 +708,7 @@ export class PiAPIProvider implements AIProvider {
         contentTypeForUrl(input.videoUrl, 'video/mp4'),
       );
       const payload = buildVideoUpscalePayload(published.publicUrl);
-      const created = await this.client.createTask(payload);
+      const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
@@ -783,7 +795,7 @@ export class PiAPIProvider implements AIProvider {
           ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
         },
       };
-      const created = await this.client.createTask(payload);
+      const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,

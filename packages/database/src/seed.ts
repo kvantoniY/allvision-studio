@@ -2624,6 +2624,61 @@ const giftFactoryServices = [
       },
     ],
   },
+  {
+    slug: 'video-quality-kling',
+    title: 'Улучшение видео через Kling 3.0',
+    description:
+      'Загрузите короткий ролик до 15 секунд — Kling 3.0 пересоберёт его как более чистую версию с повышенной резкостью, детализацией, стабильностью кадра и аккуратным контрастом. Промпт просит сохранить исходное движение, композицию, тайминг и длительность без смены сюжета.',
+    shortDesc: 'Генеративное улучшение короткого видео через Kling 3.0',
+    category: ServiceCategory.TRENDS_MEMES,
+    priceTokens: 25,
+    priceCoinsStandard: 25,
+    priceCoinsPro: 25,
+    costUsd: 1.5,
+    coverImage: image('gift-video-quality-upscale'),
+    galleryImages: [image('gift-video-quality-upscale-1'), image('gift-video-quality-upscale-2')],
+    previewImage: image('gift-video-quality-upscale-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 29,
+    userInputForm: [
+      {
+        id: 'video',
+        type: 'video',
+        label: 'Исходное видео',
+        required: true,
+        hint: 'MP4 до 25 МБ и до 15 секунд. Лучше загружать ролик без сильной тряски и с понятным главным объектом.',
+        maxSizeMb: 25,
+        maxDurationSec: 15,
+        allowedFormats: ['mp4', 'mov'],
+        allowUserUpload: true,
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'text-to-video',
+        input: '{{user.video}}',
+        params: {
+          model: { standard: 'kling-3-omni', pro: 'kling-3-omni' },
+          mode: 'omni_reference',
+          video: '{{user.video}}',
+          duration: 15,
+          aspect_ratio: 'auto',
+          resolution: '720p',
+          enable_audio: false,
+          keep_original_audio: true,
+          prompt:
+            'Use the uploaded video as the strict source reference. Create the same video again with visibly improved quality while preserving the original duration, timing, camera motion, composition, subject identity, scene, action, framing, and rhythm. Do not invent a new story, do not change people, clothing, environment, camera angle, or motion. Improve clarity, sharpness, fine detail, compression artifacts, flicker, low-light noise, color balance, local contrast, facial stability, edge definition, and temporal consistency. Keep natural realistic texture, no plastic skin, no over-sharpening halos, no HDR look, no added text, no watermark, no extra objects. The output must feel like a cleaner high-quality restoration of the exact same clip.',
+        },
+      },
+    ],
+  },
 ];
 
 const legacyTrendServiceSlugs = [
@@ -3132,15 +3187,7 @@ async function ensureUser(options: EnsureUserOptions) {
 // loader must never re-create anything outside this list, and never updates/deletes existing rows.
 // When adding a future batch of services, add their slugs here for that deploy, then clear the list.
 const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
-  'me-in-movie',
-  'me-in-cartoon',
-  'kid-in-blue-tractor',
-  'me-in-harry-potter',
-  'carousel-post',
-  'product-card',
-  'product-cover',
-  'product-ad',
-  'video-quality-upscale',
+  'video-quality-kling',
 ]);
 
 // Additive loader for explicitly new data-driven services. It creates allowlisted services only when

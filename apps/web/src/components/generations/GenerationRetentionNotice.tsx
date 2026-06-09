@@ -21,9 +21,9 @@ export function GenerationRetentionNotice({
 
   if (compact) {
     return (
-      <div className={cn('inline-flex items-center gap-1.5 text-xs text-amber-200', className)}>
+      <div className={cn('inline-flex max-w-full items-start gap-1.5 text-xs text-amber-200', className)}>
         <Clock3 className="h-3.5 w-3.5 shrink-0" />
-        <span>Удалится {expiresLabel}</span>
+        <span className="min-w-0 break-words">Удалится {expiresLabel}</span>
       </div>
     );
   }
@@ -36,7 +36,7 @@ export function GenerationRetentionNotice({
       )}
     >
       <Clock3 className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-      <div>
+      <div className="min-w-0">
         <div className="font-medium text-amber-50">Хранится до {expiresLabel}</div>
         <div className="mt-0.5 text-xs text-amber-100/85">
           Генерации удаляются через 3 дня. Скачайте результат или сохраните в Студию, чтобы не потерять.

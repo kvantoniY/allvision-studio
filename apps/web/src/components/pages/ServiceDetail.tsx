@@ -1623,10 +1623,10 @@ function GenerationProgress({ project, compact = false }: { project: ProjectList
   const progress = Math.max(0, Math.min(100, project.progress ?? 0));
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
-      <div className="flex items-center justify-between gap-3 text-sm">
-        <span className={cn('flex min-w-0 items-center gap-2 font-medium', compact ? 'text-amber-200' : 'text-slate-100')}>
+      <div className="flex items-start justify-between gap-3 text-sm">
+        <span className={cn('flex min-w-0 items-start gap-2 font-medium', compact ? 'text-amber-200' : 'text-slate-100')}>
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
-          <span className="truncate">{creativeProgressMessage(progress)}</span>
+          <span className={compact ? 'line-clamp-2 min-w-0' : 'min-w-0'}>{creativeProgressMessage(progress)}</span>
         </span>
         <span className="shrink-0 text-slate-400">{progress}%</span>
       </div>
@@ -1718,39 +1718,45 @@ function GenerationCard({
   const isGallery = project.status === 'COMPLETED' && galleryAssets.length > 1;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-start gap-3 p-4 text-left transition hover:bg-slate-800/60"
+        className="grid w-full grid-cols-[auto,minmax(0,1fr)] gap-3 p-3 text-left transition hover:bg-slate-800/60 sm:flex sm:items-start sm:p-4"
       >
-        <div className="mt-0.5 shrink-0 text-slate-400">
-          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </div>
-        <GenerationServiceThumb project={project} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="min-w-0 truncate text-sm font-semibold text-slate-100">{project.title}</h3>
-            <Badge className={cn('rounded-md', PROJECT_STATUS_COLOR[project.status])}>
-              {PROJECT_STATUS_LABEL[project.status]}
-            </Badge>
+        <div className="flex shrink-0 items-start gap-2">
+          <div className="mt-0.5 text-slate-400">
+            {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
           </div>
-          <div className="mt-1 text-xs text-slate-500">{formatDateTime(project.createdAt)}</div>
+          <GenerationServiceThumb project={project} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <h3 className="max-w-full truncate text-sm font-semibold text-slate-100">{project.title}</h3>
+                <Badge className={cn('shrink-0 rounded-md', PROJECT_STATUS_COLOR[project.status])}>
+                  {PROJECT_STATUS_LABEL[project.status]}
+                </Badge>
+              </div>
+              <div className="mt-1 text-xs text-slate-500">{formatDateTime(project.createdAt)}</div>
+            </div>
+            <div className="shrink-0 text-xs text-slate-500 sm:text-right">{project.tokensCost} коинов</div>
+          </div>
           {project.status === 'COMPLETED' && (
-            <GenerationRetentionNotice expiresAt={project.expiresAt} compact className="mt-1" />
+            <GenerationRetentionNotice expiresAt={project.expiresAt} compact className="mt-1 sm:max-w-[22rem]" />
           )}
         </div>
-        <div className="shrink-0 text-right text-xs text-slate-500">{project.tokensCost} коинов</div>
       </button>
 
       {!expanded && isActive && (
-        <div className="border-t border-slate-800 px-4 pb-4">
+        <div className="border-t border-slate-800 px-3 pb-3 sm:px-4 sm:pb-4">
           <GenerationProgress project={project} compact />
         </div>
       )}
 
       {expanded && (
-        <div className="space-y-4 border-t border-slate-800 p-4">
+        <div className="min-w-0 space-y-4 border-t border-slate-800 p-3 sm:p-4">
           {isGallery ? (
             <GenerationGallery assets={galleryAssets} />
           ) : (
@@ -1765,15 +1771,15 @@ function GenerationCard({
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
               <GenerationRetentionNotice expiresAt={project.expiresAt} className="sm:basis-full" />
               {resultUrl && (
-                <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+                <Button asChild className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400 sm:w-auto">
                   <a href={resultUrl} download target="_blank" rel="noopener">
                     <Download className="h-4 w-4" />
                     Скачать
                   </a>
                 </Button>
               )}
-              <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
-              <ReportGenerationButton projectId={project.id} />
+              <SaveToStudioButton projectId={project.id} defaultTitle={project.title} className="w-full sm:w-auto" />
+              <ReportGenerationButton projectId={project.id} className="w-full sm:w-auto" />
             </div>
           )}
         </div>
@@ -1933,6 +1939,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [mediaByKind, setMediaByKind] = useState<Record<string, MediaAssetOption[]>>({});
   const [activeView, setActiveView] = useState<ServiceDetailView>('service');
   const [expandedGenerationId, setExpandedGenerationId] = useState<string | null>(null);
+  const [launchStartedLock, setLaunchStartedLock] = useState(false);
   const projectsQuery = useListProjectsQuery(
     { page: 1, limit: 40 },
     { skip: !user, pollingInterval: activeView === 'generations' ? 3000 : 0 },
@@ -1954,6 +1961,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     return Array.from(buckets.values());
   }, [photoFields]);
   const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
+  const launchButtonLocked = launchState.isLoading || launchStartedLock;
 
   useEffect(() => {
     const latest = projects[0];
@@ -1986,6 +1994,12 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       return changed ? next : current;
     });
   }, [fields]);
+
+  useEffect(() => {
+    if (!launchStartedLock) return;
+    const timer = window.setTimeout(() => setLaunchStartedLock(false), 4500);
+    return () => window.clearTimeout(timer);
+  }, [launchStartedLock]);
 
   useEffect(() => {
     const specs = new Map<string, { kind: string; group?: string }>();
@@ -2056,6 +2070,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   };
 
   const submit = async () => {
+    if (launchButtonLocked) return;
     if (!user) {
       router.push(loginHref);
       return;
@@ -2112,6 +2127,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
     try {
       const result = await launchService({ slug: service.slug, formData }).unwrap();
+      setLaunchStartedLock(true);
       setActiveView('generations');
       setExpandedGenerationId(result.project.id);
       void projectsQuery.refetch();
@@ -2307,12 +2323,23 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   <Button
                     type="button"
                     onClick={submit}
-                    disabled={launchState.isLoading || isAuthLoading}
-                    className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400"
+                    disabled={launchButtonLocked || isAuthLoading}
+                    className={cn(
+                      'w-full text-slate-950',
+                      launchStartedLock
+                        ? 'bg-emerald-400 hover:bg-emerald-400'
+                        : 'bg-amber-500 hover:bg-amber-400',
+                    )}
                     size="lg"
                   >
-                    {launchState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <TokenIcon className="h-4 w-4" />}
-                    Создать за {price} коинов
+                    {launchState.isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : launchStartedLock ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <TokenIcon className="h-4 w-4" />
+                    )}
+                    {launchStartedLock ? 'Генерация началась!' : `Создать за ${price} коинов`}
                   </Button>
                   {!hasEnoughCoins && user && (
                     <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">
