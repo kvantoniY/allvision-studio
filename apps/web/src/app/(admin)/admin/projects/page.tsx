@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Trash2 } from 'lucide-react';
 import { formatMoney } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
-import { type AdminProject, useListAdminProjectsQuery } from '@/store/api/admin-projects-api';
+import { type AdminProject, useDeleteAdminProjectMutation, useListAdminProjectsQuery } from '@/store/api/admin-projects-api';
 
 type StatusFilter = 'all' | AdminProject['status'];
 
@@ -33,6 +34,7 @@ export default function AdminProjectsPage() {
   const [user, setUser] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [deleteProject] = useDeleteAdminProjectMutation();
   const settings = useGetAdminSettingsQuery();
   const rate = settings.data?.settings.usdToRub ?? 80;
   const projects = useListAdminProjectsQuery({
@@ -45,6 +47,16 @@ export default function AdminProjectsPage() {
     dateTo: dateTo ? new Date(dateTo).toISOString() : undefined,
   });
   const totalPages = Math.max(1, Math.ceil((projects.data?.total ?? 0) / (projects.data?.limit ?? 50)));
+
+  const remove = async (project: AdminProject) => {
+    if (!window.confirm(`Удалить генерацию "${project.title}"? Запись и временные файлы будут удалены полностью.`)) return;
+    try {
+      await deleteProject(project.id).unwrap();
+      void projects.refetch();
+    } catch {
+      window.alert('Не удалось удалить генерацию');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -88,10 +100,11 @@ export default function AdminProjectsPage() {
               <th className="px-4 py-3">Наша себестоимость</th>
               <th className="px-4 py-3">Цена для юзера</th>
               <th className="px-4 py-3">Ошибка</th>
+              <th className="px-4 py-3 text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800 bg-zinc-900/60">
-            {projects.isLoading && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">Загрузка...</td></tr>}
+            {projects.isLoading && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">Загрузка...</td></tr>}
             {(projects.data?.items ?? []).map((project) => (
               <tr key={project.id} className="hover:bg-zinc-900">
                 <td className="px-4 py-3"><Link href={`/admin/projects/${project.id}`} className="text-white hover:text-rose-200">{new Date(project.createdAt).toLocaleString()}</Link></td>
@@ -102,9 +115,14 @@ export default function AdminProjectsPage() {
                 <td className="px-4 py-3">{formatMoney({ usd: project.costUsd }, { primary: 'usd', showAll: true, usdToRub: rate })}</td>
                 <td className="px-4 py-3">{formatMoney({ coins: project.userPriceCoins }, { primary: 'coins', showAll: true, usdToRub: rate })}</td>
                 <td className="px-4 py-3 text-rose-200">{project.errorCode ?? '—'}</td>
+                <td className="px-4 py-3 text-right">
+                  <Button type="button" variant="destructive" size="icon" onClick={() => void remove(project)} aria-label="Удалить генерацию">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </td>
               </tr>
             ))}
-            {!projects.isLoading && (projects.data?.items.length ?? 0) === 0 && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Проекты не найдены</td></tr>}
+            {!projects.isLoading && (projects.data?.items.length ?? 0) === 0 && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Проекты не найдены</td></tr>}
           </tbody>
         </table>
       </div>

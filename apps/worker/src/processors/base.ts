@@ -45,6 +45,7 @@ export async function markProjectFailed(
   const refundTokens = options.refundTokens ?? true;
 
   await prisma.$transaction(async (tx) => {
+    const failedAt = new Date();
     const project = await tx.project.findUnique({
       where: { id: projectId },
       select: { id: true, userId: true, tokensCost: true, status: true },
@@ -57,6 +58,8 @@ export async function markProjectFailed(
         status: ProjectStatus.FAILED,
         errorMessage,
         errorCode: options.errorCode ?? null,
+        completedAt: failedAt,
+        expiresAt: generationExpiresAt(failedAt),
       },
     });
 

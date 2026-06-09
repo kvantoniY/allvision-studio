@@ -209,6 +209,32 @@ export async function runPipeline(
   } catch (err) {
     const errorCode = err instanceof ProviderError ? err.code : undefined;
     const activeIndex = stepProgress.findIndex((step) => step.status === 'processing');
+    if (errorCode === 'PIAPI_SYNC_PENDING') {
+      if (activeIndex >= 0) {
+        stepProgress[activeIndex] = {
+          ...stepProgress[activeIndex],
+          status: 'processing',
+          progress: Math.max(stepProgress[activeIndex].progress, 95),
+          errorMessage: 'Синхронизируем результат с PiAPI. Генерация продолжится автоматически.',
+        };
+      }
+      await prisma.project.update({
+        where: { id: params.generationId },
+        data: {
+          status: ProjectStatus.PROCESSING,
+          progress: 95,
+          errorMessage: 'Синхронизируем результат с PiAPI. Генерация продолжится автоматически.',
+          errorCode,
+          stepProgress: toJson(stepProgress),
+        },
+      });
+      logger.warn(`[pipeline] Project ${params.generationId} is waiting for PiAPI recovery`, err);
+      return {
+        generationId: params.generationId,
+        output: previousOutput,
+        stepProgress,
+      };
+    }
     if (activeIndex >= 0) {
       const userSafeMessage = isProviderUserSafeError(err)
         ? providerUnavailableMessage

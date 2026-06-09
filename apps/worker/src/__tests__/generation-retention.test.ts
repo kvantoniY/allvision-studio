@@ -7,6 +7,8 @@ describe('generation retention storage keys', () => {
   it('extracts only temporary generation files', () => {
     expect(storageKeyFromTemporaryUrl('http://localhost:4000/static/results/project/a.png', 'user-1'))
       .toBe('results/project/a.png');
+    expect(storageKeyFromTemporaryUrl('https://allvision-pulse.ru/static/outputs/user-1/project/step_1/result.jpg', 'user-1'))
+      .toBe('outputs/user-1/project/step_1/result.jpg');
     expect(storageKeyFromTemporaryUrl('chat:user-uploads/chat/user-1/input.mp4', 'user-1'))
       .toBe('user-uploads/chat/user-1/input.mp4');
     expect(storageKeyFromTemporaryUrl('/static/user-inputs/user-1/project/ref.jpg', 'user-1'))
@@ -27,12 +29,14 @@ describe('generation retention storage keys', () => {
       id: 'project-1',
       userId: 'user-1',
       mode: 'service',
+      aiProviderLogs: { output: 'http://localhost:4000/static/outputs/user-1/project-1/provider/result.jpg' },
       inputImages: ['http://localhost:4000/static/user-inputs/user-1/project-1/input.jpg'],
-      resultImage: 'http://localhost:4000/static/results/project-1/final.png',
+      resultImage: 'http://localhost:4000/static/outputs/user-1/project-1/step_1/result.jpg',
       resultVideo: null,
       resultThumbnail: null,
       resultAssets: [
         { type: 'image', url: 'http://localhost:4000/static/results/project-1/slide-1.png' },
+        { type: 'video', url: 'http://localhost:4000/static/outputs/user-1/project-1/step_2/result.mp4' },
         { type: 'image', url: 'http://localhost:4000/static/media-assets/preview-image/keep.png' },
       ],
       userInputs: {
@@ -45,7 +49,9 @@ describe('generation retention storage keys', () => {
     } as any);
 
     expect(keys.sort()).toEqual([
-      'results/project-1/final.png',
+      'outputs/user-1/project-1/provider/result.jpg',
+      'outputs/user-1/project-1/step_1/result.jpg',
+      'outputs/user-1/project-1/step_2/result.mp4',
       'results/project-1/slide-1.png',
       'user-inputs/user-1/project-1/input.jpg',
       'user-uploads/chat/user-1/upload.jpg',

@@ -18,6 +18,7 @@ import { useGetMeQuery } from '@/store/api/auth-api';
 import { useGetStylePresetsQuery } from '@/store/api/public-api';
 import { type ProjectListItem, useListProjectsQuery } from '@/store/api/projects-api';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL } from '@/components/dashboard/labels';
+import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import {
   type UserMediaAsset,
@@ -175,6 +176,9 @@ function StudioContent() {
           projects={projects.data?.items ?? []}
           isLoading={projects.isLoading}
           assetTitleById={assetTitleById}
+          onDeleted={() => {
+            void projects.refetch();
+          }}
         />
       )}
       {false && tab === 'history' && (
@@ -245,10 +249,12 @@ function StudioHistory({
   projects,
   isLoading,
   assetTitleById,
+  onDeleted,
 }: {
   projects: ProjectListItem[];
   isLoading: boolean;
   assetTitleById: Map<string, string>;
+  onDeleted: () => void;
 }) {
   if (isLoading) {
     return (
@@ -322,6 +328,7 @@ function StudioHistory({
                   </Link>
                 </Button>
               )}
+              <DeleteGenerationButton projectId={project.id} title={project.title} className="w-full" onDeleted={onDeleted} />
             </CardContent>
           </Card>
         );

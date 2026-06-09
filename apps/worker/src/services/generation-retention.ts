@@ -15,6 +15,7 @@ const cleanupProjectSelect = {
   id: true,
   userId: true,
   mode: true,
+  aiProviderLogs: true,
   inputImages: true,
   resultImage: true,
   resultVideo: true,
@@ -22,6 +23,7 @@ const cleanupProjectSelect = {
   resultAssets: true,
   userInputs: true,
   stepProgress: true,
+  createdAt: true,
 } satisfies Prisma.ProjectSelect;
 
 type CleanupProject = Prisma.ProjectGetPayload<{ select: typeof cleanupProjectSelect }>;
@@ -59,12 +61,15 @@ export async function runExpiredGenerationCleanup(
   for (let batch = 0; batch < maxBatches; batch += 1) {
     const projects = await prisma.project.findMany({
       where: {
-        expiresAt: { lte: now },
         mode: { in: EXPIRABLE_PROJECT_MODES },
-        status: { in: [ProjectStatus.COMPLETED, ProjectStatus.FAILED] },
+        status: { in: [ProjectStatus.COMPLETED, ProjectStatus.FAILED, ProjectStatus.PROCESSING, ProjectStatus.PENDING] },
+        OR: [
+          { expiresAt: { lte: now } },
+          { expiresAt: null, createdAt: { lte: new Date(now.getTime() - GENERATION_RETENTION_MS) } },
+        ],
       },
       select: cleanupProjectSelect,
-      orderBy: { expiresAt: 'asc' },
+      orderBy: [{ expiresAt: 'asc' }, { createdAt: 'asc' }],
       take: limit,
     });
 
@@ -136,9 +141,11 @@ async function deleteExpiredProjectBatch(
     }
   }
 
-  const deleted = await prisma.project.deleteMany({
-    where: { id: { in: projects.map((project) => project.id) } },
-  });
+  const projectIds = projects.map((project) => project.id);
+  const [, deleted] = await prisma.$transaction([
+    prisma.aIUsageLog.deleteMany({ where: { projectId: { in: projectIds } } }),
+    prisma.project.deleteMany({ where: { id: { in: projectIds } } }),
+  ]);
 
   return {
     projectsDeleted: deleted.count,
@@ -158,6 +165,7 @@ export function collectProjectStorageKeys(project: CleanupProject): string[] {
     });
   };
 
+  collect(project.aiProviderLogs);
   collect(project.inputImages);
   collect(project.resultImage);
   collect(project.resultVideo);
@@ -200,6 +208,7 @@ export function storageKeyFromTemporaryUrl(value: string, userId?: string): stri
 
 export function isTemporaryGenerationStorageKey(key: string, userId?: string): boolean {
   if (key.startsWith('results/')) return true;
+  if (key.startsWith('outputs/')) return true;
   if (key.startsWith('user-inputs/')) return true;
   if (key.startsWith('user-uploads/chat/')) return true;
   if (userId && key.startsWith(`user-uploads/${userId}/`)) return true;

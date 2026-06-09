@@ -155,6 +155,10 @@ function AiContent() {
               isLoading={chatQuery.isLoading && !!activeChatId}
               onUseAsReference={useAsReference}
               onRetry={(message: ChatMessage) => setRetryPrompt(message.prompt)}
+              onDeleted={() => {
+                void chatQuery.refetch();
+                void chats.refetch();
+              }}
             />
           </div>
         </div>

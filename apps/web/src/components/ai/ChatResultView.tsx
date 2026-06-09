@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
@@ -21,6 +22,7 @@ type ChatResultViewProps = {
   isLoading?: boolean;
   onUseAsReference: (projectId: string, url: string, mediaKind: 'image' | 'video') => void;
   onRetry: (message: ChatMessage) => void;
+  onDeleted?: () => void;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -68,7 +70,7 @@ function chatFailureMessage(errorCode?: string | null, errorMessage?: string | n
   return russianErrorFromRawMessage(errorMessage) ?? getUserFriendlyError(errorCode);
 }
 
-export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry }: ChatResultViewProps) {
+export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry, onDeleted }: ChatResultViewProps) {
   if (isLoading) {
     return (
       <div className="grid min-h-[420px] place-items-center text-slate-400">
@@ -99,6 +101,7 @@ export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry 
           message={message}
           onUseAsReference={onUseAsReference}
           onRetry={onRetry}
+          onDeleted={onDeleted}
         />
       ))}
     </div>
@@ -109,10 +112,12 @@ function MessageCard({
   message,
   onUseAsReference,
   onRetry,
+  onDeleted,
 }: {
   message: ChatMessage;
   onUseAsReference: (projectId: string, url: string, mediaKind: 'image' | 'video') => void;
   onRetry: (message: ChatMessage) => void;
+  onDeleted?: () => void;
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const project = message.project;
@@ -257,6 +262,7 @@ function MessageCard({
               Попробовать снова
             </Button>
           )}
+          <DeleteGenerationButton projectId={project.id} title={project.title} onDeleted={onDeleted} />
         </div>
       </CardContent>
     </Card>

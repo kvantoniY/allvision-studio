@@ -42,6 +42,7 @@ import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import { type UserMediaAsset, useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
+import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
@@ -1706,10 +1707,12 @@ function GenerationCard({
   project,
   expanded,
   onToggle,
+  onDeleted,
 }: {
   project: ProjectListItem;
   expanded: boolean;
   onToggle: () => void;
+  onDeleted: (id: string) => void;
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const isActive = isActiveProjectStatus(project.status);
@@ -1782,6 +1785,14 @@ function GenerationCard({
               <ReportGenerationButton projectId={project.id} className="w-full sm:w-auto" />
             </div>
           )}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <DeleteGenerationButton
+              projectId={project.id}
+              title={project.title}
+              className="w-full sm:w-auto"
+              onDeleted={() => onDeleted(project.id)}
+            />
+          </div>
         </div>
       )}
 
@@ -1795,11 +1806,13 @@ function GenerationsPanel({
   isLoading,
   expandedId,
   onExpandedChange,
+  onDeleted,
 }: {
   projects: ProjectListItem[];
   isLoading: boolean;
   expandedId: string | null;
   onExpandedChange: (id: string) => void;
+  onDeleted: (id: string) => void;
 }) {
   if (isLoading) {
     return (
@@ -1833,6 +1846,7 @@ function GenerationsPanel({
           project={project}
           expanded={expandedId === project.id}
           onToggle={() => onExpandedChange(project.id)}
+          onDeleted={onDeleted}
         />
       ))}
     </div>
@@ -2226,6 +2240,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
               isLoading={projectsQuery.isLoading}
               expandedId={expandedGenerationId}
               onExpandedChange={setExpandedGenerationId}
+              onDeleted={(id) => {
+                if (expandedGenerationId === id) setExpandedGenerationId(null);
+                void projectsQuery.refetch();
+              }}
             />
           )}
         </div>

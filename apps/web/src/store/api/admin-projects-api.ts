@@ -70,10 +70,15 @@ export const adminProjectsApi = createApi({
       query: (id) => ({ url: `/projects/${id}` }),
       providesTags: (_result, _error, id) => [{ type: 'AdminProject', id }],
     }),
+    deleteAdminProject: build.mutation<{ ok: true; projectsDeleted: number; filesDeleted: number }, string>({
+      query: (id) => ({ url: `/projects/${id}`, method: 'DELETE' }),
+      invalidatesTags: (_result, _error, id) => ['AdminProject', { type: 'AdminProject', id }],
+    }),
   }),
 });
 
 export const {
   useListAdminProjectsQuery,
   useGetAdminProjectQuery,
+  useDeleteAdminProjectMutation,
 } = adminProjectsApi;

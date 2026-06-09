@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   AlertCircle,
@@ -25,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
+import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import {
@@ -159,6 +161,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const [lastStatus, setLastStatus] = useState<ProjectStatus | undefined>(initialProject?.status);
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const router = useRouter();
   const projectQuery = useGetProjectQuery(id);
   const project = projectQuery.data ?? initialProject;
   const statusForPolling = lastStatus ?? project?.status;
@@ -222,6 +225,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const finalImageUrl = mediaUrl(resultImage);
   const finalPosterUrl = mediaUrl(resultThumbnail);
   const finalOutputUrl = finalVideoUrl ?? finalImageUrl ?? finalPosterUrl;
+  const onDeleted = () => router.push('/dashboard/projects');
 
   if (isPipelineProject) {
     const projectHeader = (
@@ -244,6 +248,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
             {completedAt ? ` · готов ${formatDateTime(completedAt)}` : ''}
           </p>
         </div>
+        <DeleteGenerationButton projectId={project.id} title={project.title} onDeleted={onDeleted} />
       </div>
     );
 
@@ -452,6 +457,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
             {completedAt ? ` · готов ${formatDateTime(completedAt)}` : ''}
           </p>
         </div>
+        <DeleteGenerationButton projectId={project.id} title={project.title} onDeleted={onDeleted} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">

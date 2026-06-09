@@ -73,7 +73,7 @@ const VIDEO_UPSCALE_ESTIMATE_FPS = 16;
 const VIDEO_UPSCALE_POSTPROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
-const PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS = 3 * 60 * 1000;
+const PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS = 5 * 60 * 1000;
 const PIAPI_UPSTREAM_BUSY_ATTEMPTS = 3;
 const DEFAULT_PIAPI_UPSTREAM_BUSY_RETRY_DELAY_MS = 15_000;
 const NANO_BANANA_COST_USD: Record<string, number> = {
@@ -206,8 +206,7 @@ export class PiAPIProvider implements AIProvider {
         const size = gptImageSizeForAspect(aspect);
         const quality = normalizeGptImageQuality(readString(input.params, 'quality'));
         const outputFormat = normalizeGptImageOutputFormat(readString(input.params, 'output_format'));
-        const refs = [input.imageUrl, ...readStringList(input.params, 'image_urls')]
-          .filter((url): url is string => typeof url === 'string' && url.length > 0);
+        const refs = uniqueImageReferenceUrls([input.imageUrl, ...readStringList(input.params, 'image_urls')]);
         // GPT Image edits send the reference as a multipart file, so the WORKER must hold the bytes.
         // Read them from the shared local uploads volume when the URL is our own /static URL, instead of
         // HTTP-fetching the public domain from inside the container (that loopback fails -> network error).
@@ -220,21 +219,23 @@ export class PiAPIProvider implements AIProvider {
           quality,
           outputFormat,
         }).catch(async (err) => {
-          const recovered = isRecoverableGptImageTransportError(err)
-            ? await this.recoverGptImageFromHistory({
-              context: input.context,
-              model: input.model,
-              prompt: input.prompt,
-              startedAt,
-              estimatedCost,
-              outputFormat,
-              size,
-              quality,
-              originalError: err,
-            })
-            : undefined;
+          if (!isRecoverableGptImageTransportError(err)) throw err;
+          const recovered = await this.recoverGptImageFromHistory({
+            context: input.context,
+            model: input.model,
+            prompt: input.prompt,
+            startedAt,
+            estimatedCost,
+            outputFormat,
+            size,
+            quality,
+            originalError: err,
+          });
           if (recovered) return { recovered };
-          throw err;
+          throw new ProviderError(
+            'PIAPI_SYNC_PENDING',
+            'PiAPI response connection was lost; result recovery is still pending',
+          );
         });
         if ('recovered' in result) {
           return result.recovered;
@@ -1178,6 +1179,11 @@ export class PiAPIProvider implements AIProvider {
       return;
     }
 
+    if (error instanceof ProviderError && error.code === 'PIAPI_SYNC_PENDING') {
+      await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, error);
+      return;
+    }
+
     if (!(error instanceof ProviderError) || error.code !== 'PIAPI_TIMEOUT') {
       await this.logUsage(context, model, taskId, 'failed', 0, durationMs, error);
       return;
@@ -1332,6 +1338,36 @@ function readBoolean(source: Record<string, unknown> | undefined, key: string): 
   if (value === 'true') return true;
   if (value === 'false') return false;
   return undefined;
+}
+
+function uniqueImageReferenceUrls(values: Array<string | undefined>) {
+  const seen = new Set<string>();
+  const refs: string[] = [];
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const url = value.trim();
+    if (!url) continue;
+    const key = imageReferenceDedupeKey(url);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push(url);
+  }
+  return refs;
+}
+
+function imageReferenceDedupeKey(value: string) {
+  const localKey = localStaticKey(value);
+  if (localKey) return `static:${localKey}`;
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    if (url.pathname.startsWith('/static/')) {
+      return `static:${decodeURIComponent(url.pathname.slice('/static/'.length))}`;
+    }
+    return url.toString();
+  } catch {
+    return value.trim();
+  }
 }
 
 function gptImageHistoryRecoveryMs() {

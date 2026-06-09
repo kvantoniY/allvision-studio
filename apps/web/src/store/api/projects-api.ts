@@ -106,6 +106,14 @@ export const projectsApi = createApi({
         body: { reason, message },
       }),
     }),
+    deleteProject: build.mutation<{ ok: true; projectsDeleted: number; filesDeleted: number }, string>({
+      query: (id) => ({ url: `/${id}`, method: 'DELETE' }),
+      invalidatesTags: (_result, _error, id) => [
+        'Project',
+        { type: 'ProjectStatus', id },
+        { type: 'Project', id },
+      ],
+    }),
   }),
 });
 
@@ -124,4 +132,5 @@ export const {
   useGetProjectStatusQuery,
   useListProjectsQuery,
   useReportProjectMutation,
+  useDeleteProjectMutation,
 } = projectsApi;

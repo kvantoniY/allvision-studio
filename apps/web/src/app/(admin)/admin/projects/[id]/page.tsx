@@ -1,11 +1,12 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
+import { Trash2 } from 'lucide-react';
 import { formatMoney } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
-import { type AdminProject, useGetAdminProjectQuery } from '@/store/api/admin-projects-api';
+import { type AdminProject, useDeleteAdminProjectMutation, useGetAdminProjectQuery } from '@/store/api/admin-projects-api';
 
 function statusLabel(status: AdminProject['status']) {
   if (status === 'PENDING') return 'Ожидает';
@@ -27,6 +28,7 @@ export default function AdminProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const project = useGetAdminProjectQuery(params.id);
+  const [deleteProject, deleteState] = useDeleteAdminProjectMutation();
   const settings = useGetAdminSettingsQuery();
   const rate = settings.data?.settings.usdToRub ?? 80;
 
@@ -34,12 +36,29 @@ export default function AdminProjectDetailPage() {
   if (!project.data?.project) return <div className="text-slate-400">Проект не найден</div>;
   const item = project.data.project;
 
+  const remove = async () => {
+    if (!window.confirm(`Удалить генерацию "${item.title}"? Запись и временные файлы будут удалены полностью.`)) return;
+    try {
+      await deleteProject(item.id).unwrap();
+      router.push('/admin/projects');
+    } catch {
+      window.alert('Не удалось удалить генерацию');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <Button type="button" variant="ghost" onClick={() => router.push('/admin/projects')}>Назад к проектам</Button>
         <h1 className="mt-3 text-3xl font-bold text-white">{item.title}</h1>
         <p className="mt-2 text-sm text-slate-400">{item.user.email} · {item.service?.title ?? 'Без услуги'} · {new Date(item.createdAt).toLocaleString()}</p>
+      </div>
+
+      <div className="flex justify-end">
+        <Button type="button" variant="destructive" disabled={deleteState.isLoading} onClick={remove}>
+          <Trash2 className="h-4 w-4" />
+          Удалить генерацию
+        </Button>
       </div>
 
       <section className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-950 p-5 md:grid-cols-4">

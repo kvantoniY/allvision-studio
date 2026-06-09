@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import * as queues from '../queues';
 import * as support from '../services/support-service';
 import { tryRecoverPiAPIProject } from '../services/piapi-recovery-service';
+import { deleteGenerationProjectById } from '../services/generation-delete-service';
 
 export const projectsRouter = Router();
 
@@ -398,6 +399,18 @@ projectsRouter.post('/:id/report', requireAuth, async (req: Request, res: Respon
     });
 
     res.status(201).json({ ticket });
+  } catch (err) {
+    next(err);
+  }
+});
+
+projectsRouter.delete('/:id', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await deleteGenerationProjectById(req.params.id, { userId: req.user!.id });
+    if (!result) {
+      throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Project not found');
+    }
+    res.json({ ok: true, ...result });
   } catch (err) {
     next(err);
   }

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { HttpError } from '../../utils/http-error';
+import { deleteGenerationProjectById } from '../../services/generation-delete-service';
 
 export const adminProjectsRouter = Router();
 
@@ -86,6 +87,16 @@ adminProjectsRouter.get('/:id', async (req: Request, res: Response, next: NextFu
     });
     if (!project) throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Проект не найден');
     res.json({ project: serializeProjectListItem(project) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminProjectsRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await deleteGenerationProjectById(req.params.id);
+    if (!result) throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Проект не найден');
+    res.json({ ok: true, ...result });
   } catch (err) {
     next(err);
   }
