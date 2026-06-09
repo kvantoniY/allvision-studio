@@ -465,7 +465,7 @@ function PhotoReferencePreview({
   const previewUrl = fileUrl ?? mediaUrl(url);
 
   return (
-    <div className="group relative h-24 w-24 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
+    <div className="group relative h-32 w-32 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
       {previewUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={previewUrl} alt={label} className="h-full w-full object-cover" />
@@ -482,8 +482,8 @@ function PhotoReferencePreview({
       >
         <X className="h-3.5 w-3.5" />
       </button>
-      <div className="absolute inset-x-0 bottom-0 bg-slate-950/75 px-1.5 py-1 text-[10px] font-medium text-white">
-        <span className="block truncate">{label}</span>
+      <div className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-2 py-1.5 text-[11px] font-semibold leading-4 text-white">
+        <span className="line-clamp-2">{label}</span>
       </div>
     </div>
   );
@@ -572,7 +572,7 @@ function ServicePhotoReferencesGroup({
         {groupHint && <p className="mt-1 text-xs leading-5 text-amber-300/80">{groupHint}</p>}
       </div>
 
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-4">
         {filled.map((item) => (
           <PhotoReferencePreview
             key={item.field.id}
@@ -587,21 +587,21 @@ function ServicePhotoReferencesGroup({
           <label
             htmlFor={nextInputId}
             className={cn(
-              'grid h-24 w-24 cursor-pointer place-items-center rounded-md border border-dashed border-slate-700 bg-slate-950/60 text-center transition hover:border-amber-400',
-              filled.length > 0 ? 'text-slate-300' : 'text-slate-200',
+              'flex h-32 w-32 cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-600 bg-slate-950/70 p-3 text-center transition hover:border-amber-400 hover:bg-slate-900/70',
+              filled.length > 0 ? 'text-slate-100' : 'text-slate-50',
             )}
           >
-            <div>
+            <div className="min-w-0">
               {filled.length > 0 ? (
-                <Plus className="mx-auto h-7 w-7 text-slate-400" />
+                <Plus className="mx-auto h-8 w-8 text-slate-300" />
               ) : (
-                <ImagePlus className="mx-auto h-7 w-7 text-slate-500" />
+                <ImagePlus className="mx-auto h-8 w-8 text-slate-300" />
               )}
-              <div className="mt-2 px-2 text-xs font-medium">
-                {filled.length > 0 ? 'Добавить' : 'Загрузить фото'}
+              <div className="mt-2 line-clamp-2 px-1 text-sm font-bold leading-5 text-slate-50">
+                {filled.length > 0 ? (nextField.label ?? nextField.id) : 'Загрузить фото'}
               </div>
-              <div className="mt-0.5 max-w-[5.5rem] truncate px-2 text-[10px] text-slate-500">
-                {nextField.label ?? nextField.id}
+              <div className="mt-1 line-clamp-2 px-1 text-[11px] font-medium leading-4 text-amber-200">
+                {filled.length > 0 ? 'Нужен этот референс' : (nextField.label ?? nextField.id)}
               </div>
             </div>
             <Input
@@ -1963,6 +1963,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [activeView, setActiveView] = useState<ServiceDetailView>('service');
   const [expandedGenerationId, setExpandedGenerationId] = useState<string | null>(null);
   const [launchStartedLock, setLaunchStartedLock] = useState(false);
+  const serviceTopRef = useRef<HTMLElement>(null);
   const projectsQuery = useListProjectsQuery(
     { page: 1, limit: 40 },
     { skip: !user, pollingInterval: activeView === 'generations' ? 3000 : 0 },
@@ -2160,6 +2161,11 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       setActiveView('generations');
       setExpandedGenerationId(result.project.id);
       void projectsQuery.refetch();
+      if (window.matchMedia('(max-width: 1023px)').matches) {
+        window.requestAnimationFrame(() => {
+          serviceTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      }
       toast({
         title: 'Генерация запущена',
         description: 'Прогресс и результат появятся слева во вкладке «Генерации».',
@@ -2184,30 +2190,31 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   };
 
   return (
-    <section className="container py-10 md:py-14">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
-        <div className="space-y-8">
-          <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1">
-            {([
-              ['service', 'Услуга'],
-              ['generations', 'Генерации'],
-            ] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveView(id)}
-                className={cn(
-                  'rounded-md px-4 py-2 text-sm font-semibold transition',
-                  activeView === id
-                    ? 'bg-violet-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100',
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+    <section ref={serviceTopRef} className="container py-10 md:py-14">
+      <div className="space-y-6 lg:space-y-8">
+        <div className="inline-flex rounded-lg border border-slate-800 bg-slate-950 p-1">
+          {([
+            ['service', 'Услуга'],
+            ['generations', 'Генерации'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setActiveView(id)}
+              className={cn(
+                'rounded-md px-4 py-2 text-sm font-semibold transition',
+                activeView === id
+                  ? 'bg-violet-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-100',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
+          <div className="space-y-8">
           {activeView === 'service' ? (
             <>
               <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
@@ -2263,7 +2270,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
           )}
         </div>
 
-        <Card className="border-slate-800 bg-slate-900 lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100vh-3rem)] lg:flex-col lg:overflow-hidden">
+        <Card className={cn(
+          'border-slate-800 bg-slate-900 lg:sticky lg:top-6 lg:flex lg:max-h-[calc(100vh-3rem)] lg:flex-col lg:overflow-hidden',
+          activeView === 'generations' && 'hidden lg:flex',
+        )}>
           <CardHeader className="shrink-0">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-xl">Создать услугу</CardTitle>
@@ -2384,6 +2394,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
     </section>
   );
