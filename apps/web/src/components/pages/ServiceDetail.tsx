@@ -400,6 +400,15 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
   return errors;
 }
 
+function fieldWithDynamicRequired(field: UserInputField, values: FormValues): UserInputField {
+  return { ...field, required: fieldIsRequired(field, values) };
+}
+
+function needsNoReferenceConfirmation(serviceSlug: string, values: FormValues, files: FileValues) {
+  if (serviceSlug !== 'me-in-movie' && serviceSlug !== 'me-in-cartoon') return false;
+  return !files.person1 && !values.person1?.trim();
+}
+
 type PhotoSourceTab = 'upload' | 'studio' | 'library';
 
 function assetIdFromRef(value?: string) {
@@ -2108,6 +2117,12 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       });
       return;
     }
+    if (needsNoReferenceConfirmation(service.slug, values, files)) {
+      const confirmed = window.confirm(
+        'Вы запускаете генерацию без своего фото. Нейронка создаст сцену без сохранения вашей внешности. Продолжить?',
+      );
+      if (!confirmed) return;
+    }
 
     const dataPayload: FormValues = { ...values };
     if (tierField) dataPayload[tierField.id] = tier;
@@ -2297,7 +2312,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                             {visibleGroups.map((group) => (
                               <ServicePhotoReferencesGroup
                                 key={group[0].id}
-                                fields={group}
+                                fields={group.map((item) => fieldWithDynamicRequired(item, values))}
                                 values={values}
                                 files={files}
                                 onValueChange={setFieldValue}
@@ -2311,7 +2326,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                       return (
                         <FieldControl
                           key={field.id}
-                          field={field}
+                          field={fieldWithDynamicRequired(field, values)}
                           value={values[field.id]}
                           file={files[field.id]}
                           mediaOptions={mediaByKind}

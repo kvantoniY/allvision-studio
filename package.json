@@ -20,6 +20,7 @@
     "prices:recompute": "tsx packages/database/src/prices-recompute.ts",
     "generations:cleanup": "tsx apps/worker/scripts/cleanup-generations.ts",
     "services:upsert": "tsx scripts/upsert-admin-services.ts",
+    "services:upsert:cinema": "tsx scripts/upsert-cinema-services.ts",
     "demo:download": "tsx apps/api/scripts/download-demo-assets.ts",
     "test": "npm test -w @allvision/shared && npm test -w @allvision/database && npm test -w @allvision/api && npm test -w @allvision/worker"
   },

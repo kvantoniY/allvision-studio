@@ -17,6 +17,10 @@ if (!catalog) throw new Error('Block catalog metadata missing: scene-transfer');
 
 const paramsSchema = z.object({
   model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  generation_mode: z.enum(['photo', 'prompt']).default('photo'),
+  photo_model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  prompt_model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  prompt_text_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   scene_mode: z.enum(['photo', 'video']).default('photo'),
   scene_image: z.string().optional(),
   scene_video: z.string().optional(),
@@ -27,9 +31,20 @@ const paramsSchema = z.object({
   stylize_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   stylize_prompt: z.string().optional(),
   base_prompt: z.string().optional(),
+  photo_base_prompt: z.string().optional(),
+  prompt_base_prompt: z.string().optional(),
   character_prompt: z.string().optional(),
+  prompt_character_prompt: z.string().optional(),
+  no_reference_prompt: z.string().optional(),
+  cartoon_visual_mode: z.enum(['realistic', 'cartoon']).optional(),
+  cartoon_style: z.string().optional(),
+  cartoon_realistic_prompt: z.string().optional(),
+  cartoon_character_prompt: z.string().optional(),
+  cartoon_style_prompt: z.string().optional(),
   user_prompt: z.string().optional(),
   default_user_prompt: z.string().optional(),
+  default_photo_prompt: z.string().optional(),
+  default_prompt_prompt: z.string().optional(),
   duration: z.number().min(1).max(30).optional(),
   aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
   resolution: z.enum(['720p', '1080p']).optional(),
@@ -37,7 +52,7 @@ const paramsSchema = z.object({
 
 type ParsedParams = z.infer<typeof paramsSchema>;
 type Engine = 'kling' | 'seedance';
-type PeopleCount = 'one' | 'two';
+type PeopleCount = 'zero' | 'one' | 'two';
 
 export const sceneTransferBlock: BlockDefinition = {
   ...catalog,
@@ -47,25 +62,29 @@ export const sceneTransferBlock: BlockDefinition = {
   estimatedCostCoins: (params) => {
     const parsed = paramsSchema.partial().safeParse(params);
     const data: Partial<ParsedParams> = parsed.success ? parsed.data : {};
-    const engine = resolveEngine(stringModel(data.model, 'kling-3-omni'));
-    const two = peopleCount(data) === 'two';
+    const count = data.people_count === 'two' ? 'two' : data.primary_photo ? peopleCount(data, data.primary_photo) : 'one';
+    const model = data.generation_mode === 'prompt'
+      ? (count === 'zero' ? stringModel(data.prompt_text_model, 'seedance-2') : stringModel(data.prompt_model, 'seedance-2-omni'))
+      : stringModel(data.photo_model ?? data.model, 'kling-3-omni');
+    const engine = resolveEngine(model);
+    const two = count === 'two';
     let base = engine === 'seedance' ? (two ? 190 : 150) : (two ? 170 : 130);
-    if (data.stylize_characters) base += two ? 20 : 10;
+    if (data.stylize_characters || data.cartoon_visual_mode === 'cartoon') base += two ? 20 : 10;
     return base;
   },
   async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);
     const primaryPhoto = parsed.primary_photo ?? readInputUrl(input, '');
-    if (!primaryPhoto) throw new Error('scene-transfer requires primary_photo');
 
-    const count = peopleCount(parsed);
+    const count = peopleCount(parsed, primaryPhoto);
+    if (count !== 'zero' && !primaryPhoto) throw new Error('scene-transfer requires primary_photo');
     if (count === 'two' && !parsed.secondary_photo) {
       throw new Error('scene-transfer requires secondary_photo for two people');
     }
-    if (parsed.scene_mode === 'photo' && !parsed.scene_image) {
+    if (parsed.generation_mode === 'photo' && parsed.scene_mode === 'photo' && !parsed.scene_image) {
       throw new Error('scene-transfer requires scene_image in photo mode');
     }
-    if (parsed.scene_mode === 'video' && !parsed.scene_video) {
+    if (parsed.generation_mode === 'photo' && parsed.scene_mode === 'video' && !parsed.scene_video) {
       throw new Error('scene-transfer requires scene_video in video mode');
     }
 
@@ -75,7 +94,8 @@ export const sceneTransferBlock: BlockDefinition = {
     let primaryRef = primaryPhoto;
     let secondaryRef = parsed.secondary_photo;
     let videoFrom = 5;
-    if (parsed.stylize_characters) {
+    const shouldStylizeCharacters = count !== 'zero' && (parsed.stylize_characters || parsed.cartoon_visual_mode === 'cartoon');
+    if (shouldStylizeCharacters) {
       const stylizeModel = stringModel(parsed.stylize_model, 'nano-banana');
       const stylizePrompt = parsed.stylize_prompt?.trim() || defaultStylizePrompt();
       const firstTo = count === 'two' ? 20 : 36;
@@ -86,17 +106,20 @@ export const sceneTransferBlock: BlockDefinition = {
       videoFrom = 40;
     }
 
-    const model = stringModel(parsed.model, 'kling-3-omni');
+    const model = selectVideoModel(parsed, count);
     const engine = resolveEngine(model);
     const duration = await resolveDuration(parsed, ctx);
-    const characterRefs = count === 'two' ? [primaryRef, secondaryRef!] : [primaryRef];
-    const userPrompt = parsed.user_prompt?.trim() || parsed.default_user_prompt?.trim() || defaultUserPrompt();
+    const characterRefs = count === 'zero' ? [] : count === 'two' ? [primaryRef, secondaryRef!] : [primaryRef];
+    const userPrompt = resolveUserPrompt(parsed);
     const prompt = buildScenePrompt({
       engine,
+      generationMode: parsed.generation_mode,
       sceneMode: parsed.scene_mode,
       peopleCount: count,
-      basePrompt: parsed.base_prompt,
-      characterPrompt: parsed.character_prompt,
+      basePrompt: resolveBasePrompt(parsed),
+      characterPrompt: resolveCharacterPrompt(parsed),
+      noReferencePrompt: parsed.no_reference_prompt,
+      cartoonPrompt: buildCartoonPrompt(parsed),
       userPrompt,
     });
 
@@ -107,7 +130,8 @@ export const sceneTransferBlock: BlockDefinition = {
   },
 };
 
-function peopleCount(parsed: Partial<ParsedParams>): PeopleCount {
+function peopleCount(parsed: Partial<ParsedParams>, primaryPhoto?: string): PeopleCount {
+  if (!primaryPhoto || primaryPhoto.trim().length === 0) return 'zero';
   if (parsed.people_count === 'one') return 'one';
   if (parsed.people_count === 'two') return 'two';
   return parsed.secondary_photo && parsed.secondary_photo.trim().length > 0 ? 'two' : 'one';
@@ -119,6 +143,22 @@ function resolveEngine(model: string): Engine {
 
 function stringModel(value: string | { standard: string; pro: string } | undefined, fallback: string) {
   return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+
+function selectVideoModel(parsed: ParsedParams, count: PeopleCount) {
+  if (parsed.generation_mode === 'prompt') {
+    if (count === 'zero') {
+      return textOnlySeedanceModel(stringModel(parsed.prompt_text_model, 'seedance-2'));
+    }
+    return stringModel(parsed.prompt_model, 'seedance-2-omni');
+  }
+  return stringModel(parsed.photo_model ?? parsed.model, 'kling-3-omni');
+}
+
+function textOnlySeedanceModel(model: string) {
+  if (model === 'seedance-2-omni') return 'seedance-2';
+  if (model === 'seedance-2-fast-omni') return 'seedance-2-fast';
+  return model;
 }
 
 async function stylizeCharacter(
@@ -154,7 +194,7 @@ async function runKling(
   from: number,
 ) {
   const provider = ctx.getAIProvider();
-  const images = parsed.scene_mode === 'photo'
+  const images = parsed.generation_mode === 'photo' && parsed.scene_mode === 'photo'
     ? [...characterRefs, parsed.scene_image!]
     : [...characterRefs];
   const baseParams = asObject(parsed);
@@ -165,12 +205,12 @@ async function runKling(
     params: {
       ...baseParams,
       images,
-      video: parsed.scene_mode === 'video' ? parsed.scene_video : undefined,
+      video: parsed.generation_mode === 'photo' && parsed.scene_mode === 'video' ? parsed.scene_video : undefined,
       duration,
       aspect_ratio: parsed.aspect_ratio ?? 'auto',
       resolution: parsed.resolution ?? '720p',
       enable_audio: false,
-      keep_original_audio: parsed.scene_mode === 'video',
+      keep_original_audio: parsed.generation_mode === 'photo' && parsed.scene_mode === 'video',
     },
     context: scaledContext(ctx.providerContext, ctx.reportProgress, from, 95),
   });
@@ -188,9 +228,13 @@ async function runSeedance(
   from: number,
 ) {
   const provider = ctx.getAIProvider();
-  const imageUrls = parsed.scene_mode === 'photo'
+  const imageUrls = parsed.generation_mode === 'photo' && parsed.scene_mode === 'photo'
     ? [...characterRefs, parsed.scene_image!]
     : [...characterRefs];
+  const videoUrls = parsed.generation_mode === 'photo' && parsed.scene_mode === 'video' && parsed.scene_video
+    ? [parsed.scene_video]
+    : [];
+  const hasReferences = imageUrls.length > 0 || videoUrls.length > 0;
   const baseParams = asObject(parsed);
   const result = await provider.textToVideo({
     prompt,
@@ -198,9 +242,9 @@ async function runSeedance(
     model,
     params: {
       ...baseParams,
-      mode: 'omni_reference',
-      image_urls: imageUrls,
-      video_urls: parsed.scene_mode === 'video' ? [parsed.scene_video] : undefined,
+      mode: hasReferences ? 'omni_reference' : 'text_to_video',
+      image_urls: imageUrls.length > 0 ? imageUrls : undefined,
+      video_urls: videoUrls.length > 0 ? videoUrls : undefined,
       duration,
       aspect_ratio: parsed.aspect_ratio ?? '9:16',
       resolution: parsed.resolution ?? '720p',
@@ -213,25 +257,34 @@ async function runSeedance(
 
 function buildScenePrompt(opts: {
   engine: Engine;
+  generationMode: 'photo' | 'prompt';
   sceneMode: 'photo' | 'video';
   peopleCount: PeopleCount;
   basePrompt?: string;
   characterPrompt?: string;
+  noReferencePrompt?: string;
+  cartoonPrompt?: string;
   userPrompt: string;
 }): string {
-  const { engine, sceneMode, peopleCount: count, basePrompt, characterPrompt, userPrompt } = opts;
+  const { engine, generationMode, sceneMode, peopleCount: count, basePrompt, characterPrompt, noReferencePrompt, cartoonPrompt, userPrompt } = opts;
   const img = (n: number) => (engine === 'seedance' ? `@image${n}` : `@image_${n}`);
   const vid = engine === 'seedance' ? '@video1' : '@video';
 
-  const people = count === 'two'
+  const people = count === 'zero'
+    ? (noReferencePrompt?.trim() || 'No user identity reference was provided. Generate the scene directly from the prompt without claiming to preserve a specific real person.')
+    : count === 'two'
     ? `Keep exactly two people in the result. ${img(1)} is the identity reference for the first / left person and ${img(2)} is the identity reference for the second / right person. Preserve each identity separately and consistently across every frame: face shape, eyes, nose, mouth, eyebrows, hair, skin tone and natural expression. Do not blend, swap sides, duplicate, merge or invent people.`
     : `Keep exactly one main person in the result. ${img(1)} is the identity reference for that person. Preserve their identity consistently across every frame: face shape, eyes, nose, mouth, eyebrows, hair, skin tone and natural expression. Do not add extra people or copy any identity from the scene reference.`;
 
-  const sceneAnchor = sceneMode === 'video'
+  const sceneAnchor = generationMode === 'prompt'
+    ? 'Create the location, action, camera, lighting and atmosphere from the text prompt.'
+    : sceneMode === 'video'
     ? `Use ${vid} as the exact location, environment, camera, framing, lighting, atmosphere and motion reference for the scene.`
-    : `Use ${img(count === 'two' ? 3 : 2)} as the exact location, environment, framing, lighting, color palette and atmosphere reference for the scene.`;
+    : `Use ${img(count === 'zero' ? 1 : count === 'two' ? 3 : 2)} as the exact location, environment, framing, lighting, color palette and atmosphere reference for the scene.`;
 
-  const placement = count === 'two'
+  const placement = count === 'zero'
+    ? 'Keep the generated characters, if any, consistent with the text prompt and avoid random extra background people unless the prompt explicitly asks for them.'
+    : count === 'two'
     ? 'Realistically place both referenced people into that scene as if they truly belong there, with consistent perspective, scale, contact shadows and matching lighting.'
     : 'Realistically place the referenced person into that scene as if they truly belong there, with consistent perspective, scale, contact shadows and matching lighting.';
 
@@ -239,6 +292,7 @@ function buildScenePrompt(opts: {
     basePrompt?.trim(),
     sceneAnchor,
     people,
+    cartoonPrompt?.trim(),
     characterPrompt?.trim(),
     placement,
     userPrompt.trim(),
@@ -248,8 +302,56 @@ function buildScenePrompt(opts: {
   return parts.join(' ');
 }
 
+function resolveBasePrompt(parsed: ParsedParams) {
+  if (parsed.generation_mode === 'prompt') {
+    return parsed.prompt_base_prompt?.trim() || parsed.base_prompt;
+  }
+  return parsed.photo_base_prompt?.trim() || parsed.base_prompt;
+}
+
+function resolveCharacterPrompt(parsed: ParsedParams) {
+  if (parsed.generation_mode === 'prompt') {
+    return parsed.prompt_character_prompt?.trim() || parsed.character_prompt;
+  }
+  return parsed.character_prompt;
+}
+
+function resolveUserPrompt(parsed: ParsedParams) {
+  const explicit = parsed.user_prompt?.trim();
+  if (explicit) return explicit;
+  if (parsed.generation_mode === 'prompt') {
+    return parsed.default_prompt_prompt?.trim() || parsed.default_user_prompt?.trim() || defaultUserPrompt();
+  }
+  return parsed.default_photo_prompt?.trim() || parsed.default_user_prompt?.trim() || defaultUserPrompt();
+}
+
+function buildCartoonPrompt(parsed: ParsedParams) {
+  const parts: string[] = [];
+  if (parsed.cartoon_style?.trim()) {
+    parts.push(parsed.cartoon_style.trim());
+  }
+  if (parsed.cartoon_style_prompt?.trim()) {
+    parts.push(parsed.cartoon_style_prompt.trim());
+  }
+  if (parsed.cartoon_visual_mode === 'realistic') {
+    parts.push(parsed.cartoon_realistic_prompt?.trim() || defaultCartoonRealisticPrompt());
+  }
+  if (parsed.cartoon_visual_mode === 'cartoon') {
+    parts.push(parsed.cartoon_character_prompt?.trim() || defaultCartoonCharacterPrompt());
+  }
+  return parts.filter(Boolean).join(' ');
+}
+
 function defaultUserPrompt() {
   return 'Bring the scene to life with natural, subtle, believable motion and coherent action.';
+}
+
+function defaultCartoonRealisticPrompt() {
+  return 'If a real person reference is provided, keep that person photorealistic and recognizable inside the animated world: human skin texture, natural face proportions, realistic eyes and hair, correct scale, matching lighting and soft contact shadows. The background can be animated, but the referenced person must not become a cartoon.';
+}
+
+function defaultCartoonCharacterPrompt() {
+  return 'If a real person reference is provided, transform that person into a polished animated character while preserving identity: same face structure, eye shape, nose, mouth, hairstyle, age impression and personality. Use clean appealing animation design, stable face across frames, no uncanny distortions.';
 }
 
 function defaultStylizePrompt() {

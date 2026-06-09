@@ -641,7 +641,7 @@ const motionTransferModels: ModelOption[] = [
 ].map((model) => withPiAPICapability(model as ModelOption));
 
 const sceneTransferModels: ModelOption[] = textToVideoModels.filter(
-  (model) => model.slug === 'kling-3-omni' || model.slug === 'seedance-2-omni',
+  (model) => ['kling-3-omni', 'seedance-2', 'seedance-2-fast', 'seedance-2-omni', 'seedance-2-fast-omni'].includes(model.slug),
 );
 
 export const BLOCK_CATALOG: BlockCatalogItem[] = [
@@ -863,17 +863,43 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
   {
     slug: 'scene-transfer',
     title: 'Перенос в сцену (фильм/мультфильм)',
-    description: 'Реалистично помещает одного или двух людей с фото в референс-сцену: фото-кадр из фильма/мультфильма или видео-референс. Standard собирает сцену на Kling 3.0 Omni, Pro — на Seedance 2.0 Omni. Опционально предварительно стилизует персонажей под мультфильм через GPT Image 2. Промпт переноса формируется из скрытого admin base_prompt, авто-промпта под 1 или 2 персонажей и текста пользователя (или дефолтного промпта).',
+    description: 'Router для услуг «я в фильме/мультфильме»: режим «По фото» оживляет пользовательский кадр через Kling 3.0 Omni, режим «По промпту» генерирует сцену через Seedance 2.0. Фото пользователя опционально: если оно есть, используется как identity-reference, если нет — сцена создаётся без обещания сохранения личности. Для мультфильмов поддерживает реалистичного человека в мультмире или стилизацию человека в мультперсонажа.',
     category: 'video',
     useWhen: 'Когда нужно перенести 1–2 людей в готовую сцену по фото-кадру или видео-референсу: «я в фильме», «я в мультфильме» и готовые шаблоны конкретных сцен.',
     compatibleInputs: ['photo', 'two photos', 'scene image reference', 'scene video reference'],
     examples: [
-      'Фото человека + кадр из кино -> Kling/Seedance помещает его в сцену.',
+      'Кадр фильма + необязательное фото человека -> Kling 3.0 оживляет сцену и переносит человека, если он задан.',
+      'Промпт + необязательное фото человека -> Seedance 2.0 создает новую сцену, сохраняя identity при наличии референса.',
       'Два фото детей + кадр из мультика -> GPT Image 2 стилизует персонажей, затем Omni собирает мультсцену.',
     ],
     paramsSchema: objectSchema(
       {
         model: modelTierObject,
+        generation_mode: {
+          type: 'string',
+          title: 'Режим генерации',
+          enum: ['photo', 'prompt'],
+          default: 'photo',
+          description: 'photo — пользователь дает референс-кадр сцены, запускаем фото/scene transfer через Kling 3.0; prompt — пользователь описывает сцену текстом, запускаем Seedance 2.0, фото пользователя необязательно.',
+        },
+        photo_model: {
+          type: 'string',
+          title: 'Модель режима «По фото»',
+          default: 'kling-3-omni',
+          description: 'Модель для режима generation_mode=photo. По задаче используем Kling 3.0 Omni.',
+        },
+        prompt_model: {
+          type: 'string',
+          title: 'Модель режима «По промпту» с фото пользователя',
+          default: 'seedance-2-omni',
+          description: 'Seedance 2.0 Omni для prompt-режима, когда есть фото пользователя как identity-reference.',
+        },
+        prompt_text_model: {
+          type: 'string',
+          title: 'Модель режима «По промпту» без фото пользователя',
+          default: 'seedance-2',
+          description: 'Seedance 2.0 text-to-video для prompt-режима без пользовательского референса.',
+        },
         scene_mode: {
           type: 'string',
           title: 'Режим референса сцены',
@@ -929,10 +955,56 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
           title: 'Базовый промпт (скрыт от пользователя)',
           description: 'Админский промпт стиля/сцены. Подставляется в начало финального промпта. Пользователь его не видит.',
         },
+        photo_base_prompt: {
+          type: 'string',
+          title: 'Базовый промпт режима «По фото»',
+          description: 'Если заполнен, переопределяет base_prompt в режиме «По фото». Хорошо описывает, как оживлять загруженный кадр и как использовать scene_image.',
+        },
+        prompt_base_prompt: {
+          type: 'string',
+          title: 'Базовый промпт режима «По промпту»',
+          description: 'Если заполнен, переопределяет base_prompt в режиме «По промпту». Хорошо описывает целевой кинематографичный/мультяшный стиль text-to-video.',
+        },
         character_prompt: {
           type: 'string',
           title: 'Промпт переноса персонажа (скрыт)',
           description: 'Админский промпт о том, КАК переносить персонажа: реалистичность, чёткое соблюдение референса лица, естественная интеграция в сцену и движение. Подставляется после блока идентичности. Особенно важен для мультсцен, чтобы реальный человек не превратился в кривую мультяшку.',
+        },
+        prompt_character_prompt: {
+          type: 'string',
+          title: 'Промпт персонажа для режима «По промпту»',
+          description: 'Дополнительный identity prompt для Seedance prompt-режима с фото пользователя. Если пусто, используется character_prompt.',
+        },
+        no_reference_prompt: {
+          type: 'string',
+          title: 'Промпт без фото пользователя',
+          description: 'Инструкция для случаев, когда пользователь запускает генерацию без своего фото. Не должна обещать сохранение личности.',
+        },
+        cartoon_visual_mode: {
+          type: 'string',
+          title: 'Визуал персонажа в мультфильме',
+          enum: ['realistic', 'cartoon'],
+          description: 'realistic — реальный человек остается фотореалистичным в мультмире; cartoon — фото пользователя предварительно стилизуется в мультперсонажа.',
+        },
+        cartoon_style: {
+          type: 'string',
+          title: 'Стиль мультфильма',
+          description: 'Промпт-фрагмент выбранного пользователем стиля мультфильма. Можно передавать из select-опции {{user.cartoon_style}}.',
+        },
+        cartoon_realistic_prompt: {
+          type: 'string',
+          title: 'Промпт реалистичного персонажа в мультмире',
+          description: 'Используется при cartoon_visual_mode=realistic: удерживает человека фотореалистичным и узнаваемым внутри мультяшной сцены.',
+        },
+        cartoon_character_prompt: {
+          type: 'string',
+          title: 'Промпт мультяшного персонажа',
+          description: 'Используется при cartoon_visual_mode=cartoon: переносит внешность человека в мультперсонажа и сохраняет узнаваемость.',
+        },
+        cartoon_style_prompt: {
+          type: 'string',
+          title: 'Дополнительный промпт стиля мультфильма',
+          description: 'Общий стиль/качество мультфильма поверх выбранного cartoon_style.',
         },
         user_prompt: {
           type: 'string',
@@ -944,6 +1016,16 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
           title: 'Промпт по умолчанию',
           default: 'Bring the scene to life with natural, subtle, believable motion and coherent action.',
           description: 'Используется, когда промпт пользователя пустой (например, «оживи сцену»).',
+        },
+        default_photo_prompt: {
+          type: 'string',
+          title: 'Промпт по умолчанию для режима «По фото»',
+          description: 'Используется, если пользователь в режиме «По фото» оставил описание действия пустым.',
+        },
+        default_prompt_prompt: {
+          type: 'string',
+          title: 'Промпт по умолчанию для режима «По промпту»',
+          description: 'Fallback для prompt-режима. Обычно не используется, потому что поле промпта у пользователя обязательное.',
         },
         duration: durationSchema,
         aspect_ratio: aspectRatioSchema,
