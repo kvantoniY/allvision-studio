@@ -13,22 +13,20 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN npm ci
+RUN npm ci && npm cache clean --force
 
 FROM deps AS builder
 WORKDIR /app
 COPY . .
 RUN npm run build -w @allvision/database \
   && npm run build -w @allvision/shared \
-  && npm run build -w @allvision/worker
+  && npm run build -w @allvision/worker \
+  && npm prune --omit=dev \
+  && npm cache clean --force
 
 FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV NPM_CONFIG_FETCH_RETRIES=5 \
-  NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000 \
-  NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000 \
-  NPM_CONFIG_FETCH_TIMEOUT=600000
 
 RUN apk add --no-cache ffmpeg openssl \
   && (deluser node 2>/dev/null || true) \
@@ -42,8 +40,8 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN npm ci --omit=dev
 
+COPY --from=builder /app/node_modules node_modules
 COPY --from=builder --chown=allvision:allvision /app/apps/worker/dist apps/worker/dist
 COPY --from=builder --chown=allvision:allvision /app/packages/database/dist packages/database/dist
 COPY --from=builder --chown=allvision:allvision /app/packages/database/prisma packages/database/prisma

@@ -9,3 +9,8 @@ tmp-*
 *.pid
 .env
 infra/prod/.env
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z

@@ -13,7 +13,7 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/database/package.json packages/database/package.json
 COPY packages/shared/package.json packages/shared/package.json
-RUN npm ci
+RUN npm ci && npm cache clean --force
 
 FROM deps AS builder
 WORKDIR /app

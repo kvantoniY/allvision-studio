@@ -54,6 +54,11 @@ jobs:
             --exclude='**/dist' \
             --exclude='.env' \
             --exclude='infra/prod/.env' \
+            --exclude='*.zip' \
+            --exclude='*.tar' \
+            --exclude='*.tar.gz' \
+            --exclude='*.tgz' \
+            --exclude='*.7z' \
             -e "ssh ${ssh_opts[*]}" \
             ./ "$SSH_USER@$SSH_HOST:/opt/allvision-studio/releases/$GIT_SHA/"
 
@@ -111,15 +116,56 @@ jobs:
             return 1
           }
 
+          cleanup_old_releases() {
+            local keep_limit="$1"
+            local current_release=""
+            local previous_release=""
+            local keep=0
+            if [ -L "$BASE/current" ]; then
+              current_release="$(readlink -f "$BASE/current")"
+            fi
+            if [ -L "$BASE/previous" ]; then
+              previous_release="$(readlink -f "$BASE/previous")"
+            fi
+            while read -r _ path; do
+              if { [ "$path" = "$RELEASE_DIR" ] \
+                || { [ -n "$current_release" ] && [ "$path" = "$current_release" ]; } \
+                || { [ -n "$previous_release" ] && [ "$path" = "$previous_release" ]; }; }; then
+                continue
+              fi
+              keep=$((keep + 1))
+              if [ "$keep" -gt "$keep_limit" ]; then
+                case "$path" in
+                  "$BASE/releases"/*) rm -rf "$path" ;;
+                  *) echo "Refusing to remove unexpected path: $path" >&2; exit 1 ;;
+                esac
+              fi
+            done < <(find "$BASE/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn)
+          }
+
           cd "$RELEASE_DIR"
           export BUILDKIT_PROGRESS=plain
+          export COMPOSE_PARALLEL_LIMIT=1
+          echo "Pruning old release directories before build"
+          cleanup_old_releases 2
+          echo "Docker disk usage before cleanup"
+          docker system df || true
+          echo "Pruning unused Docker build cache, stopped containers and dangling images"
+          docker builder prune -af || true
+          docker container prune -f || true
+          docker image prune -af || true
+          echo "Docker disk usage after cleanup"
+          docker system df || true
+
           echo "Ensuring stateful services are running"
           compose_for_release "$RELEASE_DIR" up -d postgres redis
           wait_for_container_healthy allvision-studio-postgres
           wait_for_container_healthy allvision-studio-redis
 
           echo "Building runtime images for $GIT_SHA"
-          compose_for_release "$RELEASE_DIR" build api worker web
+          compose_for_release "$RELEASE_DIR" build api
+          compose_for_release "$RELEASE_DIR" build worker
+          compose_for_release "$RELEASE_DIR" build web
 
           OLD_RELEASE=""
           if [ -L "$BASE/current" ]; then
@@ -155,18 +201,7 @@ jobs:
             ln -sfn "$OLD_RELEASE" "$BASE/previous"
           fi
 
-          keep=0
-          find "$BASE/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
-            | sort -rn \
-            | while read -r _ path; do
-                keep=$((keep + 1))
-                if [ "$keep" -gt 5 ]; then
-                  case "$path" in
-                    "$BASE/releases"/*) rm -rf "$path" ;;
-                    *) echo "Refusing to remove unexpected path: $path" >&2; exit 1 ;;
-                  esac
-                fi
-              done
+          cleanup_old_releases 4
           REMOTE
 
       - name: External healthcheck
