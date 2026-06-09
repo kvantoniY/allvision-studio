@@ -2570,6 +2570,55 @@ const giftFactoryServices = [
       },
     ],
   },
+  {
+    slug: 'video-quality-upscale',
+    title: 'Улучшение качества видео',
+    description:
+      'Загрузите короткое MP4-видео — нейросеть улучшит детализацию и вернёт тот же ролик в повышенном качестве без изменения сюжета и длительности. Лимит модели: до 10 МБ и до 240 кадров, поэтому держим пользовательский лимит до 15 секунд.',
+    shortDesc: 'Апскейл короткого видео без изменения длительности',
+    category: ServiceCategory.TRENDS_MEMES,
+    priceTokens: 15,
+    priceCoinsStandard: 15,
+    priceCoinsPro: 15,
+    costUsd: 0.072,
+    coverImage: image('gift-video-quality-upscale'),
+    galleryImages: [image('gift-video-quality-upscale-1'), image('gift-video-quality-upscale-2')],
+    previewImage: image('gift-video-quality-upscale-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: true,
+    sortOrder: 28,
+    userInputForm: [
+      {
+        id: 'video',
+        type: 'video',
+        label: 'Исходное видео',
+        required: true,
+        hint: 'MP4 до 10 МБ. Лучше короткие ролики до 15 секунд; провайдер обрабатывает до 240 кадров.',
+        maxSizeMb: 10,
+        maxDurationSec: 15,
+        allowedFormats: ['mp4'],
+        allowUserUpload: true,
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'video-upscale',
+        input: '{{user.video}}',
+        params: {
+          model: { standard: 'video-upscale-2x', pro: 'video-upscale-2x' },
+          video_url: '{{user.video}}',
+          duration: 15,
+          estimatedFrames: 240,
+        },
+      },
+    ],
+  },
 ];
 
 const legacyTrendServiceSlugs = [
@@ -2816,7 +2865,7 @@ const tokenPackages = [
     priceRub: 289,
     originalPriceRub: 349,
     bonus: 0,
-    features: ['1 токен = 18 ₽ для автоматических услуг', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
+    features: ['Токены зачисляются ровно по настройке пакета', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
     sortOrder: 10,
   },
   {
@@ -2826,7 +2875,7 @@ const tokenPackages = [
     originalPriceRub: 849,
     bonus: 3,
     badgeText: 'Выбирают чаще всего',
-    features: ['1 токен = 18 ₽ для автоматических услуг', 'Выгодно, токены в подарок', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
+    features: ['Токены зачисляются ровно по настройке пакета', 'Выгодно, токены в подарок', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
     isPopular: true,
     sortOrder: 20,
   },
@@ -2836,7 +2885,7 @@ const tokenPackages = [
     priceRub: 1439,
     originalPriceRub: 1689,
     bonus: 8,
-    features: ['1 токен = 18 ₽ для автоматических услуг', 'Выгодно, токены в подарок', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
+    features: ['Токены зачисляются ровно по настройке пакета', 'Выгодно, токены в подарок', 'Списание только после запуска обработки', 'Подходит для фото, анимаций и трендов'],
     sortOrder: 30,
   },
 ];
@@ -3086,6 +3135,7 @@ const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
   'product-card',
   'product-cover',
   'product-ad',
+  'video-quality-upscale',
 ]);
 
 // Additive loader for explicitly new data-driven services. It creates allowlisted services only when

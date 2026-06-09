@@ -304,6 +304,16 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     return this.createImmediateResult('trend', params.context);
   }
 
+  async videoUpscale(params: {
+    videoUrl: string;
+    durationSec?: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return this.createImmediateResult('trend', params.context);
+  }
+
   async restorePhoto(_params: {
     imageUrl: string;
     config: Record<string, any>;

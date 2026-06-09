@@ -11,6 +11,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
+import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import { cn } from '@/lib/utils';
 import type { ChatMessage } from '@/store/api/user-chat-api';
@@ -247,6 +248,9 @@ function MessageCard({
           )}
           {status === 'COMPLETED' && (
             <SaveToStudioButton projectId={project.id} defaultTitle={project.title.replace(/^Чат:\s*/, '')} />
+          )}
+          {status === 'COMPLETED' && (
+            <ReportGenerationButton projectId={project.id} />
           )}
           {failed && (
             <Button type="button" variant="outline" className="border-slate-700 bg-slate-900" onClick={() => onRetry(message)}>

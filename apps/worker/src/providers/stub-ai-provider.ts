@@ -98,4 +98,14 @@ export class StubAIProvider implements AIProvider {
   }): Promise<ProviderResult> {
     return result('stub://remove-watermark.mp4', { type: 'video' });
   }
+
+  async videoUpscale(_input: {
+    videoUrl: string;
+    durationSec?: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://video-upscale.mp4', { type: 'video' });
+  }
 }

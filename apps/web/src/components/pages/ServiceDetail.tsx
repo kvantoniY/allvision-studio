@@ -43,6 +43,7 @@ import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import { type UserMediaAsset, useListUserMediaAssetsQuery } from '@/store/api/user-media-assets-api';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
+import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import { cn } from '@/lib/utils';
 
@@ -1772,6 +1773,7 @@ function GenerationCard({
                 </Button>
               )}
               <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
+              <ReportGenerationButton projectId={project.id} />
             </div>
           )}
         </div>

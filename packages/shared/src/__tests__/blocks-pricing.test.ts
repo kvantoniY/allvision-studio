@@ -11,7 +11,7 @@ describe('block pricing summary', () => {
 
     expect(concrete.pro.costUsd).toBeCloseTo(0.3);
     expect(placeholder.pro.costUsd).toBeCloseTo(0.1);
-    expect(placeholder.pro.costCoins).toBe(1);
+    expect(placeholder.pro.costCoins).toBe(8);
   });
 
   it('estimates product-card cost from selected outputs', () => {
@@ -26,8 +26,17 @@ describe('block pricing summary', () => {
     ]);
 
     expect(cover.pro.costUsd).toBeCloseTo(0.1);
-    expect(cover.pro.costCoins).toBe(1);
+    expect(cover.pro.costCoins).toBe(8);
     expect(animation.pro.costUsd).toBeCloseTo(2.6);
     expect(userChoiceFallback.pro.costUsd).toBeCloseTo(0.1);
+  });
+
+  it('estimates video upscale by processed frames', () => {
+    const summary = summarizePipelinePricing([
+      { blockSlug: 'video-upscale', params: { model: 'video-upscale-2x', estimatedFrames: 120 } },
+    ]);
+
+    expect(summary.pro.costUsd).toBeCloseTo(0.036);
+    expect(summary.pro.costCoins).toBe(3);
   });
 });

@@ -3,6 +3,7 @@ import { createBaseQueryWithReauth } from './base-query';
 import type { Project, ProjectStatus, ServiceCategory } from '@allvision/shared';
 import { accountApi } from './account-api';
 import { authApi } from './auth-api';
+import type { SupportTicket } from './support-api';
 
 export type ProjectSummary = Pick<
   Project,
@@ -98,6 +99,13 @@ export const projectsApi = createApi({
       },
       providesTags: ['Project'],
     }),
+    reportProject: build.mutation<{ ticket: SupportTicket }, { id: string; reason?: string; message?: string }>({
+      query: ({ id, reason, message }) => ({
+        url: `/${id}/report`,
+        method: 'POST',
+        body: { reason, message },
+      }),
+    }),
   }),
 });
 
@@ -115,4 +123,5 @@ export const {
   useGetProjectQuery,
   useGetProjectStatusQuery,
   useListProjectsQuery,
+  useReportProjectMutation,
 } = projectsApi;

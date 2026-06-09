@@ -8,6 +8,7 @@ import { deleteFile, uploadUserImage, validateAndProcessImage } from '../service
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
 import * as queues from '../queues';
+import * as support from '../services/support-service';
 
 export const projectsRouter = Router();
 
@@ -307,6 +308,45 @@ projectsRouter.get('/:id/status', requireAuth, async (req: Request, res: Respons
     }
 
     res.json(project);
+  } catch (err) {
+    next(err);
+  }
+});
+
+projectsRouter.post('/:id/report', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const project = await prisma.project.findFirst({
+      where: { id: req.params.id, userId: req.user!.id },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        mode: true,
+        tokensCost: true,
+        resultImage: true,
+        resultVideo: true,
+        resultThumbnail: true,
+        createdAt: true,
+        service: {
+          select: {
+            slug: true,
+            title: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Project not found');
+    }
+
+    const ticket = await support.createGenerationReportTicket(req.user!.id, {
+      project,
+      reason: req.body?.reason,
+      message: req.body?.message,
+    });
+
+    res.status(201).json({ ticket });
   } catch (err) {
     next(err);
   }

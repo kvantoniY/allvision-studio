@@ -13,6 +13,7 @@ import { carouselSlidesBlock } from './carousel-slides';
 import { productCardBlock } from './product-card';
 import { videoEffectBlock } from './video-effect';
 import { videoWatermarkRemoveBlock } from './video-watermark-remove';
+import { videoUpscaleBlock } from './video-upscale';
 
 export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'image-restore': imageRestoreBlock,
@@ -29,6 +30,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'product-card': productCardBlock,
   'video-effect': videoEffectBlock,
   'video-watermark-remove': videoWatermarkRemoveBlock,
+  'video-upscale': videoUpscaleBlock,
 };
 
 export function getBlock(slug: string): BlockDefinition {

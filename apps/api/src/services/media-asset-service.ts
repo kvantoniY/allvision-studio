@@ -12,9 +12,10 @@ const VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
 const AUDIO_MIME = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg']);
 
 const MAX_VIDEO_DURATION_SEC = 15;
-const MAX_VIDEO_FILE_SIZE = 15 * 1024 * 1024;
-const MAX_IMAGE_FILE_SIZE = 10 * 1024 * 1024;
-const MAX_AUDIO_FILE_SIZE = 20 * 1024 * 1024;
+const MAX_MEDIA_FILE_SIZE = 25 * 1024 * 1024;
+const MAX_VIDEO_FILE_SIZE = MAX_MEDIA_FILE_SIZE;
+const MAX_IMAGE_FILE_SIZE = MAX_MEDIA_FILE_SIZE;
+const MAX_AUDIO_FILE_SIZE = MAX_MEDIA_FILE_SIZE;
 export const VIDEO_TRANSCODE_FILTER = "scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2";
 
 export type ProcessedMediaAsset = {
@@ -66,7 +67,7 @@ function extFor(contentType: string) {
 
 async function processImage(kind: string, file: Express.Multer.File): Promise<ProcessedMediaAsset> {
   if (file.size > MAX_IMAGE_FILE_SIZE) {
-    throw new HttpError(413, 'FILE_TOO_LARGE', 'Image must be no larger than 10 MB');
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Image must be no larger than 25 MB');
   }
   const metadata = await sharp(file.buffer).metadata().catch(() => undefined);
   if (!metadata?.width || !metadata.height) {
@@ -90,7 +91,7 @@ async function processImage(kind: string, file: Express.Multer.File): Promise<Pr
 
 async function processAudio(kind: string, file: Express.Multer.File): Promise<ProcessedMediaAsset> {
   if (file.size > MAX_AUDIO_FILE_SIZE) {
-    throw new HttpError(413, 'FILE_TOO_LARGE', 'Audio file is too large');
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Audio file must be no larger than 25 MB');
   }
   const key = `media-assets/${safeKind(kind)}/${crypto.randomUUID()}.${extFor(file.mimetype)}`;
   const uploaded = await getStorageProvider().upload({ key, body: file.buffer, contentType: file.mimetype });
@@ -104,7 +105,7 @@ async function processAudio(kind: string, file: Express.Multer.File): Promise<Pr
 
 async function processVideo(kind: string, file: Express.Multer.File): Promise<ProcessedMediaAsset> {
   if (file.size > MAX_VIDEO_FILE_SIZE) {
-    throw new HttpError(413, 'FILE_TOO_LARGE', 'Видео должно быть не длиннее 15 секунд и не тяжелее 15 МБ');
+    throw new HttpError(413, 'FILE_TOO_LARGE', 'Видео должно быть не длиннее 15 секунд и не тяжелее 25 МБ');
   }
 
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'allvision-media-'));
@@ -145,7 +146,7 @@ async function processVideo(kind: string, file: Express.Multer.File): Promise<Pr
     const output = await fs.readFile(outputPath);
     const outputProbe = await ffprobe(outputPath);
     if (output.length > MAX_VIDEO_FILE_SIZE) {
-      throw new HttpError(413, 'FILE_TOO_LARGE', 'Видео после обработки должно быть не тяжелее 15 МБ');
+      throw new HttpError(413, 'FILE_TOO_LARGE', 'Видео после обработки должно быть не тяжелее 25 МБ');
     }
 
     const midpoint = Math.max(0.1, (probe.durationSec ?? 1) / 2);

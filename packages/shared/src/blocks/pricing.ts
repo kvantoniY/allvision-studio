@@ -136,6 +136,11 @@ export function estimateModelCostUsd(model: ModelOption, params: Record<string, 
     return frames * 0.004;
   }
 
+  if (model.slug === 'video-upscale-2x') {
+    const frames = positiveNumber(params.estimatedFrames) ?? Math.ceil(duration * 16);
+    return Math.min(240, Math.max(10, frames)) * 0.0003;
+  }
+
   if (model.slug === 'kling-std') return 0.2 * Math.max(1, Math.ceil(duration / 5));
   if (model.slug === 'kling-pro') return 0.33 * Math.max(1, Math.ceil(duration / 5));
 

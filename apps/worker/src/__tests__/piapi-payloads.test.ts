@@ -1,6 +1,6 @@
 import { __piapiPayloadBuildersForTests } from '../providers/piapi-provider';
 
-const { buildImageToVideoPayload, buildTextToVideoPayload, buildWatermarkPayload } = __piapiPayloadBuildersForTests;
+const { buildImageToVideoPayload, buildTextToVideoPayload, buildWatermarkPayload, buildVideoUpscalePayload } = __piapiPayloadBuildersForTests;
 
 describe('PiAPI payload builders', () => {
   it('builds Veo 3.1 text-to-video payload with audio and quality controls', () => {
@@ -194,6 +194,14 @@ describe('PiAPI payload builders', () => {
       model: 'seedance',
       task_type: 'remove-watermark',
       input: { video_url: 'https://cdn.test/clip.mp4', duration: 8 },
+    });
+  });
+
+  it('builds video upscale payload', () => {
+    expect(buildVideoUpscalePayload('https://cdn.test/source.mp4')).toEqual({
+      model: 'Qubico/video-toolkit',
+      task_type: 'upscale',
+      input: { video: 'https://cdn.test/source.mp4' },
     });
   });
 });

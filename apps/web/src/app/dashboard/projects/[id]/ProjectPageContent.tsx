@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
+import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
 import {
   type ProjectDetails,
@@ -330,6 +331,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 Поделиться
               </Button>
               <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
+              <ReportGenerationButton projectId={project.id} />
             </div>
           </TooltipProvider>
 
@@ -503,6 +505,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                     <Link href="/dashboard/projects">К списку проектов</Link>
                   </Button>
                   <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
+                  <ReportGenerationButton projectId={project.id} />
                 </div>
               </div>
             ) : (

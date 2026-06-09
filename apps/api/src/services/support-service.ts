@@ -34,6 +34,22 @@ export type SupportActor = {
   role: 'USER' | 'ADMIN' | 'READONLY_ADMIN';
 };
 
+export type GenerationReportProject = {
+  id: string;
+  title: string;
+  status: string;
+  mode: string;
+  tokensCost: number;
+  resultImage?: string | null;
+  resultVideo?: string | null;
+  resultThumbnail?: string | null;
+  createdAt: Date;
+  service?: {
+    slug: string;
+    title: string;
+  } | null;
+};
+
 function filesOf(files: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] } | undefined) {
   if (!files) return [];
   if (Array.isArray(files)) return files;
@@ -100,6 +116,7 @@ export async function listAdminTickets(params: { page: number; limit: number; st
     ...(params.search ? {
       OR: [
         { subject: { contains: params.search, mode: 'insensitive' } },
+        { messages: { some: { body: { contains: params.search, mode: 'insensitive' } } } },
         { user: { email: { contains: params.search, mode: 'insensitive' } } },
         { user: { name: { contains: params.search, mode: 'insensitive' } } },
       ],
@@ -175,6 +192,54 @@ export async function createTicket(userId: string, params: { subject: unknown; b
     await cleanupUploaded(uploaded);
     throw error;
   }
+
+  return getUserTicket(userId, ticketId);
+}
+
+export async function createGenerationReportTicket(
+  userId: string,
+  params: {
+    project: GenerationReportProject;
+    reason?: unknown;
+    message?: unknown;
+  },
+) {
+  const reason = normalizeSubject(params.reason) || 'Не указана';
+  const message = normalizeBody(params.message);
+  const ticketId = crypto.randomUUID();
+  const subject = normalizeSubject(`Жалоба на генерацию ${params.project.id.slice(0, 8)}: ${params.project.title}`).slice(0, 160);
+  const body = [
+    'Пользователь пожаловался на генерацию.',
+    '',
+    `ID проекта: ${params.project.id}`,
+    `Название: ${params.project.title}`,
+    `Сервис: ${params.project.service?.title ?? 'не указан'}${params.project.service?.slug ? ` (${params.project.service.slug})` : ''}`,
+    `Статус: ${params.project.status}`,
+    `Тип: ${params.project.mode}`,
+    `Стоимость: ${params.project.tokensCost} токенов`,
+    `Создана: ${params.project.createdAt.toISOString()}`,
+    `Результат: ${params.project.resultVideo ?? params.project.resultImage ?? params.project.resultThumbnail ?? 'нет ссылки'}`,
+    '',
+    `Причина: ${reason}`,
+    message ? `Комментарий: ${message}` : null,
+  ].filter(Boolean).join('\n');
+
+  await prisma.$transaction(async (tx) => {
+    await tx.supportTicket.create({
+      data: {
+        id: ticketId,
+        userId,
+        subject,
+      },
+    });
+    await tx.supportMessage.create({
+      data: {
+        ticketId,
+        authorId: userId,
+        body,
+      },
+    });
+  });
 
   return getUserTicket(userId, ticketId);
 }

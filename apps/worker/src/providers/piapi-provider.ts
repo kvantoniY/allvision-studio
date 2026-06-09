@@ -38,6 +38,10 @@ const FACE_SWAP_COST_PER_FRAME_USD = 0.004;
 const DEFAULT_FACE_SWAP_DURATION_SEC = 5;
 const DEFAULT_FACE_SWAP_FPS = 24;
 const WATERMARK_COST_PER_SEC_USD = 0.008;
+const VIDEO_UPSCALE_MODEL = 'video-upscale-2x';
+const VIDEO_UPSCALE_COST_PER_FRAME_USD = 0.0003;
+const VIDEO_UPSCALE_MAX_FRAMES = 240;
+const VIDEO_UPSCALE_ESTIMATE_FPS = 16;
 const PIAPI_VIDEO_TIMEOUT_MS = 15 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_UPSTREAM_BUSY_ATTEMPTS = 3;
@@ -628,6 +632,68 @@ export class PiAPIProvider implements AIProvider {
           piapiUrl: completed.outputUrl,
           model: input.model,
           provider: 'piapi',
+        },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      throw err;
+    }
+  }
+
+  async videoUpscale(input: {
+    videoUrl: string;
+    durationSec?: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    if (input.model !== VIDEO_UPSCALE_MODEL) {
+      throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported video-upscale model: ${input.model}`);
+    }
+    const duration = input.durationSec ?? readNumber(input.params, 'duration') ?? 15;
+    const frameEstimate = readNumber(input.params, 'estimatedFrames')
+      ?? Math.ceil(duration * VIDEO_UPSCALE_ESTIMATE_FPS);
+    const frames = Math.min(VIDEO_UPSCALE_MAX_FRAMES, Math.max(10, Math.ceil(frameEstimate)));
+    const estimatedCost = frames * VIDEO_UPSCALE_COST_PER_FRAME_USD;
+    await this.ensureCanCall(estimatedCost);
+
+    const startedAt = Date.now();
+    let taskId: string | undefined;
+    let completedTask: PiAPITaskStatus | undefined;
+    try {
+      const published = await this.publisher.publishFileUrl(
+        input.videoUrl,
+        1,
+        contentTypeForUrl(input.videoUrl, 'video/mp4'),
+      );
+      const payload = buildVideoUpscalePayload(published.publicUrl);
+      const created = await this.client.createTask(payload);
+      taskId = created.taskId;
+      const completed = await this.client.pollUntilDone(taskId, {
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
+        expectedDurationMs: 8 * 60 * 1000,
+        onProgress: input.context.reportProgress,
+      });
+      completedTask = completed;
+      if (!completed.outputUrl) {
+        throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI video-upscale task completed without video URL');
+      }
+      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
+      const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      return {
+        outputUrl: local.url,
+        costUsd,
+        durationMs,
+        meta: {
+          piapiTaskId: taskId,
+          piapiUrl: completed.outputUrl,
+          model: input.model,
+          provider: 'piapi',
+          estimatedFrames: frames,
+          scale: '2x',
         },
       };
     } catch (err) {
@@ -1316,11 +1382,22 @@ function buildWatermarkPayload(videoUrl: string, durationSec?: number) {
   };
 }
 
+function buildVideoUpscalePayload(videoUrl: string) {
+  return {
+    model: 'Qubico/video-toolkit',
+    task_type: 'upscale',
+    input: {
+      video: videoUrl,
+    },
+  };
+}
+
 export const __piapiPayloadBuildersForTests = {
   buildImageToVideoPayload,
   buildTextToVideoPayload,
   buildImageEditPayload,
   buildWatermarkPayload,
+  buildVideoUpscalePayload,
 };
 
 function aspectRatioFromDimensions(width: number, height: number): '9:16' | '16:9' | '1:1' {

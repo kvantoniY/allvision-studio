@@ -87,4 +87,12 @@ export interface AIProvider {
     params?: Record<string, unknown>;
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
+
+  videoUpscale(input: {
+    videoUrl: string;
+    durationSec?: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
 }
