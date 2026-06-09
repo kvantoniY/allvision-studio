@@ -14,7 +14,7 @@ type AdminServiceRecord = {
   title: string;
 };
 
-const TARGET_SLUGS = ['me-in-movie', 'me-in-cartoon'] as const;
+const TARGET_SLUGS = ['me-in-movie', 'me-in-cartoon', 'road-camera-couple'] as const;
 
 function loadEnvFile(path = '.env') {
   if (!fs.existsSync(path)) return;

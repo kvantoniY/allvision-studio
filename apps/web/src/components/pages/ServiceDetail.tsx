@@ -406,6 +406,8 @@ function fieldWithDynamicRequired(field: UserInputField, values: FormValues): Us
 
 function needsNoReferenceConfirmation(serviceSlug: string, values: FormValues, files: FileValues) {
   if (serviceSlug !== 'me-in-movie' && serviceSlug !== 'me-in-cartoon') return false;
+  const generationMode = values.generation_mode || 'prompt';
+  if (generationMode !== 'prompt') return false;
   return !files.person1 && !values.person1?.trim();
 }
 
