@@ -41,9 +41,9 @@ describe('prices recompute CLI', () => {
     });
 
     expect(result.changes[0].changed).toBe(true);
-    expect(result.changes[0].newStandard).toBe(38);
-    expect(result.changes[0].newPro).toBe(57);
-    expect(result.rubPerToken).toBe(1);
+    expect(result.changes[0].newStandard).toBe(3);
+    expect(result.changes[0].newPro).toBe(4);
+    expect(result.rubPerToken).toBe(18);
     expect(client.service.update).not.toHaveBeenCalled();
     expect(log.mock.calls.flat().join('\n')).toContain('[prices:diff] revive');
   });

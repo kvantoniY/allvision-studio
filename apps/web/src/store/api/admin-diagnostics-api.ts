@@ -36,6 +36,16 @@ export type AdminDiagnosticsState = {
   }>;
   recentErrors: Array<Record<string, unknown>>;
   mediaAssets: Array<Record<string, unknown>>;
+  disk: {
+    path: string;
+    totalBytes: number | null;
+    freeBytes: number | null;
+    availableBytes: number | null;
+    usedBytes: number | null;
+    usedPercent: number | null;
+    checkedAt: string;
+    error?: string;
+  };
   env: Record<string, string | null>;
   piapiBalance: {
     balanceUsd: number | null;

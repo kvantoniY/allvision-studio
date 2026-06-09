@@ -1,5 +1,5 @@
 export const PRICING_USD_TO_RUB_DEFAULT = 80;
-export const PRICING_RUB_PER_TOKEN_DEFAULT = 1;
+export const PRICING_RUB_PER_TOKEN_DEFAULT = 18;
 
 export function rubToTokens(rub: number, rubPerToken = PRICING_RUB_PER_TOKEN_DEFAULT) {
   if (!Number.isFinite(rub) || rub <= 0) {

@@ -17,7 +17,7 @@ adminDiagnosticsRouter.use(requireAuth, requireAdmin);
 
 adminDiagnosticsRouter.get('/state', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const [queues, recentProjects, recentErrors, mediaAssets, piapiBalance] = await Promise.all([
+    const [queues, recentProjects, recentErrors, mediaAssets, piapiBalance, disk] = await Promise.all([
       readQueueState(),
       prisma.project.findMany({
         orderBy: { createdAt: 'desc' },
@@ -43,6 +43,7 @@ adminDiagnosticsRouter.get('/state', async (_req: Request, res: Response, next: 
         lowBalance: false,
         errorCode: err instanceof HttpError ? err.code : 'PIAPI_BALANCE_UNAVAILABLE',
       })),
+      readDiskState(),
     ]);
 
     res.json({
@@ -59,6 +60,7 @@ adminDiagnosticsRouter.get('/state', async (_req: Request, res: Response, next: 
       recentProjects,
       recentErrors,
       mediaAssets,
+      disk,
       env: maskedEnv(),
       piapiBalance,
     });
@@ -311,6 +313,39 @@ async function fileState(storageKey: string) {
     return { exists: stat.isFile(), path: target, size: stat.size };
   } catch (err) {
     return { exists: false, path: target, error: (err as NodeJS.ErrnoException).code ?? 'FS_ERROR' };
+  }
+}
+
+async function readDiskState() {
+  const root = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
+  try {
+    await fs.mkdir(root, { recursive: true });
+    const stat = await fs.statfs(root);
+    const blockSize = Number(stat.bsize);
+    const totalBytes = Number(stat.blocks) * blockSize;
+    const freeBytes = Number(stat.bfree) * blockSize;
+    const availableBytes = Number(stat.bavail) * blockSize;
+    const usedBytes = Math.max(0, totalBytes - availableBytes);
+    return {
+      path: root,
+      totalBytes,
+      freeBytes,
+      availableBytes,
+      usedBytes,
+      usedPercent: totalBytes > 0 ? ((totalBytes - availableBytes) / totalBytes) * 100 : null,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    return {
+      path: root,
+      totalBytes: null,
+      freeBytes: null,
+      availableBytes: null,
+      usedBytes: null,
+      usedPercent: null,
+      checkedAt: new Date().toISOString(),
+      error: (err as Error).message,
+    };
   }
 }
 

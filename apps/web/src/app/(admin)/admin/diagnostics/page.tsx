@@ -24,6 +24,18 @@ function seconds(value: number | null | undefined) {
   return `${hours} ч ${minutes} мин`;
 }
 
+function formatBytes(value: number | null | undefined) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return 'н/д';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
+}
+
 function projectStatusLabel(status: string) {
   if (status === 'PENDING') return 'Ожидает';
   if (status === 'PROCESSING') return 'В работе';
@@ -45,6 +57,12 @@ export default function AdminDiagnosticsPage() {
   const sevenDaySpend = usage.data?.summary.totalCostUsd ?? 0;
   const dailySpend = sevenDaySpend / 7;
   const balanceDays = data?.piapiBalance.balanceUsd && dailySpend > 0 ? Math.floor(data.piapiBalance.balanceUsd / dailySpend) : null;
+  const diskUsedPercent = typeof data?.disk?.usedPercent === 'number' ? Math.round(data.disk.usedPercent) : null;
+  const diskDetail = data?.disk?.error
+    ? data.disk.error
+    : data?.disk?.totalBytes
+      ? `${formatBytes(data.disk.usedBytes)} занято из ${formatBytes(data.disk.totalBytes)}${diskUsedPercent === null ? '' : ` · ${diskUsedPercent}%`}`
+      : data?.disk?.path ?? '';
 
   useEffect(() => {
     if (settings.data?.settings.usdToRub) setRateDraft(String(settings.data.settings.usdToRub));
@@ -82,10 +100,16 @@ export default function AdminDiagnosticsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Metric label="Сборка" value={data?.build.version ?? 'загрузка'} detail={data?.build.gitSha ?? data?.build.nodeEnv ?? ''} />
         <Metric label="Аптайм API" value={seconds(data?.uptime.apiSeconds)} />
         <Metric label="Аптайм воркера" value={seconds(data?.uptime.workerSeconds)} />
+        <Metric
+          label="Свободно на диске"
+          value={formatBytes(data?.disk?.availableBytes)}
+          detail={diskDetail}
+          tone={data?.disk?.error || (diskUsedPercent !== null && diskUsedPercent >= 90) ? 'danger' : 'ok'}
+        />
         <Metric
           label="Баланс PiAPI"
           value={typeof data?.piapiBalance.balanceUsd === 'number' ? formatMoney({ usd: data.piapiBalance.balanceUsd }, { primary: 'usd', showAll: true, usdToRub }) : 'н/д'}

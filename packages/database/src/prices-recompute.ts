@@ -3,7 +3,7 @@ import { prisma } from './index';
 
 const PRICING_MARGIN_DEFAULT = 0.8;
 const PRICING_USD_TO_RUB_DEFAULT = 80;
-const PRICING_RUB_PER_TOKEN_DEFAULT = 1;
+const PRICING_RUB_PER_TOKEN_DEFAULT = 18;
 
 export type PriceRecomputeOptions = {
   apply?: boolean;
