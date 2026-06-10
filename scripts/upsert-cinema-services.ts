@@ -14,7 +14,7 @@ type AdminServiceRecord = {
   title: string;
 };
 
-const TARGET_SLUGS = ['me-in-movie', 'me-in-cartoon', 'road-camera-couple'] as const;
+const TARGET_SLUGS = ['me-in-movie', 'me-in-cartoon'] as const;
 
 function loadEnvFile(path = '.env') {
   if (!fs.existsSync(path)) return;
@@ -171,6 +171,11 @@ async function main() {
         body: JSON.stringify(toUpdateInput(service)),
       });
       console.log(`updated ${service.slug} (prices, previews and sort order preserved)`);
+      continue;
+    }
+
+    if (!hasFlag('create-missing')) {
+      console.log(`skipped missing ${service.slug} (pass --create-missing to create it)`);
       continue;
     }
 
