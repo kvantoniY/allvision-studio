@@ -74,6 +74,12 @@ const VIDEO_UPSCALE_POSTPROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_VIDEO_TIMEOUT_MS = 30 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS = 5 * 60 * 1000;
+// GPT Image edit uploads references as multipart files FROM the worker. Raw user uploads
+// (especially lossless PNG phone shots, 8-20 MB) make the body huge, and the VM egress resets
+// the long upload connection (ECONNRESET at progress 5, before generation). Downscale + re-encode
+// to JPEG so the body stays small and uploads instantly. gpt-image renders at <=1536 anyway.
+const GPT_IMAGE_REF_MAX_PX = 1536;
+const GPT_IMAGE_REF_JPEG_QUALITY = 90;
 const NANO_BANANA_COST_USD: Record<string, number> = {
   '1K': 0.06,
   '2K': 0.08,
@@ -946,6 +952,11 @@ export class PiAPIProvider implements AIProvider {
   // the shared local uploads volume (the worker cannot reliably fetch its own public domain from inside
   // the container). For external URLs it HTTP-downloads as before.
   private async readImageRefBytes(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const raw = await this.readRawImageRefBytes(url);
+    return normalizeGptImageReference(raw, this.logger);
+  }
+
+  private async readRawImageRefBytes(url: string): Promise<{ buffer: Buffer; contentType: string }> {
     const key = localStaticKey(url);
     if (key) {
       try {
@@ -1451,6 +1462,35 @@ function imageContentTypeForPath(filePath: string): string {
   return 'image/jpeg';
 }
 
+// Downscale + re-encode a gpt-image reference so the multipart upload body stays small.
+// Raw user uploads (big PNG/JPG) otherwise make the VM->PiAPI upload connection drop (ECONNRESET).
+// On any sharp failure we fall back to the original bytes rather than failing the generation.
+async function normalizeGptImageReference(
+  raw: { buffer: Buffer; contentType: string },
+  logger: Logger,
+): Promise<{ buffer: Buffer; contentType: string }> {
+  try {
+    const buffer = await sharp(raw.buffer)
+      .rotate()
+      .resize({
+        width: GPT_IMAGE_REF_MAX_PX,
+        height: GPT_IMAGE_REF_MAX_PX,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: GPT_IMAGE_REF_JPEG_QUALITY })
+      .toBuffer();
+    if (buffer.length < raw.buffer.length) {
+      return { buffer, contentType: 'image/jpeg' };
+    }
+    // Already small (e.g. a tiny library asset): re-encoding gained nothing, keep the original.
+    return raw;
+  } catch (err) {
+    logger.warn('[piapi] gpt-image reference normalization failed; sending original bytes', err);
+    return raw;
+  }
+}
+
 // PiAPI gpt-image quality allows: low | standard | high | auto (per the PiAPI GPT Image docs).
 // Anything else falls back to "auto".
 function normalizeGptImageQuality(value: string | undefined): 'auto' | 'high' | 'standard' | 'low' {
@@ -1819,6 +1859,7 @@ export const __piapiPayloadBuildersForTests = {
   buildImageEditPayload,
   buildWatermarkPayload,
   buildVideoUpscalePayload,
+  normalizeGptImageReference,
 };
 
 function aspectRatioFromDimensions(width: number, height: number): '9:16' | '16:9' | '1:1' {
