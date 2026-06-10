@@ -40,6 +40,9 @@ export type AdminUsageLog = {
     inputText: string | null;
     selectedTier: string | null;
     userInputs: unknown | null;
+    pipelineSnapshot: unknown | null;
+    stepProgress: unknown | null;
+    aiProviderLogs: unknown | null;
     resultImage: string | null;
     resultVideo: string | null;
     resultThumbnail: string | null;

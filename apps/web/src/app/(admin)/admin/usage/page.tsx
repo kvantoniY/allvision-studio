@@ -50,7 +50,17 @@ function hasLogPayload(value: unknown) {
   return value !== undefined && value !== null;
 }
 
+function pipelineSteps(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item));
+}
+
+function matchingPipelineStep(log: AdminUsageLog) {
+  return pipelineSteps(log.project?.pipelineSnapshot).find((step) => step.blockSlug === log.blockSlug) ?? null;
+}
+
 function reconstructedRequestPayload(log: AdminUsageLog) {
+  const pipelineStep = matchingPipelineStep(log);
   return {
     notice: 'Точный provider request не был записан для этого лога. Обычно это значит, что генерация была создана до включения requestPayload/responsePayload или worker еще не был обновлен. Ниже восстановленный контекст из проекта и usage-лога.',
     providerCall: {
@@ -76,6 +86,8 @@ function reconstructedRequestPayload(log: AdminUsageLog) {
       inputImages: log.project?.inputImages ?? [],
       userInputs: log.project?.userInputs ?? null,
     },
+    pipelineStep,
+    pipelineSnapshot: log.project?.pipelineSnapshot ?? null,
   };
 }
 
@@ -91,6 +103,8 @@ function reconstructedResponsePayload(log: AdminUsageLog) {
       errorCode: log.errorCode,
       errorMessage: log.errorMessage,
     },
+    stepProgress: log.project?.stepProgress ?? null,
+    aiProviderLogs: log.project?.aiProviderLogs ?? null,
     projectResult: log.project
       ? {
           status: log.project.status,
