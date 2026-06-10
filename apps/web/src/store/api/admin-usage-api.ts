@@ -28,6 +28,9 @@ export type AdminUsageLog = {
   durationMs: number;
   errorCode: string | null;
   errorMessage: string | null;
+  recoverableOutputUrl: string | null;
+  requestPayload: unknown | null;
+  responsePayload: unknown | null;
   project?: {
     id: string;
     title: string;

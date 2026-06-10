@@ -157,5 +157,20 @@ describe('PiAPI provider safety', () => {
     expect(log?.status).toBe('timeout_charged');
     expect(log?.costUsd).toBeCloseTo(0.42);
     expect(log?.recoverableOutputUrl).toBe('https://piapi.test/output.mp4');
+    expect(log?.requestPayload).toMatchObject({
+      model: 'Qubico/video-toolkit',
+      task_type: 'face-swap',
+      input: {
+        swap_image: 'https://cdn.test/swap.jpg',
+        target_video: 'https://cdn.test/target.mp4',
+      },
+    });
+    expect(log?.responsePayload).toMatchObject({
+      finalTask: {
+        status: 'completed',
+        outputUrl: 'https://piapi.test/output.mp4',
+        actualCostUsd: 0.42,
+      },
+    });
   });
 });

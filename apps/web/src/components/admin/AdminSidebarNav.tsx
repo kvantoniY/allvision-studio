@@ -23,7 +23,7 @@ const navGroups: NavGroup[] = [
   {
     label: 'Аналитика',
     items: [
-      { href: '/admin/usage', label: 'Расходы', icon: LineChart },
+      { href: '/admin/usage', label: 'AI-консоль', icon: LineChart },
       { href: '/admin/diagnostics', label: 'Диагностика', icon: Activity },
     ],
   },

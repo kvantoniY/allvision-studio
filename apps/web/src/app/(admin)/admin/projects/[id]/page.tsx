@@ -1,12 +1,13 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Trash2 } from 'lucide-react';
+import { Check, Copy, Trash2 } from 'lucide-react';
 import { formatMoney } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
-import { type AdminProject, useDeleteAdminProjectMutation, useGetAdminProjectQuery } from '@/store/api/admin-projects-api';
+import { type AdminProject, type AdminProjectUsageLog, useDeleteAdminProjectMutation, useGetAdminProjectQuery } from '@/store/api/admin-projects-api';
 
 function statusLabel(status: AdminProject['status']) {
   if (status === 'PENDING') return 'Ожидает';
@@ -24,13 +25,52 @@ function usageStatusLabel(status: string) {
   return status;
 }
 
+function jsonBlock(value: unknown) {
+  if (value === undefined || value === null) return 'Нет данных';
+  return JSON.stringify(value, null, 2);
+}
+
+function usageLogText(project: AdminProject, log: AdminProjectUsageLog) {
+  return [
+    `Проект: ${project.title}`,
+    `Project ID: ${project.id}`,
+    `Пользователь: ${project.user.email} (${project.user.id})`,
+    `Сервис: ${project.service?.title ?? 'н/д'}`,
+    `Время: ${new Date(log.createdAt).toLocaleString('ru-RU')}`,
+    `Статус: ${usageStatusLabel(log.status)}`,
+    `Блок: ${log.blockSlug}`,
+    `Провайдер: ${log.provider}`,
+    `Модель: ${log.model}`,
+    `Task ID: ${log.taskId ?? 'н/д'}`,
+    `Длительность: ${log.durationMs} ms`,
+    `Стоимость: $${log.costUsd}`,
+    `Recoverable output: ${log.recoverableOutputUrl ?? 'н/д'}`,
+    `Ошибка: ${log.errorCode ?? 'нет'}`,
+    `Сообщение ошибки: ${log.errorMessage ?? 'нет'}`,
+    '',
+    'REQUEST:',
+    jsonBlock(log.requestPayload),
+    '',
+    'RESPONSE:',
+    jsonBlock(log.responsePayload),
+  ].join('\n');
+}
+
 export default function AdminProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
   const project = useGetAdminProjectQuery(params.id);
   const [deleteProject, deleteState] = useDeleteAdminProjectMutation();
   const settings = useGetAdminSettingsQuery();
   const rate = settings.data?.settings.usdToRub ?? 80;
+
+  const copyLog = async (log: AdminProjectUsageLog) => {
+    if (!project.data?.project) return;
+    await navigator.clipboard.writeText(usageLogText(project.data.project, log));
+    setCopiedLogId(log.id);
+    window.setTimeout(() => setCopiedLogId((current) => (current === log.id ? null : current)), 1600);
+  };
 
   if (project.isLoading) return <div className="text-slate-400">Загрузка...</div>;
   if (!project.data?.project) return <div className="text-slate-400">Проект не найден</div>;
@@ -78,31 +118,19 @@ export default function AdminProjectDetailPage() {
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="font-semibold text-white">AI-вызовы</h2>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-full text-left text-sm">
-            <thead className="text-xs uppercase text-slate-500">
-              <tr>
-                <th className="p-2">Дата</th>
-                <th className="p-2">Блок</th>
-                <th className="p-2">Модель</th>
-                <th className="p-2">Статус</th>
-                <th className="p-2">Стоимость</th>
-                <th className="p-2">Ошибка</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {(item.aiUsageLogs ?? []).map((log) => (
-                <tr key={String(log.id)}>
-                  <td className="p-2">{new Date(String(log.createdAt)).toLocaleString()}</td>
-                  <td className="p-2">{log.blockSlug}</td>
-                  <td className="p-2">{log.model}</td>
-                  <td className="p-2"><Badge className={log.status === 'success' ? 'bg-emerald-600' : 'bg-red-700'}>{usageStatusLabel(String(log.status))}</Badge></td>
-                  <td className="p-2">{formatMoney({ usd: log.costUsd }, { primary: 'usd', showAll: true, usdToRub: rate })}</td>
-                  <td className="p-2 text-rose-200">{String(log.errorCode ?? '—')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4 space-y-3">
+          {(item.aiUsageLogs ?? []).length === 0 && <div className="text-sm text-slate-500">AI-вызовов нет</div>}
+          {(item.aiUsageLogs ?? []).map((log) => (
+            <ProjectUsageLogCard
+              key={log.id}
+              log={log}
+              copied={copiedLogId === log.id}
+              usdToRub={rate}
+              onCopy={() => {
+                void copyLog(log);
+              }}
+            />
+          ))}
         </div>
       </section>
 
@@ -118,6 +146,71 @@ export default function AdminProjectDetailPage() {
           }, null, 2)}
         </pre>
       </section>
+    </div>
+  );
+}
+
+function ProjectUsageLogCard({
+  log,
+  copied,
+  usdToRub,
+  onCopy,
+}: {
+  log: AdminProjectUsageLog;
+  copied: boolean;
+  usdToRub: number;
+  onCopy: () => void;
+}) {
+  const hasError = Boolean(log.errorCode || log.errorMessage);
+
+  return (
+    <article className="rounded-md border border-zinc-800 bg-zinc-900 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={log.status === 'success' ? 'bg-emerald-600' : 'bg-red-700'}>{usageStatusLabel(log.status)}</Badge>
+            <span className="text-sm font-semibold text-white">{new Date(log.createdAt).toLocaleString('ru-RU')}</span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+            <span>{log.blockSlug}</span>
+            <span>{log.provider}</span>
+            <span>{log.model}</span>
+            <span>{log.taskId ?? 'нет taskId'}</span>
+            <span>{Math.round(log.durationMs / 1000)} с</span>
+            <span>{formatMoney({ usd: log.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</span>
+          </div>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={onCopy}>
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied ? 'Скопировано' : 'Копировать'}
+        </Button>
+      </div>
+
+      {hasError && (
+        <div className="mt-3 rounded-md border border-rose-900/60 bg-rose-950/20 p-3">
+          <div className="text-sm font-medium text-rose-200">{log.errorCode ?? 'Ошибка провайдера'}</div>
+          {log.errorMessage && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-rose-100/80">{log.errorMessage}</pre>}
+        </div>
+      )}
+
+      <details className="mt-3" open={log.status !== 'success'}>
+        <summary className="cursor-pointer text-sm font-medium text-slate-300">Запрос и ответ</summary>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <ProjectJsonBlock title="Запрос" value={log.requestPayload} />
+          <ProjectJsonBlock title="Ответ" value={log.responsePayload} />
+        </div>
+      </details>
+    </article>
+  );
+}
+
+function ProjectJsonBlock({ title, value }: { title: string; value: unknown }) {
+  return (
+    <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-950">
+      <div className="border-b border-zinc-800 px-3 py-2 text-xs font-semibold uppercase text-slate-500">{title}</div>
+      <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap break-words p-3 text-xs leading-relaxed text-slate-200">
+        {jsonBlock(value)}
+      </pre>
     </div>
   );
 }

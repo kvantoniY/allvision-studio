@@ -81,6 +81,8 @@ adminProjectsRouter.get('/:id', async (req: Request, res: Response, next: NextFu
             errorCode: true,
             errorMessage: true,
             recoverableOutputUrl: true,
+            requestPayload: true,
+            responsePayload: true,
           },
         },
       },

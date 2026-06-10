@@ -647,6 +647,8 @@ model AIUsageLog {
   errorCode            String?
   errorMessage         String?
   recoverableOutputUrl String?
+  requestPayload       Json?
+  responsePayload      Json?
 
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 

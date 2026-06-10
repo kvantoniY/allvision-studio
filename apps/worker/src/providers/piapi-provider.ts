@@ -203,6 +203,8 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       // GPT Image идёт через OpenAI-совместимый эндпоинт (синхронно), а не unified task.
       if (input.model.startsWith('gpt-image')) {
@@ -211,6 +213,19 @@ export class PiAPIProvider implements AIProvider {
         const quality = normalizeGptImageQuality(readString(input.params, 'quality'));
         const outputFormat = normalizeGptImageOutputFormat(readString(input.params, 'output_format'));
         const refs = uniqueImageReferenceUrls([input.imageUrl, ...readStringList(input.params, 'image_urls')]);
+        requestPayload = {
+          endpoint: refs.length > 0 ? '/v1/images/edits' : '/v1/images/generations',
+          body: {
+            model: input.model,
+            prompt: input.prompt,
+            n: 1,
+            size,
+            quality,
+            output_format: outputFormat,
+            response_format: 'url',
+            references: refs,
+          },
+        };
         // GPT Image edits send the reference as a multipart file, so the WORKER must hold the bytes.
         // Read them from the shared local uploads volume when the URL is our own /static URL, instead of
         // HTTP-fetching the public domain from inside the container (that loopback fails -> network error).
@@ -234,6 +249,7 @@ export class PiAPIProvider implements AIProvider {
             size,
             quality,
             originalError: err,
+            requestPayload,
           });
           if (recovered) return { recovered };
           throw new ProviderError(
@@ -256,7 +272,16 @@ export class PiAPIProvider implements AIProvider {
           throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'GPT Image returned no image');
         }
         const durationMs = Date.now() - startedAt;
-        await this.logUsage(input.context, input.model, undefined, 'success', estimatedCost, durationMs);
+        await this.logUsage(input.context, input.model, undefined, 'success', estimatedCost, durationMs, {
+          requestPayload,
+          responsePayload: {
+            result: {
+              url: result.url,
+              b64: result.b64 ? `[base64:${result.b64.length}-chars]` : undefined,
+            },
+            localOutputUrl: local.url,
+          },
+        });
         return {
           outputUrl: local.url,
           costUsd: estimatedCost,
@@ -279,8 +304,10 @@ export class PiAPIProvider implements AIProvider {
         strength: input.strength,
         params: input.params,
       });
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_IMAGE_EDIT_TIMEOUT_MS,
         expectedDurationMs: 60 * 1000,
@@ -293,7 +320,10 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'jpg');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -309,7 +339,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -340,6 +370,8 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       const published = await this.publisher.publishImageUrl(input.imageUrl, 1);
       const aspectRatio = await this.resolveImageAspectRatio(input.imageUrl, input.params);
@@ -350,8 +382,10 @@ export class PiAPIProvider implements AIProvider {
         aspectRatio,
         params: input.params,
       });
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 10 * 60 * 1000,
@@ -364,7 +398,10 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -379,7 +416,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -403,6 +440,8 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
       const providerParams = await this.publishTextToVideoReferences(input.model, input.params);
@@ -414,8 +453,10 @@ export class PiAPIProvider implements AIProvider {
         generateAudio: readBoolean(input.params, 'generate_audio') ?? false,
         params: providerParams,
       });
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 10 * 60 * 1000,
@@ -428,7 +469,10 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -443,7 +487,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -506,6 +550,8 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       const published = await this.publisher.publishImageUrl(input.swapImageUrl, 1);
       const publishedTarget = await this.publisher.publishFileUrl(
@@ -524,8 +570,10 @@ export class PiAPIProvider implements AIProvider {
           ...(readString(input.params, 'target_faces_index') ? { target_faces_index: readString(input.params, 'target_faces_index') } : {}),
         },
       };
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 12 * 60 * 1000,
@@ -538,7 +586,10 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -554,7 +605,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -578,6 +629,8 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       const published = await this.publisher.publishImageUrl(input.imageUrl, 1);
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
@@ -592,8 +645,10 @@ export class PiAPIProvider implements AIProvider {
           ...(aspectRatio && aspectRatio !== 'auto' ? { aspect_ratio: aspectRatio } : {}),
         },
       };
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 8 * 60 * 1000,
@@ -606,7 +661,10 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -622,7 +680,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -644,10 +702,14 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       const payload = buildWatermarkPayload(input.videoUrl, input.durationSec);
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 5 * 60 * 1000,
@@ -660,7 +722,10 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -674,7 +739,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -699,6 +764,8 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       const published = await this.publisher.publishFileUrl(
         input.videoUrl,
@@ -706,8 +773,10 @@ export class PiAPIProvider implements AIProvider {
         contentTypeForUrl(input.videoUrl, 'video/mp4'),
       );
       const payload = buildVideoUpscalePayload(published.publicUrl);
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 8 * 60 * 1000,
@@ -721,7 +790,13 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistVideoUpscaleOutput(completed.outputUrl, input.context, postprocessSettings);
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, {
+          localOutputUrl: local.url,
+          postprocess: local.postprocess,
+        }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -738,7 +813,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -764,6 +839,8 @@ export class PiAPIProvider implements AIProvider {
     const startedAt = Date.now();
     let taskId: string | undefined;
     let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
     try {
       const publishedImage = await this.publisher.publishImageUrl(input.inputImageUrl, 1);
       const publishedDrivingVideo = input.drivingVideoUrl
@@ -793,8 +870,10 @@ export class PiAPIProvider implements AIProvider {
           ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}),
         },
       };
+      requestPayload = payload;
       const created = await this.createTask(payload, input.context);
       taskId = created.taskId;
+      createTaskResponse = created.raw;
       const completed = await this.client.pollUntilDone(taskId, {
         timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
         expectedDurationMs: 12 * 60 * 1000,
@@ -807,7 +886,10 @@ export class PiAPIProvider implements AIProvider {
       const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
       const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs);
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
       return {
         outputUrl: local.url,
         costUsd,
@@ -822,7 +904,7 @@ export class PiAPIProvider implements AIProvider {
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost);
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
       throw err;
     }
   }
@@ -853,6 +935,7 @@ export class PiAPIProvider implements AIProvider {
     size: string;
     quality: string;
     originalError: unknown;
+    requestPayload?: unknown;
   }): Promise<ProviderResult | undefined> {
     const recoveryMs = gptImageHistoryRecoveryMs();
     if (recoveryMs <= 0) return undefined;
@@ -886,7 +969,15 @@ export class PiAPIProvider implements AIProvider {
         const outputExt = params.outputFormat === 'jpeg' ? 'jpg' : params.outputFormat;
         const local = await this.persistProviderOutput(task.outputUrl, params.context, outputExt);
         const durationMs = Date.now() - params.startedAt;
-        await this.logUsage(params.context, params.model, task.taskId, 'success', params.estimatedCost, durationMs, undefined, task.outputUrl);
+        await this.logUsage(params.context, params.model, task.taskId, 'success', params.estimatedCost, durationMs, {
+          recoverableOutputUrl: task.outputUrl,
+          requestPayload: params.requestPayload,
+          responsePayload: {
+            historyTask: task,
+            localOutputUrl: local.url,
+            recoveredFromOriginalError: errorPayload(params.originalError),
+          },
+        });
         return {
           outputUrl: local.url,
           costUsd: params.estimatedCost,
@@ -1117,8 +1208,12 @@ export class PiAPIProvider implements AIProvider {
     status: 'success' | 'failed' | 'timeout' | 'timeout_charged' | 'timeout_pending',
     costUsd: number,
     durationMs: number,
-    error?: unknown,
-    recoverableOutputUrl?: string,
+    details: {
+      error?: unknown;
+      recoverableOutputUrl?: string;
+      requestPayload?: unknown;
+      responsePayload?: unknown;
+    } = {},
   ) {
     await createAIUsageLog({
       projectId: context.projectId,
@@ -1130,9 +1225,11 @@ export class PiAPIProvider implements AIProvider {
       status,
       costUsd,
       durationMs,
-      errorCode: error instanceof ProviderError ? error.code : undefined,
-      errorMessage: error ? (error as Error).message : undefined,
-      recoverableOutputUrl,
+      errorCode: details.error instanceof ProviderError ? details.error.code : undefined,
+      errorMessage: details.error ? (details.error as Error).message : undefined,
+      recoverableOutputUrl: details.recoverableOutputUrl,
+      requestPayload: details.requestPayload,
+      responsePayload: details.responsePayload,
     }).catch((err) => {
       this.logger.warn('[piapi] Failed to write AIUsageLog', err);
     });
@@ -1146,6 +1243,8 @@ export class PiAPIProvider implements AIProvider {
     error: unknown,
     completedTask?: PiAPITaskStatus,
     estimatedCost?: number,
+    requestPayload?: unknown,
+    createTaskResponse?: unknown,
   ) {
     if (completedTask?.status === 'completed') {
       await this.logUsage(
@@ -1155,24 +1254,40 @@ export class PiAPIProvider implements AIProvider {
         'failed',
         costUsdFromActualOrEstimate(completedTask, estimatedCost ?? 0),
         durationMs,
-        error,
-        completedTask.outputUrl,
+        {
+          error,
+          recoverableOutputUrl: completedTask.outputUrl,
+          requestPayload,
+          responsePayload: providerTaskResponsePayload(createTaskResponse, completedTask),
+        },
       );
       return;
     }
 
     if (error instanceof ProviderError && error.code === 'PIAPI_SYNC_PENDING') {
-      await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, error);
+      await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, {
+        error,
+        requestPayload,
+        responsePayload: providerErrorResponsePayload(createTaskResponse, error),
+      });
       return;
     }
 
     if (!(error instanceof ProviderError) || error.code !== 'PIAPI_TIMEOUT') {
-      await this.logUsage(context, model, taskId, 'failed', 0, durationMs, error);
+      await this.logUsage(context, model, taskId, 'failed', 0, durationMs, {
+        error,
+        requestPayload,
+        responsePayload: providerErrorResponsePayload(createTaskResponse, error, completedTask),
+      });
       return;
     }
 
     if (!taskId) {
-      await this.logUsage(context, model, taskId, 'timeout', 0, durationMs, error);
+      await this.logUsage(context, model, taskId, 'timeout', 0, durationMs, {
+        error,
+        requestPayload,
+        responsePayload: providerErrorResponsePayload(createTaskResponse, error),
+      });
       return;
     }
 
@@ -1181,7 +1296,11 @@ export class PiAPIProvider implements AIProvider {
       latest = await this.client.getTask(taskId);
     } catch (finalCheckError) {
       this.logger.warn(`[piapi] Final timeout getTask failed for taskId=${taskId}`, finalCheckError);
-      await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, error);
+      await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, {
+        error,
+        requestPayload,
+        responsePayload: providerErrorResponsePayload(createTaskResponse, error, undefined, finalCheckError),
+      });
       return;
     }
 
@@ -1193,8 +1312,12 @@ export class PiAPIProvider implements AIProvider {
         'timeout_charged',
         costUsdFromActualOrEstimate(latest, estimatedCost ?? 0),
         durationMs,
-        error,
-        latest.outputUrl,
+        {
+          error,
+          recoverableOutputUrl: latest.outputUrl,
+          requestPayload,
+          responsePayload: providerTaskResponsePayload(createTaskResponse, latest),
+        },
       );
       return;
     }
@@ -1204,12 +1327,71 @@ export class PiAPIProvider implements AIProvider {
         latest.errorCode ?? error.code,
         latest.errorMessage ?? error.message,
       );
-      await this.logUsage(context, model, taskId, 'timeout', 0, durationMs, taskError);
+      await this.logUsage(context, model, taskId, 'timeout', 0, durationMs, {
+        error: taskError,
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, latest),
+      });
       return;
     }
 
-    await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, error);
+    await this.logUsage(context, model, taskId, 'timeout_pending', 0, durationMs, {
+      error,
+      requestPayload,
+      responsePayload: providerTaskResponsePayload(createTaskResponse, latest),
+    });
   }
+}
+
+function providerTaskResponsePayload(createTaskResponse: unknown, task: PiAPITaskStatus, extra?: Record<string, unknown>) {
+  return {
+    createTask: createTaskResponse,
+    finalTask: {
+      taskId: task.taskId,
+      status: task.status,
+      progress: task.progress,
+      outputUrl: task.outputUrl,
+      actualCostUsd: task.actualCostUsd,
+      errorCode: task.errorCode,
+      errorMessage: task.errorMessage,
+      raw: task.raw,
+    },
+    ...(extra ?? {}),
+  };
+}
+
+function providerErrorResponsePayload(
+  createTaskResponse: unknown,
+  error: unknown,
+  task?: PiAPITaskStatus,
+  finalCheckError?: unknown,
+) {
+  return {
+    createTask: createTaskResponse,
+    ...(task ? { finalTask: providerTaskResponsePayload(undefined, task).finalTask } : {}),
+    error: errorPayload(error),
+    ...(finalCheckError ? { finalCheckError: errorPayload(finalCheckError) } : {}),
+  };
+}
+
+function errorPayload(error: unknown) {
+  if (error instanceof ProviderError) {
+    return {
+      name: error.name,
+      code: error.code,
+      status: error.status,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return { message: String(error) };
 }
 
 async function downloadUrlToFile(url: string, targetPath: string): Promise<void> {

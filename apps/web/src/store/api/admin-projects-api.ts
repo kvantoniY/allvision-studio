@@ -1,6 +1,23 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { createBaseQueryWithReauth } from './base-query';
 
+export type AdminProjectUsageLog = {
+  id: string;
+  createdAt: string;
+  blockSlug: string;
+  provider: string;
+  model: string;
+  taskId: string | null;
+  status: string;
+  costUsd: number;
+  durationMs: number;
+  errorCode: string | null;
+  errorMessage: string | null;
+  recoverableOutputUrl: string | null;
+  requestPayload: unknown | null;
+  responsePayload: unknown | null;
+};
+
 export type AdminProject = {
   id: string;
   title: string;
@@ -16,7 +33,7 @@ export type AdminProject = {
   completedAt: string | null;
   user: { id: string; email: string };
   service: { id: string; slug: string; title: string; priceCoinsStandard: number | null; priceCoinsPro: number | null; priceTokens: number } | null;
-  aiUsageLogs?: Array<Record<string, unknown> & { costUsd: number; status: string; model: string; blockSlug: string; createdAt: string }>;
+  aiUsageLogs?: AdminProjectUsageLog[];
   pipelineSnapshot?: unknown;
   userInputs?: unknown;
   stepProgress?: unknown;

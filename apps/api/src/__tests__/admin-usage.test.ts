@@ -101,6 +101,8 @@ beforeAll(async () => {
         status: 'success',
         costUsd: 0.06,
         durationMs: 1200,
+        requestPayload: { prompt: 'usage prompt', model: `usage-model-${RUN_ID}-nano` },
+        responsePayload: { outputUrl: 'https://provider.test/result.png', status: 'completed' },
       },
       {
         projectId,
@@ -162,6 +164,14 @@ describe('/api/admin/usage', () => {
     expect(res.body.summary.totalCostUsd).toBeCloseTo(0.06);
     expect(res.body.logs).toHaveLength(3);
     expect(res.body.logs[0].project.service.slug).toBe(SERVICE_SLUG);
+    expect(res.body.logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requestPayload: expect.objectContaining({ prompt: 'usage prompt' }),
+          responsePayload: expect.objectContaining({ outputUrl: 'https://provider.test/result.png' }),
+        }),
+      ]),
+    );
     expect(res.body.byModel).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ model: `usage-model-${RUN_ID}-kling`, requestCount: 2 }),

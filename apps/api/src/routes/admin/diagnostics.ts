@@ -261,6 +261,8 @@ async function readRecentErrors() {
         status: true,
         errorCode: true,
         errorMessage: true,
+        requestPayload: true,
+        responsePayload: true,
       },
     }),
   ]);

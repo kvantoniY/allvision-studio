@@ -1,13 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { Check, Copy, RefreshCw } from 'lucide-react';
 import { formatMoney } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useGetAdminAnalyticsOverviewQuery, useGetAdminUsageQuery, useGetPiAPIAccountQuery } from '@/store/api/admin-usage-api';
+import { type AdminUsageLog, useGetAdminAnalyticsOverviewQuery, useGetAdminUsageQuery, useGetPiAPIAccountQuery } from '@/store/api/admin-usage-api';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 
 function statusClass(status: string) {
@@ -30,9 +30,52 @@ const usageFilterFields = [
   { key: 'model', label: 'Модель', placeholder: 'kling-3-pro' },
 ] as const satisfies ReadonlyArray<{ key: 'provider' | 'blockSlug' | 'model'; label: string; placeholder: string }>;
 
+function formatLogTime(value: string) {
+  return new Date(value).toLocaleString('ru-RU', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function jsonBlock(value: unknown) {
+  if (value === undefined || value === null) return 'Нет данных';
+  return JSON.stringify(value, null, 2);
+}
+
+function buildGenerationLogText(log: AdminUsageLog) {
+  return [
+    `Время: ${formatLogTime(log.createdAt)}`,
+    `Статус: ${usageStatusLabels[log.status] ?? log.status}`,
+    `Генерация: ${log.project?.service?.title ?? log.project?.title ?? 'н/д'}`,
+    `Project ID: ${log.projectId ?? 'н/д'}`,
+    `User ID: ${log.userId ?? 'н/д'}`,
+    `Блок: ${log.blockSlug}`,
+    `Провайдер: ${log.provider}`,
+    `Модель: ${log.model}`,
+    `Task ID: ${log.taskId ?? 'н/д'}`,
+    `Длительность: ${log.durationMs} ms`,
+    `Стоимость: $${log.costUsd}`,
+    `Recoverable output: ${log.recoverableOutputUrl ?? 'н/д'}`,
+    `Ошибка: ${log.errorCode ?? 'нет'}`,
+    `Сообщение ошибки: ${log.errorMessage ?? 'нет'}`,
+    '',
+    'REQUEST:',
+    jsonBlock(log.requestPayload),
+    '',
+    'RESPONSE:',
+    jsonBlock(log.responsePayload),
+  ].join('\n');
+}
+
 export default function AdminUsagePage() {
   const [filters, setFilters] = useState({ provider: '', blockSlug: '', model: '', status: '' });
+  const [copiedLogId, setCopiedLogId] = useState<string | null>(null);
   const usage = useGetAdminUsageQuery({
+    limit: 100,
     provider: filters.provider || undefined,
     blockSlug: filters.blockSlug || undefined,
     model: filters.model || undefined,
@@ -46,13 +89,20 @@ export default function AdminUsagePage() {
   const sevenDaySpend = usage.data?.summary.totalCostUsd ?? 0;
   const dailySpend = sevenDaySpend / 7;
   const balanceDays = account.data && dailySpend > 0 ? Math.floor(account.data.balanceUsd / dailySpend) : null;
+  const logs = usage.data?.logs ?? [];
+
+  const copyText = async (id: string, text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopiedLogId(id);
+    window.setTimeout(() => setCopiedLogId((current) => (current === id ? null : current)), 1600);
+  };
 
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Аналитика расходов</h1>
-          <p className="mt-2 text-sm text-slate-400">Расход PiAPI, здоровье запросов, последние ошибки провайдера и статистика по моделям.</p>
+          <h1 className="text-3xl font-bold text-white">AI-консоль генераций</h1>
+          <p className="mt-2 text-sm text-slate-400">Расход PiAPI, здоровье запросов, история генераций, ошибки, request и response провайдера.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => { usage.refetch(); account.refetch(); overview.refetch(); }}>
           <RefreshCw className="h-4 w-4" />
@@ -253,49 +303,122 @@ export default function AdminUsagePage() {
         </div>
       </section>
 
-      <div className="overflow-hidden rounded-lg border border-zinc-800">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-zinc-950 text-slate-400">
-            <tr>
-              <th className="p-3">Дата</th>
-              <th className="p-3">Услуга</th>
-              <th className="p-3">Блок/модель</th>
-              <th className="p-3">Статус</th>
-              <th className="p-3">Стоимость</th>
-              <th className="p-3">Ошибка</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-800">
-            {(usage.data?.logs ?? []).map((log) => (
-              <tr key={log.id} className="bg-zinc-900/60">
-                <td className="p-3 text-slate-300">{new Date(log.createdAt).toLocaleString()}</td>
-                <td className="p-3">
-                  <div className="text-white">{log.project?.service?.title ?? log.project?.title ?? 'н/д'}</div>
-                  <div className="text-xs text-slate-500">{log.userId ?? 'нет пользователя'}</div>
-                </td>
-                <td className="p-3 text-slate-300">
-                  <div>{log.blockSlug}</div>
-                  <div className="text-xs text-slate-500">{log.model}</div>
-                </td>
-                <td className="p-3"><Badge className={statusClass(log.status)}>{usageStatusLabels[log.status] ?? log.status}</Badge></td>
-                <td className="p-3 text-slate-300" title={`Точная стоимость: $${log.costUsd}`}>
-                  {formatMoney({ usd: log.costUsd }, { primary: 'usd', showAll: true, usdToRub })} · {Math.round(log.durationMs / 1000)} с
-                </td>
-                <td className="p-3">
-                  {log.errorCode ? (
-                    <details>
-                      <summary className="cursor-pointer text-rose-300">{log.errorCode}</summary>
-                      <p className="mt-2 max-w-md text-xs text-slate-400">{log.errorMessage}</p>
-                    </details>
-                  ) : (
-                    <span className="text-slate-600">нет</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold text-white">Консоль генераций</h2>
+            <p className="mt-1 text-sm text-slate-500">{logs.length} записей в текущей выборке</p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={logs.length === 0}
+            onClick={() => {
+              void copyText('visible', logs.map(buildGenerationLogText).join('\n\n---\n\n'));
+            }}
+          >
+            {copiedLogId === 'visible' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copiedLogId === 'visible' ? 'Скопировано' : 'Скопировать видимые'}
+          </Button>
+        </div>
+
+        <div className="space-y-3">
+          {logs.length === 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-5 text-sm text-slate-500">
+              За выбранный период логов генераций нет
+            </div>
+          )}
+          {logs.map((log) => (
+            <GenerationLogCard
+              key={log.id}
+              log={log}
+              copied={copiedLogId === log.id}
+              usdToRub={usdToRub}
+              onCopy={() => {
+                void copyText(log.id, buildGenerationLogText(log));
+              }}
+            />
+          ))}
+        </div>
+      </section>
+
+    </div>
+  );
+}
+
+function GenerationLogCard({
+  log,
+  copied,
+  usdToRub,
+  onCopy,
+}: {
+  log: AdminUsageLog;
+  copied: boolean;
+  usdToRub: number;
+  onCopy: () => void;
+}) {
+  const title = log.project?.service?.title ?? log.project?.title ?? 'н/д';
+  const hasError = Boolean(log.errorCode || log.errorMessage);
+  const hasPayloads = Boolean(log.requestPayload || log.responsePayload);
+
+  return (
+    <article className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className={statusClass(log.status)}>{usageStatusLabels[log.status] ?? log.status}</Badge>
+            <span className="text-sm font-semibold text-white">{formatLogTime(log.createdAt)}</span>
+            <span className="text-xs text-slate-500">{log.provider}</span>
+          </div>
+          <div className="mt-2 text-sm text-slate-200">{title}</div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+            <span>{log.blockSlug}</span>
+            <span>{log.model}</span>
+            <span>{log.taskId ?? 'нет taskId'}</span>
+            <span>{Math.round(log.durationMs / 1000)} с</span>
+            <span>{formatMoney({ usd: log.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</span>
+          </div>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={onCopy}>
+          {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copied ? 'Скопировано' : 'Копировать'}
+        </Button>
       </div>
+
+      {hasError && (
+        <div className="mt-4 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-sm">
+          <div className="font-medium text-rose-200">{log.errorCode ?? 'Ошибка провайдера'}</div>
+          {log.errorMessage && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-rose-100/80">{log.errorMessage}</pre>}
+        </div>
+      )}
+
+      <details className="mt-4" open={log.status !== 'success' || hasPayloads}>
+        <summary className="cursor-pointer text-sm font-medium text-slate-300">
+          Запрос и ответ
+        </summary>
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <JsonLogBlock title="Запрос" value={log.requestPayload} />
+          <JsonLogBlock title="Ответ" value={log.responsePayload} />
+        </div>
+      </details>
+
+      <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2 lg:grid-cols-4">
+        <div>Project ID: {log.projectId ?? 'н/д'}</div>
+        <div>User ID: {log.userId ?? 'н/д'}</div>
+        <div>Log ID: {log.id}</div>
+        <div>Output: {log.recoverableOutputUrl ?? 'н/д'}</div>
+      </div>
+    </article>
+  );
+}
+
+function JsonLogBlock({ title, value }: { title: string; value: unknown }) {
+  return (
+    <div className="min-w-0 rounded-md border border-zinc-800 bg-zinc-900">
+      <div className="border-b border-zinc-800 px-3 py-2 text-xs font-semibold uppercase text-slate-500">{title}</div>
+      <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap break-words p-3 text-xs leading-relaxed text-slate-200">
+        {jsonBlock(value)}
+      </pre>
     </div>
   );
 }
