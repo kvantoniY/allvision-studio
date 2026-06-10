@@ -42,11 +42,81 @@ function formatLogTime(value: string) {
 }
 
 function jsonBlock(value: unknown) {
-  if (value === undefined || value === null) return 'Нет данных';
+  if (value === undefined || value === null) return 'Данные отсутствуют';
   return JSON.stringify(value, null, 2);
 }
 
+function hasLogPayload(value: unknown) {
+  return value !== undefined && value !== null;
+}
+
+function reconstructedRequestPayload(log: AdminUsageLog) {
+  return {
+    notice: 'Точный provider request не был записан для этого лога. Обычно это значит, что генерация была создана до включения requestPayload/responsePayload или worker еще не был обновлен. Ниже восстановленный контекст из проекта и usage-лога.',
+    providerCall: {
+      provider: log.provider,
+      model: log.model,
+      blockSlug: log.blockSlug,
+      taskId: log.taskId,
+      createdAt: log.createdAt,
+    },
+    generationInput: {
+      projectId: log.projectId,
+      userId: log.userId,
+      service: log.project?.service
+        ? {
+            id: log.project.service.id,
+            slug: log.project.service.slug,
+            title: log.project.service.title,
+          }
+        : null,
+      projectTitle: log.project?.title ?? null,
+      selectedTier: log.project?.selectedTier ?? null,
+      inputText: log.project?.inputText ?? null,
+      inputImages: log.project?.inputImages ?? [],
+      userInputs: log.project?.userInputs ?? null,
+    },
+  };
+}
+
+function reconstructedResponsePayload(log: AdminUsageLog) {
+  return {
+    notice: 'Точный provider response не был записан для этого лога. Ниже технический итог, который сохранился в AIUsageLog и Project.',
+    providerResult: {
+      status: log.status,
+      taskId: log.taskId,
+      durationMs: log.durationMs,
+      costUsd: log.costUsd,
+      recoverableOutputUrl: log.recoverableOutputUrl,
+      errorCode: log.errorCode,
+      errorMessage: log.errorMessage,
+    },
+    projectResult: log.project
+      ? {
+          status: log.project.status,
+          progress: log.project.progress,
+          errorCode: log.project.errorCode,
+          errorMessage: log.project.errorMessage,
+          resultImage: log.project.resultImage,
+          resultVideo: log.project.resultVideo,
+          resultThumbnail: log.project.resultThumbnail,
+          resultAssets: log.project.resultAssets,
+        }
+      : null,
+  };
+}
+
+function requestPayloadForDisplay(log: AdminUsageLog) {
+  return hasLogPayload(log.requestPayload) ? log.requestPayload : reconstructedRequestPayload(log);
+}
+
+function responsePayloadForDisplay(log: AdminUsageLog) {
+  return hasLogPayload(log.responsePayload) ? log.responsePayload : reconstructedResponsePayload(log);
+}
+
 function buildGenerationLogText(log: AdminUsageLog) {
+  const exactRequest = hasLogPayload(log.requestPayload);
+  const exactResponse = hasLogPayload(log.responsePayload);
   return [
     `Время: ${formatLogTime(log.createdAt)}`,
     `Статус: ${usageStatusLabels[log.status] ?? log.status}`,
@@ -63,11 +133,11 @@ function buildGenerationLogText(log: AdminUsageLog) {
     `Ошибка: ${log.errorCode ?? 'нет'}`,
     `Сообщение ошибки: ${log.errorMessage ?? 'нет'}`,
     '',
-    'REQUEST:',
-    jsonBlock(log.requestPayload),
+    exactRequest ? 'REQUEST (точный provider payload):' : 'REQUEST (восстановленный контекст, точный provider payload не был записан):',
+    jsonBlock(requestPayloadForDisplay(log)),
     '',
-    'RESPONSE:',
-    jsonBlock(log.responsePayload),
+    exactResponse ? 'RESPONSE (точный provider response):' : 'RESPONSE (восстановленный итог, точный provider response не был записан):',
+    jsonBlock(responsePayloadForDisplay(log)),
   ].join('\n');
 }
 
@@ -359,7 +429,9 @@ function GenerationLogCard({
 }) {
   const title = log.project?.service?.title ?? log.project?.title ?? 'н/д';
   const hasError = Boolean(log.errorCode || log.errorMessage);
-  const hasPayloads = Boolean(log.requestPayload || log.responsePayload);
+  const hasExactRequest = hasLogPayload(log.requestPayload);
+  const hasExactResponse = hasLogPayload(log.responsePayload);
+  const hasMissingExactPayload = !hasExactRequest || !hasExactResponse;
 
   return (
     <article className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
@@ -385,6 +457,13 @@ function GenerationLogCard({
         </Button>
       </div>
 
+      {hasMissingExactPayload && (
+        <div className="mt-4 rounded-md border border-amber-900/60 bg-amber-950/20 p-3 text-xs leading-relaxed text-amber-100">
+          Точный request/response не сохранился в этой старой записи. Ниже показан восстановленный контекст: входные данные проекта,
+          model/block/taskId, итоговый статус, результат и ошибка. Новые генерации после обновления worker будут хранить точный payload провайдера.
+        </div>
+      )}
+
       {hasError && (
         <div className="mt-4 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-sm">
           <div className="font-medium text-rose-200">{log.errorCode ?? 'Ошибка провайдера'}</div>
@@ -392,13 +471,19 @@ function GenerationLogCard({
         </div>
       )}
 
-      <details className="mt-4" open={log.status !== 'success' || hasPayloads}>
+      <details className="mt-4" open>
         <summary className="cursor-pointer text-sm font-medium text-slate-300">
           Запрос и ответ
         </summary>
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <JsonLogBlock title="Запрос" value={log.requestPayload} />
-          <JsonLogBlock title="Ответ" value={log.responsePayload} />
+          <JsonLogBlock
+            title={hasExactRequest ? 'Запрос: точный provider payload' : 'Запрос: восстановленный контекст'}
+            value={requestPayloadForDisplay(log)}
+          />
+          <JsonLogBlock
+            title={hasExactResponse ? 'Ответ: точный provider response' : 'Ответ: восстановленный итог'}
+            value={responsePayloadForDisplay(log)}
+          />
         </div>
       </details>
 

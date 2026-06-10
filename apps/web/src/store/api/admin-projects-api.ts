@@ -37,6 +37,8 @@ export type AdminProject = {
   pipelineSnapshot?: unknown;
   userInputs?: unknown;
   stepProgress?: unknown;
+  inputText?: string | null;
+  inputImages?: string[];
   resultImage?: string | null;
   resultVideo?: string | null;
 };

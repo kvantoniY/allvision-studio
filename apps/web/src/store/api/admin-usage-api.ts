@@ -34,6 +34,18 @@ export type AdminUsageLog = {
   project?: {
     id: string;
     title: string;
+    status: string;
+    progress: number;
+    inputImages: string[];
+    inputText: string | null;
+    selectedTier: string | null;
+    userInputs: unknown | null;
+    resultImage: string | null;
+    resultVideo: string | null;
+    resultThumbnail: string | null;
+    resultAssets: unknown | null;
+    errorCode: string | null;
+    errorMessage: string | null;
     service: { id: string; slug: string; title: string } | null;
   } | null;
 };
