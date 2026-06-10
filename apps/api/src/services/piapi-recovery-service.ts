@@ -192,7 +192,7 @@ async function markPiAPIProjectFailed(
       });
     }
 
-    if (current.status === ProjectStatus.FAILED || current.tokensCost <= 0) return;
+    if (current.tokensCost <= 0) return;
 
     const existingRefund = await tx.tokenTransaction.findFirst({
       where: {

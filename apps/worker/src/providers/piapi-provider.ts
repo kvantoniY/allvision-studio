@@ -58,7 +58,7 @@ const KLING_PRICE_5S: Record<string, { mode: 'std' | 'pro'; costUsd: number; ver
   'kling-std': { mode: 'std', costUsd: 0.20 },
   'kling-pro': { mode: 'pro', costUsd: 0.33 },
   'kling-3-std': { mode: 'std', costUsd: 0.50, version: '3.0' },
-  'kling-3-pro': { mode: 'pro', costUsd: 1.30, version: '3.0' },
+  'kling-3-pro': { mode: 'pro', costUsd: 0.50, version: '3.0' },
 };
 
 const FACE_SWAP_MODEL = 'qubico-video-toolkit';

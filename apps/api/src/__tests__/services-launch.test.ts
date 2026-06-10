@@ -339,4 +339,49 @@ describe('POST /api/services/:slug/launch', () => {
     const after = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     expect(after.tokenBalance).toBe(before.tokenBalance - 250);
   });
+
+  it('charges the selected duration price when a duration field defines prices', async () => {
+    const service = await createService({
+      ...serviceData(),
+      priceCoinsStandard: 100,
+      priceCoinsPro: 250,
+      userInputForm: [
+        { id: 'photo', type: 'photo', label: 'Photo', required: true },
+        {
+          id: 'mood',
+          type: 'select',
+          label: 'Mood',
+          required: true,
+          options: [{ label: 'Warm', value: 'warm' }],
+        },
+        {
+          id: 'duration',
+          type: 'duration',
+          label: 'Duration',
+          required: false,
+          durationOptions: [5, 10, 15],
+          defaultDuration: 5,
+          durationPrices: [
+            { duration: 5, priceCoins: 30 },
+            { duration: 10, priceCoins: 60 },
+            { duration: 15, priceCoins: 90 },
+          ],
+        },
+        { id: 'tier', type: 'tier', label: 'Quality', required: true },
+      ],
+    });
+    jest.spyOn(queuesModule, 'addServicePipelineJob').mockResolvedValue({} as never);
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+    const res = await request(app)
+      .post(`/api/services/${service.slug}/launch`)
+      .set('Cookie', authCookie(userId))
+      .field('data', JSON.stringify({ tier: 'pro', mood: 'warm', duration: 15 }))
+      .attach('photo', await imageBuffer(), { filename: 'photo.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.project.tokensCost).toBe(90);
+    const after = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    expect(after.tokenBalance).toBe(before.tokenBalance - 90);
+  });
 });

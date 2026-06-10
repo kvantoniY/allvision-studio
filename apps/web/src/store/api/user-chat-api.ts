@@ -2,7 +2,7 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 import type { ChatModelOption, ModelPriceOverrides, ProjectStatus } from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 import { authApi } from './auth-api';
-import { projectsApi } from './projects-api';
+import { invalidateFailedProjectSideEffects, projectsApi } from './projects-api';
 
 export type ChatProjectState = {
   id: string;
@@ -122,6 +122,14 @@ export const userChatApi = createApi({
     getChat: build.query<ChatDetails, string>({
       query: (id) => ({ url: `/chats/${id}` }),
       providesTags: (_result, _error, id) => [{ type: 'Chat', id }],
+      async onQueryStarted(_id, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          invalidateFailedProjectSideEffects(dispatch, data.messages.map((message) => message.project));
+        } catch {
+          // query errors are handled by the caller
+        }
+      },
     }),
     renameChat: build.mutation<{ chat: ChatSummary }, { id: string; title: string }>({
       query: ({ id, title }) => ({ url: `/chats/${id}`, method: 'PATCH', body: { title } }),

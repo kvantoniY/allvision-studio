@@ -64,7 +64,7 @@ export async function markProjectFailed(
       },
     });
 
-    if (!refundTokens || project.status === ProjectStatus.FAILED || project.tokensCost <= 0) return;
+    if (!refundTokens || project.tokensCost <= 0) return;
 
     const existingRefund = await tx.tokenTransaction.findFirst({
       where: {

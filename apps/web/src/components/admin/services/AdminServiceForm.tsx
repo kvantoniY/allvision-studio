@@ -216,6 +216,44 @@ function unique<T>(items: T[]): T[] {
   return [...new Set(items.filter((item) => item !== undefined && item !== null))];
 }
 
+function parseDurationOptionsInput(value: string): number[] {
+  return unique(
+    value
+      .split(',')
+      .map((item) => Number(item.trim()))
+      .filter((duration) => Number.isInteger(duration) && duration > 0 && duration <= 60),
+  );
+}
+
+function syncDurationPrices(
+  durations: number[],
+  prices: UserInputField['durationPrices'],
+): UserInputField['durationPrices'] {
+  const next = durations
+    .map((duration) => {
+      const existing = prices?.find((item) => item.duration === duration);
+      return existing && existing.priceCoins > 0 ? { duration, priceCoins: existing.priceCoins } : null;
+    })
+    .filter((item): item is { duration: number; priceCoins: number } => Boolean(item));
+  return next.length > 0 ? next : undefined;
+}
+
+function setDurationPrice(
+  field: UserInputField,
+  duration: number,
+  rawValue: string,
+): UserInputField['durationPrices'] {
+  const priceCoins = Number(rawValue);
+  const current = field.durationPrices ?? [];
+  const withoutCurrent = current.filter((item) => item.duration !== duration);
+  if (!Number.isInteger(priceCoins) || priceCoins <= 0) return withoutCurrent.length > 0 ? withoutCurrent : undefined;
+  return [...withoutCurrent, { duration, priceCoins }].sort((a, b) => a.duration - b.duration);
+}
+
+function durationPriceInputValue(field: UserInputField, duration: number) {
+  return field.durationPrices?.find((item) => item.duration === duration)?.priceCoins ?? '';
+}
+
 function schemaObject(value: unknown): JsonSchemaObject {
   return isRecord(value) && typeof value.type === 'string' ? (value as JsonSchemaObject) : { type: 'string' };
 }
@@ -632,6 +670,7 @@ export function buildMockUserInputs(fields: UserInputField[] | null | undefined)
       }
       if (field.type === 'slides') return [field.id, ['Слайд 1', 'Слайд 2', 'Слайд 3']];
       if (field.type === 'tier') return [field.id, 'standard'];
+      if (field.type === 'duration') return [field.id, String(field.defaultDuration ?? field.durationOptions?.[0] ?? 5)];
       return [field.id, field.placeholder || field.label || 'Test value'];
     }),
   );
@@ -1564,20 +1603,58 @@ function UserInputFormBuilder({
                               </>
                             )}
                             {field.type === 'duration' && (
-                              <label className="flex items-center gap-2">
-                                Опции (через запятую)
-                                <Input
-                                  value={(field.durationOptions ?? [5, 8, 10]).join(',')}
-                                  onChange={(event) => {
-                                    const parts = event.target.value
-                                      .split(',')
-                                      .map((item) => Number(item.trim()))
-                                      .filter((n) => Number.isFinite(n) && n > 0);
-                                    updateField(index, { durationOptions: parts.length > 0 ? parts : undefined });
-                                  }}
-                                  className="h-8 w-40"
-                                />
-                              </label>
+                              <div className="space-y-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+                                <div className="flex flex-wrap items-center gap-3">
+                                  <label className="flex items-center gap-2">
+                                    Опции (через запятую)
+                                    <Input
+                                      value={(field.durationOptions ?? [5, 8, 10]).join(',')}
+                                      onChange={(event) => {
+                                        const parts = parseDurationOptionsInput(event.target.value);
+                                        updateField(index, {
+                                          durationOptions: parts.length > 0 ? parts : undefined,
+                                          defaultDuration: parts.length > 0 && (!field.defaultDuration || !parts.includes(field.defaultDuration))
+                                            ? parts[0]
+                                            : field.defaultDuration,
+                                          durationPrices: syncDurationPrices(parts, field.durationPrices),
+                                        });
+                                      }}
+                                      className="h-8 w-40"
+                                    />
+                                  </label>
+                                  <label className="flex items-center gap-2">
+                                    По умолчанию
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      max={60}
+                                      value={field.defaultDuration ?? ''}
+                                      onChange={(event) => updateField(index, { defaultDuration: event.target.value ? Number(event.target.value) : undefined })}
+                                      className="h-8 w-24"
+                                    />
+                                  </label>
+                                </div>
+                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                                  {(field.durationOptions ?? [5, 8, 10]).map((duration) => (
+                                    <label key={duration} className="space-y-1 text-xs text-slate-400">
+                                      <span>{duration} сек, цена</span>
+                                      <Input
+                                        type="number"
+                                        min={1}
+                                        placeholder="fallback"
+                                        value={durationPriceInputValue(field, duration)}
+                                        onChange={(event) => updateField(index, {
+                                          durationPrices: setDurationPrice(field, duration, event.target.value),
+                                        })}
+                                        className="h-8"
+                                      />
+                                    </label>
+                                  ))}
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                  Если цена для длительности пустая, используется обычная цена услуги. Заполненные значения списываются как финальная цена генерации.
+                                </p>
+                              </div>
                             )}
                             {field.type === 'slides' && (
                               <label className="flex items-center gap-2">
@@ -1915,6 +1992,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const hasPricedMultiselect = draft.userInputForm.some(
     (field) => field.type === 'multiselect' && (field.options ?? []).some((option) => typeof option.priceCoins === 'number'),
   );
+  const hasDurationPricing = draft.userInputForm.some(
+    (field) => field.type === 'duration' && (field.durationPrices ?? []).length > 0,
+  );
   const pricingSummary = useMemo(() => summarizePipelinePricing(draft.pipelineConfig, blocks, usdToRub), [draft.pipelineConfig, blocks, usdToRub]);
   const costPro = pricingSummary.pro.costCoins;
   const standardMargin = useMemo(
@@ -2237,7 +2317,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
       <Section title="Цена" description="Себестоимость считается по блокам и выбранным моделям. Для карусели основная цена считается за один слайд; для чекбоксов с ценами итог берётся из выбранных вариантов.">
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="space-y-2">
-            <Label htmlFor="pricePro">{hasSlidesPricing ? 'Цена за 1 слайд, токены' : hasPricedMultiselect ? 'Резервная цена услуги, токены' : 'Цена услуги, токены'}</Label>
+            <Label htmlFor="pricePro">{hasSlidesPricing ? 'Цена за 1 слайд, токены' : hasPricedMultiselect || hasDurationPricing ? 'Резервная цена услуги, токены' : 'Цена услуги, токены'}</Label>
             <Input
               id="pricePro"
               type="number"
@@ -2250,6 +2330,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
             />
             {hasPricedMultiselect && (
               <p className="text-xs text-slate-500">Для этой услуги итоговая цена берётся из цен выбранных чекбоксов в форме пользователя.</p>
+            )}
+            {hasDurationPricing && (
+              <p className="text-xs text-slate-500">Для этой услуги итоговая цена берётся из выбранной длительности, если для неё задана цена.</p>
             )}
           </div>
           <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">

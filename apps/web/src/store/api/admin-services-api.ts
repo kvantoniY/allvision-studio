@@ -49,6 +49,7 @@ export type UserInputField = {
   options?: Array<{ label: string; value: string; disabled?: boolean; priceCoins?: number; hint?: string }>;
   durationOptions?: number[];
   defaultDuration?: number;
+  durationPrices?: Array<{ duration: number; priceCoins: number }>;
   maxSlides?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';

@@ -84,6 +84,7 @@ type UserInputField = {
   allowSystemLibrary?: boolean;
   durationOptions?: number[];
   defaultDuration?: number;
+  durationPrices?: Array<{ duration: number; priceCoins: number }>;
   maxSlides?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
@@ -174,6 +175,18 @@ function multiselectPrice(fields: UserInputField[], values: FormValues): number 
   return sum;
 }
 
+function durationPrice(fields: UserInputField[], values: FormValues): number | null {
+  const field = fields.find(
+    (item) => fieldVisible(item, values) && item.type === 'duration' && (item.durationPrices ?? []).some((price) => typeof price.priceCoins === 'number'),
+  );
+  if (!field) return null;
+  const options = field.durationOptions && field.durationOptions.length > 0 ? field.durationOptions : [5, 8, 10];
+  const selected = Number(values[field.id] ?? field.defaultDuration ?? options[0]);
+  if (!Number.isFinite(selected)) return null;
+  const match = (field.durationPrices ?? []).find((item) => item.duration === selected);
+  return typeof match?.priceCoins === 'number' ? match.priceCoins : null;
+}
+
 function parseFields(value: unknown): UserInputField[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -202,6 +215,15 @@ function parseFields(value: unknown): UserInputField[] {
         ? item.durationOptions.filter((v): v is number => typeof v === 'number')
         : undefined,
       defaultDuration: typeof item.defaultDuration === 'number' ? item.defaultDuration : undefined,
+      durationPrices: Array.isArray(item.durationPrices)
+        ? item.durationPrices
+            .filter((price): price is Record<string, unknown> => !!price && typeof price === 'object' && !Array.isArray(price))
+            .map((price) => ({
+              duration: typeof price.duration === 'number' ? price.duration : Number(price.duration),
+              priceCoins: typeof price.priceCoins === 'number' ? price.priceCoins : Number(price.priceCoins),
+            }))
+            .filter((price) => Number.isFinite(price.duration) && Number.isFinite(price.priceCoins) && price.priceCoins > 0)
+        : undefined,
       maxSlides: typeof item.maxSlides === 'number' ? item.maxSlides : undefined,
       aspectOptions: Array.isArray(item.aspectOptions)
         ? (item.aspectOptions.filter((v) => typeof v === 'string') as UserInputField['aspectOptions'])
@@ -2079,8 +2101,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
   const basePrice = tierField ? tierPrice(service, tier) : servicePrice(service);
   const slidesCount = slideCount(fields, values);
+  const selectedDurationPrice = durationPrice(fields, values);
   const msPrice = multiselectPrice(fields, values);
-  const price = msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : basePrice;
+  const price = msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : selectedDurationPrice ?? basePrice;
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);

@@ -8,7 +8,7 @@ import { ArrowRight, Bot, Film, ImagePlus, ImageIcon, Layers3, Library, MessageS
 import { TokenIcon } from '@/components/ui/token-icon';
 import {
   CHAT_MODELS,
-  estimateChatGenerationCostCoins,
+  estimateChatGenerationPriceCoins,
   type PublicService,
 } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
@@ -795,9 +795,9 @@ function StudioPricingSection({
   starterPackage?: { tokens: number; bonus: number; priceRub: number } | null;
 }) {
   const studio = content.studio;
-  const photoPrice = estimateChatGenerationCostCoins('nano-banana');
-  const videoPrice = estimateChatGenerationCostCoins('veo-3.1-fast', { duration: 8 });
-  const audioPrice = estimateChatGenerationCostCoins('veo-3.1-fast', { duration: 8, generateAudio: true });
+  const photoPrice = estimateChatGenerationPriceCoins('nano-banana');
+  const videoPrice = estimateChatGenerationPriceCoins('veo-3.1-fast', { duration: 8 });
+  const audioPrice = estimateChatGenerationPriceCoins('veo-3.1-fast', { duration: 8, generateAudio: true });
 
   return (
     <section className="border-b border-slate-800 bg-slate-900/40" {...sectionAttrs(studio.sectionKey)}>

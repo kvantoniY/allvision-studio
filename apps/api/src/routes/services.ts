@@ -63,6 +63,27 @@ function parseBoolean(value: unknown): boolean | undefined {
   return undefined;
 }
 
+function fieldVisibleForData(field: UserInputFieldInput, data: Record<string, unknown>): boolean {
+  if (!field.visibleWhen) return true;
+  return data[field.visibleWhen.field] === field.visibleWhen.value;
+}
+
+function selectedDurationPrice(fields: UserInputFieldInput[], data: Record<string, unknown>): number | null {
+  const field = fields.find(
+    (item) => fieldVisibleForData(item, data)
+      && item.type === 'duration'
+      && (item.durationPrices ?? []).some((price) => Number.isFinite(price.priceCoins) && price.priceCoins > 0),
+  );
+  if (!field) return null;
+
+  const options = field.durationOptions && field.durationOptions.length > 0 ? field.durationOptions : [5, 8, 10];
+  const duration = Number(data[field.id] ?? field.defaultDuration ?? options[0]);
+  if (!Number.isFinite(duration)) return null;
+
+  const match = (field.durationPrices ?? []).find((item) => item.duration === duration);
+  return match && Number.isFinite(match.priceCoins) && match.priceCoins > 0 ? match.priceCoins : null;
+}
+
 function parseDataField(value: unknown): Record<string, unknown> {
   if (value === undefined) return {};
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -494,6 +515,11 @@ servicesRouter.post(
       let tokensCost = tierValue === 'standard'
         ? (service.priceCoinsStandard ?? service.priceCoinsPro ?? service.priceTokens)
         : (service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens);
+
+      const durationPrice = selectedDurationPrice(fields, data);
+      if (durationPrice !== null) {
+        tokensCost = durationPrice;
+      }
 
       // Slides services are priced per slide: the tier price is the price of ONE slide.
       const slidesField = fields.find((field) => field.type === 'slides');

@@ -73,4 +73,12 @@ describe('CHAT_MODELS', () => {
     expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': base + 50 } })).toBe(base + 50);
     expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(1);
   });
+
+  it('keeps image chat pricing at cost and marks up video chat pricing three times after token rounding', () => {
+    expect(estimateChatGenerationPriceCoins('gpt-image-2')).toBe(estimateChatGenerationCostCoins('gpt-image-2'));
+
+    const klingCost = estimateChatGenerationCostCoins('kling-3-omni', { duration: 15, params: { resolution: '720p' } });
+    expect(klingCost).toBe(7);
+    expect(estimateChatGenerationPriceCoins('kling-3-omni', { duration: 15, params: { resolution: '720p' } })).toBe(21);
+  });
 });

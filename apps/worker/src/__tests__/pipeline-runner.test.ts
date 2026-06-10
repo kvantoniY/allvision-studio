@@ -16,6 +16,7 @@ import {
   runPipeline,
   type PipelineStep,
 } from '../pipeline-runner';
+import { markProjectFailed } from '../processors/base';
 import { StubAIProvider } from '../providers/stub-ai-provider';
 import { deleteAIUsageLogsByUserIds } from '../providers/usage-limits';
 
@@ -299,6 +300,24 @@ describe('runPipeline', () => {
     expect(updatedProject.status).toBe(ProjectStatus.FAILED);
     expect(updatedUser.tokenBalance).toBe(110);
     expect(refund?.amount).toBe(10);
+  });
+
+  it('refunds an already failed paid project when the refund transaction is missing', async () => {
+    const user = await createUser(100);
+    const service = await createService();
+    const project = await createProject({ user, service, pipeline: [{ id: 'step_1', blockSlug: 'bad' }], tokensCost: 10 });
+    await prisma.project.update({ where: { id: project.id }, data: { status: ProjectStatus.FAILED } });
+
+    await markProjectFailed(project.id, 'retry failure sync', { refundTokens: true });
+    await markProjectFailed(project.id, 'retry failure sync again', { refundTokens: true });
+
+    const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+    const refunds = await prisma.tokenTransaction.findMany({
+      where: { userId: user.id, refId: project.id, reason: 'refund' },
+    });
+    expect(updatedUser.tokenBalance).toBe(110);
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0].amount).toBe(10);
   });
 
   it('fails with a clear error for unknown blocks', async () => {

@@ -7,6 +7,26 @@ import {
 const form = [{ id: 'tier', type: 'tier' as const, label: 'Качество', required: true }];
 
 describe('admin service validation messages', () => {
+  it('accepts duration fields with per-duration prices', () => {
+    expect(() =>
+      validateUserInputForm([
+        {
+          id: 'duration',
+          type: 'duration',
+          label: 'Duration',
+          required: false,
+          durationOptions: [5, 10, 15],
+          defaultDuration: 5,
+          durationPrices: [
+            { duration: 5, priceCoins: 30 },
+            { duration: 10, priceCoins: 60 },
+            { duration: 15, priceCoins: 90 },
+          ],
+        },
+      ]),
+    ).not.toThrow();
+  });
+
   it('returns a human-readable empty pipeline error', () => {
     expect(() => validatePipelineConfig([], form)).toThrow('PIPELINE_EMPTY');
     expect(formatAdminServiceValidationError('PIPELINE_EMPTY')).toBe('Пайплайн пустой. Добавьте хотя бы один шаг.');

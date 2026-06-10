@@ -316,7 +316,7 @@ function seedancePerSecond(slug: string, resolution: string) {
   const canonical = slug.includes('fast') ? 'seedance-2-fast' : 'seedance-2';
   const table: Record<string, Record<string, number>> = {
     'seedance-2': { '480p': 0.1, '720p': 0.2, '1080p': 0.5 },
-    'seedance-2-fast': { '480p': 0.06, '720p': 0.16, '1080p': 0.35 },
+    'seedance-2-fast': { '480p': 0.08, '720p': 0.16 },
   };
   const base = table[canonical]?.[resolution] ?? table[canonical]?.['720p'] ?? 0;
   return slug.includes('less-restriction') ? base * 1.25 : base;
@@ -328,13 +328,11 @@ function veoPerSecond(slug: string, generateAudio: boolean) {
 }
 
 function wanPerSecond(resolution: string) {
-  return resolution === '1080p' ? 0.12 : 0.07;
+  return resolution === '1080p' ? 0.12 : 0.08;
 }
 
-function kling3UnitCost(slug: string, resolution: string, enableAudio: boolean) {
-  if (slug === 'kling-3-pro') return resolution === '1080p' ? 2.8 : 1.3;
-  if (enableAudio) return resolution === '1080p' ? 1.6 : 0.9;
-  return resolution === '1080p' ? 1.2 : 0.5;
+function kling3UnitCost(_slug: string, resolution: string, enableAudio: boolean) {
+  return 5 * kling3OmniPerSecond(resolution, enableAudio);
 }
 
 function kling3OmniPerSecond(resolution: string, enableAudio: boolean) {
@@ -344,17 +342,20 @@ function kling3OmniPerSecond(resolution: string, enableAudio: boolean) {
 
 function hailuoCost(slug: string, duration: number, resolution: string) {
   const canonical = slug.includes('fast') ? 'hailuo-2.3-fast' : 'hailuo-2.3';
-  const key = `${canonical}:${resolution}:${duration}`;
+  const normalizedResolution = resolution.toUpperCase().replace(/P$/, '');
+  const boundedDuration = duration <= 6 ? 6 : 10;
+  const key = `${canonical}:${normalizedResolution}:${boundedDuration}`;
   const table: Record<string, number> = {
-    'hailuo-2.3:768P:6': 0.23,
-    'hailuo-2.3:1080P:6': 0.68,
-    'hailuo-2.3:768P:10': 0.39,
-    'hailuo-2.3:1080P:10': 1.14,
-    'hailuo-2.3-fast:768P:6': 0.14,
-    'hailuo-2.3-fast:1080P:6': 0.41,
-    'hailuo-2.3-fast:768P:10': 0.23,
-    'hailuo-2.3-fast:1080P:10': 0.68,
+    'hailuo-2.3:768:6': 0.23,
+    'hailuo-2.3:768:10': 0.45,
+    'hailuo-2.3:1080:6': 0.4,
+    'hailuo-2.3-fast:768:6': 0.16,
+    'hailuo-2.3-fast:768:10': 0.26,
+    'hailuo-2.3-fast:1080:6': 0.26,
   };
+  if (normalizedResolution === '1080' && boundedDuration === 10) {
+    return table[`${canonical}:1080:6`] ?? modelFallback(slug);
+  }
   return table[key] ?? (modelFallback(slug));
 }
 

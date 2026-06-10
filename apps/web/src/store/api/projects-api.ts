@@ -87,6 +87,14 @@ export const projectsApi = createApi({
     getProjectStatus: build.query<ProjectStatusResponse, string>({
       query: (id) => ({ url: `/${id}/status` }),
       providesTags: (_result, _error, id) => [{ type: 'ProjectStatus', id }],
+      async onQueryStarted(_id, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          invalidateFailedProjectSideEffects(dispatch, [data]);
+        } catch {
+          // query errors are handled by the caller
+        }
+      },
     }),
     listProjects: build.query<ProjectsResponse, ProjectsQuery | void>({
       query: (q) => {
@@ -98,6 +106,14 @@ export const projectsApi = createApi({
         return { url: `/?${params.toString()}` };
       },
       providesTags: ['Project'],
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        try {
+          const { data } = await queryFulfilled;
+          invalidateFailedProjectSideEffects(dispatch, data.items);
+        } catch {
+          // query errors are handled by the caller
+        }
+      },
     }),
     reportProject: build.mutation<{ ticket: SupportTicket }, { id: string; reason?: string; message?: string }>({
       query: ({ id, reason, message }) => ({
@@ -121,9 +137,24 @@ type InvalidateAction =
   | ReturnType<typeof accountApi.util.invalidateTags>
   | ReturnType<typeof authApi.util.invalidateTags>;
 
+const failedProjectSideEffectsSeen = new Set<string>();
+
 export function invalidateProjectSideEffects(dispatch: (action: InvalidateAction) => unknown) {
   dispatch(accountApi.util.invalidateTags(['User', 'Dashboard', 'Transactions']));
   dispatch(authApi.util.invalidateTags(['Me', 'User']));
+}
+
+export function invalidateFailedProjectSideEffects(
+  dispatch: (action: InvalidateAction) => unknown,
+  projects: Array<{ id: string; status?: ProjectStatus | string | null }>,
+) {
+  const hasNewFailure = projects.some((project) => {
+    if (project.status !== 'FAILED') return false;
+    if (failedProjectSideEffectsSeen.has(project.id)) return false;
+    failedProjectSideEffectsSeen.add(project.id);
+    return true;
+  });
+  if (hasNewFailure) invalidateProjectSideEffects(dispatch);
 }
 
 export const {
