@@ -115,14 +115,14 @@ const MOTION_TRANSFER_MODELS = new Set([
   'kling-motion-3.0-pro',
 ]);
 
-const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; taskType: string; supportsImageInput: boolean; estimatedCostUsd: number }> = {
-  'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06 },
+const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; taskType: string; supportsImageInput: boolean; estimatedCostUsd: number; maxInputImages?: number }> = {
+  'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06, maxInputImages: 14 },
   'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
   // GPT Image 2 (OpenAI через PiAPI). Идёт НЕ через unified /api/v1/task, а через
   // OpenAI-совместимые /v1/images/generations|edits — см. ветку gpt-image в imageEdit().
   // providerModel/taskType здесь не используются для вызова, оставлены для единообразия каталога.
-  'gpt-image-2': { providerModel: 'gpt-image-2', taskType: 'gpt-image-2', supportsImageInput: true, estimatedCostUsd: 0.1 },
+  'gpt-image-2': { providerModel: 'gpt-image-2', taskType: 'gpt-image-2', supportsImageInput: true, estimatedCostUsd: 0.1, maxInputImages: 10 },
 };
 
 const VIDEO_EFFECT_MODELS: Record<string, { providerModel: string; taskType: string; estimatedCostUsd: number }> = {
@@ -212,7 +212,12 @@ export class PiAPIProvider implements AIProvider {
         const size = gptImageSizeForAspect(aspect);
         const quality = normalizeGptImageQuality(readString(input.params, 'quality'));
         const outputFormat = normalizeGptImageOutputFormat(readString(input.params, 'output_format'));
-        const refs = uniqueImageReferenceUrls([input.imageUrl, ...readStringList(input.params, 'image_urls')]);
+        const refs = limitImageReferences(
+          uniqueImageReferenceUrls([input.imageUrl, ...readStringList(input.params, 'image_urls')]),
+          modelConfig.maxInputImages,
+          input.model,
+          this.logger,
+        );
         requestPayload = {
           endpoint: refs.length > 0 ? '/v1/images/edits' : '/v1/images/generations',
           body: {
@@ -290,14 +295,31 @@ export class PiAPIProvider implements AIProvider {
         };
       }
       const aspectRatio = normalizeAspectRatio(readString(input.params, 'aspect_ratio'));
-      const published = input.imageUrl ? await this.publisher.publishImageUrl(input.imageUrl, 1) : undefined;
-      const extraImageUrls = readStringList(input.params, 'image_urls');
+      // "Вход" шага и admin-параметр image_urls — это ОДИН список референсов: вход идёт первым,
+      // дубликаты (один и тот же файл, указанный в обоих местах) выбрасываются ДО публикации,
+      // и каждый референс проходит через publisher (resize/EXIF/публичный URL), а не только первый.
+      const sourceRefs = limitImageReferences(
+        uniqueImageReferenceUrls([input.imageUrl, ...readStringList(input.params, 'image_urls')]),
+        modelConfig.maxInputImages,
+        input.model,
+        this.logger,
+      );
+      let referenceUrls: string[] = [];
+      if (modelConfig.supportsImageInput && sourceRefs.length > 0) {
+        referenceUrls = [];
+        for (const url of sourceRefs) {
+          referenceUrls.push((await this.publisher.publishImageUrl(url, 1)).publicUrl);
+        }
+      } else if (!modelConfig.supportsImageInput && sourceRefs.length > 0) {
+        this.logger.warn(
+          `[piapi] image-edit model ${input.model} is text-to-image only; ignoring ${sourceRefs.length} image reference(s)`,
+        );
+      }
       const payload = buildImageEditPayload({
         modelSlug: input.model,
         modelConfig,
         prompt: input.prompt,
-        publishedUrl: published?.publicUrl,
-        extraImageUrls,
+        imageUrls: referenceUrls,
         resolution,
         aspectRatio,
         negativePrompt: input.negativePrompt,
@@ -1519,6 +1541,14 @@ function uniqueImageReferenceUrls(values: Array<string | undefined>) {
   return refs;
 }
 
+function limitImageReferences(refs: string[], maxInputImages: number | undefined, model: string, logger: Logger) {
+  if (!maxInputImages || refs.length <= maxInputImages) return refs;
+  logger.warn(
+    `[piapi] image-edit ${model}: ${refs.length} image references exceed the provider limit of ${maxInputImages}; sending the first ${maxInputImages}`,
+  );
+  return refs.slice(0, maxInputImages);
+}
+
 function imageReferenceDedupeKey(value: string) {
   const localKey = localStaticKey(value);
   if (localKey) return `static:${localKey}`;
@@ -1973,8 +2003,7 @@ function buildImageEditPayload(input: {
   modelSlug: string;
   modelConfig: { providerModel: string; taskType: string; supportsImageInput: boolean; estimatedCostUsd: number };
   prompt: string;
-  publishedUrl?: string;
-  extraImageUrls: string[];
+  imageUrls: string[];
   resolution: string;
   aspectRatio?: string;
   negativePrompt?: string;
@@ -1986,7 +2015,7 @@ function buildImageEditPayload(input: {
   const outputFormat = readString(input.params, 'output_format') ?? 'jpg';
 
   if (modelSlug === 'nano-banana') {
-    const imageUrls = [...(input.publishedUrl ? [input.publishedUrl] : []), ...input.extraImageUrls];
+    const imageUrls = input.imageUrls;
     return {
       model: modelConfig.providerModel,
       task_type: modelConfig.taskType,
@@ -2042,6 +2071,8 @@ export const __piapiPayloadBuildersForTests = {
   buildWatermarkPayload,
   buildVideoUpscalePayload,
   normalizeGptImageReference,
+  uniqueImageReferenceUrls,
+  limitImageReferences,
 };
 
 function aspectRatioFromDimensions(width: number, height: number): '9:16' | '16:9' | '1:1' {

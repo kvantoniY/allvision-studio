@@ -694,7 +694,7 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         quality: { type: 'string', title: 'Качество GPT Image', enum: ['standard', 'high'], default: 'standard', description: 'Качество для GPT Image 2. Standard дешевле и используется по умолчанию.' },
         aspect_ratio: aspectRatioSchema,
         resolution: { type: 'string', title: 'Разрешение', enum: ['1K', '2K', '4K'], default: '1K', description: 'Разрешение результата Nano Banana 2. 1K дешевле всего; 4K стоит дороже и дольше обрабатывается.' },
-        image_urls: { type: 'array', title: 'Image reference URLs', items: { type: 'string' }, description: 'Optional additional image references for Nano Banana 2.' },
+        image_urls: { type: 'array', title: 'Дополнительные референсы', items: { type: 'string' }, description: 'ДОПОЛНИТЕЛЬНЫЕ референс-изображения помимо основного «Входа» шага. «Вход» автоматически передаётся в модель первым референсом — не дублируйте его здесь (дубликаты воркер всё равно отсекает, ошибки не будет). Работает для Nano Banana 2 и GPT Image 2; txt2img-модели (Flux) референсы игнорируют. Лимит: 14 у Nano Banana, 10 у GPT Image.' },
       },
       ['prompt'],
     ),

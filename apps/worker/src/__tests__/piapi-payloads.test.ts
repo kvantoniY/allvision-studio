@@ -1,6 +1,14 @@
 import { __piapiPayloadBuildersForTests } from '../providers/piapi-provider';
 
-const { buildImageToVideoPayload, buildTextToVideoPayload, buildWatermarkPayload, buildVideoUpscalePayload } = __piapiPayloadBuildersForTests;
+const {
+  buildImageToVideoPayload,
+  buildTextToVideoPayload,
+  buildImageEditPayload,
+  buildWatermarkPayload,
+  buildVideoUpscalePayload,
+  uniqueImageReferenceUrls,
+  limitImageReferences,
+} = __piapiPayloadBuildersForTests;
 
 describe('PiAPI payload builders', () => {
   it('builds Veo 3.1 text-to-video payload with audio and quality controls', () => {
@@ -203,5 +211,66 @@ describe('PiAPI payload builders', () => {
       task_type: 'upscale',
       input: { video: 'https://cdn.test/source.mp4' },
     });
+  });
+
+  it('builds Nano Banana image-edit payload with merged references', () => {
+    const payload = buildImageEditPayload({
+      modelSlug: 'nano-banana',
+      modelConfig: { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06 },
+      prompt: 'restore the photo',
+      imageUrls: ['https://cdn.test/main.jpg', 'https://cdn.test/extra.jpg'],
+      resolution: '2K',
+      aspectRatio: '16:9',
+      params: { output_format: 'png' },
+    });
+
+    expect(payload).toEqual({
+      model: 'gemini',
+      task_type: 'nano-banana-2',
+      input: {
+        prompt: 'restore the photo',
+        output_format: 'png',
+        resolution: '2K',
+        image_urls: ['https://cdn.test/main.jpg', 'https://cdn.test/extra.jpg'],
+        aspect_ratio: '16:9',
+      },
+    });
+  });
+
+  it('omits image_urls for Nano Banana text-to-image (no references)', () => {
+    const payload = buildImageEditPayload({
+      modelSlug: 'nano-banana',
+      modelConfig: { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06 },
+      prompt: 'a calm lake at dawn',
+      imageUrls: [],
+      resolution: '1K',
+      params: {},
+    });
+
+    expect((payload.input as Record<string, unknown>).image_urls).toBeUndefined();
+  });
+
+  it('dedupes the step input against image_urls duplicates (same /static key)', () => {
+    const refs = uniqueImageReferenceUrls([
+      'https://allvision-pulse.ru/static/media-assets/user-avatar/photo.png',
+      'https://allvision-pulse.ru/static/media-assets/user-avatar/photo.png',
+      '/static/media-assets/user-avatar/photo.png',
+      'https://cdn.test/other.jpg',
+    ]);
+
+    expect(refs).toEqual([
+      'https://allvision-pulse.ru/static/media-assets/user-avatar/photo.png',
+      'https://cdn.test/other.jpg',
+    ]);
+  });
+
+  it('clamps references to the provider limit with a warning', () => {
+    const warnings: string[] = [];
+    const logger = { info: () => {}, warn: (msg: string) => warnings.push(msg), error: () => {} } as never;
+    const refs = Array.from({ length: 12 }, (_, i) => `https://cdn.test/ref-${i}.jpg`);
+
+    expect(limitImageReferences(refs, 10, 'gpt-image-2', logger)).toHaveLength(10);
+    expect(warnings).toHaveLength(1);
+    expect(limitImageReferences(refs, undefined, 'nano-banana', logger)).toHaveLength(12);
   });
 });
