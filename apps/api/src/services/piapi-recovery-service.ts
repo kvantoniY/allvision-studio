@@ -151,6 +151,42 @@ async function recoverPiAPIProject(projectId: string, userId?: string): Promise<
   return false;
 }
 
+// Дедлайн для PIAPI_SYNC_PENDING: gpt-image edits — синхронный вызов, и если соединение
+// оборвалось ДО того, как PiAPI принял запрос, задача никогда не появится в provider history.
+// Без дедлайна такой проект висел бы в PROCESSING на 95% до 45-минутного watchdog'а.
+// Генерация изображения занимает 1-2 минуты, поэтому если спустя failAfterMs история
+// PiAPI так и не показала задачу — честно фейлим проект и возвращаем коины.
+export async function failPiAPIProjectIfSyncLost(projectId: string, failAfterMs: number): Promise<boolean> {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId },
+    select: { id: true, userId: true, status: true, errorCode: true, stepProgress: true },
+  });
+  if (!project) return false;
+  if (project.status !== 'PENDING' && project.status !== 'PROCESSING') return false;
+  if (project.errorCode !== 'PIAPI_SYNC_PENDING') return false;
+
+  // Лог timeout_pending без taskId — это именно потерянный синхронный вызов.
+  // Записи с taskId обрабатывает обычный unified-task recovery, их не трогаем.
+  const pendingLog = await prisma.aIUsageLog.findFirst({
+    where: { projectId, provider: 'piapi', status: 'timeout_pending', taskId: null },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, createdAt: true, blockSlug: true },
+  });
+  if (!pendingLog) return false;
+  if (Date.now() - pendingLog.createdAt.getTime() < failAfterMs) return false;
+
+  await markPiAPIProjectFailed(
+    { id: project.id, userId: project.userId, stepProgress: project.stepProgress },
+    { logId: pendingLog.id, taskId: null, blockSlug: pendingLog.blockSlug },
+    {
+      status: 'failed',
+      errorCode: 'PIAPI_SYNC_LOST',
+      errorMessage: 'PiAPI connection was lost and the task never appeared in provider history',
+    },
+  );
+  return true;
+}
+
 async function markPiAPIProjectFailed(
   project: { id: string; userId: string; stepProgress: unknown },
   ref: RecoveryRef,

@@ -1,6 +1,6 @@
 import { ProjectStatus, prisma } from '@allvision/database';
 import { logger } from '../utils/logger';
-import { tryRecoverPiAPIProject } from './piapi-recovery-service';
+import { failPiAPIProjectIfSyncLost, tryRecoverPiAPIProject } from './piapi-recovery-service';
 
 // Background server-side reconciler: drives in-flight PiAPI projects to a terminal state
 // (COMPLETED or FAILED+refund) by polling PiAPI directly, independent of whether the user's
@@ -19,6 +19,9 @@ let running = false;
 const DEFAULT_INTERVAL_MS = 45_000;
 const DEFAULT_LOOKBACK_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_BATCH = 25;
+// Сколько ждать появления потерянной sync-задачи (gpt-image) в PiAPI history,
+// прежде чем зафейлить проект с refund. Сама генерация занимает 1-2 минуты.
+const DEFAULT_SYNC_PENDING_FAIL_AFTER_MS = 10 * 60 * 1000;
 
 function positiveIntEnv(name: string, fallback: number) {
   const raw = process.env[name]?.trim();
@@ -57,10 +60,24 @@ export async function reconcileInFlightPiAPIProjects(now = new Date()): Promise<
     take: positiveIntEnv('PIAPI_RECONCILE_BATCH', DEFAULT_BATCH),
   });
 
+  const syncFailAfterMs = positiveIntEnv('PIAPI_SYNC_PENDING_FAIL_AFTER_MS', DEFAULT_SYNC_PENDING_FAIL_AFTER_MS);
   let resolved = 0;
   for (const project of projects) {
     const ok = await tryRecoverPiAPIProject(project.id, project.userId);
-    if (ok) resolved += 1;
+    if (ok) {
+      resolved += 1;
+      continue;
+    }
+    // Recovery не нашёл задачу: для потерянных синхронных gpt-image вызовов
+    // по истечении дедлайна фейлим проект с refund, а не ждём watchdog.
+    const failed = await failPiAPIProjectIfSyncLost(project.id, syncFailAfterMs).catch((error) => {
+      logger.warn(`[piapi-reconciler] sync-lost check failed for project=${project.id}: ${(error as Error).message}`);
+      return false;
+    });
+    if (failed) {
+      resolved += 1;
+      logger.warn(`[piapi-reconciler] project=${project.id} failed after sync-pending deadline (refund issued)`);
+    }
   }
   return { scanned: projects.length, resolved };
 }
