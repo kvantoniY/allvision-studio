@@ -3,7 +3,10 @@ import { getUserFriendlyError } from '@allvision/shared';
 import { markProjectFailed } from '../processors/base';
 import { logger } from '../utils/logger';
 
-const DEFAULT_GENERATION_TIMEOUT_MS = 30 * 60 * 1000;
+// Backstop only. Must stay comfortably above the longest provider poll (PIAPI_VIDEO_TIMEOUT_MS = 30m)
+// so the watchdog never kills a generation the worker is still legitimately polling, and so the
+// API reconciler has time to deliver a result that completed on PiAPI after a connection drop.
+const DEFAULT_GENERATION_TIMEOUT_MS = 45 * 60 * 1000;
 const DEFAULT_WATCHDOG_INTERVAL_MS = 60 * 1000;
 const DEFAULT_BATCH_SIZE = 50;
 
