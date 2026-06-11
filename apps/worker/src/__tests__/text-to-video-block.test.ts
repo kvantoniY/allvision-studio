@@ -55,4 +55,62 @@ describe('text-to-video block', () => {
   it('validates required prompt', async () => {
     await expect(textToVideoBlock.executor({ model: 'seedance-2' }, {}, ctx())).rejects.toThrow();
   });
+
+  it('passes the step input as the first image reference for Seedance omni', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'textToVideo');
+    await textToVideoBlock.executor(
+      { model: 'seedance-2-omni', mode: 'omni_reference', prompt: 'use @image1', duration: 8 },
+      { type: 'image', url: 'https://cdn.test/step1.jpg' },
+      ctx(provider),
+    );
+
+    const call = spy.mock.calls[0][0] as { params?: Record<string, unknown> };
+    expect(call.params?.image_urls).toEqual(['https://cdn.test/step1.jpg']);
+  });
+
+  it('does not duplicate the input when image_urls already contains it', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'textToVideo');
+    await textToVideoBlock.executor(
+      {
+        model: 'seedance-2-omni',
+        mode: 'omni_reference',
+        prompt: 'use @image1 and @image2',
+        image_urls: ['https://cdn.test/step1.jpg', 'https://cdn.test/extra.jpg'],
+      },
+      { type: 'image', url: 'https://cdn.test/step1.jpg' },
+      ctx(provider),
+    );
+
+    const call = spy.mock.calls[0][0] as { params?: Record<string, unknown> };
+    expect(call.params?.image_urls).toEqual(['https://cdn.test/step1.jpg', 'https://cdn.test/extra.jpg']);
+  });
+
+  it('merges the input into images for Kling 3.0 Omni', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'textToVideo');
+    await textToVideoBlock.executor(
+      { model: 'kling-3-omni', prompt: 'use @image_1' },
+      { type: 'image', url: 'https://cdn.test/step1.jpg' },
+      ctx(provider),
+    );
+
+    const call = spy.mock.calls[0][0] as { params?: Record<string, unknown> };
+    expect(call.params?.images).toEqual(['https://cdn.test/step1.jpg']);
+  });
+
+  it('ignores the step input for text-only models', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'textToVideo');
+    await textToVideoBlock.executor(
+      { model: 'veo-3.1', prompt: 'cinematic shot' },
+      { type: 'image', url: 'https://cdn.test/step1.jpg' },
+      ctx(provider),
+    );
+
+    const call = spy.mock.calls[0][0] as { params?: Record<string, unknown> };
+    expect(call.params?.image_urls).toBeUndefined();
+    expect(call.params?.images).toBeUndefined();
+  });
 });

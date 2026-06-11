@@ -7,6 +7,7 @@ import {
   blockOutputSchema,
   estimateFromSupportedModel,
   providerResultToOutput,
+  readInputUrl,
   tierModelParamsSchema,
 } from './utils';
 
@@ -38,6 +39,13 @@ const paramsSchema = z.object({
   watermark: z.boolean().optional(),
 });
 
+function mergeReference(inputUrl: string, existing: string | string[] | undefined): string[] {
+  const rest = (Array.isArray(existing) ? existing : existing ? [existing] : [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && value !== inputUrl);
+  return [inputUrl, ...rest];
+}
+
 export const textToVideoBlock: BlockDefinition = {
   ...catalog,
   inputSchema: anyInputSchema,
@@ -45,14 +53,31 @@ export const textToVideoBlock: BlockDefinition = {
   paramsSchema,
   estimatedCostCoins: (params) =>
     estimateFromSupportedModel(params, 45, catalog.supportedModels),
-  async executor(params, _input, ctx) {
+  async executor(params, input, ctx) {
     const parsed = paramsSchema.parse(params);
     await ctx.reportProgress(5);
+    const model = typeof parsed.model === 'string' ? parsed.model : 'seedance-2-fast';
+    const providerParams = asObject(parsed);
+    // "Вход" шага (например, результат image-edit) для omni-моделей автоматически
+    // становится ПЕРВЫМ референсом. Иначе админ, выбравший вход в конструкторе, получал
+    // omni_reference без image_urls вообще — PiAPI отвечает на такой запрос HTTP 500.
+    const inputUrl = input === undefined || input === null ? '' : readInputUrl(input, '');
+    if (inputUrl) {
+      const isSeedanceOmni = model.startsWith('seedance')
+        && (model.endsWith('-omni') || parsed.mode === 'omni_reference');
+      if (isSeedanceOmni) {
+        providerParams.image_urls = mergeReference(inputUrl, parsed.image_urls);
+      } else if (model === 'kling-3-omni') {
+        providerParams.images = mergeReference(inputUrl, parsed.images);
+      } else {
+        console.warn(`[text-to-video] model ${model} is text-only; step input is ignored`);
+      }
+    }
     const result = await ctx.getAIProvider().textToVideo({
       prompt: parsed.prompt,
       durationSec: parsed.duration ?? 5,
-      model: typeof parsed.model === 'string' ? parsed.model : 'seedance-2-fast',
-      params: asObject(parsed),
+      model,
+      params: providerParams,
       context: ctx.providerContext,
     });
     const output = providerResultToOutput(result, 'video');
