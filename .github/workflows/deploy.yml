@@ -116,6 +116,15 @@ jobs:
             return 1
           }
 
+          # docker compose --force-recreate сначала переименовывает старый контейнер в
+          # "<id12>_<имя>". Если прошлый деплой оборвался посреди recreate, контейнер с таким
+          # временным именем остаётся и следующий rename падает с name conflict. Сносим их.
+          cleanup_stale_renamed_containers() {
+            docker ps -a --format '{{.Names}}' \
+              | grep -E '^[0-9a-f]{12}_allvision-studio-' \
+              | xargs -r docker rm -f || true
+          }
+
           cleanup_old_releases() {
             local keep_limit="$1"
             local current_release=""
@@ -175,6 +184,7 @@ jobs:
           ln -sfn "$RELEASE_DIR" "$BASE/current"
           cd "$BASE/current"
           echo "Recreating runtime containers for $GIT_SHA"
+          cleanup_stale_renamed_containers
           compose_for_release "$RELEASE_DIR" up -d --force-recreate --no-deps --remove-orphans api worker web nginx
 
           healthy=0
@@ -192,6 +202,7 @@ jobs:
             if [ -n "$OLD_RELEASE" ] && [ -f "$OLD_RELEASE/infra/prod/docker-compose.prod.yml" ]; then
               ln -sfn "$OLD_RELEASE" "$BASE/current"
               cd "$OLD_RELEASE"
+              cleanup_stale_renamed_containers
               compose_for_release "$OLD_RELEASE" up -d --force-recreate --no-deps --remove-orphans api worker web nginx
             fi
             exit 1
