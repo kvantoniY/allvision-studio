@@ -311,7 +311,8 @@ export class PiAPIClient {
       });
       req.on('error', (err) => {
         if (err instanceof ProviderError) reject(err);
-        else reject(new ProviderError('PIAPI_NETWORK_ERROR', `gpt-image edit: ${(err as Error).message}`));
+        // Размер тела в сообщении: сразу видно в AI-логах, был ли обрыв связан с тяжёлым upload.
+        else reject(new ProviderError('PIAPI_NETWORK_ERROR', `gpt-image edit: ${(err as Error).message} (multipart body ${body.length} bytes)`));
       });
       req.write(body);
       req.end();

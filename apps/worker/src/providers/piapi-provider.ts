@@ -80,6 +80,18 @@ const PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS = 5 * 60 * 1000;
 // to JPEG so the body stays small and uploads instantly. gpt-image renders at <=1536 anyway.
 const GPT_IMAGE_REF_MAX_PX = 1536;
 const GPT_IMAGE_REF_JPEG_QUALITY = 90;
+// Мягкий потолок размера одного референса: если первая перекодировка вышла тяжелее,
+// пробуем меньше пикселей/качество. Большое multipart-тело — главный известный убийца
+// edits-запроса (шлюз рвёт долгий upload на ~15s).
+const GPT_IMAGE_REF_TARGET_BYTES = 1_500_000;
+// Жёсткий потолок: тело такого размера гарантированно не доживёт до ответа — лучше
+// упасть с понятной ошибкой и refund, чем 5 минут мучить соединение и history recovery.
+const GPT_IMAGE_REF_HARD_LIMIT_BYTES = 4 * 1024 * 1024;
+const GPT_IMAGE_REF_VARIANTS: Array<{ px: number; quality: number }> = [
+  { px: GPT_IMAGE_REF_MAX_PX, quality: GPT_IMAGE_REF_JPEG_QUALITY },
+  { px: 1280, quality: 80 },
+  { px: 1024, quality: 70 },
+];
 const NANO_BANANA_COST_USD: Record<string, number> = {
   '1K': 0.06,
   '2K': 0.08,
@@ -235,6 +247,19 @@ export class PiAPIProvider implements AIProvider {
         // Read them from the shared local uploads volume when the URL is our own /static URL, instead of
         // HTTP-fetching the public domain from inside the container (that loopback fails -> network error).
         const images = await Promise.all(refs.map((url) => this.readImageRefBytes(url)));
+        // В лог кладём фактический размер каждого референса ПОСЛЕ нормализации: при обрыве
+        // edits-запроса это сразу показывает, было ли тело слишком тяжёлым.
+        requestPayload = {
+          ...(requestPayload as Record<string, unknown>),
+          body: {
+            ...((requestPayload as { body?: Record<string, unknown> }).body ?? {}),
+            references: refs.map((url, index) => ({
+              url,
+              uploadBytes: images[index]?.buffer.length,
+              uploadContentType: images[index]?.contentType,
+            })),
+          },
+        };
         const result = await this.client.generateGptImage({
           model: input.model,
           prompt: input.prompt,
@@ -1681,26 +1706,39 @@ async function normalizeGptImageReference(
   raw: { buffer: Buffer; contentType: string },
   logger: Logger,
 ): Promise<{ buffer: Buffer; contentType: string }> {
+  let best: { buffer: Buffer; contentType: string } | undefined;
   try {
-    const buffer = await sharp(raw.buffer)
-      .rotate()
-      .resize({
-        width: GPT_IMAGE_REF_MAX_PX,
-        height: GPT_IMAGE_REF_MAX_PX,
-        fit: 'inside',
-        withoutEnlargement: true,
-      })
-      .jpeg({ quality: GPT_IMAGE_REF_JPEG_QUALITY })
-      .toBuffer();
-    if (buffer.length < raw.buffer.length) {
-      return { buffer, contentType: 'image/jpeg' };
+    for (const variant of GPT_IMAGE_REF_VARIANTS) {
+      const buffer = await sharp(raw.buffer)
+        .rotate()
+        .resize({
+          width: variant.px,
+          height: variant.px,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: variant.quality })
+        .toBuffer();
+      if (!best || buffer.length < best.buffer.length) {
+        best = { buffer, contentType: 'image/jpeg' };
+      }
+      if (buffer.length <= GPT_IMAGE_REF_TARGET_BYTES) break;
     }
-    // Already small (e.g. a tiny library asset): re-encoding gained nothing, keep the original.
-    return raw;
   } catch (err) {
-    logger.warn('[piapi] gpt-image reference normalization failed; sending original bytes', err);
-    return raw;
+    logger.warn('[piapi] gpt-image reference normalization failed; falling back to original bytes', err);
   }
+
+  // Already small (e.g. a tiny library asset): re-encoding gained nothing, keep the original.
+  const candidate = best && best.buffer.length < raw.buffer.length ? best : raw;
+  if (candidate.buffer.length > GPT_IMAGE_REF_HARD_LIMIT_BYTES) {
+    // Тело такого размера гарантированно не доживёт до ответа через наш egress:
+    // честная ошибка с refund вместо обречённого upload + 5 минут history recovery.
+    throw new ProviderError(
+      'GPT_IMAGE_REF_UNPROCESSABLE',
+      `gpt-image reference is ${candidate.buffer.length} bytes and could not be re-encoded below ${GPT_IMAGE_REF_HARD_LIMIT_BYTES}`,
+    );
+  }
+  return candidate;
 }
 
 // PiAPI gpt-image quality allows: low | standard | high | auto (per the PiAPI GPT Image docs).

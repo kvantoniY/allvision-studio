@@ -50,4 +50,15 @@ describe('normalizeGptImageReference (gpt-image upload size guard)', () => {
     expect(result.buffer).toBe(notAnImage);
     expect(logger.warn).toHaveBeenCalled();
   });
+
+  it('throws a clear error when an unprocessable reference would exceed the hard upload limit', async () => {
+    // 5 MB мусора, который sharp не может перекодировать: раньше такое тело уходило в PiAPI
+    // и гарантированно обрывалось на ~15s; теперь падаем сразу с понятным кодом.
+    const hugeGarbage = Buffer.alloc(5 * 1024 * 1024, 7);
+
+    await expect(
+      normalizeGptImageReference({ buffer: hugeGarbage, contentType: 'image/png' }, logger),
+    ).rejects.toMatchObject({ code: 'GPT_IMAGE_REF_UNPROCESSABLE' });
+    expect(logger.warn).toHaveBeenCalled();
+  });
 });
