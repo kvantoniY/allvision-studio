@@ -16,6 +16,38 @@ describe('PiAPIClient polling', () => {
     })).rejects.toMatchObject({ code: 'PIAPI_TIMEOUT' });
   });
 
+  it('keeps polling through transient getTask network errors', async () => {
+    jest.useFakeTimers();
+    try {
+      const client = new PiAPIClient({ apiKey: 'test' });
+      const { ProviderError } = jest.requireActual<typeof import('../providers/provider-errors')>('../providers/provider-errors');
+      jest.spyOn(client, 'getTask')
+        .mockRejectedValueOnce(new ProviderError('PIAPI_NETWORK_ERROR', 'fetch failed'))
+        .mockResolvedValueOnce({ taskId: 'task-flaky', status: 'completed', outputUrl: 'https://cdn.test/out.mp4', actualCostUsd: null, raw: {} });
+
+      const promise = client.pollUntilDone('task-flaky', {
+        timeoutMs: 60_000,
+        expectedDurationMs: 100,
+      });
+      await jest.advanceTimersByTimeAsync(5_000);
+      const result = await promise;
+      expect(result.status).toBe('completed');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('fails fast when getTask returns a hard 4xx', async () => {
+    const client = new PiAPIClient({ apiKey: 'test' });
+    const { ProviderError } = jest.requireActual<typeof import('../providers/provider-errors')>('../providers/provider-errors');
+    jest.spyOn(client, 'getTask').mockRejectedValue(new ProviderError('PIAPI_HTTP_401', 'unauthorized', 401));
+
+    await expect(client.pollUntilDone('task-auth', {
+      timeoutMs: 60_000,
+      expectedDurationMs: 100,
+    })).rejects.toMatchObject({ code: 'PIAPI_HTTP_401' });
+  });
+
   it('classifies upstream busy failed tasks separately from moderation', async () => {
     const client = new PiAPIClient({ apiKey: 'test' });
     jest.spyOn(client, 'getTask').mockResolvedValue({

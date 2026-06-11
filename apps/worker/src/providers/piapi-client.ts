@@ -38,6 +38,10 @@ export interface PiAPIClientOptions {
 }
 
 const TRANSIENT_RETRIES = 2;
+// Сколько ПОДРЯД неудачных статус-опросов pollUntilDone терпит, прежде чем сдаться.
+// Каждый опрос внутри уже делает TRANSIENT_RETRIES сетевых попыток, так что 10 подряд
+// означает несколько минут полной недоступности PiAPI, а не случайный обрыв.
+const MAX_CONSECUTIVE_POLL_ERRORS = 10;
 const PIAPI_COST_UNITS_PER_USD = 10_000_000;
 
 export class PiAPIClient {
@@ -79,9 +83,27 @@ export class PiAPIClient {
   async pollUntilDone(taskId: string, opts: PiAPIPollOptions): Promise<PiAPITaskStatus> {
     const startedAt = Date.now();
     let intervalMs = 5_000;
+    let consecutivePollErrors = 0;
 
     while (Date.now() - startedAt < opts.timeoutMs) {
-      const status = await this.getTask(taskId);
+      let status: PiAPITaskStatus;
+      try {
+        status = await this.getTask(taskId);
+        consecutivePollErrors = 0;
+      } catch (err) {
+        // Транзиентный сбой СТАТУС-опроса не должен ронять генерацию: задача на стороне
+        // PiAPI продолжает выполняться, и следующий опрос обычно проходит. Жёсткие 4xx
+        // (битый taskId / невалидный ключ) пробрасываем сразу — они не лечатся повтором.
+        if (err instanceof ProviderError && err.status && err.status >= 400 && err.status < 500) throw err;
+        consecutivePollErrors += 1;
+        if (consecutivePollErrors >= MAX_CONSECUTIVE_POLL_ERRORS) throw err;
+        console.warn(
+          `[piapi] poll ${taskId}: status check failed (${consecutivePollErrors}/${MAX_CONSECUTIVE_POLL_ERRORS}), retrying: ${(err as Error).message}`,
+        );
+        await delay(intervalMs);
+        intervalMs = Math.min(30_000, Math.round(intervalMs * 1.5));
+        continue;
+      }
       const elapsed = Date.now() - startedAt;
       const fallbackProgress = Math.min(95, Math.round((elapsed / opts.expectedDurationMs) * 95));
       const progress = typeof status.progress === 'number'
