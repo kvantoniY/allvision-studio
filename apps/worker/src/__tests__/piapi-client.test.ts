@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+import https from 'node:https';
 import { extractPiAPIActualCostUsd, PiAPIClient } from '../providers/piapi-client';
 
 describe('PiAPIClient polling', () => {
@@ -156,5 +158,123 @@ describe('PiAPIClient polling', () => {
     // Один запрос, без повторов — иначе PiAPI сгенерировал бы лишнее изображение.
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     fetchSpy.mockRestore();
+  });
+});
+
+describe('PiAPIClient gpt-image edit retries', () => {
+  type FakeBehavior =
+    | { kind: 'early-reset' }
+    | { kind: 'reset-after-response-started' }
+    | { kind: 'timeout' }
+    | { kind: 'success'; json: unknown };
+
+  function mockHttpsRequest(behaviors: FakeBehavior[]) {
+    let call = 0;
+    return jest.spyOn(https, 'request').mockImplementation(((_options: unknown, callback: (res: unknown) => void) => {
+      const behavior = behaviors[Math.min(call, behaviors.length - 1)];
+      call += 1;
+      const req = new EventEmitter() as EventEmitter & {
+        write: jest.Mock; end: jest.Mock; destroy: jest.Mock;
+      };
+      req.write = jest.fn();
+      req.destroy = jest.fn((err?: Error) => {
+        if (err) req.emit('error', err);
+      });
+      // Эмитим синхронно из end(): все обработчики уже навешаны к этому моменту,
+      // а синхронность избавляет тест от гонок с fake timers.
+      req.end = jest.fn(() => {
+        const socket = new EventEmitter() as EventEmitter & { setKeepAlive: jest.Mock };
+        socket.setKeepAlive = jest.fn();
+        req.emit('socket', socket);
+        if (behavior.kind === 'early-reset') {
+          req.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }));
+          return;
+        }
+        if (behavior.kind === 'timeout') {
+          req.emit('timeout');
+          return;
+        }
+        const res = new EventEmitter() as EventEmitter & { statusCode: number };
+        res.statusCode = 200;
+        callback(res);
+        if (behavior.kind === 'reset-after-response-started') {
+          req.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }));
+          return;
+        }
+        res.emit('data', Buffer.from(JSON.stringify(behavior.json)));
+        res.emit('end');
+      });
+      return req;
+    }) as never);
+  }
+
+  const editParams = {
+    model: 'gpt-image-2',
+    prompt: 'test prompt',
+    images: [{ buffer: Buffer.from('fake-image'), contentType: 'image/jpeg' }],
+    size: '1024x1024',
+    quality: 'auto',
+    outputFormat: 'jpeg' as const,
+  };
+
+  beforeEach(() => {
+    delete process.env.PIAPI_GPT_IMAGE_EDIT_RETRIES;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  it('retries an early connection reset (before any response byte) and succeeds', async () => {
+    jest.useFakeTimers();
+    const spy = mockHttpsRequest([
+      { kind: 'early-reset' },
+      { kind: 'success', json: { data: [{ url: 'https://image.test/after-retry.jpg' }] } },
+    ]);
+
+    const promise = new PiAPIClient({ apiKey: 'test' }).generateGptImage(editParams);
+    await jest.advanceTimersByTimeAsync(2_000);
+    const result = await promise;
+
+    expect(result.url).toBe('https://image.test/after-retry.jpg');
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks the error neverReachedProvider when every attempt resets before a response byte', async () => {
+    jest.useFakeTimers();
+    const spy = mockHttpsRequest([{ kind: 'early-reset' }]);
+
+    const promise = new PiAPIClient({ apiKey: 'test' }).generateGptImage(editParams);
+    const assertion = expect(promise).rejects.toMatchObject({
+      code: 'PIAPI_NETWORK_ERROR',
+      meta: expect.objectContaining({ neverReachedProvider: true, responseStarted: false }),
+    });
+    await jest.advanceTimersByTimeAsync(20_000);
+    await assertion;
+
+    // Default 4 попытки: ранний RST = запрос не дошёл до PiAPI, повтор безопасен.
+    expect(spy).toHaveBeenCalledTimes(4);
+  });
+
+  it('does not retry a reset after the response started (upstream may be rendering)', async () => {
+    const spy = mockHttpsRequest([{ kind: 'reset-after-response-started' }]);
+
+    await expect(new PiAPIClient({ apiKey: 'test' }).generateGptImage(editParams)).rejects.toMatchObject({
+      code: 'PIAPI_NETWORK_ERROR',
+      meta: expect.objectContaining({ responseStarted: true }),
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry our own edit timeout (history recovery handles it)', async () => {
+    const spy = mockHttpsRequest([{ kind: 'timeout' }]);
+
+    await expect(new PiAPIClient({ apiKey: 'test' }).generateGptImage(editParams)).rejects.toMatchObject({
+      code: 'PIAPI_TIMEOUT',
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

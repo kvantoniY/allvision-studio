@@ -1597,6 +1597,10 @@ function gptImageHistoryRecoveryMs() {
 function isRecoverableGptImageTransportError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof ProviderError) {
+    // Все попытки оборвались до первого байта ответа: запрос не дошёл до PiAPI, задача
+    // не создана и в history никогда не появится. Recovery бессмысленен — пусть проект
+    // сразу честно упадёт с refund, а не висит 15 минут на 95% до SYNC_LOST.
+    if (error.meta?.neverReachedProvider === true) return false;
     return error.code === 'PIAPI_TIMEOUT'
       || error.code === 'PIAPI_NETWORK_ERROR'
       || (typeof error.status === 'number' && error.status >= 520 && error.status <= 524)

@@ -38,6 +38,15 @@ export interface PiAPIClientOptions {
 }
 
 const TRANSIENT_RETRIES = 2;
+// gpt-image edit: сколько раз пробуем заново при РАННЕМ обрыве соединения (RST до первого
+// байта ответа). Такой обрыв означает, что запрос не дошёл до бэкенда PiAPI (задача не
+// создаётся и не биллится), поэтому повтор безопасен. Обрыв интермиттентный — несколько
+// попыток обычно дают успешную (наблюдение P9.4.4).
+const GPT_IMAGE_EDIT_DEFAULT_ATTEMPTS = 4;
+const GPT_IMAGE_EDIT_RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
+// Обрыв позже этого порога без ответа уже неоднозначен: генерация (40-100s) могла начаться
+// на стороне провайдера. Такие не ретраим — отдаём в history recovery.
+const GPT_IMAGE_EDIT_EARLY_RESET_WINDOW_MS = 30_000;
 // Сколько ПОДРЯД неудачных статус-опросов pollUntilDone терпит, прежде чем сдаться.
 // Каждый опрос внутри уже делает TRANSIENT_RETRIES сетевых попыток, так что 10 подряд
 // означает несколько минут полной недоступности PiAPI, а не случайный обрыв.
@@ -201,9 +210,14 @@ export class PiAPIClient {
     return readGptImageResult(json);
   }
 
-  // The gateway intermittently resets the long-held gpt-image edit connection (ECONNRESET ~15s) while
-  // the generation takes ~60-100s. Do not retry by default: the upstream may already be rendering and a
-  // fresh POST can double-charge. The provider recovers completed outputs through PiAPI history instead.
+  // The gateway intermittently resets the long-held gpt-image edit connection. Two distinct modes,
+  // disambiguated by whether response bytes had started and how early the reset happened:
+  //  - EARLY reset (~15s, no response byte): the request never reached the PiAPI backend — no task is
+  //    ever registered in provider history, nothing is billed (verified against the PiAPI dashboard).
+  //    Retrying immediately is safe and is the only thing that helps; history recovery has nothing
+  //    to recover in this mode.
+  //  - LATE reset / our timeout: the upstream may already be rendering (a disconnect does not cancel
+  //    it and it WILL be billed) — never retry, let history recovery pick up the finished output.
   private async gptImageEditViaHttps(params: {
     model: string;
     prompt: string;
@@ -212,24 +226,27 @@ export class PiAPIClient {
     quality: string;
     outputFormat?: string;
   }): Promise<{ url?: string; b64?: string }> {
-    const maxAttempts = Number(process.env.PIAPI_GPT_IMAGE_EDIT_RETRIES) || 1;
+    const maxAttempts = Number(process.env.PIAPI_GPT_IMAGE_EDIT_RETRIES) || GPT_IMAGE_EDIT_DEFAULT_ATTEMPTS;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         return await this.gptImageEditOnce(params);
       } catch (err) {
         lastError = err;
-        const message = err instanceof Error ? err.message : String(err);
-        const retryable = err instanceof ProviderError && (
-          (err.code === 'PIAPI_NETWORK_ERROR' && /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED/i.test(message))
-          || err.code === 'PIAPI_TIMEOUT'
-          || err.status === 520
-          || err.status === 522
-          || err.status === 523
-          || err.status === 524
+        if (!isEarlyGptImageEditReset(err) || attempt === maxAttempts) {
+          if (isEarlyGptImageEditReset(err) && err instanceof ProviderError) {
+            // Все попытки оборвались ДО первого байта ответа: запрос так и не дошёл до
+            // провайдера, задачи в history не будет. Провайдер по этому флагу пропускает
+            // бесполезный 5-минутный history recovery и сразу честно фейлит с refund.
+            err.meta = { ...err.meta, neverReachedProvider: true, attempts: attempt };
+          }
+          throw err;
+        }
+        console.warn(
+          `[piapi] gpt-image edit: early connection reset before any response byte `
+          + `(attempt ${attempt}/${maxAttempts}), retrying: ${(err as Error).message}`,
         );
-        if (!retryable || attempt === maxAttempts) throw err;
-        await delay(1500 * attempt);
+        await delay(GPT_IMAGE_EDIT_RETRY_DELAYS_MS[Math.min(attempt - 1, GPT_IMAGE_EDIT_RETRY_DELAYS_MS.length - 1)]);
       }
     }
     throw lastError;
@@ -268,6 +285,11 @@ export class PiAPIClient {
     chunks.push(Buffer.from(`--${boundary}--${crlf}`, 'utf8'));
     const body = Buffer.concat(chunks);
     const url = new URL(`${this.baseUrl}/v1/images/edits`);
+    const startedAt = Date.now();
+    // PiAPI отвечает только когда изображение готово, поэтому первый байт ответа —
+    // надёжный признак «запрос дошёл и обработан». Обрыв ДО него на ранней секунде
+    // означает, что запрос потерян по дороге (см. gptImageEditViaHttps).
+    let responseStarted = false;
 
     return new Promise((resolve, reject) => {
       const req = https.request(
@@ -284,6 +306,7 @@ export class PiAPIClient {
           timeout: this.gptImageTimeoutMs,
         },
         (res) => {
+          responseStarted = true;
           const data: Buffer[] = [];
           res.on('data', (chunk) => data.push(Buffer.from(chunk)));
           res.on('end', () => {
@@ -310,9 +333,18 @@ export class PiAPIClient {
         req.destroy(new ProviderError('PIAPI_TIMEOUT', `gpt-image edit timed out after ${this.gptImageTimeoutMs}ms`));
       });
       req.on('error', (err) => {
-        if (err instanceof ProviderError) reject(err);
+        if (err instanceof ProviderError) {
+          err.meta = { ...err.meta, responseStarted, elapsedMs: Date.now() - startedAt };
+          reject(err);
+          return;
+        }
         // Размер тела в сообщении: сразу видно в AI-логах, был ли обрыв связан с тяжёлым upload.
-        else reject(new ProviderError('PIAPI_NETWORK_ERROR', `gpt-image edit: ${(err as Error).message} (multipart body ${body.length} bytes)`));
+        reject(new ProviderError(
+          'PIAPI_NETWORK_ERROR',
+          `gpt-image edit: ${(err as Error).message} (multipart body ${body.length} bytes)`,
+          undefined,
+          { responseStarted, elapsedMs: Date.now() - startedAt },
+        ));
       });
       req.write(body);
       req.end();
@@ -379,6 +411,17 @@ export class PiAPIClient {
     const cause = err?.cause ? ` (cause: ${err.cause.code ?? err.cause.message ?? String(err.cause)})` : '';
     throw new ProviderError('PIAPI_NETWORK_ERROR', `${err?.message ?? 'PiAPI network error'}${cause}`);
   }
+}
+
+// Ранний обрыв gpt-image edit: connection-level ошибка, ДО первого байта ответа и в первые
+// секунды запроса. Только такие безопасно повторять — запрос не дошёл до бэкенда PiAPI.
+function isEarlyGptImageEditReset(error: unknown): error is ProviderError {
+  if (!(error instanceof ProviderError)) return false;
+  if (error.code !== 'PIAPI_NETWORK_ERROR') return false;
+  if (!/ECONNRESET|socket hang up|EPIPE|ECONNREFUSED|ETIMEDOUT/i.test(error.message)) return false;
+  if (error.meta?.responseStarted !== false) return false;
+  const elapsedMs = typeof error.meta?.elapsedMs === 'number' ? error.meta.elapsedMs : Number.POSITIVE_INFINITY;
+  return elapsedMs <= GPT_IMAGE_EDIT_EARLY_RESET_WINDOW_MS;
 }
 
 function normaliseTaskStatus(taskId: string, raw: Record<string, unknown>): PiAPITaskStatus {
