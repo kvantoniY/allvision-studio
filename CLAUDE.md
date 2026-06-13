@@ -1192,3 +1192,29 @@ gpt-image остаётся выбираемой моделью в каталог
 Долг/прод-нюанс: дефолт поля «Формат кадра» у уже существующих cinema-услуг (`me-in-movie`, `me-in-cartoon`, `me-in-harry-potter`, `kid-in-blue-tractor`) в seed остался прежним (`16:9`/`9:16`). Эти услуги НЕ в `NEW_SERVICE_SLUGS_TO_CREATE`, поэтому seed их не обновляет — менять дефолт на «Авто» нужно в `/admin/services`, если хочется чтобы по умолчанию формат брался из сцены. Сам выбор «Авто» уже работает корректно благодаря worker-фиксу. gpt-image услуги (`road-camera-couple`, `single-photo-2017`) не тронуты: им нужен конкретный размер через `gptImageSizeForAspect`.
 
 Проверки P9.6: worker `piapi-payloads scene-transfer-block` — 24 passed (3 новых теста: omit aspect при auto для Kling/Seedance omni, явный выбор сохраняется, pure t2v дефолтит 16:9); `npm.cmd run build -w @allvision/worker` — зелёный.
+
+## Этап P9.7 ✅ — Все услуги уходят с gpt-image-2 на nano-banana (надёжность)
+
+Диагностика по проду (SSH, чтение БД/логов): падает РОВНО `gpt-image-2`. За 14 дней — 17 success / 16 failed / 3 timeout_pending ≈ **47% фейлов**. Все падения — `ECONNRESET` на синхронном multipart `/v1/images/edits` (RU ВМ → api.piapi.ai рвёт долгое соединение, DPI/шлюз). Async-модели (nano-banana, seedance, sora, kling) надёжны: не-gpt падения — это легитимный `CONTENT_MODERATION`. Reconciler корректно фейлит зависшие SYNC_PENDING через 10 мин и возвращает коины (проверено: refund есть), но UX — 10–15 мин на 95% перед фейлом.
+
+Решение (по согласованию с владельцем): все услуги переведены с `gpt-image-2` на `nano-banana` (Gemini, async task API). Доки PiAPI: nano-banana-2 resolution `1K/2K/4K` (макс 4K), aspect_ratio поддерживает 1:1/3:4/9:16/16:9/auto, image-to-image есть. nano-banana и надёжнее, и дешевле ($0.06–0.12 vs $0.10 + брак).
+
+Прод-БД (изменено вручную через psql, т.к. услуги не в seed-allowlist и seed их не перезаписывает):
+
+- 8 услуг переведены `gpt-image-2` → `nano-banana`: `single-photo-2017`, `group-photo-2017`, `group-photo-2017-copy-copy`, `last-kiss-meteor-copy`, `road-camera-couple`, `carousel-post`, `product-cover`, `product-card`. Бэкап pipelineConfig сохранён в `shared/pipeline-backup-*.tsv`.
+- Фото-услуги (image-edit) получили `resolution: '4K'` (наилучшее качество).
+- `single-photo-2017`: пофикшен **захардкоженный** `aspect_ratio: '16:9'` → `'{{user.aspect}}'` — это была причина «формат не меняется» на флагмане (поле `aspect` есть, дефолт 3:4, но в пайплайн уходило 16:9).
+
+Код (доедет деплоем):
+
+- `carousel-slides` и `product-card`: дефолт модели `gpt-image-2` → `nano-banana`; cover/слайды получили `resolution: '2K'` (раньше дефолтили в 1K, без качества).
+- `PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS` дефолт 5мин → 2мин: при потере gpt-image edit (остаточный путь в Студии/чате-бете) worker не держит concurrency=1 пять минут впустую и UI не висит так долго.
+- Seed-источник: все `gpt-image-2` → `nano-banana`, фото-услуги `resolution: '4K'` (для свежих установок; прод управляется в админке).
+
+Aspect с nano-banana проверен по коду: `buildImageEditPayload` шлёт `aspect_ratio` при явном выборе и опускает при `auto` (тогда следует входному изображению) — формат юзера (9:16/16:9/1:1/3:4) уходит корректно.
+
+UI-зависание: основная причина (услуги сайта на gpt-image → путь SYNC_PENDING) устранена — nano-banana падает/завершается быстро, без 5-мин recovery и 10-мин reconciler. Остаточный gpt-image только в Студии/чате (бета, опционально); для него ужат recovery-таймаут.
+
+Прод-env (`PIAPI_SYNC_PENDING_FAIL_AFTER_MS=600000`) НЕ менялся (не дал авто-классификатор как ручную правку прод-конфига); при желании можно опустить в `shared/.env` до ~120000 для ещё более быстрого фейла остаточного gpt-image.
+
+Проверки P9.7: `npm.cmd run build -w @allvision/database -w @allvision/worker` — зелёные; worker `carousel-slides product-card blocks-registry piapi-payloads` — 26 passed. Seed-тест локально падает на устаревшем Prisma-клиенте (`stylePreset is not a function`, известный Windows EPERM на `prisma generate`), не связано с правками.

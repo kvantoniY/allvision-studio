@@ -889,10 +889,10 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.portrait}}',
         params: {
-          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
+          model: { standard: 'nano-banana', pro: 'nano-banana' },
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
-          quality: 'standard',
+          resolution: '4K',
           prompt:
             'GPT Image 2 edit. Create ONE photorealistic solo smartphone photo from the uploaded reference. Preserve the same person exactly: same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression. Do not re-age, beautify, change gender, invent a model face, duplicate the person or add other people. Style the scene as a believable 2016-2017 post-Soviet social-media photo: courtyard near panel apartment blocks, parked cars, benches or playground, crimson-magenta sunset, casual tracksuit or dark hoodie, optional bucket hat or thin chain only if natural. Phone snapshot realism: natural dusk light, slight on-camera fill, real shadows, visible skin texture, hair strands and fabric detail, mild sensor noise, subtle compression and chromatic aberration. Keep the face sharp and recognizable. No logos, text, watermark, glossy AI skin, fake bokeh, CGI, heavy HDR, glamour retouch, distorted face, deformed hands or extra faces.',
         },
@@ -972,11 +972,11 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.friend_1}}',
         params: {
-          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
+          model: { standard: 'nano-banana', pro: 'nano-banana' },
           image_urls: ['{{user.friend_2}}', '{{user.friend_3}}', '{{user.friend_4}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
-          quality: 'standard',
+          resolution: '4K',
           prompt:
             'GPT Image 2 edit. Combine the provided reference photos into ONE photorealistic group smartphone photo in a 2016-2017 post-Soviet social-media style. Critical count rule: generate exactly one person for each provided reference image and no one else. If 2 references are provided, show exactly 2 people; if 3, exactly 3; if 4, exactly 4. Preserve each identity separately and clearly: same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression from that person\'s own reference. Do not blend identities, swap faces, duplicate people, add background friends, crowds, extra faces, posters with faces or partial bodies. Setting: friends standing or sitting close together in a courtyard near panel apartment blocks, parked cars, benches or playground, crimson-magenta sunset, casual 2017 streetwear, tracksuits, dark hoodies, white sneakers, relaxed candid poses. Phone snapshot realism: natural dusk light, slight on-camera fill, real shadows, sharp recognizable faces, skin texture, hair strands, fabric detail, mild sensor noise, subtle compression and chromatic aberration. No logos, text, watermark, glossy AI skin, beauty filter, CGI, fake bokeh, heavy HDR, distorted faces, deformed hands or extra people.',
         },
@@ -2065,7 +2065,7 @@ export const giftFactoryServices = [
           primary_photo: '{{user.person1}}',
           people_count: 'auto',
           stylize_characters: false,
-          stylize_model: 'gpt-image-2',
+          stylize_model: 'nano-banana',
           stylize_prompt:
             'Create a polished animated character from the uploaded person reference while preserving recognizable identity: same face structure, eye shape, nose, mouth, hairstyle, age impression and personality. Match this selected animation direction: {{user.cartoon_style}}. Clean production-quality character design, stable face, expressive but not exaggerated, no text, no watermark, no extra people.',
           photo_base_prompt:
@@ -2167,11 +2167,11 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.man_photo}}',
         params: {
-          model: 'gpt-image-2',
+          model: 'nano-banana',
           image_urls: ['{{user.woman_photo}}', '{{user.car_photo}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
-          quality: 'standard',
+          resolution: '4K',
           prompt:
             'GPT Image 2 edit. Use exactly three provided references. Reference image 1 is the man/driver. Reference image 2 is the woman/passenger. Reference image 3 is the car. Preserve each person identity separately and clearly; preserve the car make, model, body, headlights, grille, proportions and license plates as closely as possible. Чёрно-белый фотореалистичный уличный кадр в стиле камеры дорожного наблюдения. Вид строго сверху и спереди. Автомобиль полностью идентичен фото-референсу: марка, модель, кузов, фары, решётка, пропорции и номерные знаки совпадают 1в1. Машина едет по городской дороге, расположена строго по центру кадра, симметричная композиция, подчёркнутый капот и решётка радиатора. В салоне два человека на передних сиденьях, их внешность, лица, причёски и пропорции полностью соответствуют фото-референсу (1в1). Водитель держит руль одной рукой и смотрит вперёд с лёгкой улыбкой, пассажирка наклоняется к нему и целует в щёку — интимный, спонтанный момент. Лобовое стекло слегка отражает свет, но лица хорошо читаемы. Асфальт с детализированной текстурой, бордюр слева, ощущение движения. Внизу кадра интерфейс камеры контроля скорости: моноширинный шрифт, надписи «CAM 09», дата и время «2026-03-16», скорость 217 km/h. Контрастный чёрно-белый тон, высокая резкость, документальная эстетика, gritty realism, street photography, surveillance camera look, cinematic raw mood.',
         },
@@ -2373,7 +2373,7 @@ export const giftFactoryServices = [
       'Загрузите своё фото и впишите текст для каждого слайда — GPT Image 2 соберёт набор слайдов в едином стиле, разместит вас на каждом и впечатает текст прямо в дизайн. Цена считается за слайд.',
     shortDesc: 'Набор слайдов для поста-карусели в едином стиле с вашим фото',
     category: ServiceCategory.TRENDS_MEMES,
-    // Себестоимость ~ gpt-image-2 за слайд ($0.1 ≈ 10 коинов) + маржа -> 15 коинов/слайд.
+    // Себестоимость ~ nano-banana за слайд ($0.1 ≈ 10 коинов) + маржа -> 15 коинов/слайд.
     priceTokens: 15,
     priceCoinsStandard: 15,
     priceCoinsPro: 15,
@@ -2425,7 +2425,7 @@ export const giftFactoryServices = [
         blockSlug: 'carousel-slides',
         input: '{{user.photo}}',
         params: {
-          model: 'gpt-image-2',
+          model: 'nano-banana',
           person_photo: '{{user.photo}}',
           slides: '{{user.slides}}',
           style_prompt:
@@ -2530,7 +2530,7 @@ export const giftFactoryServices = [
           photo3: '{{user.photo3}}',
           product_name: '{{user.product_name}}',
           outputs: '{{user.outputs}}',
-          cover_model: 'gpt-image-2',
+          cover_model: 'nano-banana',
           animation_model: 'kling-3-pro',
           animation_duration: 5,
           ad_model: 'seedance-2-omni',
@@ -2592,7 +2592,7 @@ export const giftFactoryServices = [
           photo3: '{{user.photo3}}',
           product_name: '{{user.product_name}}',
           outputs: '{{user.outputs}}',
-          cover_model: 'gpt-image-2',
+          cover_model: 'nano-banana',
           animation_model: 'kling-3-pro',
           animation_duration: 5,
           aspect_ratio: '{{user.aspect}}',

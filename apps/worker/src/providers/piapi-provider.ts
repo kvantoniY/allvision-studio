@@ -73,7 +73,10 @@ const VIDEO_UPSCALE_ESTIMATE_FPS = 16;
 const VIDEO_UPSCALE_POSTPROCESS_TIMEOUT_MS = 5 * 60 * 1000;
 const PIAPI_VIDEO_TIMEOUT_MS = 30 * 60 * 1000;
 const PIAPI_IMAGE_EDIT_TIMEOUT_MS = 5 * 60 * 1000;
-const PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS = 5 * 60 * 1000;
+// История-recovery для потерянного gpt-image edit укорочена до 2 минут: при раннем обрыве
+// задача у PiAPI не регистрируется и искать нечего, а длинное ожидание зря держит worker
+// (concurrency=1) и крутит UI. Если задача всё же завершилась — её поднимет серверный reconciler.
+const PIAPI_GPT_IMAGE_HISTORY_RECOVERY_MS = 2 * 60 * 1000;
 // GPT Image edit uploads references as multipart files FROM the worker. Raw user uploads
 // (especially lossless PNG phone shots, 8-20 MB) make the body huge, and the VM egress resets
 // the long upload connection (ECONNRESET at progress 5, before generation). Downscale + re-encode

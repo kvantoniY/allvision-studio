@@ -90,11 +90,12 @@ export const productCardBlock: BlockDefinition = {
       const result = await provider.imageEdit({
         imageUrl: photos[0],
         prompt: composeCoverPrompt(parsed.cover_prompt, productName, parsed.cover_style),
-        model: stringModel(parsed.cover_model, 'gpt-image-2'),
+        model: stringModel(parsed.cover_model, 'nano-banana'),
         params: {
           image_urls: photos.slice(1),
           output_format: 'jpg',
           aspect_ratio: aspect === 'auto' ? '1:1' : aspect,
+          resolution: '2K',
           quality: 'high',
         },
         context: segment(),

@@ -18,6 +18,7 @@ const paramsSchema = z.object({
   slides: z.union([z.array(z.string()), z.string()]).optional(),
   style_prompt: z.string().optional(),
   aspect_ratio: z.enum(['1:1', '3:4', '9:16']).default('3:4').optional(),
+  resolution: z.enum(['1K', '2K', '4K']).optional(),
 });
 
 type ParsedParams = z.infer<typeof paramsSchema>;
@@ -41,8 +42,9 @@ export const carouselSlidesBlock: BlockDefinition = {
     const slides = normaliseSlides(parsed.slides);
     if (slides.length === 0) throw new Error('carousel-slides requires at least one slide');
 
-    const model = stringModel(parsed.model, 'gpt-image-2');
+    const model = stringModel(parsed.model, 'nano-banana');
     const aspect = parsed.aspect_ratio ?? '3:4';
+    const resolution = parsed.resolution ?? '2K';
     const provider = ctx.getAIProvider();
     const total = slides.length;
 
@@ -61,6 +63,7 @@ export const carouselSlidesBlock: BlockDefinition = {
           image_urls: styleRef ? [styleRef] : [],
           output_format: 'jpg',
           aspect_ratio: aspect,
+          resolution,
           quality: 'high',
         },
         context: scaledContext(ctx.providerContext, ctx.reportProgress, from, to),
