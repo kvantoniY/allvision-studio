@@ -70,6 +70,10 @@ export type ProjectsResponse = {
 export const projectsApi = createApi({
   reducerPath: 'projectsApi',
   baseQuery: createBaseQueryWithReauth('/api/projects'),
+  // Когда юзер возвращается на вкладку или восстанавливается сеть — сразу тянем свежий
+  // статус/список генераций, не дожидаясь следующего тика поллинга (который в фоне тротлится).
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   tagTypes: ['Project', 'ProjectStatus'],
   endpoints: (build) => ({
     createProject: build.mutation<{ project: ProjectSummary }, FormData>({

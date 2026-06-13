@@ -1153,3 +1153,24 @@ gpt-image остаётся выбираемой моделью в каталог
 Осознанный риск: если ранний RST всё же случился ПОСЛЕ регистрации задачи у провайдера (не наблюдалось), ретрай создаст дубль-генерацию ~$0.03–0.10 за наш счёт; коины юзера не дублируются (одна job). Структурная причина обрывов — нестабильный путь RU ВМ → api.piapi.ai для долгих multipart-соединений (похоже на DPI/шлюз); если флапы участятся, кардинальное решение — зарубежный relay/proxy для PiAPI-трафика.
 
 Проверки P9.4.5: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client` — 12 passed (4 новых теста: ретрай раннего RST, neverReachedProvider после всех попыток, нет ретрая после начала ответа, нет ретрая таймаута); полный worker suite без DB-backed — 85 passed (pipeline-runner/piapi-provider требуют Postgres `localhost:5433`, локально не поднят).
+
+## Этап P9.5 ✅ — Live-обновление UI, retry-кнопки, лимиты файлов, безопасные ретраи createTask
+
+Задача 1 — «генерация завершилась, но UI не обновляется без F5». Корневая причина (универсальная для всех экранов): в Redux-store не вызывался `setupListeners`, и у RTK Query API не были включены `refetchOnFocus`/`refetchOnReconnect`. Когда юзер уходил на другую вкладку (например, на дашборд PiAPI), браузер тротлит фоновые таймеры — поллинг почти останавливался, а на возврат вкладки рефетча не было. Фикс:
+
+- `apps/web/src/store/index.ts`: `setupListeners(store.dispatch)`.
+- `refetchOnFocus: true` + `refetchOnReconnect: true` на `projectsApi` (services/studio/project-page), `userChatApi` (чат), `accountApi` и `authApi` (баланс/дашборд). Теперь фокус/реконнект форсят свежий запрос.
+- ServiceDetail: поллинг списка генераций больше не привязан к активной вкладке. Введён `shouldPoll = hasActiveProject || launchStartedLock` (есть незавершённый проект ИЛИ только что запустили) → 3s polling, результат догоняет и на вкладке «Услуга».
+- Studio history: добавлен 3s polling, пока есть `PENDING/PROCESSING` проект (раньше не поллился вовсе).
+- Project-page и чат уже поллили по статусу — оставлены, но теперь дополнительно ловят возврат на вкладку.
+
+Задача 2 — явная кнопка «Попробовать снова» при ошибке. Была пропущена только в ServiceDetail `GenerationCard` (показывался лишь warning). Добавлена кнопка, которая переключает на вкладку «Услуга» и скроллит к форме (значения формы сохраняются в стейте). На project-page, в Студии и чате retry уже был.
+
+Задача 3a — явные лимиты файлов в UI + клиентская проверка размера (раньше для фото её не было — юзер ждал серверный reject):
+
+- ServiceDetail: фото `JPG, PNG или WebP, до 15 МБ`, аудио `MP3, WAV или OGG, до 25 МБ` показываются прямо под зоной загрузки; при превышении — мгновенная ошибка, файл не принимается. Видео-лимит уже показывался. Лимиты не строже серверных multer-фильтров.
+- Чат (`InputSourcePicker`): добавлена клиентская проверка 25 МБ (совпадает с `MAX_CHAT_INPUT_SIZE`), текст лимита там уже был.
+
+Задача 3b — безопасные ретраи при обрыве «до старта генерации» для unified-моделей (nano-banana, kling, omni, seedance...). `PiAPIClient.fetchWithRetry` получил раздельные счётчики: `retries` (HTTP 5xx, ответ пришёл = запрос дошёл) и `connectionRetries` (transport-обрыв, fetch бросил, ОТВЕТА не было = задача не зарегистрирована, повтор безопасен). `createTask` теперь `{ retries: 1, connectionRetries: 3 }`: до 3 попыток ТОЛЬКО на transport-обрыв; HTTP-ответы и наш AbortController-таймаут не повторяются (задача могла создаться → не плодим дубль-генерации). gpt-image edit retry-логика (P9.4.5) не тронута. Списание коинов остаётся одно на job, refund на FAILED — ретраи внутри одной job, дублей запросов/списаний нет.
+
+Проверки P9.5: `npm.cmd run build -w @allvision/worker` и `-w @allvision/web` — зелёные; worker `piapi-client` — 14 passed (2 новых теста: retry createTask на transport-обрыв, НЕ retry на HTTP 5xx); полный worker suite без DB-backed — 87 passed (pipeline-runner/piapi-provider требуют Postgres `localhost:5433`, локально не поднят).

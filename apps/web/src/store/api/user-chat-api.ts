@@ -100,6 +100,10 @@ export type ChatModelsResponse = {
 export const userChatApi = createApi({
   reducerPath: 'userChatApi',
   baseQuery: createBaseQueryWithReauth('/api/user'),
+  // Возврат на вкладку / реконнект сразу подтягивают свежее состояние чата и результат
+  // генерации, не дожидаясь следующего (затроттленного в фоне) тика поллинга.
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   tagTypes: ['Chats', 'Chat', 'ChatModels'],
   endpoints: (build) => ({
     getChatModels: build.query<ChatModelsResponse, void>({

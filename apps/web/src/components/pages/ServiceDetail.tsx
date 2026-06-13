@@ -19,6 +19,7 @@ import {
   Lock,
   Maximize2,
   Plus,
+  RotateCcw,
   Sparkles,
   Star,
   Video,
@@ -50,6 +51,20 @@ import { cn } from '@/lib/utils';
 
 import { TokenIcon } from '@/components/ui/token-icon';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
+
+// Явные лимиты для юзера. Должны быть не строже серверных multer-фильтров
+// (фото/видео/аудио форматы) и достаточно щедрыми под телефонные фото.
+const PHOTO_FORMATS_LABEL = 'JPG, PNG или WebP';
+const PHOTO_MAX_MB = 15;
+const AUDIO_FORMATS_LABEL = 'MP3, WAV или OGG';
+const AUDIO_MAX_MB = 25;
+const photoLimitLabel = (maxMb = PHOTO_MAX_MB) => `${PHOTO_FORMATS_LABEL}, до ${maxMb} МБ`;
+const audioLimitLabel = (maxMb = AUDIO_MAX_MB) => `${AUDIO_FORMATS_LABEL}, до ${maxMb} МБ`;
+
+function fileSizeError(file: File | undefined, maxMb: number): string | null {
+  if (!file) return null;
+  return file.size > maxMb * 1024 * 1024 ? `Файл больше ${maxMb} МБ. Загрузите версию полегче.` : null;
+}
 
 type ServiceDetailProps = {
   slug: string;
@@ -527,6 +542,7 @@ function ServicePhotoReferencesGroup({
   onFileChange: (id: string, file?: File) => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [sizeError, setSizeError] = useState<string | null>(null);
   const studioEnabled = fields.some((field) => field.allowStudioAvatars !== false);
   const libraryEnabled = fields.some((field) => field.allowSystemLibrary === true);
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 }, { skip: !studioEnabled });
@@ -579,6 +595,12 @@ function ServicePhotoReferencesGroup({
   };
 
   const selectFile = (field: UserInputField, file?: File) => {
+    const error = fileSizeError(file, field.maxSizeMb ?? PHOTO_MAX_MB);
+    setSizeError(error);
+    if (error) {
+      onFileChange(field.id, undefined);
+      return;
+    }
     onValueChange(field.id, '');
     onFileChange(field.id, file);
     if (file) setPickerOpen(false);
@@ -591,9 +613,10 @@ function ServicePhotoReferencesGroup({
           {title} {firstRequired ? <span className="text-amber-300">*</span> : null}
         </Label>
         <p className="mt-1 text-xs leading-5 text-slate-500">
-          {filled.length}/{fields.length} добавлено
+          {filled.length}/{fields.length} добавлено · {photoLimitLabel()}
         </p>
         {groupHint && <p className="mt-1 text-xs leading-5 text-amber-300/80">{groupHint}</p>}
+        {sizeError && <p className="mt-1 text-xs leading-5 text-destructive">{sizeError}</p>}
       </div>
 
       <div className="flex flex-wrap gap-4">
@@ -696,6 +719,8 @@ function ServicePhotoInput({
   const libraryEnabled = field.type === 'photo' && field.allowSystemLibrary === true;
   const defaultTab: PhotoSourceTab = uploadEnabled ? 'upload' : 'studio';
   const [tab, setTab] = useState<PhotoSourceTab>(defaultTab);
+  const [sizeError, setSizeError] = useState<string | null>(null);
+  const maxMb = field.maxSizeMb ?? PHOTO_MAX_MB;
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 }, { skip: !studioEnabled });
   const publicAssets = useGetPublicMediaAssetsQuery(
     { kind: 'preview-image', active: true },
@@ -722,6 +747,12 @@ function ServicePhotoInput({
   };
 
   const selectFile = (next?: File) => {
+    const error = fileSizeError(next, maxMb);
+    setSizeError(error);
+    if (error) {
+      onFileChange(field.id, undefined);
+      return;
+    }
     onValueChange(field.id, '');
     onFileChange(field.id, next);
     if (next) setTab('upload');
@@ -804,7 +835,7 @@ function ServicePhotoInput({
           <span className="mt-3 text-sm font-medium text-slate-200">
             {file ? file.name : 'Загрузить фото'}
           </span>
-          {field.hint && <span className="mt-1 text-xs text-slate-500">{field.hint}</span>}
+          <span className="mt-1 text-xs text-slate-500">{field.hint ?? photoLimitLabel(maxMb)}</span>
           <Input
             id={field.id}
             type="file"
@@ -814,6 +845,7 @@ function ServicePhotoInput({
           />
         </label>
       )}
+      {sizeError && <p className="text-xs text-destructive">{sizeError}</p>}
     </div>
   );
 }
@@ -886,6 +918,8 @@ function ServiceAudioInput({
   const libraryEnabled = field.allowLibrary === true;
   const defaultTab: 'upload' | 'library' = uploadEnabled ? 'upload' : 'library';
   const [tab, setTab] = useState<'upload' | 'library'>(defaultTab);
+  const [sizeError, setSizeError] = useState<string | null>(null);
+  const maxMb = field.maxSizeMb ?? AUDIO_MAX_MB;
   const library = useGetPublicMediaAssetsQuery(
     { kind: field.mediaKind ?? 'background-music', active: true },
     { skip: !libraryEnabled },
@@ -914,7 +948,7 @@ function ServiceAudioInput({
           <span className="text-sm font-medium text-slate-200">
             {file ? file.name : 'Выбрать mp3 / wav / ogg'}
           </span>
-          {field.hint && <span className="mt-1 text-xs text-slate-500">{field.hint}</span>}
+          <span className="mt-1 text-xs text-slate-500">{field.hint ?? audioLimitLabel(maxMb)}</span>
           <Input
             id={field.id}
             type="file"
@@ -922,12 +956,19 @@ function ServiceAudioInput({
             className="hidden"
             onChange={(event) => {
               const next = event.target.files?.[0];
+              const error = fileSizeError(next, maxMb);
+              setSizeError(error);
+              if (error) {
+                onFileChange(field.id, undefined);
+                return;
+              }
               onValueChange(field.id, '');
               onFileChange(field.id, next);
             }}
           />
         </label>
       )}
+      {sizeError && <p className="text-xs text-destructive">{sizeError}</p>}
 
       {tab === 'library' && libraryEnabled && (
         <div className="space-y-2">
@@ -1741,11 +1782,13 @@ function GenerationCard({
   expanded,
   onToggle,
   onDeleted,
+  onRetry,
 }: {
   project: ProjectListItem;
   expanded: boolean;
   onToggle: () => void;
   onDeleted: (id: string) => void;
+  onRetry: () => void;
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const isActive = isActiveProjectStatus(project.status);
@@ -1801,7 +1844,19 @@ function GenerationCard({
 
           {isActive && <GenerationProgress project={project} />}
 
-          {project.status === 'FAILED' && <GenerationWarning project={project} />}
+          {project.status === 'FAILED' && (
+            <div className="space-y-3">
+              <GenerationWarning project={project} />
+              <Button
+                type="button"
+                onClick={onRetry}
+                className="w-full bg-amber-500 text-slate-950 hover:bg-amber-400 sm:w-auto"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Попробовать снова
+              </Button>
+            </div>
+          )}
 
           {project.status === 'COMPLETED' && (
             <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -1840,12 +1895,14 @@ function GenerationsPanel({
   expandedId,
   onExpandedChange,
   onDeleted,
+  onRetry,
 }: {
   projects: ProjectListItem[];
   isLoading: boolean;
   expandedId: string | null;
   onExpandedChange: (id: string) => void;
   onDeleted: (id: string) => void;
+  onRetry: () => void;
 }) {
   if (isLoading) {
     return (
@@ -1880,6 +1937,7 @@ function GenerationsPanel({
           expanded={expandedId === project.id}
           onToggle={() => onExpandedChange(project.id)}
           onDeleted={onDeleted}
+          onRetry={onRetry}
         />
       ))}
     </div>
@@ -1988,13 +2046,21 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [expandedGenerationId, setExpandedGenerationId] = useState<string | null>(null);
   const [launchStartedLock, setLaunchStartedLock] = useState(false);
   const serviceTopRef = useRef<HTMLElement>(null);
+  const [shouldPoll, setShouldPoll] = useState(false);
   const projectsQuery = useListProjectsQuery(
     { page: 1, limit: 40 },
-    { skip: !user, pollingInterval: activeView === 'generations' ? 3000 : 0 },
+    { skip: !user, pollingInterval: shouldPoll ? 3000 : 0 },
   );
 
   const service = data?.service;
   const projects = useMemo(() => projectsQuery.data?.items ?? [], [projectsQuery.data?.items]);
+  // Поллим, пока есть незавершённая генерация ИЛИ юзер только что запустил услугу
+  // (lock держится несколько секунд, пока проект ещё не успел появиться в списке).
+  // Не привязано к активной вкладке: результат догонит и на вкладке «Услуга».
+  const hasActiveProject = useMemo(
+    () => projects.some((project) => isActiveProjectStatus(project.status)),
+    [projects],
+  );
   const fields = useMemo(() => parseFields(service?.userInputForm), [service?.userInputForm]);
   const photoFields = useMemo(() => fields.filter((field) => field.type === 'photo'), [fields]);
   const tierField = useMemo(() => fields.find((field) => field.type === 'tier'), [fields]);
@@ -2010,6 +2076,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   }, [photoFields]);
   const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
   const launchButtonLocked = launchState.isLoading || launchStartedLock;
+
+  useEffect(() => {
+    setShouldPoll(hasActiveProject || launchStartedLock);
+  }, [hasActiveProject, launchStartedLock]);
 
   useEffect(() => {
     const latest = projects[0];
@@ -2287,6 +2357,12 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
               isLoading={projectsQuery.isLoading}
               expandedId={expandedGenerationId}
               onExpandedChange={setExpandedGenerationId}
+              onRetry={() => {
+                setActiveView('service');
+                window.requestAnimationFrame(() => {
+                  serviceTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+              }}
               onDeleted={(id) => {
                 if (expandedGenerationId === id) setExpandedGenerationId(null);
                 void projectsQuery.refetch();

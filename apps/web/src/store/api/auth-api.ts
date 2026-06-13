@@ -18,6 +18,9 @@ export type SafeUser = Omit<
 export const authApi = createApi({
   reducerPath: 'authApi',
   baseQuery: createBaseQueryWithReauth('/api/auth'),
+  // Баланс в шапке (useGetMeQuery) обновляется при возврате на вкладку.
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   tagTypes: ['Me', 'User'],
   endpoints: (build) => ({
     register: build.mutation<{ user: SafeUser }, RegisterInput & CaptchaBody>({

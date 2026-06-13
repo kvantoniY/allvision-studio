@@ -141,6 +141,36 @@ describe('PiAPIClient polling', () => {
     fetchSpy.mockRestore();
   });
 
+  it('retries createTask on a transport error (request never reached PiAPI)', async () => {
+    const client = new PiAPIClient({ apiKey: 'test', baseUrl: 'https://api.test' });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ task_id: 'task-created' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+
+    const result = await client.createTask({ model: 'gemini', task_type: 'nano-banana-2' });
+
+    expect(result.taskId).toBe('task-created');
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    fetchSpy.mockRestore();
+  });
+
+  it('does not retry createTask on an HTTP 5xx (task may already exist, avoids duplicate)', async () => {
+    const client = new PiAPIClient({ apiKey: 'test', baseUrl: 'https://api.test' });
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('upstream error', {
+      status: 500,
+      headers: { 'content-type': 'text/plain' },
+    }));
+
+    await expect(client.createTask({ model: 'gemini' })).rejects.toMatchObject({ code: 'PIAPI_HTTP_500' });
+
+    // retries: 1 для HTTP — один запрос, без дубль-создания задачи.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    fetchSpy.mockRestore();
+  });
+
   it('does not retry a GPT Image request that aborts (avoids duplicate billing)', async () => {
     const client = new PiAPIClient({ apiKey: 'test', baseUrl: 'https://api.test' });
     const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' });

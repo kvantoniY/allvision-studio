@@ -47,6 +47,8 @@ const GPT_IMAGE_EDIT_RETRY_DELAYS_MS = [2_000, 5_000, 10_000];
 // Обрыв позже этого порога без ответа уже неоднозначен: генерация (40-100s) могла начаться
 // на стороне провайдера. Такие не ретраим — отдаём в history recovery.
 const GPT_IMAGE_EDIT_EARLY_RESET_WINDOW_MS = 30_000;
+// Сколько раз повторять СОЗДАНИЕ unified-задачи при транспортном обрыве (запрос не дошёл).
+const CREATE_TASK_CONNECTION_RETRIES = 3;
 // Сколько ПОДРЯД неудачных статус-опросов pollUntilDone терпит, прежде чем сдаться.
 // Каждый опрос внутри уже делает TRANSIENT_RETRIES сетевых попыток, так что 10 подряд
 // означает несколько минут полной недоступности PiAPI, а не случайный обрыв.
@@ -72,10 +74,16 @@ export class PiAPIClient {
   }
 
   async createTask(payload: unknown): Promise<{ taskId: string; raw: Record<string, unknown> }> {
+    // Транспортный обрыв запроса СОЗДАНИЯ задачи (fetch бросил, ответа не было) означает,
+    // что задача не зарегистрировалась у PiAPI и не биллится — повтор безопасен. Поэтому
+    // до 3 попыток ТОЛЬКО на connection-ошибки. HTTP-ответы (4xx/5xx) и наш таймаут не
+    // повторяются (retries: 1): они означают, что запрос дошёл и задача могла создаться,
+    // иначе словили бы дубль-генерацию. Это покрывает кейс «отправили в PiAPI, а он даже
+    // не начал генерацию» для unified-моделей (nano-banana, kling, omni, seedance...).
     const raw = await this.requestJson('/api/v1/task', {
       method: 'POST',
       body: JSON.stringify(payload),
-    }, { retries: 1 });
+    }, { retries: 1, connectionRetries: CREATE_TASK_CONNECTION_RETRIES });
     const taskId = readString(raw, ['task_id'])
       ?? readString(raw, ['data', 'task_id'])
       ?? readString(raw, ['task', 'id'])
@@ -354,7 +362,7 @@ export class PiAPIClient {
   private async requestJson(
     path: string,
     init: RequestInit,
-    opts?: { timeoutMs?: number; retries?: number },
+    opts?: { timeoutMs?: number; retries?: number; connectionRetries?: number },
   ): Promise<Record<string, unknown>> {
     const res = await this.fetchWithRetry(`${this.baseUrl}${path}`, {
       ...init,
@@ -371,16 +379,25 @@ export class PiAPIClient {
     return json as Record<string, unknown>;
   }
 
+  // retries           — макс. попыток на HTTP 5xx (ответ ПРИШЁЛ, запрос дошёл до PiAPI).
+  // connectionRetries — макс. попыток на transport-обрыв (fetch бросил, ОТВЕТА не было,
+  //                     значит запрос не дошёл — повтор безопасен). По умолчанию = retries.
+  // Наш AbortController-таймаут не повторяется никогда: задача могла уйти в работу.
   private async fetchWithRetry(
     url: string,
     init: RequestInit,
     parseErrorJson: boolean,
-    opts?: { timeoutMs?: number; retries?: number },
+    opts?: { timeoutMs?: number; retries?: number; connectionRetries?: number },
   ): Promise<Response> {
     const timeoutMs = opts?.timeoutMs ?? this.requestTimeoutMs;
-    const retries = opts?.retries ?? TRANSIENT_RETRIES;
+    const httpRetries = opts?.retries ?? TRANSIENT_RETRIES;
+    const connectionRetries = opts?.connectionRetries ?? httpRetries;
+    const maxAttempts = Math.max(httpRetries, connectionRetries, 1);
+    let httpAttempts = 0;
+    let connectionAttempts = 0;
     let lastError: unknown;
-    for (let attempt = 0; attempt < retries; attempt += 1) {
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
@@ -390,20 +407,26 @@ export class PiAPIClient {
           const message = parseErrorJson ? await readErrorMessage(res) : res.statusText;
           throw new ProviderError(`PIAPI_HTTP_${res.status}`, message || res.statusText, res.status);
         }
+        httpAttempts += 1;
         lastError = new ProviderError(`PIAPI_HTTP_${res.status}`, res.statusText, res.status);
+        if (httpAttempts >= httpRetries) throw lastError as ProviderError;
       } catch (err) {
-        if (err instanceof ProviderError && err.status && err.status < 500) throw err;
+        if (err instanceof ProviderError && err.status && err.status >= 400 && err.status < 500) throw err;
+        // 5xx, исчерпавший httpRetries, пробрасываем как есть.
+        if (err instanceof ProviderError && err.status && err.status >= 500) throw err;
         // Наш собственный таймаут (AbortController) не повторяем: задача могла уже
         // уйти в работу на стороне PiAPI, а повтор привёл бы к двойному списанию.
         if ((err as Error)?.name === 'AbortError') {
           throw new ProviderError('PIAPI_TIMEOUT', `PiAPI request timed out after ${timeoutMs}ms`);
         }
+        connectionAttempts += 1;
         lastError = err;
+        if (connectionAttempts >= connectionRetries) break;
       } finally {
         clearTimeout(timer);
       }
 
-      await delay(500 * (attempt + 1));
+      await delay(500 * attempt);
     }
 
     if (lastError instanceof ProviderError) throw lastError;

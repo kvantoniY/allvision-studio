@@ -1,4 +1,5 @@
 import { configureStore } from '@reduxjs/toolkit';
+import { setupListeners } from '@reduxjs/toolkit/query';
 import { authApi } from './api/auth-api';
 import { publicApi } from './api/public-api';
 import { accountApi } from './api/account-api';
@@ -90,6 +91,12 @@ export const store = configureStore({
       supportApi.middleware,
     ),
 });
+
+// Включает refetchOnFocus / refetchOnReconnect для всех API, у которых они помечены.
+// Без этого фоновые вкладки тротлят таймеры поллинга (браузер замедляет setInterval
+// в неактивной вкладке), и при возврате на вкладку результат генерации не подтягивается,
+// пока не обновишь страницу. С listener'ами фокус/реконнект сразу форсит свежий запрос.
+setupListeners(store.dispatch);
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch;

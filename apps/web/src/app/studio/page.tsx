@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ImageIcon, Loader2, MapPin, Plus, RotateCcw, Trash2, Upload, Video, Wand2 } from 'lucide-react';
@@ -108,7 +108,18 @@ function StudioContent() {
   const [modal, setModal] = useState<ModalKind>(null);
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 });
   const locations = useListUserMediaAssetsQuery({ kind: 'user-location', limit: 100 });
-  const projects = useListProjectsQuery({ page: 1, limit: 30 });
+  const [historyPolling, setHistoryPolling] = useState(false);
+  const projects = useListProjectsQuery(
+    { page: 1, limit: 30 },
+    { pollingInterval: historyPolling ? 3000 : 0 },
+  );
+  const hasActiveProject = useMemo(
+    () => (projects.data?.items ?? []).some((project) => project.status === 'PENDING' || project.status === 'PROCESSING'),
+    [projects.data?.items],
+  );
+  useEffect(() => {
+    setHistoryPolling(hasActiveProject);
+  }, [hasActiveProject]);
   const assetTitleById = useMemo(
     () => new Map(flattenAssets([...(avatars.data?.items ?? []), ...(locations.data?.items ?? [])]).map((asset) => [asset.id, asset.title])),
     [avatars.data?.items, locations.data?.items],

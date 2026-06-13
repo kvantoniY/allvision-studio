@@ -24,6 +24,10 @@ export type PaymentsQuery = {
 export const accountApi = createApi({
   reducerPath: 'accountApi',
   baseQuery: createBaseQueryWithReauth('/api/account'),
+  // Баланс/дашборд обновляются при возврате на вкладку: после завершения генерации
+  // (списание/возврат коинов) цифры не остаются устаревшими.
+  refetchOnFocus: true,
+  refetchOnReconnect: true,
   tagTypes: ['User', 'Dashboard', 'Transactions', 'Payments'],
   endpoints: (build) => ({
     getDashboard: build.query<DashboardResponse, void>({

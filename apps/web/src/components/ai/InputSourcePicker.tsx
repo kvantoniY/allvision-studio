@@ -36,6 +36,9 @@ function errorMessage(error: unknown) {
   return (error as { data?: { error?: { message?: string } } })?.data?.error?.message ?? 'Не удалось загрузить файл';
 }
 
+// Должно совпадать с серверным MAX_CHAT_INPUT_SIZE (apps/api/src/middleware/upload.ts).
+const CHAT_UPLOAD_MAX_MB = 25;
+
 function fileAccept(mediaKind: 'image' | 'video' | 'audio') {
   if (mediaKind === 'image') return 'image/jpeg,image/png,image/webp';
   if (mediaKind === 'video') return 'video/mp4,video/quicktime';
@@ -80,6 +83,11 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
   const changeFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (file.size > CHAT_UPLOAD_MAX_MB * 1024 * 1024) {
+      toast({ title: `Файл больше ${CHAT_UPLOAD_MAX_MB} МБ. Загрузите версию полегче.`, variant: 'destructive' });
+      event.target.value = '';
+      return;
+    }
     const form = new FormData();
     form.append('file', file);
     try {
