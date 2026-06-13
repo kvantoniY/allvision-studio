@@ -246,7 +246,8 @@ async function runSeedance(
       image_urls: imageUrls.length > 0 ? imageUrls : undefined,
       video_urls: videoUrls.length > 0 ? videoUrls : undefined,
       duration,
-      aspect_ratio: parsed.aspect_ratio ?? '9:16',
+      // «авто» (а не 9:16): omni сам возьмёт формат из загруженной сцены/видео-референса.
+      aspect_ratio: parsed.aspect_ratio ?? 'auto',
       resolution: parsed.resolution ?? '720p',
     },
     context: scaledContext(ctx.providerContext, ctx.reportProgress, from, 95),

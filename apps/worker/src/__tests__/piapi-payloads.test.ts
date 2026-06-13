@@ -155,6 +155,54 @@ describe('PiAPI payload builders', () => {
     });
   });
 
+  it('omits aspect_ratio for Kling 3.0 Omni when auto (follows the uploaded scene)', () => {
+    const payload = buildTextToVideoPayload('kling-3-omni', {
+      prompt: 'integrate the person into the scene',
+      durationSec: 5,
+      aspectRatio: 'auto',
+      resolution: '720p',
+      generateAudio: false,
+      params: { images: ['https://cdn.test/scene.jpg'] },
+    });
+
+    expect((payload.input as Record<string, unknown>).aspect_ratio).toBeUndefined();
+    expect((payload.input as Record<string, unknown>).images).toEqual(['https://cdn.test/scene.jpg']);
+  });
+
+  it('omits aspect_ratio for Seedance omni when auto, but keeps an explicit choice', () => {
+    const auto = buildTextToVideoPayload('seedance-2-omni', {
+      prompt: 'match the scene',
+      durationSec: 5,
+      aspectRatio: 'auto',
+      resolution: '720p',
+      generateAudio: false,
+      params: { image_urls: ['https://cdn.test/a.jpg'] },
+    });
+    expect((auto.input as Record<string, unknown>).aspect_ratio).toBeUndefined();
+
+    const explicit = buildTextToVideoPayload('seedance-2-omni', {
+      prompt: 'match the scene',
+      durationSec: 5,
+      aspectRatio: '9:16',
+      resolution: '720p',
+      generateAudio: false,
+      params: { image_urls: ['https://cdn.test/a.jpg'] },
+    });
+    expect((explicit.input as Record<string, unknown>).aspect_ratio).toBe('9:16');
+  });
+
+  it('keeps a 16:9 default for pure Seedance text-to-video (no references) when auto', () => {
+    const payload = buildTextToVideoPayload('seedance-2', {
+      prompt: 'a quiet forest',
+      durationSec: 5,
+      aspectRatio: 'auto',
+      resolution: '720p',
+      generateAudio: false,
+      params: {},
+    });
+    expect((payload.input as Record<string, unknown>).aspect_ratio).toBe('16:9');
+  });
+
   it('builds Wan image-to-video payload with audio reference and advanced controls', () => {
     const payload = buildImageToVideoPayload('wan-2.6-i2v', {
       imageUrl: 'https://cdn.test/input.jpg',

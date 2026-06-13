@@ -1174,3 +1174,21 @@ gpt-image остаётся выбираемой моделью в каталог
 Задача 3b — безопасные ретраи при обрыве «до старта генерации» для unified-моделей (nano-banana, kling, omni, seedance...). `PiAPIClient.fetchWithRetry` получил раздельные счётчики: `retries` (HTTP 5xx, ответ пришёл = запрос дошёл) и `connectionRetries` (transport-обрыв, fetch бросил, ОТВЕТА не было = задача не зарегистрирована, повтор безопасен). `createTask` теперь `{ retries: 1, connectionRetries: 3 }`: до 3 попыток ТОЛЬКО на transport-обрыв; HTTP-ответы и наш AbortController-таймаут не повторяются (задача могла создаться → не плодим дубль-генерации). gpt-image edit retry-логика (P9.4.5) не тронута. Списание коинов остаётся одно на job, refund на FAILED — ретраи внутри одной job, дублей запросов/списаний нет.
 
 Проверки P9.5: `npm.cmd run build -w @allvision/worker` и `-w @allvision/web` — зелёные; worker `piapi-client` — 14 passed (2 новых теста: retry createTask на transport-обрыв, НЕ retry на HTTP 5xx); полный worker suite без DB-backed — 87 passed (pipeline-runner/piapi-provider требуют Postgres `localhost:5433`, локально не поднят).
+
+## Этап P9.6 ✅ — Формат кадра (aspect ratio): omni следует загруженной сцене, а не форсит 16:9
+
+Симптом: видео-генерации (cinema/scene-transfer на Kling 3.0 / Seedance Omni) выходили в 16:9 независимо от выбранного формата.
+
+Корневая причина: в `buildTextToVideoPayload` для omni-веток (`kling-3-omni`, `seedance-*-omni`) формат шёл через `providerAspectRatio(value, fallback='16:9')` — любой `auto`/пусто превращался в жёсткие 16:9. Это отличалось от `image-to-video` Kling, который при неизвестном формате ОПУСКАЕТ `aspect_ratio` и даёт модели взять формат из референса. У omni референс (загруженный кадр/видео сцены) есть всегда, но его формат игнорировался.
+
+Фикс (worker, доезжает на прод):
+
+- Добавлен `explicitAspectRatio(value)` — возвращает формат только при явном выборе юзера (не `auto`/пусто).
+- В omni-ветках `buildTextToVideoPayload` (`kling-3-omni` и seedance при `mode='omni_reference'`/`-omni`) `aspect_ratio` теперь отправляется ТОЛЬКО при явном выборе; при `auto` поле опускается → модель берёт формат из загруженной сцены. Для чистого text-to-video без референсов (seedance text_to_video, veo, sora, wan, hailuo) сохранён дефолт 16:9 через `providerAspectRatio`.
+- `scene-transfer` runSeedance: дефолт `'9:16'` → `'auto'` (согласовано с runKling), чтобы при «авто» формат брался из сцены, а не хардкодился.
+
+Поведение по контракту юзера: если в форме есть поле формата и юзер выбрал конкретный (9:16/16:9/1:1...) — он и уходит в PiAPI; если выбрал «Авто» или поля формата нет (`{{user.aspect}}` → undefined → auto) — omni следует загруженной сцене, чистый t2v дефолтит 16:9.
+
+Долг/прод-нюанс: дефолт поля «Формат кадра» у уже существующих cinema-услуг (`me-in-movie`, `me-in-cartoon`, `me-in-harry-potter`, `kid-in-blue-tractor`) в seed остался прежним (`16:9`/`9:16`). Эти услуги НЕ в `NEW_SERVICE_SLUGS_TO_CREATE`, поэтому seed их не обновляет — менять дефолт на «Авто» нужно в `/admin/services`, если хочется чтобы по умолчанию формат брался из сцены. Сам выбор «Авто» уже работает корректно благодаря worker-фиксу. gpt-image услуги (`road-camera-couple`, `single-photo-2017`) не тронуты: им нужен конкретный размер через `gptImageSizeForAspect`.
+
+Проверки P9.6: worker `piapi-payloads scene-transfer-block` — 24 passed (3 новых теста: omit aspect при auto для Kling/Seedance omni, явный выбор сохраняется, pure t2v дефолтит 16:9); `npm.cmd run build -w @allvision/worker` — зелёный.

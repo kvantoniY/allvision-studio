@@ -1808,6 +1808,13 @@ function providerAspectRatio(value: string | undefined, fallback = '16:9') {
   return value && value !== 'auto' ? value : fallback;
 }
 
+// Возвращает формат ТОЛЬКО когда юзер выбрал его явно (не «авто»/пусто). Используется
+// в omni-ветках, где при «авто» поле aspect_ratio лучше опустить, чтобы модель взяла
+// формат из загруженного референса (сцена/видео), а не форсила 16:9.
+function explicitAspectRatio(value: string | undefined): string | undefined {
+  return value && value !== 'auto' ? value : undefined;
+}
+
 function hailuoModelSlug(model: string) {
   return model.includes('fast') ? 'v2.3-fast' : 'v2.3';
 }
@@ -1940,13 +1947,17 @@ function buildTextToVideoPayload(
   if (model === 'kling-3-omni') {
     const images = readStringList(input.params, 'images');
     const video = readString(input.params, 'video');
+    const explicit = explicitAspectRatio(input.aspectRatio);
     return {
       model: 'kling',
       task_type: 'omni_video_generation',
       input: {
         prompt: input.prompt,
         duration: input.durationSec,
-        aspect_ratio: providerAspectRatio(input.aspectRatio),
+        // Omni следует загруженной сцене (фото-кадр/видео-референс). Жёсткий формат шлём
+        // ТОЛЬКО когда юзер выбрал его явно; при «авто» поле опускаем, чтобы модель взяла
+        // формат из референса, а не дефолтила в 16:9.
+        ...(explicit ? { aspect_ratio: explicit } : {}),
         resolution: input.resolution ?? '720p',
         version: '3.0',
         enable_audio: readBoolean(input.params, 'enable_audio') ?? input.generateAudio,
@@ -1964,6 +1975,7 @@ function buildTextToVideoPayload(
     const imageUrls = readStringList(input.params, 'image_urls');
     const videoUrls = readStringList(input.params, 'video_urls');
     const audioUrls = readStringList(input.params, 'audio_urls');
+    const explicit = explicitAspectRatio(input.aspectRatio);
     return {
       model: 'seedance',
       task_type: seedanceTaskType(model),
@@ -1971,7 +1983,11 @@ function buildTextToVideoPayload(
         prompt: input.prompt,
         mode: isOmni ? 'omni_reference' : 'text_to_video',
         duration: input.durationSec,
-        aspect_ratio: providerAspectRatio(input.aspectRatio),
+        // Omni следует референсу: при «авто» опускаем формат (а не дефолтим в 16:9).
+        // Для чистого text-to-video (без референса) оставляем дефолт.
+        ...(isOmni
+          ? (explicit ? { aspect_ratio: explicit } : {})
+          : { aspect_ratio: providerAspectRatio(input.aspectRatio) }),
         resolution: input.resolution ?? '720p',
         ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
         ...(videoUrls.length > 0 ? { video_urls: videoUrls } : {}),
