@@ -84,6 +84,12 @@ async function recoverPiAPIProject(projectId: string, userId?: string): Promise<
   if (refs.length === 0) return false;
 
   for (const ref of refs) {
+    // Не финализируем проект по УЖЕ завершённому промежуточному шагу. Иначе для
+    // многошаговых пайплайнов (image-edit -> text-to-video -> video-compose)
+    // реконсайлер мог схватить готовую картинку первого шага и закрыть весь проект
+    // ею, пока видео-шаг ещё processing — юзер получал фото вместо видео.
+    if (isConsumedIntermediateStep(project.stepProgress, ref)) continue;
+
     const task: NormalizedPiAPITask | undefined = ref.recoverableOutputUrl
       ? { status: 'completed', outputUrl: ref.recoverableOutputUrl }
       : ref.taskId ? await piapiTaskState(client, ref.taskId) : undefined;
@@ -547,6 +553,20 @@ function extensionFor(contentType: string, providerUrl: string, outputType: 'ima
   const fromPath = path.extname(new URL(providerUrl).pathname).replace('.', '').toLowerCase();
   if (fromPath) return fromPath;
   return outputType === 'video' ? 'mp4' : 'jpg';
+}
+
+// true, если шаг рефа уже завершён И это не последний шаг пайплайна — значит его
+// результат промежуточный (например, кадр перед видео-шагом) и не должен закрывать проект.
+function isConsumedIntermediateStep(stepProgress: unknown, ref: RecoveryRef): boolean {
+  if (!ref.blockSlug || !Array.isArray(stepProgress)) return false;
+  const steps = stepProgress.filter(
+    (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+  );
+  if (steps.length === 0) return false;
+  const lastBlockSlug = steps[steps.length - 1].blockSlug;
+  const entry = steps.find((item) => item.blockSlug === ref.blockSlug);
+  if (!entry) return false;
+  return entry.status === 'completed' && entry.blockSlug !== lastBlockSlug;
 }
 
 function activeStepBlockSlug(stepProgress: unknown): string | null {
