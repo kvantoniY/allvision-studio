@@ -5,6 +5,7 @@ import { ReduxProvider } from '@/components/providers/redux-provider';
 import { Toaster } from '@/components/ui/toaster';
 import { AppShell } from '@/components/layout/AppShell';
 import { CookieBanner } from '@/components/CookieBanner';
+import { Analytics } from '@/components/analytics/Analytics';
 import { SITE_NAME, SITE_URL } from '@/lib/seo';
 
 const inter = Inter({
@@ -81,6 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <CookieBanner />
           <Toaster />
         </ReduxProvider>
+        <Analytics />
       </body>
     </html>
   );
