@@ -79,11 +79,13 @@ export const productCardBlock: BlockDefinition = {
 
     const total = outputs.length;
     let done = 0;
-    const segment = () => {
+    // Уникальный stepId на каждый вывод: cover/animation/ad иначе пишутся в один путь
+    // (animation и ad оба result.mp4) и перезаписывают друг друга.
+    const segment = (key: string) => {
       const from = Math.round((done / total) * 95) + 2;
       const to = Math.round(((done + 1) / total) * 95) + 2;
       done += 1;
-      return scaledContext(ctx.providerContext, ctx.reportProgress, from, to);
+      return scaledContext(ctx.providerContext, ctx.reportProgress, from, to, `${ctx.providerContext.stepId}-${key}`);
     };
 
     if (outputs.includes('cover')) {
@@ -98,7 +100,7 @@ export const productCardBlock: BlockDefinition = {
           resolution: '2K',
           quality: 'high',
         },
-        context: segment(),
+        context: segment('cover'),
       });
       coverUrl = result.outputUrl;
       assets.push({ type: 'image', url: result.outputUrl, label: 'Обложка' });
@@ -114,7 +116,7 @@ export const productCardBlock: BlockDefinition = {
           aspect_ratio: aspect,
           resolution: '720p',
         },
-        context: segment(),
+        context: segment('animation'),
       });
       assets.push({ type: 'video', url: result.outputUrl, label: 'Анимация' });
     }
@@ -130,7 +132,7 @@ export const productCardBlock: BlockDefinition = {
           aspect_ratio: aspect === 'auto' ? '16:9' : aspect,
           resolution: '720p',
         },
-        context: segment(),
+        context: segment('ad'),
       });
       assets.push({ type: 'video', url: result.outputUrl, label: 'Реклама' });
     }
@@ -202,9 +204,11 @@ function scaledContext(
   reportProgress: (percent: number) => Promise<void>,
   from: number,
   to: number,
+  stepId?: string,
 ): ProviderRunContext {
   return {
     ...context,
+    ...(stepId ? { stepId } : {}),
     reportProgress: async (percent: number) => {
       const safe = Math.max(0, Math.min(100, percent));
       await reportProgress(from + ((to - from) * safe) / 100);

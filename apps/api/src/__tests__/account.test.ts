@@ -33,6 +33,11 @@ beforeAll(async () => {
     .send({ email: EMAIL, password: PASSWORD, name: NAME });
   expect(reg.status).toBe(201);
   createdUserId = reg.body.user.id;
+  // Стартовый баланс теперь 0 (без welcome-бонуса), поэтому для проверки ленты транзакций
+  // создаём явную транзакцию вручную.
+  await prisma.tokenTransaction.create({
+    data: { userId: createdUserId, amount: 100, reason: 'topup', balanceAfter: 100 },
+  });
 });
 
 afterAll(async () => {
@@ -59,7 +64,7 @@ describe('GET /api/account/dashboard', () => {
     expect(Array.isArray(res.body.recentProjects)).toBe(true);
     expect(Array.isArray(res.body.activeOrders)).toBe(true);
     expect(res.body.recentTransactions.length).toBeGreaterThanOrEqual(1);
-    expect(res.body.recentTransactions[0].reason).toBe('welcome_bonus');
+    expect(res.body.recentTransactions[0].reason).toBe('topup');
   });
 });
 

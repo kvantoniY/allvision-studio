@@ -38,10 +38,9 @@ export function HeroSection() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-14 w-full border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white">
-              <Link href="/register">Создать первый бесплатно</Link>
+              <Link href="/register">Создать подарок</Link>
             </Button>
           </div>
-          <div className="mt-3 text-sm font-semibold text-amber-100">25 токенов после регистрации</div>
 
           <div className="mt-10 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-medium text-indigo-100">
             <span>2–5 минут на готовое решение</span>

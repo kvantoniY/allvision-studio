@@ -1218,3 +1218,25 @@ UI-зависание: основная причина (услуги сайта 
 Прод-env (`PIAPI_SYNC_PENDING_FAIL_AFTER_MS=600000`) НЕ менялся (не дал авто-классификатор как ручную правку прод-конфига); при желании можно опустить в `shared/.env` до ~120000 для ещё более быстрого фейла остаточного gpt-image.
 
 Проверки P9.7: `npm.cmd run build -w @allvision/database -w @allvision/worker` — зелёные; worker `carousel-slides product-card blocks-registry piapi-payloads` — 26 passed. Seed-тест локально падает на устаревшем Prisma-клиенте (`stylePreset is not a function`, известный Windows EPERM на `prisma generate`), не связано с правками.
+
+## Этап P9.8 ✅ — Cinema-режимы, стартовый баланс 0, фикс карусели
+
+**Задача 1 — «Я в фильме» / «Я в мультфильме»: режим фото/видео → промпт(дефолт)/фото.**
+На проде эти услуги остались на старом конфиге (`scene_mode: photo|video`), хотя seed-источник уже был переделан на правильный дизайн (`generation_mode: prompt|photo`, без видео). Причина: услуги не в `NEW_SERVICE_SLUGS_TO_CREATE`, поэтому seed их не перезаписывает на деплое. Блок `scene-transfer` уже умеет `generation_mode`. Привёл прод к seed-версии: сгенерировал SQL из `giftFactoryServices` (точное соответствие, без ручного перевода) и применил через psql (`infra/prod/cinema-mode-fix.sql`, бэкап `shared/cinema-backup-*.tsv`).
+- `me-in-movie`: `generation_mode` (По промпту — дефолт / По фото), `person1` опционален, `scene_photo` виден в фото-режиме, `prompt` обязателен в промпт-режиме. Промпт-режим → Seedance 2.0 t2v, фото-режим → Kling 3.0 оживляет кадр. Видео-режим убран.
+- `me-in-cartoon`: то же + `cartoon_visual_mode` (дефолт **`realistic`** — «максимально реалистичный перенос персонажа в мультмир») и `cartoon_style` (5 стилей). Блок резолвит `cartoon_visual_mode={{user.cartoon_visual_mode}}`.
+Seed уже корректен — менять не пришлось. Фронт data-driven (visibleWhen/requiredWhen, select), деплой не требуется.
+
+**Задача 2 — стартовый баланс 25 → 0.**
+- `auth-service.ts`: дефолт `WELCOME_TOKENS_BONUS ?? 25` → `?? 0`; при 0 транзакция `welcome_bonus` не создаётся.
+- `.env.example`, `infra/prod/.env.example`: `WELCOME_TOKENS_BONUS=0`. Прод `shared/.env` правится операционно (было 25).
+- UI: `HeroSection` убрал «25 токенов после регистрации» и CTA «Создать первый бесплатно» → «Создать подарок»; `CTASection` тот же CTA.
+- Тесты: `auth.test.ts` (баланс 0, нет транзакций), `account.test.ts` (вместо welcome_bonus — ручная `topup`-транзакция).
+
+**Задача 3 — карусель: «1 картинка вместо 5» + переделка качества.**
+Корневой баг: каждый слайд `provider.imageEdit` писал в один путь `outputs/.../{stepId}/result.jpg` (stepId одинаковый для всех слайдов блока) → слайды перезаписывали друг друга, и все 5 `resultAssets` указывали на один файл (5 копий последнего). Подтверждено на проде: `resultAssets` = 5 одинаковых URL. Фикс: уникальный `stepId` на слайд (`{stepId}-slide-N`) через расширенный `scaledContext`. Тот же баг был в `product-card` (animation/ad оба `result.mp4`) — тоже исправлен (`{stepId}-cover|animation|ad`).
+Промпт слайда переписан по фидбэку: человек как чистая PNG-вырезка без фона сбоку (не в рамке/карточке), дизайнерский фон во весь кадр, сильная современная типографика (жирный заголовок + читаемый текст), высокое качество фото/кожи/ткани, одежда сохраняется, единый шаблон по всем слайдам. Дефолт resolution слайдов/обложки поднят на 2K.
+
+Технический долг P9.8: точный рендер текста на слайдах — слабое место nano-banana; на будущее overlay текста через ffmpeg/canvas. Прод-env `WELCOME_TOKENS_BONUS` и рестарт api — операционно.
+
+Проверки P9.8: `npm.cmd run build -w @allvision/worker -w @allvision/api -w @allvision/web` — зелёные; worker `carousel-slides product-card blocks-registry` — 11 passed. API-тесты (auth/account) требуют Postgres `localhost:5433`, локально не гоняются.

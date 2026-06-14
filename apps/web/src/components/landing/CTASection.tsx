@@ -22,7 +22,7 @@ export function CTASection() {
           </div>
           <Button asChild size="lg" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
             <Link href="/register">
-              Создать первый бесплатно
+              Создать подарок
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>

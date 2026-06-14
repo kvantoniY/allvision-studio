@@ -25,14 +25,14 @@ afterAll(async () => {
 });
 
 describe('POST /api/auth/register', () => {
-  it('creates user, sets cookies, credits welcome bonus', async () => {
+  it('creates user, sets cookies, starts with zero balance and no welcome bonus', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: EMAIL, password: PASSWORD, name: NAME });
 
     expect(res.status).toBe(201);
     expect(res.body.user.email).toBe(EMAIL);
-    expect(res.body.user.tokenBalance).toBe(Number(process.env.WELCOME_TOKENS_BONUS ?? 25));
+    expect(res.body.user.tokenBalance).toBe(Number(process.env.WELCOME_TOKENS_BONUS ?? 0));
     expect(res.body.user.passwordHash).toBeUndefined();
 
     const cookies = res.headers['set-cookie'] as unknown as string[] | string | undefined;
@@ -40,11 +40,11 @@ describe('POST /api/auth/register', () => {
     expect(cookieArr.some((c) => c.startsWith('accessToken='))).toBe(true);
     expect(cookieArr.some((c) => c.startsWith('refreshToken='))).toBe(true);
 
+    // Стартовый баланс 0 — приветственный бонус больше не начисляется.
     const txns = await prisma.tokenTransaction.findMany({
       where: { user: { email: EMAIL } },
     });
-    expect(txns.length).toBe(1);
-    expect(txns[0].reason).toBe('welcome_bonus');
+    expect(txns.length).toBe(0);
   });
 
   it('rejects duplicate email with 409', async () => {

@@ -66,7 +66,10 @@ export const carouselSlidesBlock: BlockDefinition = {
           resolution,
           quality: 'high',
         },
-        context: scaledContext(ctx.providerContext, ctx.reportProgress, from, to),
+        // Уникальный stepId на каждый слайд: иначе все слайды пишутся в один и тот же
+        // путь outputs/.../{stepId}/result.jpg и перезаписывают друг друга — юзер получал
+        // 5 одинаковых картинок вместо 5 разных слайдов.
+        context: scaledContext(ctx.providerContext, ctx.reportProgress, from, to, `${ctx.providerContext.stepId}-slide-${index + 1}`),
       });
       urls.push(result.outputUrl);
       if (index === 0) styleRef = result.outputUrl;
@@ -113,15 +116,19 @@ function buildSlidePrompt(
   const trimmed = text.trim();
   const parts = [
     stylePrompt?.trim(),
-    `This is slide ${slideNo} of ${total} in ONE cohesive social-media carousel. Every slide must share the exact same visual style, layout grid, color palette, fonts, margins and overall template, so all slides look like one matching set.`,
+    `Design slide ${slideNo} of ${total} of ONE cohesive, premium social-media carousel (Instagram / VK style). All slides share an identical design system: same background style, color palette, typography, layout grid, margins and person placement, so the whole set looks professionally art-directed as a single brand.`,
+    // Layout & background — NOT a framed photo next to text.
+    'Layout: a modern editorial / marketing slide. Do NOT make a plain photo with a caption beside it, and do NOT put the person inside a rectangular photo frame, card or border. Build a fully designed background that fills the canvas edge to edge: a tasteful solid brand color or soft gradient with subtle geometric shapes and accent elements behind the content.',
+    // Person as a clean PNG-style cutout on one side.
+    'Person: use the SAME real person from the first reference image and composite them as a clean cut-out, like a transparent-background PNG, placed to one side of the slide (consistent side across all slides). Soft natural cut-out edges — no hard rectangle, no photo frame, no border, no boxed drop shadow. Keep them fully photorealistic, sharp and high resolution, half or full body, with their exact face, hairstyle and clothing preserved and consistent across every slide. They should sit naturally within the design, lightly overlapping the graphic elements, never pasted inside a box.',
+    // Typography.
     trimmed
-      ? `Render this exact text on the slide, clearly legible, correctly spelled and well typeset, as the slide heading/body. Do not translate it, do not invent extra words, render only this text: "${trimmed}".`
-      : 'This slide has no caption text; keep it as a clean visual slide without invented text.',
-    'Feature the SAME real person from the first reference image naturally in the photo area of the slide; keep their face consistent, recognizable and undistorted across all slides.',
+      ? `Typography: render this exact text as the slide copy with strong modern editorial type — a bold clean sans-serif headline plus lighter readable body text, clear visual hierarchy, generous spacing, accurate kerning, crisp and 100% legible. Keep the original language, do not translate, do not add or invent any words, render only this text verbatim: "${trimmed}".`
+      : 'This slide has no caption text; keep it a clean visual slide with only the person and the designed background, no invented text.',
     hasStyleRef
-      ? 'Use the second reference image ONLY as the visual style and layout template (palette, fonts, composition, framing). Do not copy its text and do not duplicate its exact content.'
-      : 'Establish a clean, premium, reusable template that the other slides will follow.',
-    'Professional graphic design, balanced composition, high quality, sharp readable typography, no gibberish text, no extra captions beyond the specified text, no watermark.',
+      ? 'Use the second reference image ONLY as the style/layout template (palette, fonts, composition, person side and placement). Match it closely, but render this slide\'s own new text and content; never copy its text.'
+      : 'This is the first slide: establish the reusable template (background style, palette, fonts, person side, type layout) that every following slide must match exactly.',
+    'Ultra high quality, crisp focus, realistic skin and fabric texture, clean professional graphic-design finish, balanced composition, no gibberish text, no extra captions beyond the specified text, no logos, no watermark.',
   ];
   return parts.filter((part): part is string => Boolean(part && part.length > 0)).join(' ');
 }
@@ -135,9 +142,11 @@ function scaledContext(
   reportProgress: (percent: number) => Promise<void>,
   from: number,
   to: number,
+  stepId?: string,
 ): ProviderRunContext {
   return {
     ...context,
+    ...(stepId ? { stepId } : {}),
     reportProgress: async (percent: number) => {
       const safe = Math.max(0, Math.min(100, percent));
       await reportProgress(from + ((to - from) * safe) / 100);
