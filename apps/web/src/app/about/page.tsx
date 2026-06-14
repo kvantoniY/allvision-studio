@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
 import { Sparkles, Target, UserRound } from 'lucide-react';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: 'О проекте',
-  description: 'История, миссия и команда Allvision Studio — AI-сервиса для создания и обработки персонального медиа.',
-};
+  description: 'Allvision Studio — AI-фабрика цифровых подарков: миссия, подход и команда сервиса для создания персонального медиа из фото и идей.',
+  path: '/about',
+});
 
 export default function AboutPage() {
   return (

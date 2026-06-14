@@ -1,12 +1,30 @@
 import type { Metadata } from 'next';
 import { HomePageContent } from '@/components/pages/HomePageContent';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { landingFaqs } from '@/lib/public-content';
+import { pageMetadata } from '@/lib/seo';
+import { faqSchema, organizationSchema, websiteSchema } from '@/lib/structured-data';
 
-export const metadata: Metadata = {
-  title: 'Allvision Studio — AI-генерация фото и видео',
+export const metadata: Metadata = pageMetadata({
+  title: 'Allvision Studio — AI-подарки: оживить фото, видео, мультфильмы',
   description:
-    'Трендовые AI-услуги, свободный Allvision AI чат, фото- и видеомодели, аватары, локации и генерации без подписки.',
-};
+    'AI-фабрика цифровых подарков: оживление и реставрация старых фото, перенос себя в фильм или мультфильм, трендовые видео, карусели для соцсетей, аватары и сказки. Результат за минуты, без промптов и подписки.',
+  path: '/',
+  absoluteTitle: true,
+  keywords: [
+    'нейросеть подарок',
+    'оживить старое фото',
+    'я в фильме нейросеть',
+    'ребёнок в мультфильме',
+    'AI генерация фото и видео',
+  ],
+});
 
 export default function HomePage() {
-  return <HomePageContent />;
+  return (
+    <>
+      <JsonLd data={[organizationSchema(), websiteSchema(), faqSchema(landingFaqs)]} />
+      <HomePageContent />
+    </>
+  );
 }

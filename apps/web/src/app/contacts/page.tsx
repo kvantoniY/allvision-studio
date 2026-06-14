@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import { BadgeCheck, Mail, Phone, Send, Timer } from 'lucide-react';
 import { ContactForm } from '@/components/pages/ContactForm';
 import { merchantInfo } from '@/lib/merchant';
+import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: 'Контакты',
-  description: 'Контакты Allvision Studio: Telegram поддержки, email и форма обратной связи.',
-};
+  description: 'Связаться с Allvision Studio: Telegram поддержки, email и форма обратной связи. Отвечаем ежедневно.',
+  path: '/contacts',
+});
 
 export default function ContactsPage() {
   return (

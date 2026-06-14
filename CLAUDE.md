@@ -1240,3 +1240,22 @@ Seed уже корректен — менять не пришлось. Фрон�
 Технический долг P9.8: точный рендер текста на слайдах — слабое место nano-banana; на будущее overlay текста через ffmpeg/canvas. Прод-env `WELCOME_TOKENS_BONUS` и рестарт api — операционно.
 
 Проверки P9.8: `npm.cmd run build -w @allvision/worker -w @allvision/api -w @allvision/web` — зелёные; worker `carousel-slides product-card blocks-registry` — 11 passed. API-тесты (auth/account) требуют Postgres `localhost:5433`, локально не гоняются.
+
+## Этап P10 ✅ — SEO: технический фундамент, мета, структурированные данные
+
+Аудит выявил: в коде был зашит чужой домен `allvision.studio` (реальный — `allvision-pulse.ru`) в `layout` metadataBase/OG и `sitemap` → битые canonical/OG/карта сайта; не было `robots.txt`; страницы услуг отдавали сырой slug в title («Услуга single-photo-2017»); sitemap брал статический legacy-список вместо реальных услуг; не было JSON-LD и canonical.
+
+Сделано (фазы 1–3):
+- `apps/web/src/lib/seo.ts` — единый `SITE_URL` (env `NEXT_PUBLIC_SITE_URL`, дефолт `https://allvision-pulse.ru`), `pageMetadata()` (canonical+OG+Twitter), `PUBLIC_API_URL` для серверных fetch.
+- `layout.tsx`: metadataBase/OG на правильный домен, дефолтные keywords, `verification.yandex/google` из env (опускаются, если пусто), googleBot директивы.
+- `robots.ts` (новый): открыта витрина, закрыты `/dashboard /admin /ai /studio /profile /api /mock-payment` и auth; sitemap+host.
+- `sitemap.ts`: реальный домен + услуги из `/api/services`, тренды, сценарии, статические страницы.
+- `services/[slug]/page.tsx`: `async generateMetadata` тянет услугу из `/api/services/:slug` → настоящие title/description/OG/canonical; раньше был сырой slug.
+- Мета через `pageMetadata` на главной, services, pricing, trends, about, contacts, scenarios (для client-страницы scenarios добавлен `scenarios/layout.tsx`).
+- JSON-LD: `components/seo/JsonLd.tsx` + `lib/structured-data.ts` — Organization+WebSite(SearchAction)+FAQPage на главной (FAQ из `landingFaqs`), Service+Offer (цена в RUB, 1 коин≈1₽) и BreadcrumbList на страницах услуг.
+- Dockerfile.prod/compose: build-args `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_YANDEX_VERIFICATION`, `NEXT_PUBLIC_GOOGLE_VERIFICATION` (NEXT_PUBLIC инлайнятся при сборке web). env-примеры обновлены.
+- `docs/SEO.md` — пошаговая инструкция по Яндекс.Вебмастер (приоритет РФ) + Google Search Console + Метрика, способы верификации (DNS TXT рекомендуется — без пересборки; либо мета-тег через env+ребилд, либо HTML-файл в `public/`).
+
+Долг (фазы 4–5): подключить аккаунты вебмастеров и Метрику (у владельца их пока нет), заменить picsum-превью на брендовые ассеты, контент под long-tail.
+
+Проверки P10: `npm.cmd run build -w @allvision/web` — зелёный; `/robots.txt` и `/sitemap.xml` генерируются, `/services/[slug]` стал dynamic (async-мета). Домен в дефолте корректен даже без прод-env.
