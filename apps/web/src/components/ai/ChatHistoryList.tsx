@@ -8,6 +8,7 @@ function isVideoUrl(url: string) {
 }
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/components/dashboard/labels';
 import type { ChatSummary } from '@/store/api/user-chat-api';
@@ -78,8 +79,8 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
               >
                 <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-900">
                   {item.lastResultPreview && !isVideoUrl(item.lastResultPreview) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <ImageWithSkeleton
+                      wrapperClassName="h-full w-full"
                       src={item.lastResultPreview}
                       alt=""
                       className="h-full w-full object-cover"

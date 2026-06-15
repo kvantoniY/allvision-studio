@@ -34,6 +34,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -506,8 +507,7 @@ function PhotoReferencePreview({
   return (
     <div className="group relative h-32 w-32 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
       {previewUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={previewUrl} alt={label} className="h-full w-full object-cover" />
+        <ImageWithSkeleton wrapperClassName="h-full w-full" src={previewUrl} alt={label} className="h-full w-full object-cover" />
       ) : (
         <div className="grid h-full place-items-center text-slate-600">
           <ImagePlus className="h-7 w-7" />
@@ -786,8 +786,7 @@ function ServicePhotoInput({
       {selectedAsset && (
         <div className="flex items-center gap-3 rounded-lg border border-violet-500/40 bg-violet-500/10 p-3">
           <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-slate-950">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={selectedAsset.thumbnailUrl || selectedAsset.publicUrl} alt="" className="h-full w-full object-cover" />
+            <ImageWithSkeleton wrapperClassName="h-full w-full" src={selectedAsset.thumbnailUrl || selectedAsset.publicUrl} alt="" className="h-full w-full object-cover" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium text-white">{selectedAsset.title}</div>
@@ -887,8 +886,7 @@ function AssetChoiceGrid({
           className="overflow-hidden rounded-md border border-slate-800 bg-slate-950 text-left transition hover:border-violet-500"
         >
           <div className="relative aspect-square bg-slate-900">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+            <ImageWithSkeleton wrapperClassName="absolute inset-0 h-full w-full" src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
           </div>
           <div className="truncate p-2 text-xs text-slate-100">{asset.title}</div>
         </button>
@@ -1544,8 +1542,7 @@ function GenerationServiceThumb({ project }: { project: ProjectListItem }) {
       {previewVideoUrl ? (
         <video src={previewVideoUrl} muted preload="metadata" className="h-full w-full object-cover" />
       ) : previewUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={previewUrl} alt={project.service?.title ?? project.title} className="h-full w-full object-cover" />
+        <ImageWithSkeleton wrapperClassName="h-full w-full" src={previewUrl} alt={project.service?.title ?? project.title} className="h-full w-full object-cover" />
       ) : (
         <div className="grid h-full place-items-center text-slate-600">
           <Video className="h-6 w-6" />

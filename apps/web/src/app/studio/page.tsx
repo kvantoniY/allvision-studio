@@ -18,6 +18,7 @@ import { useGetMeQuery } from '@/store/api/auth-api';
 import { useGetStylePresetsQuery } from '@/store/api/public-api';
 import { type ProjectListItem, useListProjectsQuery } from '@/store/api/projects-api';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL } from '@/components/dashboard/labels';
+import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import {
@@ -299,8 +300,7 @@ function StudioHistory({
                 {media?.type === 'video' ? (
                   <video src={media.url} muted preload="metadata" className="h-full w-full object-cover" />
                 ) : media?.type === 'image' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={media.url} alt="" className="h-full w-full object-cover" />
+                  <ImageWithSkeleton wrapperClassName="h-full w-full" src={media.url} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <div className="grid h-full place-items-center text-slate-600">
                     <Video className="h-10 w-10" />
@@ -443,8 +443,7 @@ function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation:
         {isVideo ? (
           <video src={selectedAsset.publicUrl} className="h-full w-full object-cover" muted playsInline />
         ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={selectedAsset.thumbnailUrl || selectedAsset.publicUrl} alt="" className="h-full w-full object-cover" />
+          <ImageWithSkeleton wrapperClassName="h-full w-full" src={selectedAsset.thumbnailUrl || selectedAsset.publicUrl} alt="" className="h-full w-full object-cover" />
         )}
         <div className="absolute inset-0 flex items-end bg-gradient-to-t from-black/80 via-black/10 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
           <div className="flex w-full gap-2">
@@ -482,8 +481,7 @@ function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation:
                 )}
                 title={index === 0 ? 'Основной образ' : `Вариация ${index}`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={variant.thumbnailUrl || variant.publicUrl} alt="" className="h-full w-full object-cover" />
+                <ImageWithSkeleton wrapperClassName="h-full w-full" src={variant.thumbnailUrl || variant.publicUrl} alt="" className="h-full w-full object-cover" />
               </button>
             ))}
           </div>
@@ -731,8 +729,7 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
       <form onSubmit={submit} className="space-y-4">
         <div className="flex items-center gap-3 rounded-md border border-slate-800 bg-slate-950 p-3">
           <div className="h-20 w-20 shrink-0 overflow-hidden rounded-md bg-slate-900">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
+            <ImageWithSkeleton wrapperClassName="h-full w-full" src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
           </div>
           <div>
             <div className="font-medium text-white">{asset.title}</div>

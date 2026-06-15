@@ -13,6 +13,7 @@ import {
 } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import {
   EditableMedia,
   EditableText,
@@ -928,7 +929,7 @@ function MediaBlock({ media, className }: { media: HomeMedia; className?: string
     return <video src={src} className={cn('h-full w-full object-cover', className)} autoPlay loop muted playsInline />;
   }
 
-  return <img src={src} alt={media.alt} className={cn('h-full w-full object-cover', className)} />;
+  return <ImageWithSkeleton wrapperClassName="h-full w-full" src={src} alt={media.alt} className={cn('h-full w-full object-cover', className)} />;
 }
 
 function SectionEyebrow({
