@@ -256,16 +256,23 @@ export class PiAPIClient {
     });
     // При заданном прокси generations (text-to-image: карусель, обложки) тоже идут через
     // зарубежный egress, иначе они остаются на нестабильном РФ-маршруте.
+    let json: Record<string, unknown>;
     if (PIAPI_PROXY_URL) {
-      return readGptImageResult(await this.gptImageJsonViaHttps('/v1/images/generations', jsonBody));
+      json = await this.gptImageJsonViaHttps('/v1/images/generations', jsonBody);
+    } else {
+      const res = await this.fetchWithRetry(`${this.baseUrl}/v1/images/generations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
+        body: jsonBody,
+      }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
+      json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     }
-    const res = await this.fetchWithRetry(`${this.baseUrl}/v1/images/generations`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
-      body: jsonBody,
-    }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
-    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    return readGptImageResult(json);
+    const result = readGptImageResult(json);
+    if (!result.url && !result.b64) {
+      const raw = JSON.stringify(json).slice(0, 400);
+      throw new ProviderError(emptyGptImageCode(raw), `GPT Image returned no image: ${raw}`);
+    }
+    return result;
   }
 
   // JSON POST через прокси-туннель (для gpt-image generations). Тот же транспорт, что у edits.
@@ -439,9 +446,18 @@ export class PiAPIClient {
             }
             try {
               const json = JSON.parse(text) as Record<string, unknown>;
-              resolve(readGptImageResult(json));
-            } catch {
-              reject(new ProviderError('PIAPI_BAD_RESPONSE', 'gpt-image edit returned non-JSON'));
+              const result = readGptImageResult(json);
+              if (!result.url && !result.b64) {
+                // 200 без картинки — обычно отказ модерации gpt-image по конкретному фото.
+                // Кладём сырой ответ в сообщение для диагностики и мапим в CONTENT_MODERATION,
+                // если в теле есть признаки отказа (тогда юзер видит понятную причину).
+                reject(new ProviderError(emptyGptImageCode(text), `GPT Image edit returned no image: ${text.slice(0, 400)}`));
+                return;
+              }
+              resolve(result);
+            } catch (parseErr) {
+              if (parseErr instanceof ProviderError) reject(parseErr);
+              else reject(new ProviderError('PIAPI_BAD_RESPONSE', 'gpt-image edit returned non-JSON'));
             }
           });
         },
@@ -664,6 +680,16 @@ function extractHistoryRecords(raw: Record<string, unknown>): Record<string, unk
   }
 
   return [];
+}
+
+// 200 без картинки от gpt-image обычно означает отказ модерации по конкретному контенту.
+// Если в сыром теле есть явные признаки отказа — отдаём CONTENT_MODERATION (понятное
+// сообщение юзеру), иначе PIAPI_EMPTY_OUTPUT.
+function emptyGptImageCode(rawBody: string): string {
+  const lower = rawBody.toLowerCase();
+  return /moderat|safety|policy|content[_ ]?policy|violat|rejected|declined|not allowed|cannot|unable|refus|нельзя|политик|запрещ|отклон/.test(lower)
+    ? 'CONTENT_MODERATION'
+    : 'PIAPI_EMPTY_OUTPUT';
 }
 
 function readGptImageResult(json: Record<string, unknown>): { url?: string; b64?: string } {
