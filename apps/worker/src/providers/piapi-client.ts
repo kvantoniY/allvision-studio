@@ -1,15 +1,50 @@
 import https from 'node:https';
+import http from 'node:http';
+import tls from 'node:tls';
+import type { Socket } from 'node:net';
 import crypto from 'node:crypto';
-import { HttpsProxyAgent } from 'https-proxy-agent';
 import { ProviderError } from './provider-errors';
 
 // Опциональный прокси ТОЛЬКО для синхронного gpt-image edits: маршрут РФ ВМ -> api.piapi.ai
 // интермиттентно рвёт длинное multipart-соединение (подтверждено: ~50% ECONNRESET напрямую,
 // 0% через зарубежный прокси). Через прокси (зарубежный egress) запрос идёт стабильно.
 // Async-модели (createTask/poll) надёжны и идут НАПРЯМУЮ, чтобы не зависеть от прокси.
-const gptImageProxyAgent = process.env.PIAPI_PROXY_URL
-  ? new HttpsProxyAgent(process.env.PIAPI_PROXY_URL)
-  : undefined;
+// Реализовано на встроенных node-модулях (CONNECT-туннель), без внешних зависимостей,
+// чтобы отсутствие пакета в образе не валило воркер.
+const PIAPI_PROXY_URL = process.env.PIAPI_PROXY_URL?.trim() || undefined;
+
+// Открывает HTTP CONNECT-туннель через прокси к target:port и отдаёт сырой сокет.
+function openProxyTunnel(proxyUrl: string, targetHost: string, targetPort: number, timeoutMs: number): Promise<Socket> {
+  const u = new URL(proxyUrl);
+  const headers: Record<string, string> = { Host: `${targetHost}:${targetPort}` };
+  if (u.username) {
+    const cred = Buffer.from(`${decodeURIComponent(u.username)}:${decodeURIComponent(u.password)}`).toString('base64');
+    headers['Proxy-Authorization'] = `Basic ${cred}`;
+  }
+  return new Promise<Socket>((resolve, reject) => {
+    const req = http.request({
+      host: u.hostname,
+      port: Number(u.port) || 80,
+      method: 'CONNECT',
+      path: `${targetHost}:${targetPort}`,
+      headers,
+      timeout: timeoutMs,
+    });
+    req.once('connect', (res, socket) => {
+      if (res.statusCode === 200) {
+        resolve(socket);
+      } else {
+        socket.destroy();
+        reject(new ProviderError('PIAPI_PROXY_CONNECT', `proxy CONNECT failed: HTTP ${res.statusCode}`));
+      }
+    });
+    req.once('timeout', () => req.destroy(new ProviderError('PIAPI_PROXY_TIMEOUT', 'proxy CONNECT timed out')));
+    req.once('error', (err) =>
+      reject(err instanceof ProviderError ? err : new ProviderError('PIAPI_PROXY_ERROR', `proxy connect: ${(err as Error).message}`)),
+    );
+    req.end();
+  });
+}
 
 export interface PiAPITaskStatus {
   taskId: string;
@@ -271,7 +306,7 @@ export class PiAPIClient {
 
   // Raw https multipart POST to /v1/images/edits. Sends the whole body with a fixed Content-Length
   // (not chunked/streamed) and enables TCP keepalive, which fixes the ~15s ECONNRESET seen with fetch.
-  private gptImageEditOnce(params: {
+  private async gptImageEditOnce(params: {
     model: string;
     prompt: string;
     images: Array<{ buffer: Buffer; contentType: string }>;
@@ -307,21 +342,30 @@ export class PiAPIClient {
     // надёжный признак «запрос дошёл и обработан». Обрыв ДО него на ранней секунде
     // означает, что запрос потерян по дороге (см. gptImageEditViaHttps).
     let responseStarted = false;
+    const targetHost = url.hostname;
+    const targetPort = Number(url.port) || 443;
+
+    // При заданном PIAPI_PROXY_URL поднимаем CONNECT-туннель и пускаем TLS через него
+    // (зарубежный egress). Туннель открываем ДО https.request.
+    const tunnel = PIAPI_PROXY_URL
+      ? await openProxyTunnel(PIAPI_PROXY_URL, targetHost, targetPort, 30_000)
+      : undefined;
 
     return new Promise((resolve, reject) => {
       const req = https.request(
         {
           method: 'POST',
-          hostname: url.hostname,
-          port: url.port || 443,
+          host: targetHost,
+          port: targetPort,
           path: url.pathname + url.search,
           headers: {
+            Host: targetHost,
             Authorization: `Bearer ${this.apiKey}`,
             'Content-Type': `multipart/form-data; boundary=${boundary}`,
             'Content-Length': body.length,
           },
           timeout: this.gptImageTimeoutMs,
-          ...(gptImageProxyAgent ? { agent: gptImageProxyAgent } : {}),
+          ...(tunnel ? { createConnection: () => tls.connect({ socket: tunnel, servername: targetHost }) } : {}),
         },
         (res) => {
           responseStarted = true;
