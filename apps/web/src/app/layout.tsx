@@ -34,7 +34,10 @@ export const metadata: Metadata = {
     'трендовое видео ИИ',
     'AI генерация фото и видео',
     'карусель для поста нейросеть',
+    'Allvision',
     'Allvision Studio',
+    'Allvision AI',
+    'allvision pulse',
   ],
   alternates: {
     canonical: '/',

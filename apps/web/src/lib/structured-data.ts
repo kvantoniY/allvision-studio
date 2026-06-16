@@ -9,11 +9,15 @@ export function organizationSchema(): Schema {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: SITE_NAME,
+    alternateName: ['Allvision', 'Allvision AI', 'Алвижн'],
     url: SITE_URL,
     logo: absoluteImage(DEFAULT_OG_IMAGE),
     email: merchantInfo.email,
     telephone: merchantInfo.phone,
     areaServed: 'RU',
+    // Профили компании укрепляют распознавание бренда поисковиками и AI (entity).
+    // Добавляй сюда реальные ссылки (VK, Telegram-канал, YouTube, Instagram).
+    sameAs: [`https://t.me/${merchantInfo.supportTelegram.replace(/^@/, '')}`],
     contactPoint: [
       {
         '@type': 'ContactPoint',
@@ -31,6 +35,7 @@ export function websiteSchema(): Schema {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: SITE_NAME,
+    alternateName: 'Allvision',
     url: SITE_URL,
     inLanguage: 'ru-RU',
     potentialAction: {

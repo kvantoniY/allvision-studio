@@ -112,7 +112,7 @@ function updateContentAtPath(content: HomeLandingContent, path: HomeEditorPath, 
 }
 
 export function HomePageContent() {
-  const { user, isLoading: isAuthLoading } = useAuth();
+  const { user } = useAuth();
   const isAuthed = !!user;
   const services = useListServicesQuery();
   const homePage = useGetHomePageContentQuery();
@@ -147,21 +147,11 @@ export function HomePageContent() {
       }
     : undefined;
 
-  if (isAuthLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 px-4 py-10 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-[1480px]">
-          <Skeleton className="h-[520px] rounded-xl bg-slate-900" />
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <Skeleton key={index} className="h-48 rounded-lg bg-slate-900" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // Раньше тут был «if (isAuthLoading) return <Skeleton>». На сервере useAuth всегда
+  // в состоянии загрузки, поэтому краулеры (Google) получали главную из пустых скелетонов
+  // без контента и индексировали вместо неё контентные страницы (pd-consent). Теперь лендинг
+  // рендерится на сервере с реальным текстом; isAuthed (false при загрузке) влияет только на
+  // ссылки CTA, а не на разметку, поэтому контент для поисковиков всегда в HTML.
   const allServices = services.data?.services ?? [];
   const firstPackage = tokenPackages.data?.packages?.[0];
 
