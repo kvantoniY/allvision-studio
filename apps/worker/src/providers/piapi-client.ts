@@ -1,6 +1,15 @@
 import https from 'node:https';
 import crypto from 'node:crypto';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import { ProviderError } from './provider-errors';
+
+// Опциональный прокси ТОЛЬКО для синхронного gpt-image edits: маршрут РФ ВМ -> api.piapi.ai
+// интермиттентно рвёт длинное multipart-соединение (подтверждено: ~50% ECONNRESET напрямую,
+// 0% через зарубежный прокси). Через прокси (зарубежный egress) запрос идёт стабильно.
+// Async-модели (createTask/poll) надёжны и идут НАПРЯМУЮ, чтобы не зависеть от прокси.
+const gptImageProxyAgent = process.env.PIAPI_PROXY_URL
+  ? new HttpsProxyAgent(process.env.PIAPI_PROXY_URL)
+  : undefined;
 
 export interface PiAPITaskStatus {
   taskId: string;
@@ -312,6 +321,7 @@ export class PiAPIClient {
             'Content-Length': body.length,
           },
           timeout: this.gptImageTimeoutMs,
+          ...(gptImageProxyAgent ? { agent: gptImageProxyAgent } : {}),
         },
         (res) => {
           responseStarted = true;

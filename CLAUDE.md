@@ -1273,3 +1273,11 @@ Seed уже корректен — менять не пришлось. Фрон�
 Про-длительностное ценообразование (задача из того же запроса): уже полностью реализовано и задеплоено (`610996e`) — админ-форма даёт цену на каждую длительность (`durationPrices`), сервер списывает `selectedDurationPrice` при наличии, иначе цену тира. Модельная себестоимость из реестра на списание НЕ влияет (только калькулятор маржи, подписана «Себестоимость»). Кода не требовалось; ни у одной услуги `durationPrices` пока не заполнены.
 
 Проверки P10.1: `npm.cmd run build -w @allvision/api` — зелёный.
+
+## Этап P10.2 ✅ — Прокси для gpt-image edits (зарубежный egress)
+
+Диагноз подтверждён эмпирически (тест с прод-ВМ через `curl`): синхронный `/v1/images/edits` (multipart) к `api.piapi.ai` напрямую с РФ-ВМ интермиттентно рвётся (ECONNRESET, exit 56) — в тесте 1 из 2 прямых запросов упал, оба через зарубежный прокси (Amsterdam VPS, aeza) прошли (200). Короткие запросы (account/info, createTask) и `/v1/images/generations` (JSON) стабильны и напрямую. Значит проблема именно в длинном multipart-соединении на РФ-egress.
+
+Фикс: добавлена опциональная переменная `PIAPI_PROXY_URL` (формат `http://user:pass@host:port`). При заданной — gpt-image **edits** идут через HTTP-CONNECT прокси (`https-proxy-agent` v7, classic moduleResolution → нужна именно v7, не v9 exports-only). Применяется ТОЛЬКО к синхронному edits-вызову в `PiAPIClient.gptImageEditOnce`; async-модели (createTask/poll: nano-banana, kling, seedance) идут НАПРЯМУЮ, чтобы не зависеть от прокси (если VPS упадёт — ломается только gpt-image, остальное живёт). На проде поднят tinyproxy на VPS Amsterdam, закрыт по IP прод-ВМ + BasicAuth.
+
+Проверки P10.2: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client` — 14 passed; сетевой тест direct-vs-proxy на edits подтвердил фикс.
