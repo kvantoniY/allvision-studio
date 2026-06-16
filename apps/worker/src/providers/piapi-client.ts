@@ -245,21 +245,80 @@ export class PiAPIClient {
     if (params.images.length > 0) {
       return this.gptImageEditViaHttps(params);
     }
+    const jsonBody = JSON.stringify({
+      model: params.model,
+      prompt: params.prompt,
+      n: 1,
+      size: params.size,
+      quality: params.quality,
+      ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
+      response_format: 'url',
+    });
+    // При заданном прокси generations (text-to-image: карусель, обложки) тоже идут через
+    // зарубежный egress, иначе они остаются на нестабильном РФ-маршруте.
+    if (PIAPI_PROXY_URL) {
+      return readGptImageResult(await this.gptImageJsonViaHttps('/v1/images/generations', jsonBody));
+    }
     const res = await this.fetchWithRetry(`${this.baseUrl}/v1/images/generations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({
-        model: params.model,
-        prompt: params.prompt,
-        n: 1,
-        size: params.size,
-        quality: params.quality,
-        ...(params.outputFormat ? { output_format: params.outputFormat } : {}),
-        response_format: 'url',
-      }),
+      body: jsonBody,
     }, true, { timeoutMs: this.gptImageTimeoutMs, retries: 1 });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return readGptImageResult(json);
+  }
+
+  // JSON POST через прокси-туннель (для gpt-image generations). Тот же транспорт, что у edits.
+  private async gptImageJsonViaHttps(path: string, jsonBody: string): Promise<Record<string, unknown>> {
+    const url = new URL(`${this.baseUrl}${path}`);
+    const targetHost = url.hostname;
+    const targetPort = Number(url.port) || 443;
+    const body = Buffer.from(jsonBody, 'utf8');
+    const tunnel = PIAPI_PROXY_URL
+      ? await openProxyTunnel(PIAPI_PROXY_URL, targetHost, targetPort, 30_000)
+      : undefined;
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      const req = https.request(
+        {
+          method: 'POST',
+          host: targetHost,
+          port: targetPort,
+          path: url.pathname + url.search,
+          headers: {
+            Host: targetHost,
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+            'Content-Length': body.length,
+          },
+          timeout: this.gptImageTimeoutMs,
+          ...(tunnel ? { createConnection: () => tls.connect({ socket: tunnel, servername: targetHost }) } : {}),
+        },
+        (res) => {
+          const data: Buffer[] = [];
+          res.on('data', (chunk) => data.push(Buffer.from(chunk)));
+          res.on('end', () => {
+            const text = Buffer.concat(data).toString('utf8');
+            const status = res.statusCode ?? 0;
+            if (status >= 400) {
+              reject(new ProviderError(`PIAPI_HTTP_${status}`, text.slice(0, 400) || `gpt-image generations HTTP ${status}`, status));
+              return;
+            }
+            try {
+              resolve(JSON.parse(text) as Record<string, unknown>);
+            } catch {
+              reject(new ProviderError('PIAPI_BAD_RESPONSE', 'gpt-image generations returned non-JSON'));
+            }
+          });
+        },
+      );
+      req.on('socket', (socket) => socket.setKeepAlive(true, 5_000));
+      req.on('timeout', () => req.destroy(new ProviderError('PIAPI_TIMEOUT', `gpt-image generations timed out after ${this.gptImageTimeoutMs}ms`)));
+      req.on('error', (err) =>
+        reject(err instanceof ProviderError ? err : new ProviderError('PIAPI_NETWORK_ERROR', `gpt-image generations: ${(err as Error).message}`)),
+      );
+      req.write(body);
+      req.end();
+    });
   }
 
   // The gateway intermittently resets the long-held gpt-image edit connection. Two distinct modes,

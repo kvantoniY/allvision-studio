@@ -277,7 +277,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.photo}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           prompt: 'PLACEHOLDER: восстановить старое фото, убрать царапины, выцветание и шум, восстановить цвета и детали лица. Сохранить идентичность людей и композицию. Фото должно выглядеть как качественный современный снимок того же момента.',
           output_format: 'jpg',
           aspect_ratio: 'auto',
@@ -450,7 +450,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.child_photo}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           prompt: 'Stylize this child photo as a friendly hand-drawn cartoon hero in the world of "{{user.world}}". Preserve recognizable face features. Soft pastel colors, family-friendly, no IP characters.',
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
@@ -568,7 +568,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.mother_photo}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           image_urls: ['{{user.father_photo}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
@@ -629,7 +629,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.portrait}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
           resolution: '2K',
@@ -701,7 +701,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.photos}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           prompt: 'Festive {{user.occasion}} celebration mood: subtle colorful confetti, soft warm light. Preserve identity and composition.',
           output_format: 'jpg',
           resolution: '1K',
@@ -889,7 +889,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.portrait}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
           resolution: '4K',
@@ -972,7 +972,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.friend_1}}',
         params: {
-          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          model: { standard: 'gpt-image-2', pro: 'gpt-image-2' },
           image_urls: ['{{user.friend_2}}', '{{user.friend_3}}', '{{user.friend_4}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
@@ -1248,7 +1248,7 @@ export const giftFactoryServices = [
           duration_from_reference: true,
           face_swap_model: 'qubico-video-toolkit',
           motion_model: 'kling-motion-3.0-std',
-          portrait_model: 'nano-banana',
+          portrait_model: 'gpt-image-2',
           target_faces_index_left: '0',
           target_faces_index_right: '1',
           aspect_ratio: '9:16',
@@ -1619,7 +1619,7 @@ export const giftFactoryServices = [
           duration_from_reference: true,
           face_swap_model: 'qubico-video-toolkit',
           motion_model: 'kling-motion-3.0-std',
-          portrait_model: 'nano-banana',
+          portrait_model: 'gpt-image-2',
           target_faces_index_left: '0',
           target_faces_index_right: '1',
           aspect_ratio: '9:16',
@@ -2065,7 +2065,7 @@ export const giftFactoryServices = [
           primary_photo: '{{user.person1}}',
           people_count: 'auto',
           stylize_characters: false,
-          stylize_model: 'nano-banana',
+          stylize_model: 'gpt-image-2',
           stylize_prompt:
             'Create a polished animated character from the uploaded person reference while preserving recognizable identity: same face structure, eye shape, nose, mouth, hairstyle, age impression and personality. Match this selected animation direction: {{user.cartoon_style}}. Clean production-quality character design, stable face, expressive but not exaggerated, no text, no watermark, no extra people.',
           photo_base_prompt:
@@ -2167,7 +2167,7 @@ export const giftFactoryServices = [
         blockSlug: 'image-edit',
         input: '{{user.man_photo}}',
         params: {
-          model: 'nano-banana',
+          model: 'gpt-image-2',
           image_urls: ['{{user.woman_photo}}', '{{user.car_photo}}'],
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
@@ -2425,7 +2425,7 @@ export const giftFactoryServices = [
         blockSlug: 'carousel-slides',
         input: '{{user.photo}}',
         params: {
-          model: 'nano-banana',
+          model: 'gpt-image-2',
           person_photo: '{{user.photo}}',
           slides: '{{user.slides}}',
           style_prompt:
@@ -2530,7 +2530,7 @@ export const giftFactoryServices = [
           photo3: '{{user.photo3}}',
           product_name: '{{user.product_name}}',
           outputs: '{{user.outputs}}',
-          cover_model: 'nano-banana',
+          cover_model: 'gpt-image-2',
           animation_model: 'kling-3-pro',
           animation_duration: 5,
           ad_model: 'seedance-2-omni',
@@ -2592,7 +2592,7 @@ export const giftFactoryServices = [
           photo3: '{{user.photo3}}',
           product_name: '{{user.product_name}}',
           outputs: '{{user.outputs}}',
-          cover_model: 'nano-banana',
+          cover_model: 'gpt-image-2',
           animation_model: 'kling-3-pro',
           animation_duration: 5,
           aspect_ratio: '{{user.aspect}}',
