@@ -22,6 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { ResultMedia } from '@/components/ui/result-media';
+import { useLivelyProgress } from '@/lib/use-lively-progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
@@ -129,7 +131,8 @@ function SourceThumbnails({ images }: { images: string[] }) {
 }
 
 function ProjectProgressBody({ progress }: { progress: number }) {
-  const safeProgress = Math.max(0, Math.min(100, progress));
+  // Этот блок рендерится только в активных статусах (PENDING/PROCESSING), поэтому шкала «живая».
+  const safeProgress = useLivelyProgress(progress, true);
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-4 text-sm">
@@ -166,7 +169,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
   const project = projectQuery.data ?? initialProject;
   const statusForPolling = lastStatus ?? project?.status;
   const statusQuery = useGetProjectStatusQuery(id, {
-    pollingInterval: isActiveStatus(statusForPolling) ? 3000 : 0,
+    pollingInterval: isActiveStatus(statusForPolling) ? 2000 : 0,
     skip: !project,
   });
 
@@ -286,10 +289,12 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
             <CardContent className="p-4">
               <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                 {finalVideoUrl ? (
-                  <video
+                  <ResultMedia
+                    key={finalVideoUrl}
+                    type="video"
                     src={finalVideoUrl}
                     poster={finalPosterUrl ?? undefined}
-                    controls
+                    videoControls
                     className="max-h-[70vh] w-full bg-black"
                   />
                 ) : (
@@ -298,8 +303,13 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                     onClick={() => setIsPreviewOpen(true)}
                     className="group relative block w-full"
                   >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={finalImageUrl ?? finalOutputUrl} alt="Готовый результат" className="max-h-[70vh] w-full object-contain" />
+                    <ResultMedia
+                      key={finalImageUrl ?? finalOutputUrl ?? ''}
+                      type="image"
+                      src={finalImageUrl ?? finalOutputUrl ?? ''}
+                      imgAlt="Готовый результат"
+                      className="max-h-[70vh] w-full object-contain"
+                    />
                     <span className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-md bg-slate-950/80 px-3 py-2 text-sm text-white opacity-0 transition group-hover:opacity-100">
                       <Maximize2 className="h-4 w-4" />
                       Открыть
@@ -489,10 +499,9 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
               <div className="space-y-5">
                 <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                   {resultImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={resultImage} alt="Результат улучшения" className="max-h-[520px] w-full object-contain" />
+                    <ResultMedia key={resultImage} type="image" src={resultImage} imgAlt="Результат улучшения" className="max-h-[520px] w-full object-contain" />
                   ) : resultVideo ? (
-                    <video src={resultVideo} controls className="max-h-[520px] w-full" />
+                    <ResultMedia key={resultVideo} type="video" src={resultVideo} videoControls className="max-h-[520px] w-full" />
                   ) : (
                     <div className="grid h-64 place-items-center text-slate-500">Результат пока недоступен</div>
                   )}

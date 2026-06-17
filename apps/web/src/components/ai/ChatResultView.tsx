@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { ResultMedia } from '@/components/ui/result-media';
+import { useLivelyProgress } from '@/lib/use-lively-progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
@@ -129,7 +131,7 @@ function MessageCard({
   const resultUrl = resultVideo ?? resultImage ?? resultThumbnail;
   const failed = status === 'FAILED';
   const processing = isActive(status);
-  const safeProgress = Math.max(0, Math.min(100, progress));
+  const safeProgress = useLivelyProgress(progress, processing);
   const friendlyError = chatFailureMessage(project.errorCode, project.errorMessage);
   const withAudio = hasGeneratedAudio(project.userInputs);
 
@@ -178,14 +180,22 @@ function MessageCard({
         {!processing && !failed && (
           <div className="group relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
             {resultVideo ? (
-              <video src={resultVideo} poster={resultThumbnail ?? undefined} controls className="max-h-[58vh] w-full bg-black" />
+              <ResultMedia
+                key={resultVideo}
+                type="video"
+                src={resultVideo}
+                poster={resultThumbnail ?? undefined}
+                videoControls
+                className="max-h-[58vh] w-full bg-black"
+              />
             ) : resultImage ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <ResultMedia
+                key={resultImage}
+                type="image"
                 src={resultImage}
-                alt="Результат Allvision AI"
+                imgAlt="Результат Allvision AI"
                 className="max-h-[58vh] w-full cursor-zoom-in object-contain"
-                onClick={() => setLightboxOpen(true)}
+                onImageClick={() => setLightboxOpen(true)}
               />
             ) : (
               <div className="grid min-h-[240px] place-items-center text-slate-600">

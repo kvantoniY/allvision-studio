@@ -35,6 +35,8 @@ import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
+import { ResultMedia } from '@/components/ui/result-media';
+import { useLivelyProgress } from '@/lib/use-lively-progress';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -1691,24 +1693,21 @@ function GenerationPreview({
   if (project.status === 'COMPLETED' && resultUrl) {
     return (
       <div className="group relative overflow-hidden rounded-md border border-slate-800 bg-slate-950">
-        {isResultVideo ? (
-          <video
-            src={resultUrl}
-            poster={posterUrl ?? undefined}
-            controls={expanded}
-            muted={!expanded}
-            preload="metadata"
-            className={cn('w-full bg-black object-contain', expanded ? 'max-h-[520px]' : 'h-32')}
-          />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resultUrl}
-            alt="Результат генерации"
-            className={cn('w-full cursor-zoom-in object-contain', expanded ? 'max-h-[520px]' : 'h-32')}
-            onClick={onOpenResult}
-          />
-        )}
+        <ResultMedia
+          key={resultUrl}
+          type={isResultVideo ? 'video' : 'image'}
+          src={resultUrl}
+          poster={posterUrl ?? undefined}
+          videoControls={expanded}
+          videoMuted={!expanded}
+          imgAlt="Результат генерации"
+          onImageClick={onOpenResult}
+          className={cn(
+            'w-full object-contain',
+            isResultVideo ? 'bg-black' : 'cursor-zoom-in',
+            expanded ? 'max-h-[520px]' : 'h-32',
+          )}
+        />
         <button
           type="button"
           onClick={onOpenResult}
@@ -1813,7 +1812,7 @@ function GenerationResultLightbox({
 }
 
 function GenerationProgress({ project, compact = false }: { project: ProjectListItem; compact?: boolean }) {
-  const progress = Math.max(0, Math.min(100, project.progress ?? 0));
+  const progress = useLivelyProgress(project.progress ?? 0, isActiveProjectStatus(project.status));
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
       <div className="flex items-start justify-between gap-3 text-sm">
@@ -2167,7 +2166,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [shouldPoll, setShouldPoll] = useState(false);
   const projectsQuery = useListProjectsQuery(
     { page: 1, limit: 40 },
-    { skip: !user, pollingInterval: shouldPoll ? 3000 : 0 },
+    { skip: !user, pollingInterval: shouldPoll ? 2000 : 0 },
   );
 
   const service = data?.service;

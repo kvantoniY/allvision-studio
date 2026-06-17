@@ -35,10 +35,21 @@ function AiContent() {
   const [chatListOpen, setChatListOpen] = useState(false);
   const [reference, setReference] = useState<SelectedInputSource | null>(null);
   const [retryPrompt, setRetryPrompt] = useState<string | undefined>();
+  // Поллим часто (2с), пока в чате есть незавершённая генерация, иначе редкий heartbeat (8с),
+  // чтобы готовый результат появлялся быстро, но не грузить API в простое.
+  const [chatGenerating, setChatGenerating] = useState(false);
   const chatQuery = useGetChatQuery(activeChatId ?? '', {
     skip: !activeChatId,
-    pollingInterval: 5000,
+    pollingInterval: chatGenerating ? 2000 : 8000,
   });
+
+  useEffect(() => {
+    const active = (chatQuery.data?.messages ?? []).some((message) => {
+      const status = message.project?.status;
+      return status === 'PENDING' || status === 'PROCESSING';
+    });
+    setChatGenerating((current) => (current === active ? current : active));
+  }, [chatQuery.data]);
 
   useEffect(() => {
     if (activeChatId || chats.isLoading || createChatState.isLoading) return;
