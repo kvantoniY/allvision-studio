@@ -11,6 +11,7 @@ export type PipelineStep = {
   blockSlug: string;
   input?: unknown;
   params?: Record<string, unknown>;
+  when?: { field: string; value: string };
 };
 
 export type UserInputField = {
@@ -29,7 +30,8 @@ export type UserInputField = {
     | 'aspect_ratio'
     | 'music-select'
     | 'slides'
-    | 'multiselect';
+    | 'multiselect'
+    | 'checkbox';
   label: string;
   required: boolean;
   requiredWhen?: { field: string; value: string };
@@ -51,6 +53,9 @@ export type UserInputField = {
   defaultDuration?: number;
   durationPrices?: Array<{ duration: number; priceCoins: number }>;
   maxSlides?: number;
+  defaultChecked?: boolean;
+  priceCoinsChecked?: number;
+  priceCoinsUnchecked?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;

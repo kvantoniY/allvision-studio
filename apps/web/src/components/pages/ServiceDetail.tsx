@@ -81,7 +81,7 @@ type UserInputOption = {
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides' | 'multiselect';
+  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides' | 'multiselect' | 'checkbox';
   label?: string;
   required?: boolean;
   requiredWhen?: { field: string; value: string };
@@ -102,6 +102,9 @@ type UserInputField = {
   defaultDuration?: number;
   durationPrices?: Array<{ duration: number; priceCoins: number }>;
   maxSlides?: number;
+  defaultChecked?: boolean;
+  priceCoinsChecked?: number;
+  priceCoinsUnchecked?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;
@@ -170,6 +173,29 @@ function parseSlides(value?: string): string[] {
   return [];
 }
 
+// Rich slide parser: each slide is { text, withPhoto }. Legacy string slides become withPhoto:true.
+type SlideSpec = { text: string; withPhoto: boolean };
+function parseSlidesRich(value?: string): SlideSpec[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => {
+      if (typeof item === 'string') return { text: item, withPhoto: true };
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const record = item as Record<string, unknown>;
+        return {
+          text: typeof record.text === 'string' ? record.text : '',
+          withPhoto: record.withPhoto === undefined ? true : record.withPhoto === true,
+        };
+      }
+      return { text: '', withPhoto: true };
+    });
+  } catch {
+    return [];
+  }
+}
+
 function slideCount(fields: UserInputField[], values: FormValues): number {
   const slidesField = fields.find((field) => field.type === 'slides');
   if (!slidesField) return 0;
@@ -201,6 +227,19 @@ function durationPrice(fields: UserInputField[], values: FormValues): number | n
   if (!Number.isFinite(selected)) return null;
   const match = (field.durationPrices ?? []).find((item) => item.duration === selected);
   return typeof match?.priceCoins === 'number' ? match.priceCoins : null;
+}
+
+// Two-price checkbox (e.g. "animate photo"): price = checked ? priceCoinsChecked : priceCoinsUnchecked.
+function checkboxPrice(fields: UserInputField[], values: FormValues): number | null {
+  const field = fields.find(
+    (item) => fieldVisible(item, values)
+      && item.type === 'checkbox'
+      && (item.priceCoinsChecked !== undefined || item.priceCoinsUnchecked !== undefined),
+  );
+  if (!field) return null;
+  const checked = values[field.id] === 'true';
+  const next = checked ? field.priceCoinsChecked : field.priceCoinsUnchecked;
+  return typeof next === 'number' && next > 0 ? next : null;
 }
 
 function parseFields(value: unknown): UserInputField[] {
@@ -241,6 +280,9 @@ function parseFields(value: unknown): UserInputField[] {
             .filter((price) => Number.isFinite(price.duration) && Number.isFinite(price.priceCoins) && price.priceCoins > 0)
         : undefined,
       maxSlides: typeof item.maxSlides === 'number' ? item.maxSlides : undefined,
+      defaultChecked: typeof item.defaultChecked === 'boolean' ? item.defaultChecked : undefined,
+      priceCoinsChecked: typeof item.priceCoinsChecked === 'number' ? item.priceCoinsChecked : undefined,
+      priceCoinsUnchecked: typeof item.priceCoinsUnchecked === 'number' ? item.priceCoinsUnchecked : undefined,
       aspectOptions: Array.isArray(item.aspectOptions)
         ? (item.aspectOptions.filter((v) => typeof v === 'string') as UserInputField['aspectOptions'])
         : undefined,
@@ -259,7 +301,7 @@ function parseFields(value: unknown): UserInputField[] {
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides', 'multiselect'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides', 'multiselect', 'checkbox'].includes(item.type));
 }
 
 function servicePrice(service: PublicService) {
@@ -418,9 +460,11 @@ function validateClient(fields: UserInputField[], values: FormValues, files: Fil
       continue;
     }
     if (field.type === 'slides') {
-      const arr = parseSlides(values[field.id]);
-      if (required && (arr.length < 1 || arr.every((text) => !text.trim()))) {
-        errors.push(`Заполните текст хотя бы одного слайда: ${field.label ?? field.id}`);
+      const arr = parseSlidesRich(values[field.id]);
+      // A slide is valid as text-only OR photo-only, so we only require at least one slide
+      // that has either text or the photo enabled.
+      if (required && (arr.length < 1 || arr.every((slide) => !slide.text.trim() && !slide.withPhoto))) {
+        errors.push(`Заполните хотя бы один слайд (текст или фото): ${field.label ?? field.id}`);
       }
       continue;
     }
@@ -1103,34 +1147,45 @@ function SlidesInput({
   label,
   required,
   value,
+  hasPhoto,
   onValueChange,
 }: {
   field: UserInputField;
   label: string;
   required: ReactNode;
   value?: string;
+  hasPhoto: boolean;
   onValueChange: (id: string, value: string) => void;
 }) {
   const max = field.maxSlides ?? 10;
-  const slides = useMemo(() => {
-    const parsed = parseSlides(value);
-    return parsed.length > 0 ? parsed : ['', '', ''];
+  const slides = useMemo<SlideSpec[]>(() => {
+    const parsed = parseSlidesRich(value);
+    return parsed.length > 0
+      ? parsed
+      : [
+          { text: '', withPhoto: true },
+          { text: '', withPhoto: true },
+          { text: '', withPhoto: true },
+        ];
   }, [value]);
   const count = slides.length;
 
-  const commit = (next: string[]) => onValueChange(field.id, JSON.stringify(next));
+  const commit = (next: SlideSpec[]) => onValueChange(field.id, JSON.stringify(next));
   const setCount = (n: number) => {
     const next = [...slides];
     if (n > next.length) {
-      while (next.length < n) next.push('');
+      while (next.length < n) next.push({ text: '', withPhoto: true });
     } else {
       next.length = n;
     }
     commit(next);
   };
   const setText = (index: number, text: string) => {
-    const next = [...slides];
-    next[index] = text;
+    const next = slides.map((slide, i) => (i === index ? { ...slide, text } : slide));
+    commit(next);
+  };
+  const setWithPhoto = (index: number, withPhoto: boolean) => {
+    const next = slides.map((slide, i) => (i === index ? { ...slide, withPhoto } : slide));
     commit(next);
   };
 
@@ -1157,17 +1212,46 @@ function SlidesInput({
           ))}
         </div>
       </div>
-      <div className="space-y-2.5">
-        {slides.map((text, index) => (
-          <div key={index} className="space-y-1">
-            <Label className="text-xs text-slate-400">Текст слайда {index + 1}</Label>
+      {!hasPhoto && (
+        <p className="rounded-md border border-slate-800 bg-slate-950/60 p-2.5 text-xs leading-5 text-slate-400">
+          Фото можно не добавлять — тогда слайды будут только с текстом и дизайном, без вашего фото. Чтобы поставить себя
+          на слайд, загрузите фото выше.
+        </p>
+      )}
+      <div className="space-y-3">
+        {slides.map((slide, index) => (
+          <div key={index} className="space-y-1.5 rounded-md border border-slate-800 bg-slate-950/40 p-3">
+            <Label className="text-xs text-slate-400">Слайд {index + 1}</Label>
             <Textarea
-              value={text}
+              value={slide.text}
               rows={2}
               maxLength={field.maxLength ?? 600}
               placeholder={`Текст для слайда ${index + 1} (можно оставить пустым)`}
               onChange={(event) => setText(index, event.target.value)}
             />
+            <button
+              type="button"
+              disabled={!hasPhoto}
+              onClick={() => hasPhoto && setWithPhoto(index, !slide.withPhoto)}
+              className={cn(
+                'flex w-full items-center gap-2.5 rounded-md border p-2 text-left text-sm transition',
+                !hasPhoto
+                  ? 'cursor-not-allowed border-slate-800 bg-slate-950/50 opacity-50'
+                  : slide.withPhoto
+                    ? 'border-amber-400 bg-amber-400/10'
+                    : 'border-slate-700 bg-slate-950 hover:border-slate-500',
+              )}
+            >
+              <span
+                className={cn(
+                  'grid h-4 w-4 shrink-0 place-items-center rounded border',
+                  hasPhoto && slide.withPhoto ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-600 text-transparent',
+                )}
+              >
+                <Check className="h-3 w-3" />
+              </span>
+              <span className="text-slate-200">Добавить моё фото на слайд {index + 1}</span>
+            </button>
           </div>
         ))}
       </div>
@@ -1251,6 +1335,7 @@ function FieldControl({
   value,
   file,
   mediaOptions,
+  photoAvailable,
   onValueChange,
   onFileChange,
 }: {
@@ -1258,6 +1343,7 @@ function FieldControl({
   value?: string;
   file?: File;
   mediaOptions: Record<string, MediaAssetOption[]>;
+  photoAvailable?: boolean;
   onValueChange: (id: string, value: string) => void;
   onFileChange: (id: string, file?: File) => void;
 }) {
@@ -1401,8 +1487,43 @@ function FieldControl({
         label={label}
         required={required}
         value={value}
+        hasPhoto={photoAvailable ?? false}
         onValueChange={onValueChange}
       />
+    );
+  }
+
+  if (field.type === 'checkbox') {
+    const checked = value === 'true';
+    return (
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => onValueChange(field.id, checked ? 'false' : 'true')}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-md border p-3 text-left transition',
+            checked ? 'border-amber-400 bg-amber-400/10' : 'border-slate-700 bg-slate-950 hover:border-slate-500',
+          )}
+        >
+          <span
+            className={cn(
+              'grid h-5 w-5 shrink-0 place-items-center rounded border',
+              checked ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-600 text-transparent',
+            )}
+          >
+            <Check className="h-3.5 w-3.5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-slate-100">{label}</span>
+            {field.hint && <span className="mt-0.5 block text-xs leading-4 text-slate-500">{field.hint}</span>}
+          </span>
+          {typeof field.priceCoinsChecked === 'number' && (
+            <span className="shrink-0 text-xs font-bold text-amber-300">
+              {checked ? field.priceCoinsChecked : field.priceCoinsUnchecked ?? field.priceCoinsChecked} коинов
+            </span>
+          )}
+        </button>
+      </div>
     );
   }
 
@@ -2100,7 +2221,14 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
         if (field.defaultValue) def = field.defaultValue;
         else if (field.type === 'duration' && field.defaultDuration) def = String(field.defaultDuration);
         else if (field.type === 'aspect_ratio' && field.defaultAspect) def = field.defaultAspect;
-        else if (field.type === 'slides') def = JSON.stringify(['', '', '']);
+        else if (field.type === 'checkbox') def = field.defaultChecked ? 'true' : 'false';
+        else if (field.type === 'slides') {
+          def = JSON.stringify([
+            { text: '', withPhoto: true },
+            { text: '', withPhoto: true },
+            { text: '', withPhoto: true },
+          ]);
+        }
         if (def !== undefined) {
           next[field.id] = def;
           changed = true;
@@ -2169,8 +2297,14 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const basePrice = tierField ? tierPrice(service, tier) : servicePrice(service);
   const slidesCount = slideCount(fields, values);
   const selectedDurationPrice = durationPrice(fields, values);
+  const cbPrice = checkboxPrice(fields, values);
   const msPrice = multiselectPrice(fields, values);
-  const price = msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : selectedDurationPrice ?? basePrice;
+  const effectiveBase = cbPrice ?? selectedDurationPrice ?? basePrice;
+  const price = msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : effectiveBase;
+  // Carousel: whether the user has provided a photo at all (controls per-slide photo checkboxes).
+  const photoAvailable = photoFields.some(
+    (f) => Boolean(files[f.id]) || (typeof values[f.id] === 'string' && (values[f.id] as string).trim() !== ''),
+  );
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
   const preview = previewImage(service);
@@ -2234,8 +2368,12 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
 
     const payloadObj: Record<string, unknown> = { ...dataPayload };
     for (const field of fields) {
-      if (field.type === 'slides' || field.type === 'multiselect') {
+      if (field.type === 'slides') {
+        payloadObj[field.id] = parseSlidesRich(dataPayload[field.id]);
+      } else if (field.type === 'multiselect') {
         payloadObj[field.id] = parseSlides(dataPayload[field.id]);
+      } else if (field.type === 'checkbox') {
+        payloadObj[field.id] = dataPayload[field.id] === 'true';
       }
     }
 
@@ -2438,6 +2576,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                           value={values[field.id]}
                           file={files[field.id]}
                           mediaOptions={mediaByKind}
+                          photoAvailable={photoAvailable}
                           onValueChange={setFieldValue}
                           onFileChange={setFieldFile}
                         />

@@ -102,6 +102,7 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
   'music-select': 'Музыка из библиотеки',
   slides: 'Слайды карусели',
   multiselect: 'Чекбоксы с ценами',
+  checkbox: 'Галочка (да/нет)',
 };
 
 const fieldTypeHints: Partial<Record<UserInputField['type'], string>> = {
@@ -118,6 +119,7 @@ const fieldTypeHints: Partial<Record<UserInputField['type'], string>> = {
   'music-select': 'Выбор фоновой музыки из медиа-библиотеки.',
   slides: 'Пользователь добавляет несколько текстов слайдов; итоговая цена может считаться за каждый слайд.',
   multiselect: 'Несколько чекбоксов. У каждого варианта можно задать отдельную цену в токенах.',
+  checkbox: 'Одна галочка (вкл/выкл). Можно задать две цены услуги: без галочки и с галочкой (например, фото / фото + анимация). Условный шаг пайплайна запускается по этой галочке.',
 };
 
 type AdminServiceFormProps = {
@@ -169,6 +171,8 @@ function normalisePipeline(value: AdminService['pipelineConfig'] | undefined): P
     blockSlug: step.blockSlug,
     input: step.input,
     params: isRecord(step.params) ? step.params : {},
+    // Preserve conditional-step config so editing a service in admin does not drop it.
+    ...(step.when ? { when: step.when } : {}),
   }));
 }
 
@@ -668,7 +672,14 @@ export function buildMockUserInputs(fields: UserInputField[] | null | undefined)
           .map((option) => option.value);
         return [field.id, picked.length ? picked : ['option_1']];
       }
-      if (field.type === 'slides') return [field.id, ['Слайд 1', 'Слайд 2', 'Слайд 3']];
+      if (field.type === 'slides') {
+        return [field.id, [
+          { text: 'Слайд 1', withPhoto: true },
+          { text: 'Слайд 2', withPhoto: true },
+          { text: 'Слайд 3', withPhoto: false },
+        ]];
+      }
+      if (field.type === 'checkbox') return [field.id, field.defaultChecked === true];
       if (field.type === 'tier') return [field.id, 'standard'];
       if (field.type === 'duration') return [field.id, String(field.defaultDuration ?? field.durationOptions?.[0] ?? 5)];
       return [field.id, field.placeholder || field.label || 'Test value'];
@@ -1380,6 +1391,7 @@ function UserInputFormBuilder({
       ...(type === 'select' ? { options: [{ label: 'Вариант 1', value: 'option_1' }] } : {}),
       ...(type === 'multiselect' ? { options: [{ label: 'Вариант 1', value: 'option_1', priceCoins: 1 }] } : {}),
       ...(type === 'slides' ? { maxSlides: 10, maxLength: 600 } : {}),
+      ...(type === 'checkbox' ? { defaultChecked: false } : {}),
       ...(type === 'photo'
         ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'], allowStudioAvatars: true, allowSystemLibrary: false }
         : {}),
@@ -1675,6 +1687,45 @@ function UserInputFormBuilder({
                                 />
                               </label>
                             )}
+                            {field.type === 'checkbox' && (
+                              <div className="space-y-3 rounded-md border border-zinc-800 bg-zinc-950/60 p-3">
+                                <label className="flex items-center gap-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={field.defaultChecked === true}
+                                    onChange={(event) => updateField(index, { defaultChecked: event.target.checked })}
+                                  />
+                                  Включена по умолчанию
+                                </label>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  <label className="space-y-1 text-xs text-slate-400">
+                                    <span>Цена БЕЗ галочки (коины)</span>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      placeholder="напр. фото"
+                                      value={field.priceCoinsUnchecked ?? ''}
+                                      onChange={(event) => updateField(index, { priceCoinsUnchecked: event.target.value ? Number(event.target.value) : undefined })}
+                                      className="h-8"
+                                    />
+                                  </label>
+                                  <label className="space-y-1 text-xs text-slate-400">
+                                    <span>Цена С галочкой (коины)</span>
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      placeholder="напр. фото + анимация"
+                                      value={field.priceCoinsChecked ?? ''}
+                                      onChange={(event) => updateField(index, { priceCoinsChecked: event.target.value ? Number(event.target.value) : undefined })}
+                                      className="h-8"
+                                    />
+                                  </label>
+                                </div>
+                                <p className="text-xs text-slate-500">
+                                  Если обе цены заданы, цена услуги = выбранная галочка (без галочки / с галочкой). Если пусто — используется обычная цена услуги. Условный шаг пайплайна запускается, когда галочка включена (поле <code>when</code> в шаге: field = id этой галочки, value = <code>true</code>).
+                                </p>
+                              </div>
+                            )}
                             {field.type === 'aspect_ratio' && (
                               <label className="flex items-center gap-2">
                                 Опции (через запятую)
@@ -1822,7 +1873,7 @@ function UserInputFormBuilder({
             className="h-10 min-w-[220px] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 md:flex-none"
           >
             <option value="">Выберите тип поля…</option>
-            {(['text', 'textarea', 'photo', 'video', 'select', 'multiselect', 'slides', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
+            {(['text', 'textarea', 'photo', 'video', 'select', 'multiselect', 'checkbox', 'slides', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
               <option key={type} value={type}>
                 {fieldTypeLabels[type]}
               </option>

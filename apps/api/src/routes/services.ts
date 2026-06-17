@@ -443,14 +443,28 @@ servicesRouter.post(
         }
         if (field.type === 'slides') {
           if (!Array.isArray(value)) {
-            throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} must be an array of slide texts`);
+            throw new HttpError(400, 'INVALID_FIELD_VALUE', `${field.id} must be an array of slides`);
           }
           const max = field.maxSlides ?? 10;
           if (value.length < 1 || value.length > max) {
             throw new HttpError(400, 'INVALID_SLIDES', `${field.id} must have between 1 and ${max} slides`);
           }
-          const texts = value.map((item) => (typeof item === 'string' ? item.slice(0, field.maxLength ?? 600) : ''));
-          data[field.id] = texts;
+          // A slide is { text, withPhoto }. Legacy string slides are treated as "with photo".
+          const maxLen = field.maxLength ?? 600;
+          const slides = value.map((item) => {
+            if (typeof item === 'string') return { text: item.slice(0, maxLen), withPhoto: true };
+            if (item && typeof item === 'object' && !Array.isArray(item)) {
+              const record = item as Record<string, unknown>;
+              const text = typeof record.text === 'string' ? record.text.slice(0, maxLen) : '';
+              const withPhoto = record.withPhoto === undefined ? true : record.withPhoto === true;
+              return { text, withPhoto };
+            }
+            return { text: '', withPhoto: true };
+          });
+          data[field.id] = slides;
+        }
+        if (field.type === 'checkbox') {
+          data[field.id] = value === true || value === 'true';
         }
         if (field.type === 'multiselect') {
           if (!Array.isArray(value)) {
@@ -519,6 +533,17 @@ servicesRouter.post(
       const durationPrice = selectedDurationPrice(fields, data);
       if (durationPrice !== null) {
         tokensCost = durationPrice;
+      }
+
+      // Checkbox with two prices (e.g. "animate photo"): price = checked ? checked : unchecked.
+      const pricedCheckbox = fields.find(
+        (field) => field.type === 'checkbox'
+          && (field.priceCoinsChecked !== undefined || field.priceCoinsUnchecked !== undefined),
+      );
+      if (pricedCheckbox) {
+        const checked = data[pricedCheckbox.id] === true;
+        const next = checked ? pricedCheckbox.priceCoinsChecked : pricedCheckbox.priceCoinsUnchecked;
+        if (typeof next === 'number' && next > 0) tokensCost = next;
       }
 
       // Slides services are priced per slide: the tier price is the price of ONE slide.

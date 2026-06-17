@@ -33,6 +33,15 @@ export const pipelineStepSchema = z.object({
   blockSlug: z.string().trim().min(1).max(120),
   params: z.unknown().optional(),
   input: z.unknown().optional(),
+  // Conditional step: the step runs only when the given user input field equals the given value.
+  // Used e.g. for an optional "animate photo" step that runs only when the user ticked the checkbox.
+  // When the condition is not met, the runner skips the step and keeps the previous step's output.
+  when: z
+    .object({
+      field: z.string().trim().min(1).max(80),
+      value: z.string().trim().min(1).max(120),
+    })
+    .optional(),
 });
 
 export const pipelineConfigSchema = z.array(pipelineStepSchema).min(1);
@@ -54,6 +63,7 @@ export const userInputFieldSchema = z.object({
     'music-select',
     'slides',
     'multiselect',
+    'checkbox',
   ]),
   label: z.string().trim().min(1).max(120),
   required: z.boolean(),
@@ -106,6 +116,12 @@ export const userInputFieldSchema = z.object({
   })).optional(),
   // For the 'slides' field type: max number of slides the user can add.
   maxSlides: z.number().int().min(1).max(20).optional(),
+  // For the 'checkbox' field type: optional initial state and the two service prices it controls.
+  // When both prices are set, the service price = checked ? priceCoinsChecked : priceCoinsUnchecked
+  // (e.g. "photo" vs "photo + animation"). If omitted, the service falls back to the tier price.
+  defaultChecked: z.boolean().optional(),
+  priceCoinsChecked: z.number().int().min(1).optional(),
+  priceCoinsUnchecked: z.number().int().min(1).optional(),
   aspectOptions: z.array(z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4'])).optional(),
   defaultAspect: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
   allowUserUpload: z.boolean().optional(),
@@ -182,6 +198,9 @@ export function validatePipelineConfig(
     const block = getBlockCatalogItem(step.blockSlug);
     if (!block) {
       throw new Error(`UNKNOWN_BLOCK:${stepNumber}:${step.blockSlug}`);
+    }
+    if (step.when && !fieldIds.has(step.when.field)) {
+      throw new Error(`UNKNOWN_USER_FIELD:${step.when.field}`);
     }
     validateValueAgainstJsonSchema(normaliseParamsForValidation(step.blockSlug, step.params), block.paramsSchema, `params.${step.id}`);
 

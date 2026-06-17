@@ -206,6 +206,11 @@ const services = [
   },
 ];
 
+// Анимация для услуг «Фото 2к17» (опциональный шаг по галочке «Анимировать фото»):
+// камера медленно пролетает как в клипе, оживает только фон/ветер/свет, персонажи смотрят в камеру.
+const PHOTO_2017_ANIMATION_PROMPT =
+  'Bring this 2017 photo to life as a short, cinematic B-roll clip, like an establishing shot in a music video. The camera slowly drifts and glides past the scene with a smooth, steady slow dolly / parallax move, as if a videographer is filming a gentle fly-by. The person or people stay still and simply look calmly straight into the camera — almost no movement, only subtle micro-motion: slight natural blinking and faint breathing. Do NOT make them dance, gesture, walk, turn away or change pose or expression. The environment comes alive instead: wind gently moves their hair and clothes, trees, grass and bushes sway softly, the crimson-pink sunset clouds drift slowly, and the warm dusk light shimmers. Keep every face stable, sharp and exactly recognizable in every frame — no morphing, no identity drift, no face replacement, no warping of eyes, mouth or hands. Preserve the original composition, clothing, colours and the warm sunset lighting. Photorealistic, natural film-like motion, smooth, calm and steady.';
+
 export const giftFactoryServices = [
   {
     slug: 'revive-old-photo',
@@ -882,6 +887,16 @@ export const giftFactoryServices = [
         aspectOptions: ['1:1', '3:4', '9:16', '16:9'],
         defaultAspect: '3:4',
       },
+      {
+        id: 'animate',
+        type: 'checkbox',
+        label: 'Анимировать фото (оживить)',
+        required: false,
+        defaultChecked: false,
+        priceCoinsUnchecked: 39,
+        priceCoinsChecked: 99,
+        hint: 'Сначала создадим фото, затем Kling 3.0 мягко оживит его: камера медленно пролетает как в клипе, фон, ветер и свет двигаются, а вы просто смотрите в кадр. Результат — короткое видео.',
+      },
     ],
     pipelineConfig: [
       {
@@ -893,8 +908,37 @@ export const giftFactoryServices = [
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
           resolution: '4K',
-          prompt:
-            'GPT Image 2 edit. Create ONE photorealistic solo smartphone photo from the uploaded reference. Preserve the same person exactly: same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression. Do not re-age, beautify, change gender, invent a model face, duplicate the person or add other people. Style the scene as a believable 2016-2017 post-Soviet social-media photo: courtyard near panel apartment blocks, parked cars, benches or playground, crimson-magenta sunset, casual tracksuit or dark hoodie, optional bucket hat or thin chain only if natural. Phone snapshot realism: natural dusk light, slight on-camera fill, real shadows, visible skin texture, hair strands and fabric detail, mild sensor noise, subtle compression and chromatic aberration. Keep the face sharp and recognizable. No logos, text, watermark, glossy AI skin, fake bokeh, CGI, heavy HDR, glamour retouch, distorted face, deformed hands or extra faces.',
+          quality: 'high',
+          prompt: `GPT Image 2 edit. Use the uploaded photo ONLY as a face and identity reference. Reproduce the same person exactly and recognizably: same face shape, eyes, eyebrows, nose, mouth, jawline, hairstyle, hair color, skin tone, age and natural expression. Do NOT copy the original selfie pose, framing, clothing or background from the reference, and do NOT beautify, re-age or change the face.
+
+Build a brand new authentic photo from the CIS / post-Soviet summer of 2016-2017, the nostalgic VK era. It must look like a real amateur phone snapshot taken by a friend from a few meters away, never a selfie.
+
+MANDATORY wardrobe change: replace whatever the person is wearing in the reference with authentic 2017 raion (двор) street style. Pick a believable combination: an adidas-style retro track jacket (олимпийка) with side stripes, OR a Thrasher-style flame-logo hoodie, OR a plain dark hoodie or tracksuit top; paired with dark tracksuit pants or fitted jeans and white sneakers; optionally a cap, beanie or small shoulder bag (барсетка). The outfit must clearly read as 2016-2017 CIS youth streetwear. Never keep the original clothing.
+
+Scene: an ordinary post-Soviet courtyard at dusk. Grey panel apartment blocks (панельки / хрущёвки) in the background, asphalt, a bench, metal garages, workout bars (турники), old parked cars, a simple playground. Strong малиновый закат: a crimson-pink-purple sunset gradient sky glowing behind the buildings, warm low sunlight, long soft shadows.
+
+LIGHTING AND INTEGRATION (critical - this is the most important rule): the entire photo must share ONE single coherent light situation - the warm crimson-pink sunset light plus soft cool dusk ambient. The face and body MUST be fully re-lit and color-graded to match this exact light: a warm rim/edge light on the hair, cheek and shoulders coming from the glowing sky, soft warm-to-neutral fill on the face, and the SAME white balance, color temperature, exposure, contrast, softness and grain as the background. The person must look genuinely photographed standing in this courtyard at this moment, with their skin tone blended into the warm dusk grade while staying recognizable. Do NOT keep the original lighting or color of the reference face. Strictly avoid a pasted, cut-out, sticker or photoshop-composite look: the face must NOT be brighter, sharper, cleaner, cooler or a different color than the rest of the scene, and there must be no mismatch between the face and the environment.
+
+Framing and pose: a candid three-quarter shot framed from the head down to roughly the knees or mid-thigh - NOT a tiny distant full-body figure and NOT a tight face close-up. The person stands or leans casually in the yard against the sunset and the panelki, slightly off-center, relaxed and natural - hands in pockets or loosely at the sides, calm confident posture, looking at the camera or slightly away. Not a model pose, no outstretched arm, no phone in hand, no mirror.
+
+ANATOMY AND PROPORTIONS (critical): render fully correct, natural human anatomy. The head must be in correct, realistic proportion to the neck and body, with normal shoulder width and natural limb and torso length. No oversized or undersized head, no shrunken or elongated body, no wrong head-to-body ratio, no warped or melted proportions, no distorted limbs or hands.
+
+Look and quality: this must look like a REAL amateur 2017 smartphone photo, not a polished studio render. Slightly soft focus, mild sensor noise and grain applied evenly across the WHOLE frame including the face, slightly uneven natural exposure, warm color cast, simple flat phone-camera depth (no fake bokeh), authentic imperfect VK vibe. Keep the FACE recognizable but lit and textured like the rest of the photo. Realistic skin texture, natural body proportions, correct hands.
+
+Avoid: disproportionate oversized or tiny head, wrong head-to-body ratio, elongated or shrunken body, warped or unnatural proportions, distorted limbs, pasted or cut-out faces, photoshop composite, sticker faces, faces lit differently from the scene, mismatched white balance or color temperature on the face, faces brighter sharper or cooler than the body and background, double lighting, glossy AI skin, beauty filter, glamour retouch, cinematic editorial polish, heavy HDR, oversaturation, selfie framing, close-up face crop, outstretched arm, phone or mirror in frame, modern influencer aesthetic, extra people, duplicated or distorted faces, deformed hands, text, captions, logos or watermarks.`,
+        },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'image-to-video',
+        input: '{{step_1.output}}',
+        // Conditional: runs only when the user ticked "animate".
+        when: { field: 'animate', value: 'true' },
+        params: {
+          model: { standard: 'kling-3-pro', pro: 'kling-3-pro' },
+          duration: 5,
+          aspect_ratio: '{{user.aspect}}',
+          prompt: PHOTO_2017_ANIMATION_PROMPT,
         },
       },
     ],
@@ -965,6 +1009,16 @@ export const giftFactoryServices = [
         aspectOptions: ['1:1', '16:9', '9:16'],
         defaultAspect: '1:1',
       },
+      {
+        id: 'animate',
+        type: 'checkbox',
+        label: 'Анимировать фото (оживить)',
+        required: false,
+        defaultChecked: false,
+        priceCoinsUnchecked: 49,
+        priceCoinsChecked: 119,
+        hint: 'Сначала создадим групповое фото, затем Kling 3.0 мягко оживит его: камера медленно пролетает как в клипе, фон, ветер и свет двигаются, а вы просто смотрите в кадр. Результат — короткое видео.',
+      },
     ],
     pipelineConfig: [
       {
@@ -977,8 +1031,42 @@ export const giftFactoryServices = [
           output_format: 'jpg',
           aspect_ratio: '{{user.aspect}}',
           resolution: '4K',
-          prompt:
-            'GPT Image 2 edit. Combine the provided reference photos into ONE photorealistic group smartphone photo in a 2016-2017 post-Soviet social-media style. Critical count rule: generate exactly one person for each provided reference image and no one else. If 2 references are provided, show exactly 2 people; if 3, exactly 3; if 4, exactly 4. Preserve each identity separately and clearly: same face shape, eyes, nose, mouth, eyebrows, skin tone, hairstyle, age and natural expression from that person\'s own reference. Do not blend identities, swap faces, duplicate people, add background friends, crowds, extra faces, posters with faces or partial bodies. Setting: friends standing or sitting close together in a courtyard near panel apartment blocks, parked cars, benches or playground, crimson-magenta sunset, casual 2017 streetwear, tracksuits, dark hoodies, white sneakers, relaxed candid poses. Phone snapshot realism: natural dusk light, slight on-camera fill, real shadows, sharp recognizable faces, skin texture, hair strands, fabric detail, mild sensor noise, subtle compression and chromatic aberration. No logos, text, watermark, glossy AI skin, beauty filter, CGI, fake bokeh, heavy HDR, distorted faces, deformed hands or extra people.',
+          quality: 'high',
+          prompt: `GPT Image 2 edit. You are given several reference images. Each uploaded reference image is ONE separate real person. Create one new photorealistic group photo from the CIS / post-Soviet summer of 2016-2017, the nostalgic VK era.
+
+CRITICAL identity and count rules:
+- The number of people in the result MUST exactly equal the number of provided reference images: 2 references means exactly 2 people, 3 references means exactly 3 people, 4 references means exactly 4 people.
+- Each person must be reproduced exactly and recognizably from their OWN reference image: same face shape, eyes, eyebrows, nose, mouth, jawline, hairstyle, hair color, skin tone, age and natural expression. Treat every reference as a distinct individual.
+- Do NOT blend, average, mix or swap faces between people. Do NOT duplicate the same person, do NOT invent extra people, do NOT add background friends, crowds or faces on posters. Keep each face sharp, clearly separated and recognizable.
+
+It must look like a real amateur phone snapshot taken by a friend from a few meters away, never a selfie. The group stands or sits close together, relaxed and natural, in an ordinary post-Soviet courtyard at dusk.
+
+MANDATORY wardrobe change for everyone: replace whatever each person is wearing in their reference with authentic 2016-2017 raion (двор) street style - adidas-style retro track jackets (олимпийки) with side stripes, Thrasher-style flame-logo hoodies, plain dark hoodies or tracksuit tops, dark tracksuit pants or fitted jeans, white sneakers, optional caps or beanies. Vary the outfits naturally between people. Never keep the original clothing.
+
+Scene: grey panel apartment blocks (панельки / хрущёвки) in the background, asphalt, benches, metal garages, workout bars, old parked cars, a simple playground. Strong малиновый закат: a crimson-pink-purple sunset gradient sky glowing behind the buildings, warm low sunlight, long soft shadows.
+
+LIGHTING AND INTEGRATION (critical - this is the most important rule): the entire photo must share ONE single coherent light situation - the warm crimson-pink sunset light plus soft cool dusk ambient. EVERY face and body MUST be fully re-lit and color-graded to match this exact light: a warm rim/edge light on hair, cheeks and shoulders coming from the glowing sky, soft warm-to-neutral fill on the faces, and the SAME white balance, color temperature, exposure, contrast, softness and grain across all people and the background. Everyone must look genuinely photographed together standing in this courtyard at this moment, their skin tones blended into the warm dusk grade while staying recognizable. Do NOT keep the original lighting or color of the reference faces. Strictly avoid a pasted, cut-out, sticker or photoshop-composite look: no face may be brighter, sharper, cleaner, cooler or a different color than the others or than the scene, and there must be no mismatch between faces and environment. All people must be lit by the same single sunset light and sit in the same focal plane and grain.
+
+Framing and pose: a candid group shot framed from the heads down to roughly the knees or mid-thigh - NOT tiny distant full-body figures and NOT tight face close-ups. People stand or sit casually together against the sunset and the panelki, slightly off-center, relaxed natural posture, hands in pockets or loosely at the sides, looking at the camera or slightly away. Not model poses, no outstretched arm, no phone in hand, no mirror.
+
+ANATOMY AND PROPORTIONS (critical): render fully correct, natural human anatomy for everyone. Each head must be in correct, realistic proportion to its neck and body, with normal shoulder width and natural limb and torso length, and all people at consistent, believable scale relative to each other. No oversized or undersized heads, no wrong head-to-body ratio, no shrunken or elongated bodies, no warped or melted proportions, no distorted limbs or hands.
+
+Look and quality: a REAL amateur 2017 smartphone photo, not a polished studio render. Slightly soft focus, mild sensor noise and grain applied evenly across the WHOLE frame including all faces, slightly uneven natural exposure, warm color cast, simple flat phone-camera depth, authentic imperfect VK vibe. Keep every FACE recognizable but lit and textured like the rest of the photo. Realistic skin texture, natural proportions, correct hands.
+
+Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elongated or shrunken bodies, inconsistent scale between people, warped or unnatural proportions, distorted limbs, pasted or cut-out faces, photoshop composite, sticker faces, faces lit differently from the scene, mismatched white balance or color temperature on faces, faces brighter sharper or cooler than the bodies and background, double lighting, glossy AI skin, beauty filter, glamour retouch, cinematic editorial polish, heavy HDR, oversaturation, selfie framing, outstretched arm, phone or mirror in frame, modern influencer aesthetic, merged or duplicated faces, wrong number of people, distorted faces, deformed hands, text, captions, logos or watermarks.`,
+        },
+      },
+      {
+        id: 'step_2',
+        blockSlug: 'image-to-video',
+        input: '{{step_1.output}}',
+        // Conditional: runs only when the user ticked "animate".
+        when: { field: 'animate', value: 'true' },
+        params: {
+          model: { standard: 'kling-3-pro', pro: 'kling-3-pro' },
+          duration: 5,
+          aspect_ratio: '{{user.aspect}}',
+          prompt: PHOTO_2017_ANIMATION_PROMPT,
         },
       },
     ],
@@ -2393,9 +2481,9 @@ export const giftFactoryServices = [
       {
         id: 'photo',
         type: 'photo',
-        label: 'Ваше фото',
-        required: true,
-        hint: 'Чёткое фото; будет размещено на каждом слайде',
+        label: 'Ваше фото (необязательно)',
+        required: false,
+        hint: 'Можно не добавлять — тогда слайды будут только с текстом и дизайном. Если добавите, у каждого слайда появится галочка «добавить моё фото».',
         maxSizeMb: 10,
         allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
         allowStudioAvatars: true,
@@ -2408,7 +2496,7 @@ export const giftFactoryServices = [
         required: true,
         maxSlides: 10,
         maxLength: 600,
-        hint: 'Выберите число слайдов и впишите текст каждого. Цена считается за слайд. Короткий текст читается лучше.',
+        hint: 'Выберите число слайдов и впишите текст каждого. У каждого слайда есть галочка «добавить моё фото» (если вы загрузили фото). Цена считается за слайд. Короткий текст читается лучше.',
       },
       {
         id: 'aspect',
@@ -2763,6 +2851,66 @@ export const giftFactoryServices = [
           keep_original_audio: true,
           prompt:
             'Use the uploaded video as the strict source reference. Create the same video again with visibly improved quality while preserving the original duration, timing, camera motion, composition, subject identity, scene, action, framing, and rhythm. Do not invent a new story, do not change people, clothing, environment, camera angle, or motion. Improve clarity, sharpness, fine detail, compression artifacts, flicker, low-light noise, color balance, local contrast, facial stability, edge definition, and temporal consistency. Keep natural realistic texture, no plastic skin, no over-sharpening halos, no HDR look, no added text, no watermark, no extra objects. The output must feel like a cleaner high-quality restoration of the exact same clip.',
+        },
+      },
+    ],
+  },
+  {
+    slug: 'photo-enhance',
+    title: 'Улучшение фото',
+    shortDesc: 'Повышаем качество и резкость фото до 4K без потери лиц и деталей',
+    description:
+      'Загрузите фото — нейросеть Nano Banana сделает чёткую, детализированную версию в качестве до 4K: уберёт шум, размытие и артефакты сжатия, восстановит текстуру кожи, волос и ткани, выровняет цвет и контраст. Люди, лица, поза, одежда и фон сохраняются как на оригинале — это улучшение того же снимка, а не новая картинка.',
+    category: ServiceCategory.NOSTALGIA,
+    // Себестоимость Nano Banana 4K ≈ $0.12 → с маржой 19 коинов.
+    priceTokens: 19,
+    priceCoinsStandard: 19,
+    priceCoinsPro: 19,
+    costUsd: 0.12,
+    coverImage: image('gift-photo-enhance'),
+    galleryImages: [image('gift-photo-enhance-1'), image('gift-photo-enhance-2')],
+    previewImage: image('gift-photo-enhance-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 8,
+    userInputForm: [
+      {
+        id: 'photo',
+        type: 'photo',
+        label: 'Ваше фото',
+        required: true,
+        hint: 'Любое фото, которое нужно улучшить: портрет, групповое, пейзаж',
+        maxSizeMb: 15,
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['auto', '1:1', '3:4', '9:16', '16:9'],
+        defaultAspect: 'auto',
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'image-edit',
+        input: '{{user.photo}}',
+        params: {
+          model: { standard: 'nano-banana', pro: 'nano-banana' },
+          output_format: 'jpg',
+          aspect_ratio: '{{user.aspect}}',
+          resolution: '4K',
+          prompt:
+            'Enhance and upscale the uploaded photo to a crisp, clean, high-resolution image at the best possible quality (up to 4K). This is a faithful quality enhancement of the SAME photo, not a new image. Preserve the content exactly: keep every person fully recognizable with the same faces, facial features, expressions, hairstyles, skin tone, age, body proportions, poses, clothing, the background and the overall composition. Do NOT add, remove, move, merge or duplicate people or objects, do NOT re-age, beautify, restyle or change anything. Improve sharpness and fine detail, recover and reconstruct natural texture in skin (with realistic pores), hair, fabric and surfaces, remove blur, noise, grain, compression and JPEG artifacts, fix soft focus and low-light mush, and gently balance exposure, contrast and colour while keeping the original mood and lighting. The result must look like a naturally sharp, detailed photograph of the same moment — no plastic or waxy skin, no AI smoothing, no over-sharpening halos, no heavy HDR, no beauty filter, no painterly or cartoon look, no added text, logos or watermark.',
         },
       },
     ],
@@ -3275,8 +3423,7 @@ async function ensureUser(options: EnsureUserOptions) {
 // loader must never re-create anything outside this list, and never updates/deletes existing rows.
 // When adding a future batch of services, add their slugs here for that deploy, then clear the list.
 const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
-  'video-quality-kling',
-  'road-camera-couple',
+  'photo-enhance',
 ]);
 
 // Additive loader for explicitly new data-driven services. It creates allowlisted services only when

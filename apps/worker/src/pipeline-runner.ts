@@ -20,6 +20,8 @@ export interface PipelineStep {
   blockSlug: string;
   params?: unknown;
   input?: unknown;
+  // Conditional step: run only when userInputs[when.field] equals when.value (as strings).
+  when?: { field: string; value: string };
 }
 
 export interface PipelineRunParams {
@@ -100,6 +102,20 @@ export async function runPipeline(
   try {
     for (let index = 0; index < steps.length; index += 1) {
       const step = steps[index];
+
+      // Conditional step: skip when its `when` condition does not match the user input.
+      // Skipped steps keep the previous step's output, so the final result stays the last
+      // produced output (e.g. the photo when the user did not tick "animate").
+      if (step.when && String(readPath(userInputs, step.when.field) ?? '') !== String(step.when.value)) {
+        stepProgress[index] = {
+          ...stepProgress[index],
+          status: 'completed',
+          progress: 100,
+        };
+        await persistProgress(params.generationId, stepProgress, index, steps.length, 100);
+        continue;
+      }
+
       const block = getBlockFn(step.blockSlug);
 
       stepProgress[index] = {
@@ -279,8 +295,17 @@ export function parsePipelineConfig(value: unknown): PipelineStep[] {
       blockSlug: raw.blockSlug,
       params: raw.params,
       input: raw.input,
+      when: parseStepCondition(raw.when),
     };
   });
+}
+
+function parseStepCondition(value: unknown): { field: string; value: string } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.field !== 'string' || record.field.length === 0) return undefined;
+  if (typeof record.value !== 'string' || record.value.length === 0) return undefined;
+  return { field: record.field, value: record.value };
 }
 
 export function resolvePlaceholders(value: unknown, context: PlaceholderContext): unknown {
