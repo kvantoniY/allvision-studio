@@ -36,6 +36,7 @@ import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { ResultMedia } from '@/components/ui/result-media';
+import { PhotoFramingTip } from '@/components/services/PhotoFramingTip';
 import { useLivelyProgress } from '@/lib/use-lively-progress';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
@@ -1812,7 +1813,7 @@ function GenerationResultLightbox({
 }
 
 function GenerationProgress({ project, compact = false }: { project: ProjectListItem; compact?: boolean }) {
-  const progress = useLivelyProgress(project.progress ?? 0, isActiveProjectStatus(project.status));
+  const progress = useLivelyProgress(project.progress ?? 0, isActiveProjectStatus(project.status), project.id);
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
       <div className="flex items-start justify-between gap-3 text-sm">
@@ -2554,6 +2555,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                           .filter((group) => group.length > 0);
                         return (
                           <div key="photo-references" className="space-y-5">
+                            <PhotoFramingTip />
                             {visibleGroups.map((group) => (
                               <ServicePhotoReferencesGroup
                                 key={group[0].id}

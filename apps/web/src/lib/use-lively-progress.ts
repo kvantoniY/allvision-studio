@@ -7,11 +7,47 @@ import { useEffect, useRef, useState } from 'react';
 // прогресс обогнал показанный, и никогда не застывает полностью (всегда есть минимальный шаг),
 // но и не доходит до 100% сам — финальные 100% ставит только реальное завершение.
 //
+// id (необязательно) — стабильный ключ генерации: тогда показанный прогресс сохраняется в
+// localStorage и НЕ падает после перезагрузки страницы (берётся максимум из сохранённого и реального).
+//
 // active = генерация ещё идёт (PENDING/PROCESSING). Когда active=false, показываем реальное значение
 // (т.е. 100 на завершении, или фактический прогресс на ошибке) — без додумывания.
-export function useLivelyProgress(real: number, active: boolean): number {
+const STORAGE_PREFIX = 'genprog:';
+
+function readStored(id?: string): number | null {
+  if (!id || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + id);
+    if (raw == null) return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStored(id: string | undefined, value: number) {
+  if (!id || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(STORAGE_PREFIX + id, String(Math.round(value)));
+  } catch {
+    // ignore quota / privacy-mode errors
+  }
+}
+
+function clearStored(id?: string) {
+  if (!id || typeof window === 'undefined') return;
+  try {
+    window.localStorage.removeItem(STORAGE_PREFIX + id);
+  } catch {
+    // ignore
+  }
+}
+
+export function useLivelyProgress(real: number, active: boolean, id?: string): number {
   const safeReal = Number.isFinite(real) ? Math.max(0, Math.min(100, real)) : 0;
-  const [display, setDisplay] = useState(safeReal);
+  // Инициализируемся из сохранённого значения, чтобы после перезагрузки шкала не откатывалась назад.
+  const [display, setDisplay] = useState(() => Math.max(safeReal, readStored(id) ?? safeReal));
   const realRef = useRef(safeReal);
   realRef.current = safeReal;
 
@@ -22,7 +58,7 @@ export function useLivelyProgress(real: number, active: boolean): number {
 
   useEffect(() => {
     if (!active) return;
-    const id = setInterval(() => {
+    const intervalId = setInterval(() => {
       setDisplay((d) => {
         const r = realRef.current;
         const base = Math.max(d, r);
@@ -35,8 +71,18 @@ export function useLivelyProgress(real: number, active: boolean): number {
         return Math.min(cap, base + step);
       });
     }, 500);
-    return () => clearInterval(id);
+    return () => clearInterval(intervalId);
   }, [active]);
+
+  // Пока идёт генерация — сохраняем показанный прогресс (переживёт перезагрузку).
+  // Когда генерация завершилась/упала — чистим запись, чтобы localStorage не копил мусор.
+  useEffect(() => {
+    if (active) writeStored(id, display);
+  }, [active, id, display]);
+
+  useEffect(() => {
+    if (!active) clearStored(id);
+  }, [active, id]);
 
   if (!active) return Math.round(safeReal);
   return Math.round(Math.max(display, safeReal));

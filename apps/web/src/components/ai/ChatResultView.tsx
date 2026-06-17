@@ -131,7 +131,7 @@ function MessageCard({
   const resultUrl = resultVideo ?? resultImage ?? resultThumbnail;
   const failed = status === 'FAILED';
   const processing = isActive(status);
-  const safeProgress = useLivelyProgress(progress, processing);
+  const safeProgress = useLivelyProgress(progress, processing, project.id);
   const friendlyError = chatFailureMessage(project.errorCode, project.errorMessage);
   const withAudio = hasGeneratedAudio(project.userInputs);
 

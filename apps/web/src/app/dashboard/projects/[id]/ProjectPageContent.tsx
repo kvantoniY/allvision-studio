@@ -130,9 +130,9 @@ function SourceThumbnails({ images }: { images: string[] }) {
   );
 }
 
-function ProjectProgressBody({ progress }: { progress: number }) {
+function ProjectProgressBody({ progress, projectId }: { progress: number; projectId?: string }) {
   // Этот блок рендерится только в активных статусах (PENDING/PROCESSING), поэтому шкала «живая».
-  const safeProgress = useLivelyProgress(progress, true);
+  const safeProgress = useLivelyProgress(progress, true, projectId);
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-4 text-sm">
@@ -150,11 +150,11 @@ function ProjectProgressBody({ progress }: { progress: number }) {
   );
 }
 
-function ProjectProgressPanel({ progress }: { progress: number }) {
+function ProjectProgressPanel({ progress, projectId }: { progress: number; projectId?: string }) {
   return (
     <Card className="border-slate-800 bg-slate-900">
       <CardContent className="p-5">
-        <ProjectProgressBody progress={progress} />
+        <ProjectProgressBody progress={progress} projectId={projectId} />
       </CardContent>
     </Card>
   );
@@ -431,7 +431,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
     return (
       <div className="space-y-6">
         {projectHeader}
-        <ProjectProgressPanel progress={progress} />
+        <ProjectProgressPanel progress={progress} projectId={project.id} />
 
         <Card className="border-slate-800 bg-slate-900">
           <CardContent className="p-5">
@@ -494,7 +494,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
         <Card className="bg-slate-900 border-slate-800">
           <CardContent className="p-5">
             {status === 'PENDING' || status === 'PROCESSING' ? (
-              <ProjectProgressBody progress={progress} />
+              <ProjectProgressBody progress={progress} projectId={project.id} />
             ) : status === 'COMPLETED' ? (
               <div className="space-y-5">
                 <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
