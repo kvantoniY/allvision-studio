@@ -967,7 +967,7 @@ export const giftFactoryServices = [
           prompt_one: PHOTO_2017_PROMPT_ONE,
           prompt_two: PHOTO_2017_PROMPT_TWO,
           animate: '{{user.animate}}',
-          video_model: { standard: 'kling-3-pro', pro: 'kling-3-pro' },
+          video_model: 'kling-3-pro',
           duration: 5,
           animation_prompt: PHOTO_2017_ANIMATION_PROMPT,
         },
