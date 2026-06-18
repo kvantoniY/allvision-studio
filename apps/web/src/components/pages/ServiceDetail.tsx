@@ -108,6 +108,9 @@ type UserInputField = {
   defaultChecked?: boolean;
   priceCoinsChecked?: number;
   priceCoinsUnchecked?: number;
+  secondaryField?: string;
+  priceCoinsCheckedSecondary?: number;
+  priceCoinsUncheckedSecondary?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;
@@ -232,8 +235,10 @@ function durationPrice(fields: UserInputField[], values: FormValues): number | n
   return typeof match?.priceCoins === 'number' ? match.priceCoins : null;
 }
 
-// Two-price checkbox (e.g. "animate photo"): price = checked ? priceCoinsChecked : priceCoinsUnchecked.
-function checkboxPrice(fields: UserInputField[], values: FormValues): number | null {
+// Checkbox-controlled price with up to two dimensions:
+//   checked   = checkbox value (e.g. "animate")
+//   secondary = whether the referenced photo field (e.g. person2) is filled (=> 2 people)
+function checkboxPrice(fields: UserInputField[], values: FormValues, files: FileValues): number | null {
   const field = fields.find(
     (item) => fieldVisible(item, values)
       && item.type === 'checkbox'
@@ -241,7 +246,16 @@ function checkboxPrice(fields: UserInputField[], values: FormValues): number | n
   );
   if (!field) return null;
   const checked = values[field.id] === 'true';
-  const next = checked ? field.priceCoinsChecked : field.priceCoinsUnchecked;
+  const secId = field.secondaryField;
+  const secondaryPresent = !!secId
+    && (Boolean(files[secId]) || (typeof values[secId] === 'string' && (values[secId] as string).trim() !== ''));
+  let next: number | undefined;
+  if (secondaryPresent) {
+    next = checked ? field.priceCoinsCheckedSecondary : field.priceCoinsUncheckedSecondary;
+    if (typeof next !== 'number') next = checked ? field.priceCoinsChecked : field.priceCoinsUnchecked;
+  } else {
+    next = checked ? field.priceCoinsChecked : field.priceCoinsUnchecked;
+  }
   return typeof next === 'number' && next > 0 ? next : null;
 }
 
@@ -286,6 +300,9 @@ function parseFields(value: unknown): UserInputField[] {
       defaultChecked: typeof item.defaultChecked === 'boolean' ? item.defaultChecked : undefined,
       priceCoinsChecked: typeof item.priceCoinsChecked === 'number' ? item.priceCoinsChecked : undefined,
       priceCoinsUnchecked: typeof item.priceCoinsUnchecked === 'number' ? item.priceCoinsUnchecked : undefined,
+      secondaryField: typeof item.secondaryField === 'string' ? item.secondaryField : undefined,
+      priceCoinsCheckedSecondary: typeof item.priceCoinsCheckedSecondary === 'number' ? item.priceCoinsCheckedSecondary : undefined,
+      priceCoinsUncheckedSecondary: typeof item.priceCoinsUncheckedSecondary === 'number' ? item.priceCoinsUncheckedSecondary : undefined,
       aspectOptions: Array.isArray(item.aspectOptions)
         ? (item.aspectOptions.filter((v) => typeof v === 'string') as UserInputField['aspectOptions'])
         : undefined,
@@ -2297,7 +2314,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const basePrice = tierField ? tierPrice(service, tier) : servicePrice(service);
   const slidesCount = slideCount(fields, values);
   const selectedDurationPrice = durationPrice(fields, values);
-  const cbPrice = checkboxPrice(fields, values);
+  const cbPrice = checkboxPrice(fields, values, files);
   const msPrice = multiselectPrice(fields, values);
   const effectiveBase = cbPrice ?? selectedDurationPrice ?? basePrice;
   const price = msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : effectiveBase;

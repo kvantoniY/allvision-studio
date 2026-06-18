@@ -1721,8 +1721,51 @@ function UserInputFormBuilder({
                                     />
                                   </label>
                                 </div>
+                                <div className="space-y-2 rounded-md border border-zinc-800/80 bg-zinc-900/40 p-2.5">
+                                  <label className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                                    <span title="Когда это фото-поле заполнено — применяются «вторые» цены ниже (напр. 2 человека).">Поле «второй элемент» (id фото-поля)</span>
+                                    <select
+                                      value={field.secondaryField ?? ''}
+                                      onChange={(event) => updateField(index, { secondaryField: event.target.value || undefined })}
+                                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                                    >
+                                      <option value="">— нет (одна пара цен) —</option>
+                                      {fields
+                                        .filter((item) => item.type === 'photo' || item.type === 'avatar')
+                                        .map((item) => (
+                                          <option key={item.id} value={item.id}>{item.id}</option>
+                                        ))}
+                                    </select>
+                                  </label>
+                                  {field.secondaryField && (
+                                    <div className="grid gap-2 sm:grid-cols-2">
+                                      <label className="space-y-1 text-xs text-slate-400">
+                                        <span>Цена БЕЗ галочки, со 2-м (коины)</span>
+                                        <Input
+                                          type="number"
+                                          min={1}
+                                          placeholder="напр. 2 чел."
+                                          value={field.priceCoinsUncheckedSecondary ?? ''}
+                                          onChange={(event) => updateField(index, { priceCoinsUncheckedSecondary: event.target.value ? Number(event.target.value) : undefined })}
+                                          className="h-8"
+                                        />
+                                      </label>
+                                      <label className="space-y-1 text-xs text-slate-400">
+                                        <span>Цена С галочкой, со 2-м (коины)</span>
+                                        <Input
+                                          type="number"
+                                          min={1}
+                                          placeholder="напр. 2 чел. + анимация"
+                                          value={field.priceCoinsCheckedSecondary ?? ''}
+                                          onChange={(event) => updateField(index, { priceCoinsCheckedSecondary: event.target.value ? Number(event.target.value) : undefined })}
+                                          className="h-8"
+                                        />
+                                      </label>
+                                    </div>
+                                  )}
+                                </div>
                                 <p className="text-xs text-slate-500">
-                                  Если обе цены заданы, цена услуги = выбранная галочка (без галочки / с галочкой). Если пусто — используется обычная цена услуги. Условный шаг пайплайна запускается, когда галочка включена (поле <code>when</code> в шаге: field = id этой галочки, value = <code>true</code>).
+                                  Цена услуги = выбранная комбинация: галочка (вкл/выкл) × «второй элемент» (заполнен/нет). Если «второй элемент» не задан — работают только две первые цены. Если пусто — обычная цена услуги. Условный шаг пайплайна запускается, когда галочка включена (поле <code>when</code>: field = id галочки, value = <code>true</code>).
                                 </p>
                               </div>
                             )}

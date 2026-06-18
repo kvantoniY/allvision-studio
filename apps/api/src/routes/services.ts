@@ -535,14 +535,28 @@ servicesRouter.post(
         tokensCost = durationPrice;
       }
 
-      // Checkbox with two prices (e.g. "animate photo"): price = checked ? checked : unchecked.
+      // Checkbox-controlled price. Two dimensions:
+      //   checked   = the checkbox value (e.g. "animate photo")
+      //   secondary = whether the referenced photo field (e.g. person2) is filled (=> 2 people)
+      // 4 combos: 1 person / 2 people  ×  no animation / with animation.
       const pricedCheckbox = fields.find(
         (field) => field.type === 'checkbox'
           && (field.priceCoinsChecked !== undefined || field.priceCoinsUnchecked !== undefined),
       );
       if (pricedCheckbox) {
         const checked = data[pricedCheckbox.id] === true;
-        const next = checked ? pricedCheckbox.priceCoinsChecked : pricedCheckbox.priceCoinsUnchecked;
+        const secId = pricedCheckbox.secondaryField;
+        const secondaryPresent = !!secId
+          && typeof userInputs[secId] === 'string'
+          && (userInputs[secId] as string).trim() !== '';
+        let next: number | undefined;
+        if (secondaryPresent) {
+          next = checked ? pricedCheckbox.priceCoinsCheckedSecondary : pricedCheckbox.priceCoinsUncheckedSecondary;
+          // Fall back to the primary prices if the secondary ones are not configured.
+          if (typeof next !== 'number') next = checked ? pricedCheckbox.priceCoinsChecked : pricedCheckbox.priceCoinsUnchecked;
+        } else {
+          next = checked ? pricedCheckbox.priceCoinsChecked : pricedCheckbox.priceCoinsUnchecked;
+        }
         if (typeof next === 'number' && next > 0) tokensCost = next;
       }
 

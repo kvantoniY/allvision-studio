@@ -56,6 +56,9 @@ export type UserInputField = {
   defaultChecked?: boolean;
   priceCoinsChecked?: number;
   priceCoinsUnchecked?: number;
+  secondaryField?: string;
+  priceCoinsCheckedSecondary?: number;
+  priceCoinsUncheckedSecondary?: number;
   aspectOptions?: Array<'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4'>;
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;

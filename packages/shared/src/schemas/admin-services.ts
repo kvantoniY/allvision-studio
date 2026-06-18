@@ -116,12 +116,19 @@ export const userInputFieldSchema = z.object({
   })).optional(),
   // For the 'slides' field type: max number of slides the user can add.
   maxSlides: z.number().int().min(1).max(20).optional(),
-  // For the 'checkbox' field type: optional initial state and the two service prices it controls.
-  // When both prices are set, the service price = checked ? priceCoinsChecked : priceCoinsUnchecked
+  // For the 'checkbox' field type: optional initial state and the service prices it controls.
+  // When prices are set, the service price = checked ? priceCoinsChecked : priceCoinsUnchecked
   // (e.g. "photo" vs "photo + animation"). If omitted, the service falls back to the tier price.
   defaultChecked: z.boolean().optional(),
   priceCoinsChecked: z.number().int().min(1).optional(),
   priceCoinsUnchecked: z.number().int().min(1).optional(),
+  // Optional 2-dimensional pricing: when `secondaryField` (id of a photo field) is filled, the
+  // service uses the "secondary" prices instead. Used e.g. for "1 person" vs "2 people":
+  //   secondaryField empty  -> priceCoinsUnchecked / priceCoinsChecked       (1 person no/with animation)
+  //   secondaryField filled -> priceCoinsUncheckedSecondary / ...Secondary   (2 people no/with animation)
+  secondaryField: z.string().trim().min(1).max(80).optional(),
+  priceCoinsCheckedSecondary: z.number().int().min(1).optional(),
+  priceCoinsUncheckedSecondary: z.number().int().min(1).optional(),
   aspectOptions: z.array(z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4'])).optional(),
   defaultAspect: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
   allowUserUpload: z.boolean().optional(),
