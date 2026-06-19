@@ -350,13 +350,11 @@ async function gptImageHistoryRecoveryRef(
   const promptMatches = unique
     .filter((task) => normalisePrompt(historyPrompt(task)) === normalisePrompt(step.prompt))
     .sort(sortHistoryNewestFirst);
+  // Worker service-pipeline runs at concurrency 1, so at most one gpt-image task exists in this
+  // time window. If the (often truncated) prompt did not match, fall back to the newest completed
+  // gpt-image candidate in the window instead of giving up — it is reliably our own task.
   const recovered = promptMatches[0]
-    ?? (() => {
-      const promptless = unique
-        .filter((task) => !historyPrompt(task) && task.historyFilter === 'gpts')
-        .sort(sortHistoryNewestFirst);
-      return promptless.length === 1 ? promptless[0] : undefined;
-    })();
+    ?? unique.slice().sort(sortHistoryNewestFirst)[0];
 
   if (!recovered?.outputUrl) return undefined;
   return {

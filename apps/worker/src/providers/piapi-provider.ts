@@ -1083,10 +1083,9 @@ export class PiAPIProvider implements AIProvider {
       .sort(sortHistoryNewestFirst);
     if (promptMatches[0]) return promptMatches[0];
 
-    const promptless = unique
-      .filter((task) => !historyPrompt(task) && task.historyFilter === 'gpts')
-      .sort(sortHistoryNewestFirst);
-    return promptless.length === 1 ? promptless[0] : undefined;
+    // Concurrency 1 -> at most one gpt-image task in this window; if the (often truncated) prompt
+    // did not match, return the newest completed candidate in the window rather than giving up.
+    return unique.slice().sort(sortHistoryNewestFirst)[0];
   }
 
   // Returns the bytes of a reference image. For our own /static URLs it reads the file directly from
