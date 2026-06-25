@@ -407,6 +407,18 @@ servicesRouter.post(
           continue;
         }
 
+        if (field.type === 'audio') {
+          // Audio is a file field (upload) and may also carry a library/value URL — required is
+          // satisfied by either, like photo. Without this branch a required audio with an uploaded
+          // file falsely failed the value-based required check below.
+          const hasFile = fileMap.has(field.id);
+          const value = data[field.id];
+          if (fieldRequired(field, data) && !hasFile && requiredMissing(value)) {
+            throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);
+          }
+          continue;
+        }
+
         const value = data[field.id];
         if (fieldRequired(field, data) && requiredMissing(value)) {
           throw new HttpError(400, 'REQUIRED_FIELD_MISSING', `${field.id} is required`);

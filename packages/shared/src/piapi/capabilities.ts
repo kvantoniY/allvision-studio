@@ -1051,6 +1051,53 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
       },
     ],
   },
+  {
+    slug: 'omnihuman-1.5',
+    title: 'OmniHuman 1.5',
+    blockSlug: 'talking-avatar',
+    blockCategory: 'video',
+    providerModel: 'omni-human',
+    taskType: 'omni-human-1.5',
+    inputKinds: ['image', 'audio', 'text'],
+    outputKind: 'video',
+    docsUrl: 'https://piapi.ai/docs/omni-human-api/omni-human-1-5',
+    aspectRatios: ['auto', '16:9', '9:16', '1:1'],
+    audio: { mode: 'input', inputParam: 'audio_url' },
+    params: [
+      {
+        key: 'audio_url',
+        title: 'Аудио-озвучка',
+        kind: 'source-list',
+        mediaKind: 'audio',
+        multiple: false,
+        description: 'Аудио (mp3/wav, до 35 сек), под которое персонаж синхронизирует губы.',
+      },
+    ],
+  },
+  {
+    slug: 'kling-ai-avatar',
+    title: 'Kling lip-sync (AI Avatar)',
+    blockSlug: 'talking-avatar',
+    blockCategory: 'video',
+    providerModel: 'kling',
+    taskType: 'lip_sync',
+    inputKinds: ['image', 'audio', 'text'],
+    outputKind: 'video',
+    docsUrl: 'https://piapi.ai/docs/kling-api/lipsync-examples',
+    duration: { minimum: 5, maximum: 10, default: 5, step: 5, options: [5, 10] },
+    aspectRatios: ['16:9', '9:16', '1:1'],
+    audio: { mode: 'input', inputParam: 'audio_url' },
+    params: [
+      {
+        key: 'audio_url',
+        title: 'Аудио-озвучка',
+        kind: 'source-list',
+        mediaKind: 'audio',
+        multiple: false,
+        description: 'Аудио (mp3/wav/flac/ogg, до 60 сек), под которое персонаж синхронизирует губы.',
+      },
+    ],
+  },
 ];
 
 export function getPiAPIModelCapability(slug: string): PiAPIModelCapability | undefined {

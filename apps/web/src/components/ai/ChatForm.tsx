@@ -218,6 +218,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [duration, setDuration] = useState(5);
   const [generateAudio, setGenerateAudio] = useState(false);
   const [source, setSource] = useState<SelectedInputSource | null>(null);
+  // Second input for talking-avatar (lip-sync): character image is `source`, voice audio is `audioSource`.
+  const [audioSource, setAudioSource] = useState<SelectedInputSource | null>(null);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [isDraggingReference, setIsDraggingReference] = useState(false);
   const [advancedParams, setAdvancedParams] = useState<ChatAdvancedParams>(() => defaultAdvancedParams(defaultModel('image')));
@@ -248,7 +250,9 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     (source.mediaKind === 'audio' && !selectedModel.acceptsAudioInput)
   );
   const requiresPrompt = selectedModel.requiresPrompt !== false;
-  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && canPay && (!needsInput || !!source) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
+  // Talking-avatar: needs BOTH a character image (source) and a voice audio (audioSource).
+  const dualInput = selectedModel.acceptsImageInput && selectedModel.acceptsAudioInput;
+  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -257,6 +261,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     setDuration(next.defaultDurationSec ?? next.durationOptions[0] ?? 5);
     setGenerateAudio(next.supportsAudio);
     setSource(null);
+    setAudioSource(null);
     setSubmitAttempted(false);
     setAdvancedParams(defaultAdvancedParams(next));
   }, [category]);
@@ -282,6 +287,10 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   useEffect(() => {
     setAdvancedParams(defaultAdvancedParams(selectedModel));
     setGenerateAudio(selectedModel.supportsAudio);
+    // Drop the voice-audio attachment when the model is not a talking-avatar (dual-input) model.
+    if (!(selectedModel.acceptsImageInput && selectedModel.acceptsAudioInput)) {
+      setAudioSource(null);
+    }
   }, [selectedModel]);
 
   useEffect(() => {
@@ -312,13 +321,16 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     form.append('file', file);
     try {
       const result = await uploadInput(form).unwrap();
-      setSource({
+      const picked: SelectedInputSource = {
         ref: result.input.ref,
         url: result.input.url,
         title: file.name,
         mediaKind: result.input.mediaKind,
         origin: 'upload',
-      });
+      };
+      // In talking-avatar (dual) mode an audio file fills the voice slot, everything else the image slot.
+      if (dualInput && picked.mediaKind === 'audio') setAudioSource(picked);
+      else setSource(picked);
       toast({ title: 'Файл прикреплен' });
     } catch (error) {
       toast({ title: apiErrorMessage(error, 'Не удалось прикрепить файл'), variant: 'destructive' });
@@ -366,7 +378,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           inputRef: source?.ref,
           imageInputRef: source?.mediaKind === 'image' ? source.ref : undefined,
           videoInputRef: source?.mediaKind === 'video' ? source.ref : undefined,
-          audioInputRef: source?.mediaKind === 'audio' ? source.ref : undefined,
+          audioInputRef: audioSource?.ref ?? (source?.mediaKind === 'audio' ? source.ref : undefined),
           params: Object.keys(cleanedAdvancedParams).length > 0 ? cleanedAdvancedParams : undefined,
         },
       }).unwrap();
@@ -374,6 +386,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       setPrompt('');
       setSubmitAttempted(false);
       if (!canUseInput) setSource(null);
+      if (dualInput) setAudioSource(null);
       onCreated();
     } catch (error) {
       toast({ title: apiErrorMessage(error), variant: 'destructive' });
@@ -386,7 +399,9 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     : referenceUnsupported
       ? 'Референс не подходит модели'
       : needsInput && !source
-      ? 'Нужен референс'
+      ? (dualInput ? 'Прикрепите фото персонажа' : 'Нужен референс')
+      : dualInput && !audioSource
+      ? 'Прикрепите аудио-озвучку'
       : missingAdvanced
         ? missingAdvanced
       : !canPay
@@ -403,6 +418,11 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       <Paperclip className="h-4 w-4" />
     </Button>
   );
+
+  // Second attach slot for talking-avatar: the voice audio (the character lip-syncs to it).
+  const audioAttachControl = dualInput ? (
+    <InputSourcePicker mediaKind="audio" value={audioSource} required onChange={setAudioSource} compact iconOnly />
+  ) : null;
 
   const settingsControl = (
     <DetailedSettingsControl
@@ -507,7 +527,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1 md:hidden">
             <div className="flex shrink-0 items-center gap-1.5">
               {attachControl}
-              {settingsControl}
+              {audioAttachControl}
             </div>
             <div className="flex items-center gap-2.5">{actionControl}</div>
           </div>
@@ -528,7 +548,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           <div className="flex flex-wrap items-center gap-1.5">
             <div className="hidden shrink-0 items-center gap-1.5 md:flex">
               {attachControl}
-              {settingsControl}
+              {audioAttachControl}
             </div>
             <CategoryControl category={category} onChange={setCategory} />
             <ModelFamilyControl
