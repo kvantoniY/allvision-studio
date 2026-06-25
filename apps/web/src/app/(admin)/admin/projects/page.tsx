@@ -107,14 +107,14 @@ export default function AdminProjectsPage() {
             {projects.isLoading && <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-400">Загрузка...</td></tr>}
             {(projects.data?.items ?? []).map((project) => (
               <tr key={project.id} className="hover:bg-zinc-900">
-                <td className="px-4 py-3"><Link href={`/admin/projects/${project.id}`} className="text-white hover:text-rose-200">{new Date(project.createdAt).toLocaleString()}</Link></td>
+                <td className="px-4 py-3"><Link href={`/admin/projects/${project.id}`} className="text-white hover:text-violet-200">{new Date(project.createdAt).toLocaleString()}</Link></td>
                 <td className="px-4 py-3">{project.user.email}</td>
                 <td className="px-4 py-3">{project.service?.title ?? 'Без услуги'}</td>
                 <td className="px-4 py-3"><Badge className={statusClass(project.status)}>{statusLabel(project.status)}</Badge></td>
                 <td className="px-4 py-3">{project.progress}%</td>
                 <td className="px-4 py-3">{formatMoney({ usd: project.costUsd }, { primary: 'usd', showAll: true, usdToRub: rate })}</td>
                 <td className="px-4 py-3">{formatMoney({ coins: project.userPriceCoins }, { primary: 'coins', showAll: true, usdToRub: rate })}</td>
-                <td className="px-4 py-3 text-rose-200">{project.errorCode ?? '—'}</td>
+                <td className="px-4 py-3 text-violet-200">{project.errorCode ?? '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <Button type="button" variant="destructive" size="icon" onClick={() => void remove(project)} aria-label="Удалить генерацию">
                     <Trash2 className="h-4 w-4" />

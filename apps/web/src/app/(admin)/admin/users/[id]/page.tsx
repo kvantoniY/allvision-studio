@@ -237,7 +237,7 @@ export default function AdminUserDetailPage() {
                 type="button"
                 disabled={updateState.isLoading}
                 onClick={saveBalance}
-                className="bg-rose-500 hover:bg-rose-400"
+                className="bg-violet-600 hover:bg-violet-500"
               >
                 Сохранить
               </Button>
@@ -269,7 +269,7 @@ export default function AdminUserDetailPage() {
             type="button"
             disabled={updateState.isLoading || role === item.role || (item.id === auth.user?.id && item.role === 'ADMIN' && role !== 'ADMIN')}
             onClick={saveRole}
-            className="bg-rose-500 hover:bg-rose-400"
+            className="bg-violet-600 hover:bg-violet-500"
           >
             Сохранить роль
           </Button>
@@ -283,7 +283,7 @@ export default function AdminUserDetailPage() {
         <h2 className="font-semibold text-white">Последние проекты</h2>
         <div className="mt-4 space-y-2">
           {(item.projects ?? []).map((project) => (
-            <Link key={project.id} href={`/admin/projects/${project.id}`} className="block rounded-md border border-zinc-800 bg-zinc-900 p-3 hover:border-rose-400">
+            <Link key={project.id} href={`/admin/projects/${project.id}`} className="block rounded-md border border-zinc-800 bg-zinc-900 p-3 hover:border-violet-400">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="font-medium text-white">{project.title}</span>
                 <Badge className={project.status === 'FAILED' ? 'bg-red-700' : 'bg-zinc-700'}>{projectStatusLabel(project.status)}</Badge>

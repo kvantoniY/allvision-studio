@@ -122,7 +122,7 @@ export default function AdminTokenPackagesPage() {
   return (
     <div className="space-y-8">
       <div>
-        <div className="flex items-center gap-2 text-sm text-rose-300">
+        <div className="flex items-center gap-2 text-sm text-violet-300">
           <Coins className="h-4 w-4" />
           Пакеты токенов
         </div>
@@ -133,7 +133,7 @@ export default function AdminTokenPackagesPage() {
       <form onSubmit={submit} className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <PackageFields draft={draft} setDraft={setDraft} title="Новый пакет" />
         <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Button type="submit" disabled={createState.isLoading} className="bg-rose-500 hover:bg-rose-400">
+          <Button type="submit" disabled={createState.isLoading} className="bg-violet-600 hover:bg-violet-500">
             <Plus className="h-4 w-4" />
             Создать пакет
           </Button>
@@ -197,7 +197,7 @@ function PackageRow({ item }: { item: AdminTokenPackage }) {
         <PackageFields draft={draft} setDraft={setDraft} title="Настройки пакета" />
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" disabled={updateState.isLoading} onClick={save} className="bg-rose-500 hover:bg-rose-400">
+          <Button type="button" disabled={updateState.isLoading} onClick={save} className="bg-violet-600 hover:bg-violet-500">
             <Save className="h-4 w-4" />
             Сохранить
           </Button>

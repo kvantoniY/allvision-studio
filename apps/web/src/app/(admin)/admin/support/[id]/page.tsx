@@ -62,7 +62,7 @@ export default function AdminSupportTicketPage({ params }: { params: { id: strin
             <ArrowLeft className="h-4 w-4" />
             Назад к тикетам
           </Link>
-          <div className="mt-4 flex items-center gap-2 text-sm text-rose-300">
+          <div className="mt-4 flex items-center gap-2 text-sm text-violet-300">
             <LifeBuoy className="h-4 w-4" />
             Поддержка
           </div>

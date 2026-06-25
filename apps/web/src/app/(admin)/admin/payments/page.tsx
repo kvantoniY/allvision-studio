@@ -235,12 +235,12 @@ export default function AdminPaymentsPage() {
             {(payments.data?.items ?? []).map((payment) => (
               <tr key={payment.id} className="hover:bg-zinc-900">
                 <td className="px-4 py-3 text-slate-300 whitespace-nowrap">
-                  <Link href={`/admin/payments/${payment.id}`} className="text-rose-200 hover:underline">
+                  <Link href={`/admin/payments/${payment.id}`} className="text-violet-200 hover:underline">
                     {new Date(payment.createdAt).toLocaleString('ru-RU')}
                   </Link>
                 </td>
                 <td className="px-4 py-3 font-medium text-white">
-                  <Link href={`/admin/users/${payment.user.id}`} className="hover:text-rose-200">
+                  <Link href={`/admin/users/${payment.user.id}`} className="hover:text-violet-200">
                     {payment.user.email}
                   </Link>
                 </td>

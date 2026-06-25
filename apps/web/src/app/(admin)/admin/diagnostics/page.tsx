@@ -125,7 +125,7 @@ export default function AdminDiagnosticsPage() {
             <Label htmlFor="usdToRub">Курс USD к рублю</Label>
             <Input id="usdToRub" type="number" min={1} step="0.01" value={rateDraft} onChange={(event) => setRateDraft(event.target.value)} />
           </div>
-          <Button type="button" disabled={updateSettingsState.isLoading} onClick={saveRate} className="bg-rose-500 hover:bg-rose-400">Сохранить</Button>
+          <Button type="button" disabled={updateSettingsState.isLoading} onClick={saveRate} className="bg-violet-600 hover:bg-violet-500">Сохранить</Button>
         </div>
       </section>
 
@@ -166,7 +166,7 @@ export default function AdminDiagnosticsPage() {
           <h2 className="font-semibold text-white">Последние проекты</h2>
           <div className="mt-4 space-y-3">
             {(data?.recentProjects ?? []).map((project) => (
-              <Link key={project.id} href={`/admin/projects/${project.id}`} className="block rounded-md border border-zinc-800 bg-zinc-900 p-3 hover:border-rose-400">
+              <Link key={project.id} href={`/admin/projects/${project.id}`} className="block rounded-md border border-zinc-800 bg-zinc-900 p-3 hover:border-violet-400">
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-medium text-white">{project.title}</span>
                   <Badge className={project.status === 'FAILED' ? 'bg-red-700' : 'bg-zinc-700'}>{projectStatusLabel(String(project.status))}</Badge>
@@ -182,7 +182,7 @@ export default function AdminDiagnosticsPage() {
           <div className="mt-4 space-y-3">
             {(data?.recentErrors ?? []).map((error, index) => (
               <details key={String(error.id ?? index)} className="rounded-md border border-zinc-800 bg-zinc-900 p-3">
-                <summary className="cursor-pointer text-sm text-rose-200">{String(error.errorCode ?? error.status ?? error.source ?? 'ошибка')}</summary>
+                <summary className="cursor-pointer text-sm text-violet-200">{String(error.errorCode ?? error.status ?? error.source ?? 'ошибка')}</summary>
                 <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(error, null, 2)}</pre>
               </details>
             ))}

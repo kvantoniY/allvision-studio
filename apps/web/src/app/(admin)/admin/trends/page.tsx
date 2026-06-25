@@ -90,7 +90,7 @@ export default function AdminTrendsPage() {
           <h1 className="text-3xl font-bold">Тренды</h1>
           <p className="mt-2 text-sm text-slate-400">Админский каталог трендов для услуги trends.</p>
         </div>
-        <Button asChild className="bg-rose-500 hover:bg-rose-400">
+        <Button asChild className="bg-violet-600 hover:bg-violet-500">
           <Link href="/admin/trends/new">
             <Plus className="h-4 w-4" />
             Создать тренд
@@ -142,7 +142,7 @@ export default function AdminTrendsPage() {
               <tr>
                 <td colSpan={8} className="px-4 py-12 text-center">
                   <div className="font-medium text-white">Создайте первый тренд</div>
-                  <Button asChild className="mt-4 bg-rose-500 hover:bg-rose-400">
+                  <Button asChild className="mt-4 bg-violet-600 hover:bg-violet-500">
                     <Link href="/admin/trends/new">Создать тренд</Link>
                   </Button>
                 </td>

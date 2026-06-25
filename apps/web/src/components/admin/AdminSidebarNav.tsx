@@ -44,14 +44,14 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function AdminSidebarNav() {
+export function AdminSidebarNav({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
 
   return (
-    <nav className="space-y-4">
+    <nav className="space-y-5">
       {navGroups.map((group) => (
         <div key={group.label}>
-          <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             {group.label}
           </div>
           <div className="grid gap-0.5">
@@ -62,14 +62,26 @@ export function AdminSidebarNav() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={onNavigate}
                   className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-1.5 text-sm font-medium transition',
+                    'group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150',
                     active
-                      ? 'bg-rose-500 text-white'
-                      : 'text-slate-300 hover:bg-zinc-900 hover:text-white',
+                      ? 'bg-violet-500/15 text-white ring-1 ring-inset ring-violet-500/30'
+                      : 'text-slate-400 hover:bg-zinc-800/60 hover:text-white',
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
+                  <span
+                    className={cn(
+                      'absolute left-0 top-1/2 h-5 -translate-y-1/2 rounded-r-full bg-violet-400 transition-all duration-200',
+                      active ? 'w-0.5 opacity-100' : 'w-0 opacity-0',
+                    )}
+                  />
+                  <Icon
+                    className={cn(
+                      'h-4 w-4 shrink-0 transition-colors',
+                      active ? 'text-violet-300' : 'text-slate-500 group-hover:text-violet-300',
+                    )}
+                  />
                   <span className="truncate">{item.label}</span>
                 </Link>
               );

@@ -58,7 +58,7 @@ export default function AdminStylePresetsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <div className="flex items-center gap-2 text-sm text-rose-300">
+        <div className="flex items-center gap-2 text-sm text-violet-300">
           <Palette className="h-4 w-4" />
           Шаблоны образов
         </div>
@@ -104,7 +104,7 @@ export default function AdminStylePresetsPage() {
             <Textarea value={draft.promptText} onChange={(event) => setDraft((current) => ({ ...current, promptText: event.target.value }))} rows={5} required />
           </div>
         </div>
-        <Button type="submit" disabled={createState.isLoading} className="mt-4 bg-rose-500 hover:bg-rose-400">
+        <Button type="submit" disabled={createState.isLoading} className="mt-4 bg-violet-600 hover:bg-violet-500">
           <Plus className="h-4 w-4" />
           Создать шаблон
         </Button>
@@ -202,7 +202,7 @@ function PresetRow({ preset }: { preset: AdminStylePreset }) {
           <Textarea className="lg:col-span-4" value={draft.promptText} onChange={(event) => setDraft((current) => ({ ...current, promptText: event.target.value }))} rows={5} />
         </div>
 
-        <Button type="button" disabled={updateState.isLoading} onClick={save} className="bg-rose-500 hover:bg-rose-400">
+        <Button type="button" disabled={updateState.isLoading} onClick={save} className="bg-violet-600 hover:bg-violet-500">
           Сохранить
         </Button>
       </CardContent>

@@ -177,7 +177,7 @@ export default function AdminMediaAssetsPage() {
             <Textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} rows={2} />
           </div>
         </div>
-        <Button type="submit" disabled={createState.isLoading} className="mt-4 bg-rose-500 hover:bg-rose-400">
+        <Button type="submit" disabled={createState.isLoading} className="mt-4 bg-violet-600 hover:bg-violet-500">
           <Upload className="h-4 w-4" />
           Загрузить медиа-файл
         </Button>

@@ -84,7 +84,7 @@ export default function AdminScenarioTemplatesPage() {
           <h1 className="text-3xl font-bold">Шаблоны сценариев</h1>
           <p className="mt-2 text-sm text-slate-400">Каталог V3-сценариев для будущего workflow эпизодов.</p>
         </div>
-        <Button asChild className="bg-rose-500 hover:bg-rose-400">
+        <Button asChild className="bg-violet-600 hover:bg-violet-500">
           <Link href="/admin/scenario-templates/new">
             <Plus className="h-4 w-4" />
             Создать шаблон
@@ -144,7 +144,7 @@ export default function AdminScenarioTemplatesPage() {
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center">
                   <div className="font-medium text-white">Шаблонов пока нет</div>
-                  <Button asChild className="mt-4 bg-rose-500 hover:bg-rose-400">
+                  <Button asChild className="mt-4 bg-violet-600 hover:bg-violet-500">
                     <Link href="/admin/scenario-templates/new">Создать шаблон</Link>
                   </Button>
                 </td>

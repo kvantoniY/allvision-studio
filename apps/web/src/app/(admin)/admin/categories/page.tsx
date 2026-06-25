@@ -172,14 +172,14 @@ export default function AdminCategoriesPage() {
           <h1 className="text-3xl font-bold">Категории услуг</h1>
           <p className="mt-2 text-sm text-slate-400">Создавайте, редактируйте, скрывайте и переупорядочивайте категории, по которым группируются услуги на витрине.</p>
         </div>
-        <Button onClick={openCreate} className="bg-rose-500 hover:bg-rose-400">
+        <Button onClick={openCreate} className="bg-violet-600 hover:bg-violet-500">
           <Plus className="h-4 w-4" />
           Создать категорию
         </Button>
       </div>
 
       {mode && (
-        <div className="mt-6 rounded-lg border border-rose-500/30 bg-zinc-900 p-5">
+        <div className="mt-6 rounded-lg border border-violet-500/30 bg-zinc-900 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold text-white">
               {mode === 'create' ? 'Новая категория' : `Редактирование: ${editingCode}`}
@@ -251,7 +251,7 @@ export default function AdminCategoriesPage() {
           </div>
           <div className="mt-5 flex justify-end gap-2">
             <Button variant="outline" onClick={closeForm}>Отмена</Button>
-            <Button onClick={save} disabled={busy || !draft.code || !draft.title} className="bg-rose-500 hover:bg-rose-400">
+            <Button onClick={save} disabled={busy || !draft.code || !draft.title} className="bg-violet-600 hover:bg-violet-500">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
               {mode === 'create' ? 'Создать' : 'Сохранить'}
             </Button>

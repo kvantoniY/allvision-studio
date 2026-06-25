@@ -211,7 +211,7 @@ export function AdminTrendForm({ mode, trend }: AdminTrendFormProps) {
               />
               {fileSummary(previewVideo) && <p className="text-xs text-slate-400">{fileSummary(previewVideo)}</p>}
               {!isCreate && trend?.previewVideo && (
-                <Link href={trend.previewVideo} target="_blank" className="block text-sm text-rose-300 hover:text-rose-200">
+                <Link href={trend.previewVideo} target="_blank" className="block text-sm text-violet-300 hover:text-violet-200">
                   Текущее видео
                 </Link>
               )}
@@ -251,7 +251,7 @@ export function AdminTrendForm({ mode, trend }: AdminTrendFormProps) {
             <Button asChild type="button" variant="outline">
               <Link href="/admin/trends">Отмена</Link>
             </Button>
-            <Button type="submit" disabled={isBusy} className="bg-rose-500 hover:bg-rose-400">
+            <Button type="submit" disabled={isBusy} className="bg-violet-600 hover:bg-violet-500">
               {isCreate ? 'Создать тренд' : 'Сохранить'}
             </Button>
           </div>

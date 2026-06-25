@@ -18,15 +18,20 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Coins,
+  FlaskConical,
   GripVertical,
   ImageIcon,
   Info,
+  ListChecks,
   Play,
   Plus,
   Save,
+  Settings2,
   Trash2,
   Upload,
   Video,
+  Workflow,
   X,
 } from 'lucide-react';
 import {
@@ -400,11 +405,11 @@ function providerLabel(provider: ModelOption['provider']) {
 function HelpTip({ text }: { text?: string }) {
   if (!text) return null;
   return (
-    <details className="relative inline-block">
-      <summary className="inline-flex cursor-pointer list-none items-center text-slate-500 hover:text-rose-200">
+    <details className="group/tip relative inline-block">
+      <summary className="inline-flex cursor-pointer list-none items-center rounded-full text-slate-500 transition-colors hover:text-violet-300 group-open/tip:text-violet-300">
         <Info className="h-3.5 w-3.5" />
       </summary>
-      <div className="absolute right-0 z-30 mt-2 w-72 rounded-md border border-zinc-700 bg-zinc-950 p-3 text-xs leading-relaxed text-slate-300 shadow-xl">
+      <div className="absolute right-0 z-30 mt-2 w-72 animate-admin-in whitespace-pre-line rounded-lg border border-zinc-700 bg-zinc-950/95 p-3 text-xs leading-relaxed text-slate-300 shadow-xl ring-1 ring-black/40 backdrop-blur">
         {text}
       </div>
     </details>
@@ -705,7 +710,7 @@ function SortableFrame({ id, children }: SortableFrameProps) {
   const handle = (
     <button
       type="button"
-      className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-slate-400 hover:border-rose-400 hover:text-white"
+      className="mt-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-700 text-slate-400 hover:border-violet-400 hover:text-white"
       aria-label="Перетащить"
       {...attributes}
       {...listeners}
@@ -721,14 +726,34 @@ function SortableFrame({ id, children }: SortableFrameProps) {
   );
 }
 
-function Section({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+function Section({
+  title,
+  description,
+  icon: Icon,
+  aside,
+  children,
+}: {
+  title: string;
+  description?: string;
+  icon?: typeof Settings2;
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <section className="border-t border-zinc-800 pt-6">
-      <div className="mb-5">
-        <h2 className="text-xl font-semibold text-white">{title}</h2>
-        {description && <p className="mt-1 text-sm text-slate-400">{description}</p>}
+    <section className="animate-admin-in overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-900/40 shadow-sm transition-colors hover:border-zinc-700/80">
+      <div className="flex items-start gap-3 border-b border-zinc-800/70 bg-zinc-900/50 px-5 py-4">
+        {Icon && (
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-300 ring-1 ring-inset ring-violet-500/25">
+            <Icon className="h-4 w-4" />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-semibold tracking-tight text-white">{title}</h2>
+          {description && <p className="mt-1 text-[13px] leading-relaxed text-slate-400">{description}</p>}
+        </div>
+        {aside && <div className="shrink-0">{aside}</div>}
       </div>
-      {children}
+      <div className="p-5">{children}</div>
     </section>
   );
 }
@@ -921,8 +946,12 @@ function BlockParamsForm({
 
   return (
     <div className="space-y-4">
-      <details className="rounded-md border border-zinc-800 bg-zinc-950 p-3 text-sm">
-        <summary className="cursor-pointer font-semibold text-white">Описание блока</summary>
+      <details className="group/desc rounded-lg border border-zinc-800 bg-zinc-950 p-3 text-sm [&_summary]:list-none">
+        <summary className="flex cursor-pointer items-center gap-2 font-semibold text-white transition-colors hover:text-violet-200">
+          <Info className="h-4 w-4 text-slate-500" />
+          Описание блока
+          <ChevronDown className="ml-auto h-4 w-4 text-slate-500 transition-transform group-open/desc:rotate-180" />
+        </summary>
         <div className="mt-3 space-y-2 text-sm text-slate-300">
           <p>{block.description}</p>
           {block.useWhen && <p><span className="text-slate-500">Когда использовать:</span> {block.useWhen}</p>}
@@ -936,8 +965,12 @@ function BlockParamsForm({
         </div>
       </details>
       {selectedModels.length > 0 && (
-        <details className="rounded-md border border-zinc-800 bg-zinc-900 p-3 text-xs text-slate-300" open>
-          <summary className="cursor-pointer font-semibold text-white">Что делает эта модель</summary>
+        <details className="group/model rounded-lg border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-slate-300 [&_summary]:list-none" open>
+          <summary className="flex cursor-pointer items-center gap-2 font-semibold text-white transition-colors hover:text-violet-200">
+            <Settings2 className="h-4 w-4 text-slate-500" />
+            Что делает эта модель
+            <ChevronDown className="ml-auto h-4 w-4 text-slate-500 transition-transform group-open/model:rotate-180" />
+          </summary>
           {selectedModels.map((model) => (
             <div key={model.slug} className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
               <div className="font-medium text-slate-100">
@@ -977,7 +1010,7 @@ function BlockParamsForm({
                   {model.taskType && <div className="text-slate-500">Тип задачи: {model.taskType}</div>}
                 </div>
               </div>
-              {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-rose-300 hover:text-rose-200">Документация</a>}
+              {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-violet-300 hover:text-violet-200">Документация</a>}
             </div>
           ))}
           {limitWarnings.map((warning) => <div key={warning} className="mt-2 text-amber-300">{warning}</div>)}
@@ -1006,7 +1039,7 @@ function BlockParamsForm({
               <select
                 value={modelSlug}
                 onChange={(event) => update(key, { standard: event.target.value, pro: event.target.value })}
-                className="mt-2 h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+                className="mt-2 h-10 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               >
                 {block.supportedModels.map((model) => (
                   <option key={model.slug} value={model.slug}>
@@ -1058,7 +1091,7 @@ function BlockParamsForm({
               <select
                 value={selectValue(fieldValue)}
                 onChange={(event) => update(key, coerceBySchema(event.target.value, schema))}
-                className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+                className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               >
                 {schema.enum.map((option) => (
                   <option key={String(option)} value={String(option)}>
@@ -1197,35 +1230,52 @@ function PipelineBuilder({
               return (
                 <SortableFrame key={step.id} id={step.id}>
                   {(handle) => (
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-                      <div className="flex gap-3">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 transition-colors hover:border-zinc-700">
+                      <div className="flex gap-3 p-3.5">
                         {handle}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-semibold text-white">
-                                Шаг {index + 1}: {block?.title ?? step.blockSlug}
-                              </div>
-                              <div className="mt-1 text-xs text-slate-500">{step.id}</div>
-                            </div>
-                            <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setExpanded((state) => ({ ...state, [step.id]: !isExpanded }))}
+                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            >
+                              <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-xs font-bold text-violet-300 ring-1 ring-inset ring-violet-500/25">
+                                {index + 1}
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-semibold text-white">
+                                  {block?.title ?? step.blockSlug}
+                                </span>
+                                <span className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                                  <span className="font-mono">{step.id}</span>
+                                  {block && (
+                                    <span className="rounded bg-zinc-800/80 px-1.5 py-px text-[10px] font-medium text-slate-400">
+                                      {blockCategoryLabel(block)}
+                                    </span>
+                                  )}
+                                </span>
+                              </span>
+                            </button>
+                            <div className="flex shrink-0 gap-2">
                               <Button
                                 type="button"
                                 variant="outline"
                                 size="icon"
+                                className="h-8 w-8 transition-colors"
                                 onClick={() => setExpanded((state) => ({ ...state, [step.id]: !isExpanded }))}
                                 aria-label={isExpanded ? 'Свернуть' : 'Развернуть'}
                               >
-                                {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                <ChevronDown className={cn('h-4 w-4 transition-transform', isExpanded && 'rotate-180')} />
                               </Button>
-                              <Button type="button" variant="destructive" size="icon" onClick={() => removeStep(index)} aria-label="Удалить шаг">
+                              <Button type="button" variant="destructive" size="icon" className="h-8 w-8" onClick={() => removeStep(index)} aria-label="Удалить шаг">
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
                           </div>
 
                           {isExpanded && (
-                            <div className="mt-4 space-y-4">
+                            <div className="mt-4 space-y-4 animate-admin-in">
                               <div className="grid gap-4 md:grid-cols-[200px_1fr]">
                                 <div className="space-y-2">
                                   <Label>Блок</Label>
@@ -1238,7 +1288,7 @@ function PipelineBuilder({
                                         params: nextBlock ? defaultParams(nextBlock) : {},
                                       });
                                     }}
-                                    className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+                                    className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                                   >
                                     {groupBlocksByCategory(blocks ?? []).map(([label, items]) => (
                                       <optgroup key={label} label={label}>
@@ -1299,16 +1349,23 @@ function PipelineBuilder({
         </SortableContext>
       </DndContext>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-zinc-700 bg-zinc-950/60 p-3">
-        <Plus className="h-4 w-4 text-slate-400" />
-        <span className="text-sm text-slate-300">Добавить шаг pipeline:</span>
+      {steps.length === 0 && (
+        <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/40 py-8 text-center">
+          <Workflow className="mx-auto h-7 w-7 text-slate-600" />
+          <p className="mt-2 text-sm text-slate-400">Пайплайн пуст. Добавьте первый шаг ниже.</p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 p-3 transition-colors hover:border-violet-500/40">
+        <Plus className="h-4 w-4 text-violet-300" />
+        <span className="text-sm font-medium text-slate-300">Добавить шаг:</span>
         <select
           value=""
           onChange={(event) => {
             if (event.target.value) addStep(event.target.value);
             event.target.value = '';
           }}
-          className="h-10 min-w-[260px] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 md:flex-none"
+          className="h-10 min-w-[260px] flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-600 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 md:flex-none"
         >
           <option value="">Выберите блок…</option>
           {groupBlocksByCategory(blocks ?? []).map(([label, items]) => (
@@ -1323,13 +1380,13 @@ function PipelineBuilder({
         </select>
       </div>
 
-      <div className={cn('rounded-md border p-3 text-sm', errors.length ? 'border-red-900/60 bg-red-950/30 text-red-200' : 'border-emerald-900/50 bg-emerald-950/20 text-emerald-200')}>
-        <div className="flex items-center gap-2 font-medium">
+      <div className={cn('rounded-xl border p-3.5 text-sm transition-colors', errors.length ? 'border-red-900/60 bg-red-950/30 text-red-200' : 'border-emerald-900/50 bg-emerald-950/20 text-emerald-200')}>
+        <div className="flex items-center gap-2 font-semibold">
           {errors.length ? <AlertTriangle className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
           {errors.length ? 'Пайплайн содержит ошибки' : 'Пайплайн валиден'}
         </div>
         {errors.length > 0 && (
-          <ul className="mt-2 list-disc space-y-1 pl-5">
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-red-200/90">
             {errors.map((error) => (
               <li key={error}>{error}</li>
             ))}
@@ -1427,19 +1484,23 @@ function UserInputFormBuilder({
               {fields.map((field, index) => (
                 <SortableFrame key={field.id} id={field.id}>
                   {(handle) => (
-                    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 transition-colors hover:border-zinc-700">
                       <div className="flex gap-3">
                         {handle}
                         <div className="min-w-0 flex-1 space-y-4">
-                          <div className="flex flex-wrap justify-between gap-3">
-                            <div>
-                              <div className="font-medium text-white">{field.label || field.id}</div>
-                              <div className="mt-1 text-xs text-slate-500">{field.id} · {field.type}</div>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold text-white">{field.label || field.id}</div>
+                              <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                                <span className="font-mono">{field.id}</span>
+                                <span className="rounded bg-zinc-800/80 px-1.5 py-px text-[10px] font-medium text-slate-400">{fieldTypeLabels[field.type]}</span>
+                              </div>
                             </div>
                             <Button
                               type="button"
                               variant="destructive"
                               size="icon"
+                              className="h-8 w-8 shrink-0"
                               onClick={() => removeField(index)}
                               disabled={field.type === 'tier'}
                               aria-label="Удалить поле"
@@ -1458,7 +1519,7 @@ function UserInputFormBuilder({
                                 value={field.type}
                                 onChange={(event) => updateField(index, { type: event.target.value as UserInputField['type'] })}
                                 disabled={field.type === 'tier'}
-                                className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+                                className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                               >
                                 {Object.entries(fieldTypeLabels)
                                   .filter(([type]) => type !== 'tier' || field.type === 'tier')
@@ -1904,16 +1965,16 @@ function UserInputFormBuilder({
           </SortableContext>
         </DndContext>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-zinc-700 bg-zinc-950/60 p-3">
-          <Plus className="h-4 w-4 text-slate-400" />
-          <span className="text-sm text-slate-300">Добавить поле формы:</span>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 p-3 transition-colors hover:border-violet-500/40">
+          <Plus className="h-4 w-4 text-violet-300" />
+          <span className="text-sm font-medium text-slate-300">Добавить поле:</span>
           <select
             value=""
             onChange={(event) => {
               if (event.target.value) addField(event.target.value as UserInputField['type']);
               event.target.value = '';
             }}
-            className="h-10 min-w-[220px] flex-1 rounded-md border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 md:flex-none"
+            className="h-10 min-w-[220px] flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-600 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 md:flex-none"
           >
             <option value="">Выберите тип поля…</option>
             {(['text', 'textarea', 'photo', 'video', 'select', 'multiselect', 'checkbox', 'slides', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
@@ -1925,10 +1986,13 @@ function UserInputFormBuilder({
         </div>
       </div>
 
-      <div className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+      <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
         {servicePreview && (
-          <div className="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
-            <div className="border-b border-zinc-800 px-4 py-2.5 text-sm font-semibold text-white">Как увидит пользователь</div>
+          <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 shadow-sm">
+            <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/50 px-4 py-2.5 text-sm font-semibold text-white">
+              <ImageIcon className="h-3.5 w-3.5 text-violet-300" />
+              Как увидит пользователь
+            </div>
             <div className="p-4">
               <div className="overflow-hidden rounded-lg border border-zinc-800">
                 {servicePreview.imageUrl ? (
@@ -1947,8 +2011,8 @@ function UserInputFormBuilder({
             </div>
           </div>
         )}
-        <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-        <h3 className="font-semibold text-white">Предпросмотр формы</h3>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
+        <h3 className="flex items-center gap-2 font-semibold text-white"><ListChecks className="h-3.5 w-3.5 text-violet-300" />Предпросмотр формы</h3>
         <div className="mt-4 space-y-4">
           {fields.map((field) => (
             <div key={field.id} className="space-y-2">
@@ -1981,7 +2045,7 @@ function UserInputFormBuilder({
               {field.type === 'avatar' && <Input disabled placeholder="Выбор аватара" />}
               {field.type === 'tier' && (
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-md border border-rose-500 bg-rose-500/10 p-3">Стандарт</div>
+                  <div className="rounded-md border border-violet-500 bg-violet-500/10 p-3">Стандарт</div>
                   <div className="rounded-md border border-zinc-700 p-3">Pro</div>
                 </div>
               )}
@@ -2033,7 +2097,7 @@ export function PipelineTestPanel({ generationId, onClose }: { generationId: str
               </div>
               {step.errorMessage && <p className="mt-2 text-sm text-red-200">{step.errorMessage}</p>}
               {url && (
-                <Link href={url} target="_blank" className="mt-2 block text-sm text-rose-300 hover:text-rose-200">
+                <Link href={url} target="_blank" className="mt-2 block text-sm text-violet-300 hover:text-violet-200">
                   {url}
                 </Link>
               )}
@@ -2046,7 +2110,7 @@ export function PipelineTestPanel({ generationId, onClose }: { generationId: str
           <div className="mb-2 text-sm font-medium text-white">Финальный результат</div>
           {data?.resultImage ? <img src={data.resultImage} alt="" className="max-h-72 rounded-md object-contain" /> : null}
           {data?.resultVideo ? <video src={data.resultVideo} controls className="max-h-72 rounded-md" /> : null}
-          <Link href={finalUrl} target="_blank" className="mt-2 block text-sm text-rose-300 hover:text-rose-200">
+          <Link href={finalUrl} target="_blank" className="mt-2 block text-sm text-violet-300 hover:text-violet-200">
             Открыть результат
           </Link>
         </div>
@@ -2247,8 +2311,8 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   };
 
   return (
-    <form onSubmit={submit} className="space-y-8">
-      <Section title="Основное" description="Публичные тексты, категория и статус публикации.">
+    <form onSubmit={submit} className="space-y-5 pb-4">
+      <Section icon={Settings2} title="Основное" description="Публичные тексты, категория и статус публикации.">
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="slug">Слаг</Label>
@@ -2267,7 +2331,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
               id="category"
               value={draft.category}
               onChange={(event) => updateDraft({ category: event.target.value })}
-              className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+              className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
             >
               <option value="" disabled>{categoriesLoading ? 'Загрузка...' : 'Выберите категорию'}</option>
               {availableCategories.map((category) => (
@@ -2290,144 +2354,180 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           </div>
           <div className="space-y-2 lg:col-span-2">
             <Label htmlFor="description">Описание</Label>
-            <Textarea id="description" value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} rows={5} required />
+            <Textarea id="description" value={draft.description} onChange={(event) => updateDraft({ description: event.target.value })} rows={4} required />
           </div>
-          <label className="flex items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm">
-            <input type="checkbox" checked={draft.isActive} onChange={(event) => updateDraft({ isActive: event.target.checked })} />
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm font-medium text-slate-200 transition-colors hover:border-violet-500/40 hover:bg-zinc-900">
+            <input type="checkbox" checked={draft.isActive} onChange={(event) => updateDraft({ isActive: event.target.checked })} className="h-4 w-4 accent-violet-500" />
             Услуга активна
           </label>
-          <label className="flex items-center gap-3 rounded-md border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm">
-            <input type="checkbox" checked={draft.isFeatured} onChange={(event) => updateDraft({ isFeatured: event.target.checked })} />
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm font-medium text-slate-200 transition-colors hover:border-violet-500/40 hover:bg-zinc-900">
+            <input type="checkbox" checked={draft.isFeatured} onChange={(event) => updateDraft({ isFeatured: event.target.checked })} className="h-4 w-4 accent-violet-500" />
             Рекомендуемая
           </label>
         </div>
       </Section>
 
-      <details className={cn('rounded-lg border p-5', marginTone(proMargin.marginPercent ?? 0))}>
-        <summary className="cursor-pointer font-semibold text-white">Как работает эта услуга</summary>
-        <div className="mt-4 space-y-3 text-sm">
-          <p className="text-slate-200">{pipelineSentence(draft.pipelineConfig, blocks)}</p>
-          <div>
-            <div>Себестоимость {formatMoney({ usd: pricingSummary.pro.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
-            <div>Цена {formatMoney({ coins: draft.priceCoinsPro }, { primary: 'coins', showAll: true, usdToRub })}</div>
-            <div>Маржа {proMargin.marginPercent === null ? 'н/д' : `${proMargin.marginPercent.toFixed(1)}%`} · {formatMoney({ usd: proMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
+      <details className={cn('group/how animate-admin-in rounded-xl border p-0 [&_summary]:list-none', marginTone(proMargin.marginPercent ?? 0))}>
+        <summary className="flex cursor-pointer items-center gap-2 px-5 py-4 font-semibold text-white">
+          <Info className="h-4 w-4 opacity-70" />
+          Как работает эта услуга
+          <ChevronDown className="ml-auto h-4 w-4 opacity-60 transition-transform group-open/how:rotate-180" />
+        </summary>
+        <div className="space-y-4 px-5 pb-5 text-sm">
+          <p className="font-medium leading-relaxed text-slate-100">{pipelineSentence(draft.pipelineConfig, blocks)}</p>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Себестоимость</div>
+              <div className="mt-0.5 font-semibold">{formatMoney({ usd: pricingSummary.pro.costUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Цена</div>
+              <div className="mt-0.5 font-semibold">{formatMoney({ coins: draft.priceCoinsPro }, { primary: 'coins', showAll: true, usdToRub })}</div>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wide opacity-60">Маржа</div>
+              <div className="mt-0.5 font-semibold">{proMargin.marginPercent === null ? 'н/д' : `${proMargin.marginPercent.toFixed(1)}%`} · {formatMoney({ usd: proMargin.profitUsd }, { primary: 'usd', showAll: true, usdToRub })}</div>
+            </div>
           </div>
           {proMargin.profitCoins < 0 && (
-            <div className="rounded-md border border-red-700 bg-red-950/60 p-3 font-medium text-red-100">
-              Услуга убыточна на {formatMoney({ coins: Math.abs(proMargin.profitCoins) }, { primary: 'rub' })} за каждую генерацию. Поднимите цену.
+            <div className="flex items-start gap-2 rounded-lg border border-red-700/70 bg-red-950/60 p-3 font-medium text-red-100">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>Услуга убыточна на {formatMoney({ coins: Math.abs(proMargin.profitCoins) }, { primary: 'rub' })} за каждую генерацию. Поднимите цену.</span>
             </div>
           )}
         </div>
       </details>
 
-      <Section title="Превью" description="Картинка и/или видео. Можно хранить оба файла и выбрать, что показывать на витрине.">
-        <div className="mb-5 max-w-sm space-y-2">
-          <Label htmlFor="previewMode">Что показывать на превью</Label>
+      <Section icon={ImageIcon} title="Превью" description="Картинка и/или видео. Можно хранить оба файла и выбрать, что показывать на витрине.">
+        <div className="mb-4 max-w-xs space-y-1.5">
+          <Label htmlFor="previewMode" className="text-xs text-slate-400">Что показывать на витрине</Label>
           <select
             id="previewMode"
             value={draft.previewMode}
             onChange={(event) => updateDraft({ previewMode: event.target.value as FormDraft['previewMode'] })}
-            className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+            className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
           >
             <option value="auto">Авто: видео, если есть</option>
             <option value="image">Фото превью</option>
             <option value="video">Видео превью</option>
           </select>
         </div>
-        <div className="grid gap-5 lg:grid-cols-2">
-          <div className="space-y-2">
-              <Label htmlFor="previewImage">Превью-изображение</Label>
-            <Input id="previewImage" type="file" accept="image/*" onChange={changeImage} />
-            {fileName(previewImage) && <p className="text-xs text-slate-400">{fileName(previewImage)}</p>}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="space-y-2.5 rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="previewImage" className="flex items-center gap-1.5 text-sm"><ImageIcon className="h-3.5 w-3.5 text-violet-300" />Изображение</Label>
+              {(imagePreviewUrl || (service?.previewImage && !removeImage)) && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors hover:text-red-300"
+                  onClick={() => { setPreviewImage(null); setPreviewImageUrl(''); setRemoveImage(true); setDirty(true); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Удалить
+                </button>
+              )}
+            </div>
             {imagePreviewUrl ? (
-              <img src={imagePreviewUrl} alt="" className="h-40 w-full rounded-md object-cover" />
+              <img src={imagePreviewUrl} alt="" className="h-36 w-full rounded-lg border border-zinc-800 object-cover" />
             ) : (service?.previewImage && !removeImage) ? (
-              <img src={service.previewImage} alt="" className="h-40 w-full rounded-md object-cover" />
+              <img src={service.previewImage} alt="" className="h-36 w-full rounded-lg border border-zinc-800 object-cover" />
             ) : (
-              <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-zinc-700 text-slate-500">
-                <ImageIcon className="mr-2 h-4 w-4" />
+              <div className="flex h-36 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-zinc-700 text-xs text-slate-500">
+                <ImageIcon className="h-5 w-5" />
                 Нет изображения
               </div>
             )}
-            {(imagePreviewUrl || (service?.previewImage && !removeImage)) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => { setPreviewImage(null); setPreviewImageUrl(''); setRemoveImage(true); setDirty(true); }}
-              >
-                <Trash2 className="h-4 w-4" />
-                Удалить изображение
-              </Button>
-            )}
-            <PreviewAssetPicker
-              assets={imageAssets}
-              isLoading={mediaAssetsQuery.isLoading}
-              selectedUrl={previewImageUrl}
-              onSelect={(asset) => {
-                setPreviewImage(null);
-                setPreviewImageUrl(asset.publicUrl);
-                setRemoveImage(false);
-                setDirty(true);
-              }}
-            />
+            <Input id="previewImage" type="file" accept="image/*" onChange={changeImage} className="h-9 text-xs file:mr-3 file:text-xs" />
+            {fileName(previewImage) && <p className="truncate text-xs text-slate-400">{fileName(previewImage)}</p>}
+            <details className="group/lib [&_summary]:list-none">
+              <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-violet-300">
+                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open/lib:rotate-180" />
+                Выбрать из медиа-библиотеки
+              </summary>
+              <div className="mt-2">
+                <PreviewAssetPicker
+                  assets={imageAssets}
+                  isLoading={mediaAssetsQuery.isLoading}
+                  selectedUrl={previewImageUrl}
+                  onSelect={(asset) => {
+                    setPreviewImage(null);
+                    setPreviewImageUrl(asset.publicUrl);
+                    setRemoveImage(false);
+                    setDirty(true);
+                  }}
+                />
+              </div>
+            </details>
           </div>
-          <div className="space-y-2">
-              <Label htmlFor="previewVideo">Превью-видео</Label>
-            <Input id="previewVideo" type="file" accept="video/*" onChange={changeVideo} />
-            {fileName(previewVideo) && <p className="text-xs text-slate-400">{fileName(previewVideo)}</p>}
+          <div className="space-y-2.5 rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="previewVideo" className="flex items-center gap-1.5 text-sm"><Video className="h-3.5 w-3.5 text-violet-300" />Видео</Label>
+              {(videoPreviewUrl || (service?.previewVideo && !removeVideo)) && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors hover:text-red-300"
+                  onClick={() => { setPreviewVideo(null); setPreviewVideoUrl(''); setRemoveVideo(true); setDirty(true); }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Удалить
+                </button>
+              )}
+            </div>
             {videoPreviewUrl ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video src={videoPreviewUrl} controls className="h-40 w-full rounded-md bg-black object-contain" />
+              <video src={videoPreviewUrl} controls className="h-36 w-full rounded-lg border border-zinc-800 bg-black object-contain" />
             ) : (service?.previewVideo && !removeVideo) ? (
               // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video src={service.previewVideo} controls className="h-40 w-full rounded-md bg-black object-contain" />
+              <video src={service.previewVideo} controls className="h-36 w-full rounded-lg border border-zinc-800 bg-black object-contain" />
             ) : (
-              <div className="flex h-40 items-center justify-center rounded-md border border-dashed border-zinc-700 text-slate-500">
-                <Video className="mr-2 h-4 w-4" />
+              <div className="flex h-36 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-zinc-700 text-xs text-slate-500">
+                <Video className="h-5 w-5" />
                 Нет видео
               </div>
             )}
-            {(videoPreviewUrl || (service?.previewVideo && !removeVideo)) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => { setPreviewVideo(null); setPreviewVideoUrl(''); setRemoveVideo(true); setDirty(true); }}
-              >
-                <Trash2 className="h-4 w-4" />
-                Удалить видео
-              </Button>
-            )}
-            <PreviewAssetPicker
-              assets={videoAssets}
-              isLoading={mediaAssetsQuery.isLoading}
-              selectedUrl={previewVideoUrl}
-              onSelect={(asset) => {
-                setPreviewVideo(null);
-                setPreviewVideoUrl(asset.publicUrl);
-                setRemoveVideo(false);
-                setDirty(true);
-              }}
-            />
+            <Input id="previewVideo" type="file" accept="video/*" onChange={changeVideo} className="h-9 text-xs file:mr-3 file:text-xs" />
+            {fileName(previewVideo) && <p className="truncate text-xs text-slate-400">{fileName(previewVideo)}</p>}
+            <details className="group/lib [&_summary]:list-none">
+              <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-violet-300">
+                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open/lib:rotate-180" />
+                Выбрать из медиа-библиотеки
+              </summary>
+              <div className="mt-2">
+                <PreviewAssetPicker
+                  assets={videoAssets}
+                  isLoading={mediaAssetsQuery.isLoading}
+                  selectedUrl={previewVideoUrl}
+                  onSelect={(asset) => {
+                    setPreviewVideo(null);
+                    setPreviewVideoUrl(asset.publicUrl);
+                    setRemoveVideo(false);
+                    setDirty(true);
+                  }}
+                />
+              </div>
+            </details>
           </div>
         </div>
       </Section>
 
-      <Section title="Цена" description="Себестоимость считается по блокам и выбранным моделям. Для карусели основная цена считается за один слайд; для чекбоксов с ценами итог берётся из выбранных вариантов.">
+      <Section icon={Coins} title="Цена" description="Себестоимость считается по блокам и выбранным моделям. Для карусели основная цена считается за один слайд; для чекбоксов с ценами итог берётся из выбранных вариантов.">
         <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
           <div className="space-y-2">
             <Label htmlFor="pricePro">{hasSlidesPricing ? 'Цена за 1 слайд, токены' : hasPricedMultiselect || hasDurationPricing ? 'Резервная цена услуги, токены' : 'Цена услуги, токены'}</Label>
-            <Input
-              id="pricePro"
-              type="number"
-              min={1}
-              value={draft.priceCoinsPro}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                updateDraft({ priceCoinsPro: next, priceCoinsStandard: next });
-              }}
-            />
+            <div className="relative max-w-[220px]">
+              <Input
+                id="pricePro"
+                type="number"
+                min={1}
+                value={draft.priceCoinsPro}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  updateDraft({ priceCoinsPro: next, priceCoinsStandard: next });
+                }}
+                className="pr-16"
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500">коинов</span>
+            </div>
             {hasPricedMultiselect && (
               <p className="text-xs text-slate-500">Для этой услуги итоговая цена берётся из цен выбранных чекбоксов в форме пользователя.</p>
             )}
@@ -2435,15 +2535,18 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
               <p className="text-xs text-slate-500">Для этой услуги итоговая цена берётся из выбранной длительности, если для неё задана цена.</p>
             )}
           </div>
-          <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
-            <div className="text-sm text-slate-400">Себестоимость</div>
-            <div className="mt-2 text-lg font-semibold text-white">~{costPro} коинов</div>
-            <p className="mt-2 text-xs text-slate-500">Рекомендуем минимум 3-4× себестоимости.</p>
+          <div className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-transparent p-4">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-300/80">
+              <Coins className="h-3.5 w-3.5" />
+              Себестоимость
+            </div>
+            <div className="mt-2 text-2xl font-bold tracking-tight text-white">~{costPro} <span className="text-base font-medium text-slate-400">коинов</span></div>
+            <p className="mt-2 text-xs leading-relaxed text-slate-500">Рекомендуем закладывать минимум 3–4× себестоимости.</p>
           </div>
         </div>
       </Section>
 
-      <Section title="Пайплайн" description="Шаги выполняются сверху вниз. Плейсхолдеры: {{user.photo}}, {{step_1.output}}.">
+      <Section icon={Workflow} title="Пайплайн" description="Шаги выполняются сверху вниз. Плейсхолдеры: {{user.photo}}, {{step_1.output}}.">
         <PipelineBuilder
           steps={draft.pipelineConfig}
           fields={draft.userInputForm}
@@ -2456,7 +2559,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         />
       </Section>
 
-      <Section title="Форма для юзера" description="Поля, которые увидит пользователь на странице услуги. Слева — конструктор, справа — живой предпросмотр формы и карточки услуги.">
+      <Section icon={ListChecks} title="Форма для юзера" description="Поля, которые увидит пользователь на странице услуги. Слева — конструктор, справа — живой предпросмотр формы и карточки услуги.">
         <UserInputFormBuilder
           fields={draft.userInputForm}
           onChange={(userInputForm) => updateDraft({ userInputForm })}
@@ -2469,9 +2572,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         />
       </Section>
 
-      <Section title="Тестовый прогон" description="Запускает сохранённый pipeline на моковых данных и показывает прогресс.">
+      <Section icon={FlaskConical} title="Тестовый прогон" description="Запускает сохранённый pipeline на моковых данных и показывает прогресс.">
         <div className="space-y-4">
-          <Button type="button" onClick={runTest} disabled={isCreate || errors.length > 0 || testRunState.isLoading} className="bg-rose-500 hover:bg-rose-400">
+          <Button type="button" onClick={runTest} disabled={isCreate || errors.length > 0 || testRunState.isLoading} className="bg-violet-600 transition-colors hover:bg-violet-500">
             <Play className="h-4 w-4" />
             Запустить тест
           </Button>
@@ -2480,18 +2583,35 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
       </Section>
 
-      <div className="sticky bottom-0 z-20 -mx-4 border-t border-zinc-800 bg-zinc-950/95 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky bottom-0 z-20 -mx-4 border-t border-zinc-800 bg-zinc-950/85 px-4 py-3.5 shadow-[0_-8px_24px_-12px_rgba(0,0,0,0.8)] backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-slate-500">{dirty ? 'Есть несохранённые изменения' : 'Изменений нет'}</div>
-          <div className="flex flex-wrap gap-3">
-            <Button type="button" variant="outline" onClick={cancel}>
+          <div className="flex items-center gap-2 text-sm">
+            {errors.length > 0 ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-amber-300">
+                <AlertTriangle className="h-4 w-4" />
+                {errors.length} {errors.length === 1 ? 'ошибка' : 'ошибок'} в настройке
+              </span>
+            ) : dirty ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-violet-300">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-violet-400" />
+                Есть несохранённые изменения
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-slate-500">
+                <CheckCircle2 className="h-4 w-4" />
+                Всё сохранено
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2.5">
+            <Button type="button" variant="outline" onClick={cancel} className="transition-colors">
               Отмена
             </Button>
-            <Button type="button" variant="outline" onClick={() => save(true)} disabled={isBusy || !dirty}>
+            <Button type="button" variant="outline" onClick={() => save(true)} disabled={isBusy || !dirty} className="transition-colors">
               <Save className="h-4 w-4" />
               Сохранить и оставаться
             </Button>
-            <Button type="submit" disabled={isBusy || !dirty} className="bg-rose-500 hover:bg-rose-400">
+            <Button type="submit" disabled={isBusy || !dirty} className="bg-violet-600 transition-colors hover:bg-violet-500">
               <Save className="h-4 w-4" />
               Сохранить и закрыть
             </Button>

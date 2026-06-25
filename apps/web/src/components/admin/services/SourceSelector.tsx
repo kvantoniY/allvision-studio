@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
-import { FilePlus2, ImageIcon, Link2, Music2, Upload, UserRound, Video } from 'lucide-react';
+import { ChevronDown, FilePlus2, ImageIcon, Link2, Music2, Upload, UserRound, Video, X } from 'lucide-react';
 import {
   buildAssetSourceValue,
   buildStepSourceValue,
@@ -150,20 +150,24 @@ export function SourceSelector({
         type="button"
         onClick={() => setOpen((state) => !state)}
         className={cn(
-          'flex min-h-12 w-full items-center justify-between gap-3 rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-sm text-slate-100 hover:border-rose-500',
+          'group flex min-h-12 w-full items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-left text-sm text-slate-100 transition-colors hover:border-violet-500/70 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500',
           isPlainValue && 'border-amber-800 bg-amber-950/20',
+          open && 'border-violet-500 ring-1 ring-violet-500',
         )}
       >
         <span className="flex min-w-0 items-center gap-2">
           <SourceKindIcon mediaKind={mediaKind} />
           <span className="truncate">{currentLabel}</span>
         </span>
-        <span className="text-xs text-slate-500">{sourceKindLabel(mediaKind)}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="text-xs text-slate-500">{sourceKindLabel(mediaKind)}</span>
+          <ChevronDown className={cn('h-4 w-4 text-slate-500 transition-transform', open && 'rotate-180')} />
+        </span>
       </button>
       {description && <p className="text-xs text-slate-500">{description}</p>}
 
       {open && (
-        <div className="absolute z-40 mt-2 max-h-[520px] w-full overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950 p-3 shadow-2xl shadow-black/40">
+        <div className="absolute z-40 mt-2 max-h-[520px] w-full animate-admin-in overflow-y-auto rounded-xl border border-zinc-700/80 bg-zinc-950 p-3 shadow-2xl shadow-black/50 ring-1 ring-black/30">
           <SourceSection title="Источник от юзера">
             {userOptions.length === 0 && <EmptySourceText>Нет совместимых полей формы</EmptySourceText>}
             {userOptions.map((field) => (
@@ -220,14 +224,16 @@ export function SourceSelector({
       )}
 
       {uploadOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg animate-admin-in rounded-xl border border-zinc-700/80 bg-zinc-950 p-5 shadow-2xl ring-1 ring-black/40">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h3 className="text-lg font-semibold text-white">Загрузить файл в библиотеку</h3>
                 <p className="mt-1 text-sm text-slate-500">После загрузки файл сразу станет выбранным источником.</p>
               </div>
-              <Button type="button" variant="ghost" size="icon" onClick={() => setUploadOpen(false)}>x</Button>
+              <Button type="button" variant="ghost" size="icon" onClick={() => setUploadOpen(false)} aria-label="Закрыть">
+                <X className="h-4 w-4" />
+              </Button>
             </div>
             <div className="mt-5 space-y-4">
               <div className="space-y-2">
@@ -239,7 +245,7 @@ export function SourceSelector({
                 <select
                   value={uploadDraft.kind}
                   onChange={(event) => setUploadDraft((current) => ({ ...current, kind: event.target.value }))}
-                  className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+                  className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
                 >
                   {mediaKinds[mediaKind].uploadKinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}
                 </select>
@@ -260,7 +266,7 @@ export function SourceSelector({
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setUploadOpen(false)}>Отмена</Button>
-              <Button type="button" disabled={createState.isLoading} onClick={upload} className="bg-rose-500 hover:bg-rose-400">
+              <Button type="button" disabled={createState.isLoading} onClick={upload} className="bg-violet-600 hover:bg-violet-500">
                 <Upload className="h-4 w-4" />
                 Загрузить
               </Button>
@@ -287,8 +293,8 @@ function SourceButton({ active, onClick, children }: { active: boolean; onClick:
       type="button"
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-3 rounded-md border border-transparent px-3 py-2 text-left text-sm hover:border-rose-500 hover:bg-zinc-900',
-        active && 'border-rose-500 bg-rose-500/10',
+        'flex w-full items-center gap-3 rounded-md border border-transparent px-3 py-2 text-left text-sm hover:border-violet-500 hover:bg-zinc-900',
+        active && 'border-violet-500 bg-violet-500/10',
       )}
     >
       {children}

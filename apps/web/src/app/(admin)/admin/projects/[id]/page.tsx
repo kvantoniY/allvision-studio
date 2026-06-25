@@ -264,9 +264,9 @@ function ProjectUsageLogCard({
       )}
 
       {hasError && (
-        <div className="mt-3 rounded-md border border-rose-900/60 bg-rose-950/20 p-3">
-          <div className="text-sm font-medium text-rose-200">{log.errorCode ?? 'Ошибка провайдера'}</div>
-          {log.errorMessage && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-rose-100/80">{log.errorMessage}</pre>}
+        <div className="mt-3 rounded-md border border-violet-900/60 bg-violet-950/20 p-3">
+          <div className="text-sm font-medium text-violet-200">{log.errorCode ?? 'Ошибка провайдера'}</div>
+          {log.errorMessage && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-violet-100/80">{log.errorMessage}</pre>}
         </div>
       )}
 

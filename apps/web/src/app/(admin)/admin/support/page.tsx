@@ -50,7 +50,7 @@ export default function AdminSupportPage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm text-rose-300">
+          <div className="flex items-center gap-2 text-sm text-violet-300">
             <LifeBuoy className="h-4 w-4" />
             Поддержка
           </div>
@@ -110,7 +110,7 @@ export default function AdminSupportPage() {
               <tr key={ticket.id} className="hover:bg-zinc-900">
                 <td className="whitespace-nowrap px-4 py-3 text-slate-300">{new Date(ticket.updatedAt).toLocaleString('ru-RU')}</td>
                 <td className="px-4 py-3">
-                  <Link href={`/admin/support/${ticket.id}`} className="font-medium text-white hover:text-rose-200">
+                  <Link href={`/admin/support/${ticket.id}`} className="font-medium text-white hover:text-violet-200">
                     {ticket.subject}
                   </Link>
                   <div className="mt-1 text-xs text-slate-500">#{ticket.id.slice(0, 8)}</div>

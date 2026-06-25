@@ -316,7 +316,7 @@ export default function AdminUsagePage() {
             {(usage.data?.byDay ?? []).map((day) => (
               <div key={day.date} className="flex flex-1 flex-col items-center gap-2">
                 <div
-                  className="w-full rounded-t bg-rose-500"
+                  className="w-full rounded-t bg-violet-500"
                   style={{ height: `${Math.max(4, (day.totalCostUsd / maxSpend) * 160)}px` }}
                   title={`${day.date}: ${formatMoney({ usd: day.totalCostUsd }, { primary: 'usd', showAll: true, usdToRub })}`}
                 />
@@ -479,9 +479,9 @@ function GenerationLogCard({
       )}
 
       {hasError && (
-        <div className="mt-4 rounded-md border border-rose-900/60 bg-rose-950/20 p-3 text-sm">
-          <div className="font-medium text-rose-200">{log.errorCode ?? 'Ошибка провайдера'}</div>
-          {log.errorMessage && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-rose-100/80">{log.errorMessage}</pre>}
+        <div className="mt-4 rounded-md border border-violet-900/60 bg-violet-950/20 p-3 text-sm">
+          <div className="font-medium text-violet-200">{log.errorCode ?? 'Ошибка провайдера'}</div>
+          {log.errorMessage && <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-violet-100/80">{log.errorMessage}</pre>}
         </div>
       )}
 
@@ -535,7 +535,7 @@ const BIZ_ACCENT: Record<string, string> = {
   violet: 'border-violet-500/30 bg-violet-500/5',
   amber: 'border-amber-500/30 bg-amber-500/5',
   emerald: 'border-emerald-500/30 bg-emerald-500/5',
-  rose: 'border-rose-500/30 bg-rose-500/5',
+  rose: 'border-violet-500/30 bg-violet-500/5',
   slate: 'border-zinc-800 bg-zinc-950',
 };
 

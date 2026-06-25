@@ -112,7 +112,7 @@ export default function AdminPaymentDetailPage() {
               <code className="font-mono text-xs">{detail.providerPaymentId ?? '—'}</code>
             </Row>
             <Row label="Пользователь">
-              <Link href={`/admin/users/${detail.user.id}`} className="text-rose-200 hover:underline">
+              <Link href={`/admin/users/${detail.user.id}`} className="text-violet-200 hover:underline">
                 {detail.user.email}
               </Link>{' '}
               · баланс {detail.user.tokenBalance}

@@ -55,3 +55,27 @@
   h1 { @apply tracking-tight; }
   h2 { @apply font-bold tracking-tight; }
 }
+
+/* Admin panel uses a calm violet accent (scoped so the public site keeps its own theme). */
+@layer base {
+  .admin-theme {
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 262 83% 64%;
+  }
+  .admin-theme ::selection {
+    background-color: hsl(262 83% 58% / 0.35);
+  }
+}
+
+/* Reusable soft entrance for admin cards/sections. */
+@keyframes admin-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-admin-in {
+  animation: admin-fade-in 0.25s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-admin-in { animation: none; }
+}

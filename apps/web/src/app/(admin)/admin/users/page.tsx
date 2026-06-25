@@ -82,7 +82,7 @@ export default function AdminUsersPage() {
             {users.isLoading && <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">Загрузка...</td></tr>}
             {(users.data?.items ?? []).map((user) => (
               <tr key={user.id}>
-                <td className="px-4 py-3 font-medium text-white"><Link href={`/admin/users/${user.id}`} className="hover:text-rose-200">{user.email}</Link></td>
+                <td className="px-4 py-3 font-medium text-white"><Link href={`/admin/users/${user.id}`} className="hover:text-violet-200">{user.email}</Link></td>
                 <td className="px-4 py-3">{new Date(user.createdAt).toLocaleString()}</td>
                 <td className="px-4 py-3">{roleLabel(user.role)}</td>
                 <td className="px-4 py-3">{formatMoney({ coins: user.tokenBalance }, { primary: 'coins', showAll: true, usdToRub: rate })}</td>

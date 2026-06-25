@@ -218,13 +218,13 @@ export default function AdminServicesPage() {
   };
 
   return (
-    <>
+    <div className="animate-admin-in">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Услуги (готовые решения)</h1>
-          <p className="mt-2 text-sm text-slate-400">Настраиваемые пайплайны для витрины AI-услуг.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Услуги</h1>
+          <p className="mt-1.5 text-sm text-slate-400">Готовые решения — настраиваемые пайплайны для витрины AI-подарков.</p>
         </div>
-        <Button asChild className="bg-rose-500 hover:bg-rose-400">
+        <Button asChild className="bg-violet-600 shadow-sm shadow-violet-900/40 transition-colors hover:bg-violet-500">
           <Link href="/admin/services/new">
             <Plus className="h-4 w-4" />
             Создать услугу
@@ -236,7 +236,7 @@ export default function AdminServicesPage() {
         <select
           value={category}
           onChange={(event) => setCategory(event.target.value as ServiceCategory | 'all')}
-          className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+          className="h-10 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
         >
           <option value="all">Все категории</option>
           {availableCategories.map((item) => (
@@ -248,7 +248,7 @@ export default function AdminServicesPage() {
         <select
           value={status}
           onChange={(event) => setStatus(event.target.value as StatusFilter)}
-          className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+          className="h-10 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
         >
           <option value="all">Все статусы</option>
           <option value="active">Активные</option>
@@ -257,7 +257,7 @@ export default function AdminServicesPage() {
         <select
           value={featured}
           onChange={(event) => setFeatured(event.target.value as FeaturedFilter)}
-          className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+          className="h-10 rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
         >
           <option value="all">Все</option>
           <option value="featured">Рекомендуемые</option>
@@ -274,9 +274,9 @@ export default function AdminServicesPage() {
         </div>
       )}
 
-      <div className="mt-6 overflow-x-auto rounded-lg border border-zinc-800">
+      <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-800/80 shadow-sm">
         <table className="min-w-[920px] divide-y divide-zinc-800 text-sm">
-          <thead className="bg-zinc-900 text-left text-xs uppercase tracking-wide text-slate-400">
+          <thead className="bg-zinc-900/80 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 backdrop-blur">
             <tr>
               <th className="w-[64px] px-3 py-2.5">Превью</th>
               <th className="px-3 py-2.5">Название</th>
@@ -300,7 +300,7 @@ export default function AdminServicesPage() {
               <tr>
                 <td colSpan={8} className="px-4 py-14 text-center">
                   <div className="font-medium text-white">Создайте первую услугу — она появится в каталоге</div>
-                  <Button asChild className="mt-4 bg-rose-500 hover:bg-rose-400">
+                  <Button asChild className="mt-4 bg-violet-600 hover:bg-violet-500">
                     <Link href="/admin/services/new">Создать услугу</Link>
                   </Button>
                 </td>
@@ -383,6 +383,6 @@ export default function AdminServicesPage() {
         busy={deleteState.isLoading}
         onConfirm={confirmDelete}
       />
-    </>
+    </div>
   );
 }
