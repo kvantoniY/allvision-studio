@@ -30,7 +30,7 @@ let piapiSingleton: PiAPIProvider | undefined;
 let publisherSingleton: FilePublisher | undefined;
 
 const MOCK_ONLY_BLOCKS = new Set(['image-restore', 'image-upscale']);
-const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit', 'text-to-video', 'motion-transfer', 'trend-video-transfer', 'scene-transfer', 'carousel-slides', 'product-card', 'photo-2017', 'video-effect', 'video-watermark-remove', 'video-upscale']);
+const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit', 'text-to-video', 'motion-transfer', 'trend-video-transfer', 'scene-transfer', 'carousel-slides', 'product-card', 'photo-2017', 'talking-avatar', 'video-effect', 'video-watermark-remove', 'video-upscale']);
 
 /**
  * Worker использует тот же LocalFileStorage что и API — но мы не импортируем класс

@@ -12,6 +12,7 @@ import { sceneTransferBlock } from './scene-transfer';
 import { carouselSlidesBlock } from './carousel-slides';
 import { productCardBlock } from './product-card';
 import { photo2017Block } from './photo-2017';
+import { talkingAvatarBlock } from './talking-avatar';
 import { videoEffectBlock } from './video-effect';
 import { videoWatermarkRemoveBlock } from './video-watermark-remove';
 import { videoUpscaleBlock } from './video-upscale';
@@ -30,6 +31,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'carousel-slides': carouselSlidesBlock,
   'product-card': productCardBlock,
   'photo-2017': photo2017Block,
+  'talking-avatar': talkingAvatarBlock,
   'video-effect': videoEffectBlock,
   'video-watermark-remove': videoWatermarkRemoveBlock,
   'video-upscale': videoUpscaleBlock,

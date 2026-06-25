@@ -2956,6 +2956,93 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
       },
     ],
   },
+  {
+    slug: 'talking-character',
+    title: 'Говорящий персонаж',
+    shortDesc: 'Фото персонажа + аудио-озвучка → видео, где он это говорит (lip-sync)',
+    description:
+      'Загрузите фото персонажа и аудио-файл с озвучкой — нейросеть оживит персонажа, и он проговорит ваше аудио с синхронизацией губ. По желанию опишите поведение и жесты. OmniHuman 1.5 (реалистичные жесты и мимика) или Kling lip-sync (чёткая артикуляция, 1080p). Аудио до 35 секунд.',
+    category: ServiceCategory.TRENDS_MEMES,
+    // Себестоимость OmniHuman ~$1.3 (по аудио), Kling ~$1.0. Цена с маржой.
+    priceTokens: 199,
+    priceCoinsStandard: 199,
+    priceCoinsPro: 199,
+    costUsd: 1.3,
+    coverImage: image('gift-talking-character'),
+    galleryImages: [image('gift-talking-character-1'), image('gift-talking-character-2')],
+    previewImage: image('gift-talking-character-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'piapi',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    isActive: true,
+    isFeatured: false,
+    sortOrder: 9,
+    userInputForm: [
+      {
+        id: 'character',
+        type: 'photo',
+        label: 'Фото персонажа',
+        required: true,
+        hint: 'Чёткое фото лица/портрет персонажа, который будет говорить',
+        maxSizeMb: 10,
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+      {
+        id: 'audio',
+        type: 'audio',
+        label: 'Аудио-озвучка',
+        required: true,
+        hint: 'Голос, который проговорит персонаж (MP3 или WAV, до 35 секунд)',
+        maxSizeMb: 25,
+        allowedFormats: ['mp3', 'wav', 'ogg', 'm4a'],
+      },
+      {
+        id: 'prompt',
+        type: 'textarea',
+        label: 'Поведение персонажа (необязательно)',
+        required: false,
+        maxLength: 600,
+        placeholder: 'Например: спокойно смотрит в камеру, лёгкая улыбка, естественные жесты',
+        hint: 'Опишите настроение, действия и жесты. Работает с OmniHuman.',
+      },
+      {
+        id: 'model',
+        type: 'select',
+        label: 'Модель',
+        required: false,
+        options: [
+          { value: 'omnihuman-1.5', label: 'OmniHuman 1.5 (жесты, реализм)' },
+          { value: 'kling-ai-avatar', label: 'Kling lip-sync (1080p, чёткие губы)' },
+        ],
+      },
+      {
+        id: 'aspect',
+        type: 'aspect_ratio',
+        label: 'Формат кадра',
+        required: false,
+        aspectOptions: ['9:16', '1:1', '16:9'],
+        defaultAspect: '9:16',
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'talking-avatar',
+        input: '{{user.character}}',
+        params: {
+          model: '{{user.model}}',
+          audio_url: '{{user.audio}}',
+          prompt: '{{user.prompt}}',
+          aspect_ratio: '{{user.aspect}}',
+          fast_mode: true,
+        },
+      },
+    ],
+  },
 ];
 
 const legacyTrendServiceSlugs = [
@@ -3464,7 +3551,7 @@ async function ensureUser(options: EnsureUserOptions) {
 // loader must never re-create anything outside this list, and never updates/deletes existing rows.
 // When adding a future batch of services, add their slugs here for that deploy, then clear the list.
 const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
-  'photo-enhance',
+  'talking-character',
 ]);
 
 // Additive loader for explicitly new data-driven services. It creates allowlisted services only when

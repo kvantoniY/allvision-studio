@@ -80,6 +80,17 @@ export interface AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
 
+  // Talking-avatar / lip-sync: a character image + an audio file -> video where the character
+  // speaks that audio (mouth-sync). Models: OmniHuman 1.5, Kling lip-sync.
+  talkingAvatar(input: {
+    imageUrl: string;
+    audioUrl: string;
+    prompt?: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
+
   removeWatermark(input: {
     videoUrl: string;
     durationSec?: number;

@@ -66,6 +66,9 @@ const FACE_SWAP_COST_PER_FRAME_USD = 0.004;
 const DEFAULT_FACE_SWAP_DURATION_SEC = 5;
 const DEFAULT_FACE_SWAP_FPS = 24;
 const WATERMARK_COST_PER_SEC_USD = 0.008;
+// Talking-avatar (OmniHuman 1.5 ~$0.13/sec of audio; Kling lip-sync similar). Estimate by audio seconds.
+const TALKING_AVATAR_COST_PER_SEC_USD = 0.13;
+const TALKING_AVATAR_DEFAULT_SECONDS = 10;
 const VIDEO_UPSCALE_MODEL = 'video-upscale-2x';
 const VIDEO_UPSCALE_COST_PER_FRAME_USD = 0.0003;
 const VIDEO_UPSCALE_MAX_FRAMES = 240;
@@ -652,6 +655,69 @@ export class PiAPIProvider implements AIProvider {
           estimatedFrames: frames,
           aspectRatio: aspectRatio ?? 'auto',
         },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startedAt;
+      await this.logProviderFailure(input.context, input.model, taskId, durationMs, err, completedTask, estimatedCost, requestPayload, createTaskResponse);
+      throw err;
+    }
+  }
+
+  async talkingAvatar(input: {
+    imageUrl: string;
+    audioUrl: string;
+    prompt?: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    const estimatedSeconds = readNumber(input.params, 'estimatedSeconds') ?? TALKING_AVATAR_DEFAULT_SECONDS;
+    const estimatedCost = estimatedSeconds * TALKING_AVATAR_COST_PER_SEC_USD;
+    await this.ensureCanCall(estimatedCost);
+
+    const startedAt = Date.now();
+    let taskId: string | undefined;
+    let completedTask: PiAPITaskStatus | undefined;
+    let requestPayload: unknown;
+    let createTaskResponse: unknown;
+    try {
+      const publishedImage = await this.publisher.publishImageUrl(input.imageUrl, 1);
+      const publishedAudio = await this.publisher.publishFileUrl(
+        input.audioUrl,
+        1,
+        contentTypeForUrl(input.audioUrl, 'audio/mpeg'),
+      );
+      const payload = buildTalkingAvatarPayload(input.model, {
+        imageUrl: publishedImage.publicUrl,
+        audioUrl: publishedAudio.publicUrl,
+        prompt: input.prompt,
+        params: input.params,
+      });
+      requestPayload = payload;
+      const created = await this.createTask(payload, input.context);
+      taskId = created.taskId;
+      createTaskResponse = created.raw;
+      const completed = await this.client.pollUntilDone(taskId, {
+        timeoutMs: PIAPI_VIDEO_TIMEOUT_MS,
+        expectedDurationMs: 12 * 60 * 1000,
+        onProgress: input.context.reportProgress,
+      });
+      completedTask = completed;
+      if (!completed.outputUrl) {
+        throw new ProviderError('PIAPI_EMPTY_OUTPUT', 'PiAPI talking-avatar task completed without video URL');
+      }
+      const local = await this.persistProviderOutput(completed.outputUrl, input.context, 'mp4');
+      const costUsd = costUsdFromActualOrEstimate(completed, estimatedCost);
+      const durationMs = Date.now() - startedAt;
+      await this.logUsage(input.context, input.model, taskId, 'success', costUsd, durationMs, {
+        requestPayload,
+        responsePayload: providerTaskResponsePayload(createTaskResponse, completed, { localOutputUrl: local.url }),
+      });
+      return {
+        outputUrl: local.url,
+        costUsd,
+        durationMs,
+        meta: { piapiTaskId: taskId, piapiUrl: completed.outputUrl, model: input.model, provider: 'piapi' },
       };
     } catch (err) {
       const durationMs = Date.now() - startedAt;
@@ -1833,6 +1899,44 @@ function seedanceTaskType(model: string) {
   if (model.includes('fast-less-restriction')) return 'seedance-2-fast-less-restriction';
   if (model.includes('less-restriction')) return 'seedance-2-less-restriction';
   return model.includes('fast') ? 'seedance-2-fast' : 'seedance-2';
+}
+
+// Talking-avatar / lip-sync payloads. OmniHuman 1.5: image_url + audio_url + prompt (audio <35s).
+// Kling lip-sync: image_url + local_dubbing_url (mp3/wav/flac/ogg <60s) + mode/duration/aspect.
+function buildTalkingAvatarPayload(
+  model: string,
+  input: { imageUrl: string; audioUrl: string; prompt?: string; params?: Record<string, unknown> },
+) {
+  if (model === 'omnihuman-1.5') {
+    const fastMode = readBoolean(input.params, 'fast_mode');
+    return {
+      model: 'omni-human',
+      task_type: 'omni-human-1.5',
+      input: {
+        image_url: input.imageUrl,
+        audio_url: input.audioUrl,
+        ...(input.prompt && input.prompt.trim() ? { prompt: input.prompt.trim() } : {}),
+        fast_mode: fastMode ?? true,
+      },
+    };
+  }
+  if (model === 'kling-ai-avatar') {
+    const mode = readString(input.params, 'mode') === 'std' ? 'std' : 'pro';
+    const duration = readNumber(input.params, 'duration') === 10 ? 10 : 5;
+    const aspect = normalizeAspectRatio(readString(input.params, 'aspect_ratio')) ?? '9:16';
+    return {
+      model: 'kling',
+      task_type: 'lip_sync',
+      input: {
+        image_url: input.imageUrl,
+        local_dubbing_url: input.audioUrl,
+        mode,
+        duration,
+        aspect_ratio: aspect,
+      },
+    };
+  }
+  throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported talking-avatar model: ${model}`);
 }
 
 function buildImageToVideoPayload(

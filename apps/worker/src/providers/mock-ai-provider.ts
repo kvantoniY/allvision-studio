@@ -294,6 +294,17 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     return this.createImmediateResult('trend', params.context);
   }
 
+  async talkingAvatar(params: {
+    imageUrl: string;
+    audioUrl: string;
+    prompt?: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return this.createImmediateResult('trend', params.context);
+  }
+
   async removeWatermark(params: {
     videoUrl: string;
     durationSec?: number;

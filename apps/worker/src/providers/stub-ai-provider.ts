@@ -89,6 +89,17 @@ export class StubAIProvider implements AIProvider {
     return result('stub://video-effect.mp4', { type: 'video' });
   }
 
+  async talkingAvatar(_input: {
+    imageUrl: string;
+    audioUrl: string;
+    prompt?: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://talking-avatar.mp4', { type: 'video' });
+  }
+
   async removeWatermark(_input: {
     videoUrl: string;
     durationSec?: number;
