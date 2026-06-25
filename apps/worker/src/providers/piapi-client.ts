@@ -174,7 +174,9 @@ export class PiAPIClient {
       if (status.status === 'pending' || status.status === 'processing') {
         await opts.onProgress?.(progress);
         await delay(intervalMs);
-        intervalMs = Math.min(30_000, Math.round(intervalMs * 1.5));
+        // Cap the status-poll interval low (8s) so we notice PiAPI completion quickly and the
+        // result appears in the UI within ~8s instead of waiting up to 30s.
+        intervalMs = Math.min(8_000, Math.round(intervalMs * 1.5));
         continue;
       }
 

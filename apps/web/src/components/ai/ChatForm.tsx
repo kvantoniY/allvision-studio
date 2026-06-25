@@ -528,6 +528,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             <div className="flex shrink-0 items-center gap-1.5">
               {attachControl}
               {audioAttachControl}
+              {settingsControl}
             </div>
             <div className="flex items-center gap-2.5">{actionControl}</div>
           </div>
@@ -549,6 +550,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             <div className="hidden shrink-0 items-center gap-1.5 md:flex">
               {attachControl}
               {audioAttachControl}
+              {settingsControl}
             </div>
             <CategoryControl category={category} onChange={setCategory} />
             <ModelFamilyControl

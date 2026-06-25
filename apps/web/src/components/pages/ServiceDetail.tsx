@@ -37,7 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { ResultMedia } from '@/components/ui/result-media';
 import { PhotoFramingTip } from '@/components/services/PhotoFramingTip';
-import { useLivelyProgress } from '@/lib/use-lively-progress';
+import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -1830,7 +1830,9 @@ function GenerationResultLightbox({
 }
 
 function GenerationProgress({ project, compact = false }: { project: ProjectListItem; compact?: boolean }) {
-  const progress = useLivelyProgress(project.progress ?? 0, isActiveProjectStatus(project.status), project.id);
+  const active = isActiveProjectStatus(project.status);
+  const progress = useLivelyProgress(project.progress ?? 0, active, project.id);
+  const stuck = useStuckHint(progress, active);
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
       <div className="flex items-start justify-between gap-3 text-sm">
@@ -1841,11 +1843,15 @@ function GenerationProgress({ project, compact = false }: { project: ProjectList
         <span className="shrink-0 text-slate-400">{progress}%</span>
       </div>
       <Progress value={progress} />
-      {!compact && (
+      {stuck ? (
+        <p className={cn('leading-6 text-amber-300/90', compact ? 'text-xs' : 'text-sm')}>
+          Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно не закрывать.
+        </p>
+      ) : !compact ? (
         <p className="text-sm leading-6 text-slate-400">
           Можно закрыть страницу: генерация продолжится, а результат появится здесь автоматически.
         </p>
-      )}
+      ) : null}
     </div>
   );
 }

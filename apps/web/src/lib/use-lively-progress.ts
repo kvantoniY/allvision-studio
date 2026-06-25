@@ -87,3 +87,28 @@ export function useLivelyProgress(real: number, active: boolean, id?: string): n
   if (!active) return Math.round(safeReal);
   return Math.round(Math.max(display, safeReal));
 }
+
+// True once progress has been sitting near the end (>=95%) for a while — used to show a friendly
+// "servers are busy, please wait a bit longer" note when a generation hangs at 99%.
+export function useStuckHint(progress: number, active: boolean, thresholdMs = 25_000): boolean {
+  const [stuck, setStuck] = useState(false);
+  const sinceRef = useRef<number | null>(null);
+  const high = active && Number.isFinite(progress) && progress >= 95;
+
+  useEffect(() => {
+    if (!high) {
+      sinceRef.current = null;
+      setStuck(false);
+      return;
+    }
+    if (sinceRef.current === null) sinceRef.current = Date.now();
+    const check = () => {
+      if (sinceRef.current !== null && Date.now() - sinceRef.current >= thresholdMs) setStuck(true);
+    };
+    check();
+    const id = setInterval(check, 4000);
+    return () => clearInterval(id);
+  }, [high, thresholdMs]);
+
+  return stuck;
+}

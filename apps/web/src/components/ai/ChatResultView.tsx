@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { ResultMedia } from '@/components/ui/result-media';
-import { useLivelyProgress } from '@/lib/use-lively-progress';
+import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
@@ -132,6 +132,7 @@ function MessageCard({
   const failed = status === 'FAILED';
   const processing = isActive(status);
   const safeProgress = useLivelyProgress(progress, processing, project.id);
+  const stuckHint = useStuckHint(safeProgress, processing);
   const friendlyError = chatFailureMessage(project.errorCode, project.errorMessage);
   const withAudio = hasGeneratedAudio(project.userInputs);
 
@@ -164,6 +165,11 @@ function MessageCard({
               <span className="shrink-0 text-slate-400">{safeProgress}%</span>
             </div>
             <Progress value={safeProgress} />
+            {stuckHint && (
+              <p className="mt-2 text-xs leading-5 text-amber-300/90">
+                Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного.
+              </p>
+            )}
           </div>
         )}
 

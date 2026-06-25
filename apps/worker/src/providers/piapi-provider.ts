@@ -1920,22 +1920,8 @@ function buildTalkingAvatarPayload(
       },
     };
   }
-  if (model === 'kling-ai-avatar') {
-    const mode = readString(input.params, 'mode') === 'std' ? 'std' : 'pro';
-    const duration = readNumber(input.params, 'duration') === 10 ? 10 : 5;
-    const aspect = normalizeAspectRatio(readString(input.params, 'aspect_ratio')) ?? '9:16';
-    return {
-      model: 'kling',
-      task_type: 'lip_sync',
-      input: {
-        image_url: input.imageUrl,
-        local_dubbing_url: input.audioUrl,
-        mode,
-        duration,
-        aspect_ratio: aspect,
-      },
-    };
-  }
+  // Kling lip-sync (task_type lip_sync) requires a pre-existing video (origin_task_id/video_url),
+  // not a bare image, so it cannot do image->talking-avatar; only OmniHuman is supported here.
   throw new ProviderError('UNSUPPORTED_MODEL', `Unsupported talking-avatar model: ${model}`);
 }
 

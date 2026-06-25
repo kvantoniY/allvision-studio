@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { ResultMedia } from '@/components/ui/result-media';
-import { useLivelyProgress } from '@/lib/use-lively-progress';
+import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
@@ -133,6 +133,7 @@ function SourceThumbnails({ images }: { images: string[] }) {
 function ProjectProgressBody({ progress, projectId }: { progress: number; projectId?: string }) {
   // Этот блок рендерится только в активных статусах (PENDING/PROCESSING), поэтому шкала «живая».
   const safeProgress = useLivelyProgress(progress, true, projectId);
+  const stuck = useStuckHint(safeProgress, true);
   return (
     <>
       <div className="mb-4 flex items-center justify-between gap-4 text-sm">
@@ -144,7 +145,9 @@ function ProjectProgressBody({ progress, projectId }: { progress: number; projec
       </div>
       <Progress value={safeProgress} />
       <p className="mt-5 text-sm leading-6 text-slate-400">
-        Можно закрыть страницу: генерация продолжится, а результат появится в проектах автоматически.
+        {stuck
+          ? 'Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно не закрывать.'
+          : 'Можно закрыть страницу: генерация продолжится, а результат появится в проектах автоматически.'}
       </p>
     </>
   );
