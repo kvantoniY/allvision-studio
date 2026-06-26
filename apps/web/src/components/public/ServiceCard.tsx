@@ -28,7 +28,7 @@ export function ServiceCard({ service, detailed = false, className }: ServiceCar
     >
       <Link href={`/services/${service.slug}`} className="block overflow-hidden">
         <Image
-          src={service.coverImage ?? service.galleryImages[0]}
+          src={service.coverImage ?? service.galleryImages[0] ?? '/mock_preview.png'}
           alt={service.title}
           width={800}
           height={600}
