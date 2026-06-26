@@ -5,6 +5,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type CSSProperties,
@@ -2197,6 +2198,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
     setDirty(true);
   };
 
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
   const changeImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     setPreviewImage(file);
@@ -2310,6 +2314,9 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
     }
   };
 
+  const imageShown = imagePreviewUrl || (service?.previewImage && !removeImage ? service.previewImage : '');
+  const videoShown = videoPreviewUrl || (service?.previewVideo && !removeVideo ? service.previewVideo : '');
+
   return (
     <form onSubmit={submit} className="space-y-5 pb-4">
       <Section icon={Settings2} title="Основное" description="Публичные тексты, категория и статус публикации.">
@@ -2414,30 +2421,40 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-2.5 rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="previewImage" className="flex items-center gap-1.5 text-sm"><ImageIcon className="h-3.5 w-3.5 text-violet-300" />Изображение</Label>
-              {(imagePreviewUrl || (service?.previewImage && !removeImage)) && (
+            <Label className="flex items-center gap-1.5 text-sm">
+              <ImageIcon className="h-3.5 w-3.5 text-violet-300" />Изображение
+              <span className="ml-1 rounded bg-zinc-800 px-1.5 py-px text-[10px] font-medium text-slate-400">16:9</span>
+            </Label>
+            <input ref={imageInputRef} type="file" accept="image/*" onChange={changeImage} className="hidden" />
+            <div className="group/prev relative aspect-video w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
+              <img src={imageShown || '/mock_preview.png'} alt="" className={cn('h-full w-full object-cover transition', !imageShown && 'opacity-40')} />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                title={imageShown ? 'Заменить изображение' : 'Загрузить изображение'}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-xs font-semibold text-white opacity-0 transition-all duration-200 group-hover/prev:bg-slate-950/55 group-hover/prev:opacity-100"
+              >
+                <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-violet-600/90 ring-1 ring-white/20">
+                  <Plus className="h-5 w-5" />
+                </span>
+                {imageShown ? 'Заменить' : 'Загрузить'}
+              </button>
+              {!imageShown && (
+                <span className="pointer-events-none absolute bottom-1.5 left-1.5 rounded bg-slate-950/70 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">
+                  дефолтное превью
+                </span>
+              )}
+              {imageShown && (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors hover:text-red-300"
                   onClick={() => { setPreviewImage(null); setPreviewImageUrl(''); setRemoveImage(true); setDirty(true); }}
+                  title="Сбросить на дефолтное превью"
+                  className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-950/70 text-slate-200 opacity-0 ring-1 ring-white/15 transition hover:bg-red-600 hover:text-white group-hover/prev:opacity-100"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Удалить
                 </button>
               )}
             </div>
-            {imagePreviewUrl ? (
-              <img src={imagePreviewUrl} alt="" className="h-36 w-full rounded-lg border border-zinc-800 object-cover" />
-            ) : (service?.previewImage && !removeImage) ? (
-              <img src={service.previewImage} alt="" className="h-36 w-full rounded-lg border border-zinc-800 object-cover" />
-            ) : (
-              <div className="flex h-36 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-zinc-700 text-xs text-slate-500">
-                <ImageIcon className="h-5 w-5" />
-                Нет изображения
-              </div>
-            )}
-            <Input id="previewImage" type="file" accept="image/*" onChange={changeImage} className="h-9 text-xs file:mr-3 file:text-xs" />
             {fileName(previewImage) && <p className="truncate text-xs text-slate-400">{fileName(previewImage)}</p>}
             <details className="group/lib [&_summary]:list-none">
               <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-violet-300">
@@ -2460,32 +2477,45 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
             </details>
           </div>
           <div className="space-y-2.5 rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="previewVideo" className="flex items-center gap-1.5 text-sm"><Video className="h-3.5 w-3.5 text-violet-300" />Видео</Label>
-              {(videoPreviewUrl || (service?.previewVideo && !removeVideo)) && (
+            <Label className="flex items-center gap-1.5 text-sm"><Video className="h-3.5 w-3.5 text-violet-300" />Видео</Label>
+            <input ref={videoInputRef} type="file" accept="video/*" onChange={changeVideo} className="hidden" />
+            <div className="group/prev relative aspect-video w-full overflow-hidden rounded-lg border border-zinc-800 bg-black">
+              {videoShown ? (
+                <>
+                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                  <video src={videoShown} controls className="h-full w-full bg-black object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => videoInputRef.current?.click()}
+                    title="Заменить видео"
+                    className="absolute left-1/2 top-2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-slate-950/75 px-3 py-1 text-xs font-semibold text-white opacity-0 ring-1 ring-white/15 transition hover:bg-violet-600 group-hover/prev:opacity-100"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Заменить
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPreviewVideo(null); setPreviewVideoUrl(''); setRemoveVideo(true); setDirty(true); }}
+                    title="Удалить видео"
+                    className="absolute right-1.5 top-1.5 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-950/75 text-slate-200 opacity-0 ring-1 ring-white/15 transition hover:bg-red-600 hover:text-white group-hover/prev:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 transition-colors hover:text-red-300"
-                  onClick={() => { setPreviewVideo(null); setPreviewVideoUrl(''); setRemoveVideo(true); setDirty(true); }}
+                  onClick={() => videoInputRef.current?.click()}
+                  title="Загрузить видео"
+                  className="flex h-full w-full flex-col items-center justify-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:bg-zinc-900 hover:text-violet-300"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Удалить
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-zinc-800 text-slate-300">
+                    <Plus className="h-5 w-5" />
+                  </span>
+                  Загрузить видео
                 </button>
               )}
             </div>
-            {videoPreviewUrl ? (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video src={videoPreviewUrl} controls className="h-36 w-full rounded-lg border border-zinc-800 bg-black object-contain" />
-            ) : (service?.previewVideo && !removeVideo) ? (
-              // eslint-disable-next-line jsx-a11y/media-has-caption
-              <video src={service.previewVideo} controls className="h-36 w-full rounded-lg border border-zinc-800 bg-black object-contain" />
-            ) : (
-              <div className="flex h-36 flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-zinc-700 text-xs text-slate-500">
-                <Video className="h-5 w-5" />
-                Нет видео
-              </div>
-            )}
-            <Input id="previewVideo" type="file" accept="video/*" onChange={changeVideo} className="h-9 text-xs file:mr-3 file:text-xs" />
             {fileName(previewVideo) && <p className="truncate text-xs text-slate-400">{fileName(previewVideo)}</p>}
             <details className="group/lib [&_summary]:list-none">
               <summary className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-400 transition-colors hover:text-violet-300">
@@ -2511,38 +2541,38 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
       </Section>
 
       <Section icon={Coins} title="Цена" description="Себестоимость считается по блокам и выбранным моделям. Для карусели основная цена считается за один слайд; для чекбоксов с ценами итог берётся из выбранных вариантов.">
-        <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
-          <div className="space-y-2">
-            <Label htmlFor="pricePro">{hasSlidesPricing ? 'Цена за 1 слайд, токены' : hasPricedMultiselect || hasDurationPricing ? 'Резервная цена услуги, токены' : 'Цена услуги, токены'}</Label>
-            <div className="relative max-w-[220px]">
-              <Input
-                id="pricePro"
-                type="number"
-                min={1}
-                value={draft.priceCoinsPro}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  updateDraft({ priceCoinsPro: next, priceCoinsStandard: next });
-                }}
-                className="pr-16"
-              />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500">коинов</span>
-            </div>
-            {hasPricedMultiselect && (
-              <p className="text-xs text-slate-500">Для этой услуги итоговая цена берётся из цен выбранных чекбоксов в форме пользователя.</p>
-            )}
-            {hasDurationPricing && (
-              <p className="text-xs text-slate-500">Для этой услуги итоговая цена берётся из выбранной длительности, если для неё задана цена.</p>
-            )}
+        <div className="max-w-md rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/15 to-transparent p-5">
+          <Label htmlFor="pricePro" className="text-sm font-semibold text-violet-200">
+            {hasSlidesPricing ? 'Цена за 1 слайд' : hasPricedMultiselect || hasDurationPricing ? 'Резервная цена услуги' : 'Цена услуги'}
+          </Label>
+          <div className="relative mt-2">
+            <Input
+              id="pricePro"
+              type="number"
+              min={1}
+              value={draft.priceCoinsPro}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                updateDraft({ priceCoinsPro: next, priceCoinsStandard: next });
+              }}
+              className="h-14 border-violet-500/40 bg-zinc-950/60 pr-20 text-2xl font-bold tracking-tight text-white focus-visible:ring-violet-500"
+            />
+            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-violet-300/80">коинов</span>
           </div>
-          <div className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/10 to-transparent p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-violet-300/80">
-              <Coins className="h-3.5 w-3.5" />
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-violet-500/15 pt-3">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
+              <Coins className="h-3.5 w-3.5 text-violet-300/70" />
               Себестоимость
-            </div>
-            <div className="mt-2 text-2xl font-bold tracking-tight text-white">~{costPro} <span className="text-base font-medium text-slate-400">коинов</span></div>
-            <p className="mt-2 text-xs leading-relaxed text-slate-500">Рекомендуем закладывать минимум 3–4× себестоимости.</p>
+            </span>
+            <span className="text-sm font-semibold text-slate-200">~{costPro} коинов</span>
           </div>
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">Рекомендуем закладывать минимум 3–4× себестоимости.</p>
+          {hasPricedMultiselect && (
+            <p className="mt-2 text-xs leading-relaxed text-amber-300/80">Итоговая цена берётся из цен выбранных чекбоксов в форме пользователя.</p>
+          )}
+          {hasDurationPricing && (
+            <p className="mt-2 text-xs leading-relaxed text-amber-300/80">Итоговая цена берётся из выбранной длительности, если для неё задана цена.</p>
+          )}
         </div>
       </Section>
 

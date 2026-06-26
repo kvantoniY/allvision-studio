@@ -83,7 +83,7 @@ function serviceMedia(service?: PublicService): HomeMedia | null {
   if (image) {
     return { type: 'image', url: image, alt: service.title };
   }
-  return null;
+  return { type: 'image', url: '/mock_preview.png', alt: service.title };
 }
 
 function formatCoins(value: number) {
