@@ -248,20 +248,213 @@ function syncDurationPrices(
   return next.length > 0 ? next : undefined;
 }
 
-function setDurationPrice(
+function setDurationPriceValue(
   field: UserInputField,
   duration: number,
-  rawValue: string,
+  value: number | undefined,
 ): UserInputField['durationPrices'] {
-  const priceCoins = Number(rawValue);
   const current = field.durationPrices ?? [];
-  const withoutCurrent = current.filter((item) => item.duration !== duration);
-  if (!Number.isInteger(priceCoins) || priceCoins <= 0) return withoutCurrent.length > 0 ? withoutCurrent : undefined;
-  return [...withoutCurrent, { duration, priceCoins }].sort((a, b) => a.duration - b.duration);
+  const without = current.filter((item) => item.duration !== duration);
+  if (!value || value <= 0) return without.length > 0 ? without : undefined;
+  return [...without, { duration, priceCoins: value }].sort((a, b) => a.duration - b.duration);
 }
 
-function durationPriceInputValue(field: UserInputField, duration: number) {
-  return field.durationPrices?.find((item) => item.duration === duration)?.priceCoins ?? '';
+function priceOrUndef(raw: string): number | undefined {
+  const n = Number(raw);
+  return raw !== '' && Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+// Compact coins input with a "коинов" suffix.
+function CoinsInput({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  return (
+    <div className="relative">
+      <Input
+        type="number"
+        min={1}
+        placeholder={placeholder}
+        value={value ?? ''}
+        onChange={(event) => onChange(priceOrUndef(event.target.value))}
+        className={cn('pr-16', className)}
+      />
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-500">коинов</span>
+    </div>
+  );
+}
+
+function PriceField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block space-y-1.5">
+      <span className="text-xs font-medium text-slate-300">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+// Единая плашка цен: базовая цена + все условные цены (галочка, длительность, опции) в одном месте.
+function PricingPanel({
+  fields,
+  priceStandard,
+  pricePro,
+  costCoins,
+  usdToRub,
+  onPrice,
+  onFields,
+}: {
+  fields: UserInputField[];
+  priceStandard: number;
+  pricePro: number;
+  costCoins: number;
+  usdToRub: number;
+  onPrice: (next: { standard: number; pro: number }) => void;
+  onFields: (next: UserInputField[]) => void;
+}) {
+  const tierField = fields.find((field) => field.type === 'tier');
+  const checkboxField = fields.find((field) => field.type === 'checkbox');
+  const durationField = fields.find((field) => field.type === 'duration');
+  const multiselectField = fields.find((field) => field.type === 'multiselect');
+  const slidesField = fields.find((field) => field.type === 'slides');
+  const setField = (id: string, patch: Partial<UserInputField>) =>
+    onFields(fields.map((field) => (field.id === id ? { ...field, ...patch } : field)));
+  const hasOverride = Boolean(checkboxField || durationField || multiselectField);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/15 to-transparent p-5">
+        {tierField ? (
+          <div className="grid max-w-md gap-4 sm:grid-cols-2">
+            <PriceField label="Цена Standard">
+              <CoinsInput value={priceStandard || undefined} onChange={(value) => onPrice({ standard: value ?? 1, pro: pricePro })} />
+            </PriceField>
+            <PriceField label="Цена Pro">
+              <CoinsInput value={pricePro || undefined} onChange={(value) => onPrice({ standard: priceStandard, pro: value ?? 1 })} />
+            </PriceField>
+          </div>
+        ) : (
+          <div>
+            <Label htmlFor="pricePro" className="text-sm font-semibold text-violet-200">
+              {slidesField ? 'Базовая цена за 1 слайд' : multiselectField ? 'Резервная цена услуги' : 'Цена услуги'}
+            </Label>
+            <div className="relative mt-2 max-w-xs">
+              <Input
+                id="pricePro"
+                type="number"
+                min={1}
+                value={pricePro}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  onPrice({ standard: next, pro: next });
+                }}
+                className="h-14 border-violet-500/40 bg-zinc-950/60 pr-20 text-2xl font-bold tracking-tight text-white focus-visible:ring-violet-500"
+              />
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-violet-300/80">коинов</span>
+            </div>
+          </div>
+        )}
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-violet-500/15 pt-3">
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
+            <Coins className="h-3.5 w-3.5 text-violet-300/70" />
+            Себестоимость
+          </span>
+          <span className="text-sm font-semibold text-slate-200">~{costCoins} коинов · {formatMoney({ coins: costCoins }, { primary: 'rub', usdToRub })}</span>
+        </div>
+        {hasOverride ? (
+          <p className="mt-2 text-xs leading-relaxed text-amber-300/80">Эта цена — запасная. Если у опции ниже задана цена, она перекрывает базовую.</p>
+        ) : (
+          <p className="mt-2 text-xs leading-relaxed text-slate-500">Рекомендуем закладывать минимум 3–4× себестоимости.</p>
+        )}
+        {slidesField && (
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">Итоговая цена = базовая × число слайдов (поле «{slidesField.label}»).</p>
+        )}
+      </div>
+
+      {checkboxField && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-300">Галочка</span>
+            {checkboxField.label}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PriceField label="Без галочки">
+              <CoinsInput value={checkboxField.priceCoinsUnchecked} placeholder="базовая" onChange={(value) => setField(checkboxField.id, { priceCoinsUnchecked: value })} />
+            </PriceField>
+            <PriceField label="С галочкой">
+              <CoinsInput value={checkboxField.priceCoinsChecked} placeholder="дороже" onChange={(value) => setField(checkboxField.id, { priceCoinsChecked: value })} />
+            </PriceField>
+          </div>
+          {checkboxField.secondaryField && (
+            <div className="mt-3 grid gap-3 border-t border-zinc-800 pt-3 sm:grid-cols-2">
+              <PriceField label={`Без галочки · со 2-м (${checkboxField.secondaryField})`}>
+                <CoinsInput value={checkboxField.priceCoinsUncheckedSecondary} onChange={(value) => setField(checkboxField.id, { priceCoinsUncheckedSecondary: value })} />
+              </PriceField>
+              <PriceField label="С галочкой · со 2-м">
+                <CoinsInput value={checkboxField.priceCoinsCheckedSecondary} onChange={(value) => setField(checkboxField.id, { priceCoinsCheckedSecondary: value })} />
+              </PriceField>
+            </div>
+          )}
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">
+            Если обе цены пустые — берётся базовая цена выше.{checkboxField.secondaryField ? ` Цены «со 2-м» применяются, когда заполнено поле «${checkboxField.secondaryField}».` : ' Доплату за «2-го человека» можно включить в разделе «Форма для юзера», задав «второй элемент».'}
+          </p>
+        </div>
+      )}
+
+      {durationField && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-300">Длительность</span>
+            {durationField.label}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {(durationField.durationOptions ?? [5, 8, 10]).map((duration) => (
+              <PriceField key={duration} label={`${duration} сек`}>
+                <CoinsInput
+                  value={durationField.durationPrices?.find((item) => item.duration === duration)?.priceCoins}
+                  placeholder="базовая"
+                  onChange={(value) => setField(durationField.id, { durationPrices: setDurationPriceValue(durationField, duration, value) })}
+                />
+              </PriceField>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">Пустая цена = базовая. Список длительностей настраивается в разделе «Форма для юзера».</p>
+        </div>
+      )}
+
+      {multiselectField && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-300">Опции</span>
+            {multiselectField.label}
+          </div>
+          <div className="space-y-2">
+            {(multiselectField.options ?? []).map((option, optionIndex) => (
+              <div key={option.value} className="flex items-center gap-3">
+                <span className={cn('min-w-0 flex-1 truncate text-sm', option.disabled ? 'text-slate-600 line-through' : 'text-slate-200')}>{option.label}</span>
+                <div className="w-36 shrink-0">
+                  <CoinsInput
+                    value={option.priceCoins}
+                    onChange={(value) => {
+                      const nextOptions = (multiselectField.options ?? []).map((item, index) => (index === optionIndex ? { ...item, priceCoins: value } : item));
+                      setField(multiselectField.id, { options: nextOptions });
+                    }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-slate-500">Итоговая цена = сумма цен выбранных пользователем опций. Сами опции добавляются в разделе «Форма для юзера».</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function schemaObject(value: unknown): JsonSchemaObject {
@@ -1714,25 +1907,8 @@ function UserInputFormBuilder({
                                     />
                                   </label>
                                 </div>
-                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                                  {(field.durationOptions ?? [5, 8, 10]).map((duration) => (
-                                    <label key={duration} className="space-y-1 text-xs text-slate-400">
-                                      <span>{duration} сек, цена</span>
-                                      <Input
-                                        type="number"
-                                        min={1}
-                                        placeholder="fallback"
-                                        value={durationPriceInputValue(field, duration)}
-                                        onChange={(event) => updateField(index, {
-                                          durationPrices: setDurationPrice(field, duration, event.target.value),
-                                        })}
-                                        className="h-8"
-                                      />
-                                    </label>
-                                  ))}
-                                </div>
                                 <p className="text-xs text-slate-500">
-                                  Если цена для длительности пустая, используется обычная цена услуги. Заполненные значения списываются как финальная цена генерации.
+                                  Цена за каждую длительность задаётся в разделе <span className="font-medium text-violet-300">«Цена»</span>.
                                 </p>
                               </div>
                             )}
@@ -1759,75 +1935,23 @@ function UserInputFormBuilder({
                                   />
                                   Включена по умолчанию
                                 </label>
-                                <div className="grid gap-2 sm:grid-cols-2">
-                                  <label className="space-y-1 text-xs text-slate-400">
-                                    <span>Цена БЕЗ галочки (коины)</span>
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      placeholder="напр. фото"
-                                      value={field.priceCoinsUnchecked ?? ''}
-                                      onChange={(event) => updateField(index, { priceCoinsUnchecked: event.target.value ? Number(event.target.value) : undefined })}
-                                      className="h-8"
-                                    />
-                                  </label>
-                                  <label className="space-y-1 text-xs text-slate-400">
-                                    <span>Цена С галочкой (коины)</span>
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      placeholder="напр. фото + анимация"
-                                      value={field.priceCoinsChecked ?? ''}
-                                      onChange={(event) => updateField(index, { priceCoinsChecked: event.target.value ? Number(event.target.value) : undefined })}
-                                      className="h-8"
-                                    />
-                                  </label>
-                                </div>
-                                <div className="space-y-2 rounded-md border border-zinc-800/80 bg-zinc-900/40 p-2.5">
-                                  <label className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                                    <span title="Когда это фото-поле заполнено — применяются «вторые» цены ниже (напр. 2 человека).">Поле «второй элемент» (id фото-поля)</span>
-                                    <select
-                                      value={field.secondaryField ?? ''}
-                                      onChange={(event) => updateField(index, { secondaryField: event.target.value || undefined })}
-                                      className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                                    >
-                                      <option value="">— нет (одна пара цен) —</option>
-                                      {fields
-                                        .filter((item) => item.type === 'photo' || item.type === 'avatar')
-                                        .map((item) => (
-                                          <option key={item.id} value={item.id}>{item.id}</option>
-                                        ))}
-                                    </select>
-                                  </label>
-                                  {field.secondaryField && (
-                                    <div className="grid gap-2 sm:grid-cols-2">
-                                      <label className="space-y-1 text-xs text-slate-400">
-                                        <span>Цена БЕЗ галочки, со 2-м (коины)</span>
-                                        <Input
-                                          type="number"
-                                          min={1}
-                                          placeholder="напр. 2 чел."
-                                          value={field.priceCoinsUncheckedSecondary ?? ''}
-                                          onChange={(event) => updateField(index, { priceCoinsUncheckedSecondary: event.target.value ? Number(event.target.value) : undefined })}
-                                          className="h-8"
-                                        />
-                                      </label>
-                                      <label className="space-y-1 text-xs text-slate-400">
-                                        <span>Цена С галочкой, со 2-м (коины)</span>
-                                        <Input
-                                          type="number"
-                                          min={1}
-                                          placeholder="напр. 2 чел. + анимация"
-                                          value={field.priceCoinsCheckedSecondary ?? ''}
-                                          onChange={(event) => updateField(index, { priceCoinsCheckedSecondary: event.target.value ? Number(event.target.value) : undefined })}
-                                          className="h-8"
-                                        />
-                                      </label>
-                                    </div>
-                                  )}
-                                </div>
+                                <label className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                                  <span title="Когда это фото-поле заполнено — применяются «вторые» цены (напр. 2 человека).">Поле «второй элемент» (id фото-поля)</span>
+                                  <select
+                                    value={field.secondaryField ?? ''}
+                                    onChange={(event) => updateField(index, { secondaryField: event.target.value || undefined })}
+                                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                                  >
+                                    <option value="">— нет (одна пара цен) —</option>
+                                    {fields
+                                      .filter((item) => item.type === 'photo' || item.type === 'avatar')
+                                      .map((item) => (
+                                        <option key={item.id} value={item.id}>{item.id}</option>
+                                      ))}
+                                  </select>
+                                </label>
                                 <p className="text-xs text-slate-500">
-                                  Цена услуги = выбранная комбинация: галочка (вкл/выкл) × «второй элемент» (заполнен/нет). Если «второй элемент» не задан — работают только две первые цены. Если пусто — обычная цена услуги. Условный шаг пайплайна запускается, когда галочка включена (поле <code>when</code>: field = id галочки, value = <code>true</code>).
+                                  Цены «без галочки / с галочкой» (и для «2-го») задаются в разделе <span className="font-medium text-violet-300">«Цена»</span>. Условный шаг пайплайна запускается, когда галочка включена (поле <code>when</code>: field = id галочки, value = <code>true</code>).
                                 </p>
                               </div>
                             )}
@@ -1877,23 +2001,6 @@ function UserInputFormBuilder({
                                           updateField(index, { options });
                                         }}
                                       />
-                                      {field.type === 'multiselect' && (
-                                        <Input
-                                          type="number"
-                                          min={0}
-                                          value={option.priceCoins ?? ''}
-                                          placeholder="цена"
-                                          title="Цена варианта, токены"
-                                          onChange={(event) => {
-                                            const options = (field.options ?? []).map((item, current) =>
-                                              current === optionIndex
-                                                ? { ...item, priceCoins: event.target.value ? Number(event.target.value) : undefined }
-                                                : item,
-                                            );
-                                            updateField(index, { options });
-                                          }}
-                                        />
-                                      )}
                                     </div>
                                     <div className="flex items-center justify-end gap-2">
                                       {field.type === 'multiselect' && (
@@ -2153,13 +2260,6 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const isCreate = mode === 'create';
   const isBusy = createState.isLoading || updateState.isLoading;
   const errors = useMemo(() => validationErrors(draft.pipelineConfig, draft.userInputForm), [draft.pipelineConfig, draft.userInputForm]);
-  const hasSlidesPricing = draft.userInputForm.some((field) => field.type === 'slides');
-  const hasPricedMultiselect = draft.userInputForm.some(
-    (field) => field.type === 'multiselect' && (field.options ?? []).some((option) => typeof option.priceCoins === 'number'),
-  );
-  const hasDurationPricing = draft.userInputForm.some(
-    (field) => field.type === 'duration' && (field.durationPrices ?? []).length > 0,
-  );
   const pricingSummary = useMemo(() => summarizePipelinePricing(draft.pipelineConfig, blocks, usdToRub), [draft.pipelineConfig, blocks, usdToRub]);
   const costPro = pricingSummary.pro.costCoins;
   const standardMargin = useMemo(
@@ -2540,40 +2640,16 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         </div>
       </Section>
 
-      <Section icon={Coins} title="Цена" description="Себестоимость считается по блокам и выбранным моделям. Для карусели основная цена считается за один слайд; для чекбоксов с ценами итог берётся из выбранных вариантов.">
-        <div className="max-w-md rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/15 to-transparent p-5">
-          <Label htmlFor="pricePro" className="text-sm font-semibold text-violet-200">
-            {hasSlidesPricing ? 'Цена за 1 слайд' : hasPricedMultiselect || hasDurationPricing ? 'Резервная цена услуги' : 'Цена услуги'}
-          </Label>
-          <div className="relative mt-2">
-            <Input
-              id="pricePro"
-              type="number"
-              min={1}
-              value={draft.priceCoinsPro}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                updateDraft({ priceCoinsPro: next, priceCoinsStandard: next });
-              }}
-              className="h-14 border-violet-500/40 bg-zinc-950/60 pr-20 text-2xl font-bold tracking-tight text-white focus-visible:ring-violet-500"
-            />
-            <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-violet-300/80">коинов</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-violet-500/15 pt-3">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-slate-400">
-              <Coins className="h-3.5 w-3.5 text-violet-300/70" />
-              Себестоимость
-            </span>
-            <span className="text-sm font-semibold text-slate-200">~{costPro} коинов</span>
-          </div>
-          <p className="mt-2 text-xs leading-relaxed text-slate-500">Рекомендуем закладывать минимум 3–4× себестоимости.</p>
-          {hasPricedMultiselect && (
-            <p className="mt-2 text-xs leading-relaxed text-amber-300/80">Итоговая цена берётся из цен выбранных чекбоксов в форме пользователя.</p>
-          )}
-          {hasDurationPricing && (
-            <p className="mt-2 text-xs leading-relaxed text-amber-300/80">Итоговая цена берётся из выбранной длительности, если для неё задана цена.</p>
-          )}
-        </div>
+      <Section icon={Coins} title="Цена" description="Все цены услуги — в одном месте. Если у услуги есть галочка, длительность или опции, итоговая цена для пользователя зависит от его выбора.">
+        <PricingPanel
+          fields={draft.userInputForm}
+          priceStandard={draft.priceCoinsStandard ?? draft.priceCoinsPro}
+          pricePro={draft.priceCoinsPro}
+          costCoins={costPro}
+          usdToRub={usdToRub}
+          onPrice={({ standard, pro }) => updateDraft({ priceCoinsStandard: standard, priceCoinsPro: pro })}
+          onFields={(userInputForm) => updateDraft({ userInputForm })}
+        />
       </Section>
 
       <Section icon={Workflow} title="Пайплайн" description="Шаги выполняются сверху вниз. Плейсхолдеры: {{user.photo}}, {{step_1.output}}.">

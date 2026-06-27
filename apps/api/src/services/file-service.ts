@@ -42,7 +42,8 @@ const MAX_SCENE_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_TEMPLATE_PREVIEW_SIZE = 50 * 1024 * 1024;
 const MAX_TEMPLATE_IMAGE_SIZE = 5 * 1024 * 1024;
 const MAX_SERVICE_PREVIEW_VIDEO_SIZE = 50 * 1024 * 1024;
-const MAX_SERVICE_PREVIEW_IMAGE_SIZE = 5 * 1024 * 1024;
+// Covers are re-encoded/downscaled by sharp before storage, so accept generously-sized originals.
+const MAX_SERVICE_PREVIEW_IMAGE_SIZE = 25 * 1024 * 1024;
 const MAX_USER_INPUT_FILE_SIZE = 50 * 1024 * 1024;
 const MAX_CHAT_INPUT_SIZE = 25 * 1024 * 1024;
 const MAX_SUPPORT_ATTACHMENT_SIZE = 25 * 1024 * 1024;
