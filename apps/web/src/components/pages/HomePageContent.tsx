@@ -919,7 +919,7 @@ function MediaBlock({ media, className }: { media: HomeMedia; className?: string
     return <video src={src} className={cn('h-full w-full object-cover', className)} autoPlay loop muted playsInline />;
   }
 
-  return <ImageWithSkeleton wrapperClassName="h-full w-full" src={src} alt={media.alt} className={cn('h-full w-full object-cover', className)} />;
+  return <ImageWithSkeleton wrapperClassName="h-full w-full" src={src} alt={media.alt} fallbackSrc="/mock_preview.png" className={cn('h-full w-full object-cover', className)} />;
 }
 
 function SectionEyebrow({

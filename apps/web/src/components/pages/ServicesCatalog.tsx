@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Image from 'next/image';
+import { FallbackImage } from '@/components/ui/fallback-image';
 import Link from 'next/link';
 import { AlertCircle, Baby, Cake, ChevronDown, Clapperboard, Flame, Gift, Heart, LayoutGrid, Search, Sparkles, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -124,12 +124,10 @@ function ServiceTile({ service }: { service: PublicService }) {
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
         ) : (
-          <Image
+          <FallbackImage
             src={previewImage}
             alt={service.title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover transition duration-500 group-hover:scale-105"
+            className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />

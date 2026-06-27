@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import Image from 'next/image';
+import { FallbackImage } from '@/components/ui/fallback-image';
 import { ArrowRight } from 'lucide-react';
 import { tokensToRub, type PublicService } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
@@ -27,11 +27,9 @@ export function ServiceCard({ service, detailed = false, className }: ServiceCar
       )}
     >
       <Link href={`/services/${service.slug}`} className="block overflow-hidden">
-        <Image
+        <FallbackImage
           src={service.coverImage ?? service.galleryImages[0] ?? '/mock_preview.png'}
           alt={service.title}
-          width={800}
-          height={600}
           className="h-48 w-full object-cover transition duration-500 group-hover:scale-105"
         />
       </Link>

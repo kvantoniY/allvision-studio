@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import { FallbackImage } from '@/components/ui/fallback-image';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -571,7 +571,7 @@ function PhotoReferencePreview({
   return (
     <div className="group relative h-32 w-32 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
       {previewUrl ? (
-        <ImageWithSkeleton wrapperClassName="h-full w-full" src={previewUrl} alt={label} className="h-full w-full object-cover" />
+        <ImageWithSkeleton wrapperClassName="h-full w-full" src={previewUrl} alt={label} fallbackSrc="/mock_preview.png" className="h-full w-full object-cover" />
       ) : (
         <div className="grid h-full place-items-center text-slate-600">
           <ImagePlus className="h-7 w-7" />
@@ -1683,7 +1683,7 @@ function GenerationServiceThumb({ project }: { project: ProjectListItem }) {
       {previewVideoUrl ? (
         <video src={previewVideoUrl} muted preload="metadata" className="h-full w-full object-cover" />
       ) : previewUrl ? (
-        <ImageWithSkeleton wrapperClassName="h-full w-full" src={previewUrl} alt={project.service?.title ?? project.title} className="h-full w-full object-cover" />
+        <ImageWithSkeleton wrapperClassName="h-full w-full" src={previewUrl} alt={project.service?.title ?? project.title} fallbackSrc="/mock_preview.png" className="h-full w-full object-cover" />
       ) : (
         <div className="grid h-full place-items-center text-slate-600">
           <Video className="h-6 w-6" />
@@ -2488,7 +2488,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   </div>
                 ) : (
                   <div className="relative aspect-[16/10]">
-                    <Image src={preview} alt={service.title} fill priority sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
+                    <FallbackImage src={preview} alt={service.title} loading="eager" className="absolute inset-0 h-full w-full object-cover" />
                   </div>
                 )}
               </div>

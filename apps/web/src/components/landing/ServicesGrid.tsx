@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import { FallbackImage } from '@/components/ui/fallback-image';
 import Link from 'next/link';
 import { AlertCircle, ArrowRight, Baby, Cake, Clapperboard, Flame, Gift, Heart, LayoutGrid, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -113,12 +113,10 @@ export function ServicesGrid() {
                 <Link key={service.id} href={`/services/${service.slug}`} className="group">
                   <Card className="h-full overflow-hidden border-slate-800 bg-slate-900 transition duration-300 hover:-translate-y-1 hover:border-amber-400/70">
                     <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
-                      <Image
+                      <FallbackImage
                         src={servicePreview(service)}
                         alt={service.title}
-                        fill
-                        sizes="(max-width: 1024px) 100vw, 33vw"
-                        className="object-cover transition duration-500 group-hover:scale-105"
+                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
                       />
                       <Badge className="absolute left-3 top-3 border-amber-300/60 bg-amber-400 text-slate-950">
                         Популярное
