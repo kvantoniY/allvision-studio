@@ -23,6 +23,7 @@ import {
   User as UserIcon,
   Wallet,
 } from 'lucide-react';
+import { pluralizeTokens } from '@allvision/shared';
 import type { Payment, PaymentStatus, TokenTransaction, UpdateProfileInput } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
@@ -763,7 +764,7 @@ function BillingSection() {
             </span>
             <div>
               <div className="text-sm text-slate-300">Ваш баланс</div>
-              <div className="text-2xl font-bold text-amber-300 sm:text-3xl">{user.tokenBalance} <span className="text-base font-normal text-slate-300">токенов</span></div>
+              <div className="text-2xl font-bold text-amber-300 sm:text-3xl">{user.tokenBalance} <span className="text-base font-normal text-slate-300">{pluralizeTokens(user.tokenBalance)}</span></div>
             </div>
           </div>
           <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">

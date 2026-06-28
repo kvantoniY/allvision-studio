@@ -25,7 +25,7 @@ import {
   Video,
   X,
 } from 'lucide-react';
-import { getUserFriendlyError, type ProjectStatus, type PublicService } from '@allvision/shared';
+import { formatTokens, getUserFriendlyError, type ProjectStatus, type PublicService } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -378,7 +378,7 @@ function TierSelector({
             >
               <div className="text-sm font-semibold text-slate-100">{option.label}</div>
               <div className="mt-1 text-xs font-bold text-amber-300">
-                {disabled ? 'скоро' : `${tierPrice(service, tier)} коинов`}
+                {disabled ? 'скоро' : formatTokens(tierPrice(service, tier))}
               </div>
             </button>
           );
@@ -401,7 +401,7 @@ const warningToastClass = 'border-amber-500 bg-amber-950 text-amber-50 shadow-2x
 const warningAlertClass = 'border-amber-500 bg-amber-950 text-amber-50 [&>svg]:text-amber-300';
 
 const LAUNCH_ERROR_MESSAGES: Record<string, string> = {
-  INSUFFICIENT_TOKENS: 'На балансе недостаточно коинов для запуска услуги. Пополните баланс и попробуйте снова.',
+  INSUFFICIENT_TOKENS: 'На балансе недостаточно токенов для запуска услуги. Пополните баланс и попробуйте снова.',
   REQUIRED_FIELD_MISSING: 'Не заполнено обязательное поле. Проверьте фото и параметры услуги.',
   FILE_REQUIRED: 'Нужно загрузить файл для запуска услуги.',
   FILE_TOO_LARGE: 'Файл слишком большой. Загрузите файл меньшего размера.',
@@ -1339,7 +1339,7 @@ function MultiSelectInput({
                 {option.hint && <span className="mt-0.5 block text-xs leading-4 text-slate-500">{option.hint}</span>}
               </span>
               {typeof option.priceCoins === 'number' && !disabled && (
-                <span className="shrink-0 text-xs font-bold text-amber-300">{option.priceCoins} коинов</span>
+                <span className="shrink-0 text-xs font-bold text-amber-300">{formatTokens(option.priceCoins)}</span>
               )}
             </button>
           );
@@ -1539,7 +1539,7 @@ function FieldControl({
           </span>
           {typeof field.priceCoinsChecked === 'number' && (
             <span className="shrink-0 text-xs font-bold text-amber-300">
-              {checked ? field.priceCoinsChecked : field.priceCoinsUnchecked ?? field.priceCoinsChecked} коинов
+              {formatTokens((checked ? field.priceCoinsChecked : field.priceCoinsUnchecked ?? field.priceCoinsChecked) ?? 0)}
             </span>
           )}
         </button>
@@ -1845,7 +1845,7 @@ function GenerationProgress({ project, compact = false }: { project: ProjectList
       <Progress value={progress} />
       {stuck ? (
         <p className={cn('leading-6 text-amber-300/90', compact ? 'text-xs' : 'text-sm')}>
-          Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно не закрывать.
+          Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно закрыть, результат появится тут автоматически.
         </p>
       ) : !compact ? (
         <p className="text-sm leading-6 text-slate-400">
@@ -1961,7 +1961,7 @@ function GenerationCard({
               </div>
               <div className="mt-1 text-xs text-slate-500">{formatDateTime(project.createdAt)}</div>
             </div>
-            <div className="shrink-0 text-xs text-slate-500 sm:text-right">{project.tokensCost} коинов</div>
+            <div className="shrink-0 text-xs text-slate-500 sm:text-right">{formatTokens(project.tokensCost)}</div>
           </div>
           {project.status === 'COMPLETED' && (
             <GenerationRetentionNotice expiresAt={project.expiresAt} compact className="mt-1 sm:max-w-[22rem]" />
@@ -2470,26 +2470,24 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
           <div className="space-y-8">
           {activeView === 'service' ? (
             <>
-              <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+              <div className="flex justify-center overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                 {previewVideo ? (
-                  <div className="flex justify-center bg-slate-950">
-                    <div className="aspect-[9/16] h-[70vh] min-h-[360px] max-h-[620px] max-w-full">
-                      <video
-                        key={previewVideo}
-                        src={previewVideo}
-                        muted
-                        loop
-                        playsInline
-                        autoPlay
-                        controls
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                  </div>
+                  <video
+                    key={previewVideo}
+                    src={previewVideo}
+                    muted
+                    loop
+                    playsInline
+                    autoPlay
+                    className="max-h-[70vh] w-auto max-w-full object-contain"
+                  />
                 ) : (
-                  <div className="relative aspect-[16/10]">
-                    <FallbackImage src={preview} alt={service.title} loading="eager" className="absolute inset-0 h-full w-full object-cover" />
-                  </div>
+                  <FallbackImage
+                    src={preview}
+                    alt={service.title}
+                    loading="eager"
+                    className="max-h-[70vh] w-auto max-w-full object-contain"
+                  />
                 )}
               </div>
 
@@ -2544,7 +2542,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
               <div className="space-y-5 px-6 pb-6">
                 <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
                   <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
-                  <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
+                  <div className="mt-1 text-3xl font-black text-amber-200">{formatTokens(price)}</div>
                 </div>
                 <Alert className="border-slate-700 bg-slate-950">
                   <Lock className="h-4 w-4" />
@@ -2561,7 +2559,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-5 lg:pr-5">
                   <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
                     <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
-                    <div className="mt-1 text-3xl font-black text-amber-200">{price} коинов</div>
+                    <div className="mt-1 text-3xl font-black text-amber-200">{formatTokens(price)}</div>
                   </div>
 
                   {tierField && (
@@ -2613,13 +2611,13 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     <div className="flex items-center justify-between gap-3 text-sm">
                       <span className="text-slate-400">Ваш баланс</span>
                       <span className={cn('font-bold', hasEnoughCoins ? 'text-emerald-300' : 'text-amber-300')}>
-                        {balance} коинов
+                        {formatTokens(balance)}
                       </span>
                     </div>
                     {!hasEnoughCoins && (
                       <div className="mt-3 flex items-start gap-2 text-sm text-amber-200">
                         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                        <span>Недостаточно коинов для запуска услуги.</span>
+                        <span>Недостаточно токенов для запуска услуги.</span>
                       </div>
                     )}
                   </div>
@@ -2643,7 +2641,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     ) : (
                       <TokenIcon className="h-4 w-4" />
                     )}
-                    {launchStartedLock ? 'Генерация началась!' : `Создать за ${price} коинов`}
+                    {launchStartedLock ? 'Генерация началась!' : `Создать за ${formatTokens(price)}`}
                   </Button>
                   {!hasEnoughCoins && user && (
                     <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">

@@ -16,7 +16,7 @@ import {
   RotateCcw,
   Share2,
 } from 'lucide-react';
-import { getUserFriendlyError, type ProjectStatus } from '@allvision/shared';
+import { formatTokens, getUserFriendlyError, type ProjectStatus } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -146,7 +146,7 @@ function ProjectProgressBody({ progress, projectId }: { progress: number; projec
       <Progress value={safeProgress} />
       <p className="mt-5 text-sm leading-6 text-slate-400">
         {stuck
-          ? 'Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно не закрывать.'
+          ? 'Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно закрыть, результат появится тут автоматически.'
           : 'Можно закрыть страницу: генерация продолжится, а результат появится в проектах автоматически.'}
       </p>
     </>
@@ -370,7 +370,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wide text-slate-500">Стоимость</div>
-                  <div className="mt-1 font-semibold text-slate-100">{project.tokensCost} токенов</div>
+                  <div className="mt-1 font-semibold text-slate-100">{formatTokens(project.tokensCost)}</div>
                 </div>
               </div>
               <div>

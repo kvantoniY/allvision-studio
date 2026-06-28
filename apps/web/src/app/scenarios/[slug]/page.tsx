@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TEMPLATE_CATEGORY_LABEL } from '@/components/studio/v3-labels';
 import { useAuth } from '@/hooks/use-auth';
 import { useGetPublicScenarioTemplateQuery } from '@/store/api/public-scenario-templates-api';
+import { formatTokens } from '@allvision/shared';
 
 import { TokenIcon } from '@/components/ui/token-icon';
 function categoryLabel(category: string) {
@@ -124,7 +125,7 @@ export default function ScenarioDetailPage() {
                 <TokenIcon className="h-4 w-4 text-amber-400" />
                 Цена
               </span>
-              <span className="font-semibold">{template.priceTokens} токенов</span>
+              <span className="font-semibold">{formatTokens(template.priceTokens)}</span>
             </div>
             <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <span className="flex items-center gap-2 text-sm text-slate-400">

@@ -77,3 +77,14 @@ function coinWord(value: number) {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'токена';
   return 'токенов';
 }
+
+/** Russian plural word for "токен" matching `value` (1 токен, 2 токена, 5 токенов). */
+export function pluralizeTokens(value: number) {
+  return coinWord(Math.round(value));
+}
+
+/** "<n> токен/токена/токенов" with correct Russian pluralization. */
+export function formatTokens(value: number) {
+  const rounded = Math.round(value);
+  return `${rounded} ${coinWord(rounded)}`;
+}

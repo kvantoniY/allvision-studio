@@ -56,6 +56,7 @@ import type { BlockCatalogItem, JsonSchemaObject, ModelOption, ModelPriceOverrid
 import {
   applyModelPriceOverride,
   formatMoney,
+  formatTokens,
   formatAdminServiceValidationError,
   getPiAPIModelCapability,
   parseSourceSelectDescription,
@@ -264,7 +265,7 @@ function priceOrUndef(raw: string): number | undefined {
   return raw !== '' && Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
-// Compact coins input with a "коинов" suffix.
+// Compact tokens input with a "токенов" suffix.
 function CoinsInput({
   value,
   onChange,
@@ -286,7 +287,7 @@ function CoinsInput({
         onChange={(event) => onChange(priceOrUndef(event.target.value))}
         className={cn('pr-16', className)}
       />
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-500">коинов</span>
+      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-500">токенов</span>
     </div>
   );
 }
@@ -356,7 +357,7 @@ function PricingPanel({
                 }}
                 className="h-14 border-violet-500/40 bg-zinc-950/60 pr-20 text-2xl font-bold tracking-tight text-white focus-visible:ring-violet-500"
               />
-              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-violet-300/80">коинов</span>
+              <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm font-medium text-violet-300/80">токенов</span>
             </div>
           </div>
         )}
@@ -365,7 +366,7 @@ function PricingPanel({
             <Coins className="h-3.5 w-3.5 text-violet-300/70" />
             Себестоимость
           </span>
-          <span className="text-sm font-semibold text-slate-200">~{costCoins} коинов · {formatMoney({ coins: costCoins }, { primary: 'rub', usdToRub })}</span>
+          <span className="text-sm font-semibold text-slate-200">~{formatTokens(costCoins)} · {formatMoney({ coins: costCoins }, { primary: 'rub', usdToRub })}</span>
         </div>
         {hasOverride ? (
           <p className="mt-2 text-xs leading-relaxed text-amber-300/80">Эта цена — запасная. Если у опции ниже задана цена, она перекрывает базовую.</p>
@@ -1237,7 +1238,7 @@ function BlockParamsForm({
               >
                 {block.supportedModels.map((model) => (
                   <option key={model.slug} value={model.slug}>
-                    {model.title} · {effectiveModelPriceCoins(model, modelPriceOverrides)} коинов
+                    {model.title} · {formatTokens(effectiveModelPriceCoins(model, modelPriceOverrides))}
                   </option>
                 ))}
               </select>
@@ -2114,7 +2115,7 @@ function UserInputFormBuilder({
               {servicePreview.shortDesc && <p className="mt-1 text-sm leading-6 text-slate-400">{servicePreview.shortDesc}</p>}
               <div className="mt-3 rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-center">
                 <div className="text-[11px] uppercase tracking-wide text-amber-300">Стоимость услуги</div>
-                <div className="text-xl font-black text-amber-200">{servicePreview.priceCoins} коинов</div>
+                <div className="text-xl font-black text-amber-200">{formatTokens(servicePreview.priceCoins)}</div>
               </div>
             </div>
           </div>

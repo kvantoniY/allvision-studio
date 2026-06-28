@@ -3,11 +3,11 @@ import { PricingPageContent } from '@/components/pages/PricingPageContent';
 import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata({
-  title: 'Цены и пакеты коинов',
+  title: 'Цены и пакеты токенов',
   description:
-    'Прозрачные цены Allvision Studio: оплата за результат коинами без подписки. Пакеты пополнения и стоимость каждой AI-услуги видны до запуска.',
+    'Прозрачные цены Allvision Studio: оплата за результат токенами без подписки. Пакеты пополнения и стоимость каждой AI-услуги видны до запуска.',
   path: '/pricing',
-  keywords: ['цена нейросеть подарок', 'сколько стоит оживить фото', 'пакеты коинов Allvision'],
+  keywords: ['цена нейросеть подарок', 'сколько стоит оживить фото', 'пакеты токенов Allvision'],
 });
 
 export default function PricingPage() {

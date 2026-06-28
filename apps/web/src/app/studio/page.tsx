@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from '
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ImageIcon, Loader2, MapPin, Plus, RotateCcw, Trash2, Upload, Video, Wand2 } from 'lucide-react';
-import { buildStylePresetPrompt, getBlockCatalogItem, tokensToRub, type PublicStylePreset } from '@allvision/shared';
+import { buildStylePresetPrompt, formatTokens, getBlockCatalogItem, tokensToRub, type PublicStylePreset } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -319,7 +319,7 @@ function StudioHistory({
                 </div>
               </Link>
               <div className="space-y-1 text-xs text-slate-500">
-                <div>{project.tokensCost} токенов</div>
+                <div>{formatTokens(project.tokensCost)}</div>
                 {usedAssets.length > 0 && <div className="line-clamp-1">Референс: {usedAssets.join(', ')}</div>}
                 {project.errorMessage && <div className="line-clamp-2 text-amber-200">{project.errorMessage}</div>}
               </div>
@@ -630,7 +630,7 @@ function GenerateAssetModal({ kind, onClose }: { kind: UserMediaKind; onClose: (
     <Modal title="Создать образ" onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
-          Стоимость: {generationCost} токенов · ~{generationCostRub} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
+          Стоимость: {formatTokens(generationCost)} · ~{generationCostRub} ₽. Баланс: {formatTokens(balance)} · {canPay ? 'хватит' : 'не хватает'}.
         </div>
         <div className="space-y-2">
           <Label>Название</Label>
@@ -737,7 +737,7 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
           </div>
         </div>
         <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">
-          Стоимость: {generationCost} токенов · ~{generationCostRub} ₽. Баланс: {balance} токенов · {canPay ? 'хватит' : 'не хватает'}.
+          Стоимость: {formatTokens(generationCost)} · ~{generationCostRub} ₽. Баланс: {formatTokens(balance)} · {canPay ? 'хватит' : 'не хватает'}.
         </div>
         <div className="space-y-2">
           <Label>Название</Label>

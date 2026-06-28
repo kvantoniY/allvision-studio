@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { formatTokens } from '@allvision/shared';
 import type { PublicScenarioTemplate } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -49,7 +50,7 @@ function TemplateCard({ template, featured = false }: { template: PublicScenario
             <Badge variant="secondary" className="bg-slate-800 text-slate-200">
               {categoryLabel(template.category)}
             </Badge>
-            <Badge className="bg-violet-600 text-white">{template.priceTokens} токенов</Badge>
+            <Badge className="bg-violet-600 text-white">{formatTokens(template.priceTokens)}</Badge>
           </div>
           <div>
             <h2 className="text-lg font-semibold leading-tight text-white">{template.title}</h2>

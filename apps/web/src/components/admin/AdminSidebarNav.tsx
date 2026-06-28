@@ -39,7 +39,7 @@ const navGroups: NavGroup[] = [
     label: 'Финансы',
     items: [
       { href: '/admin/payments', label: 'Платежи', icon: CreditCard },
-      { href: '/admin/token-packages', label: 'Пакеты коинов', icon: Coins },
+      { href: '/admin/token-packages', label: 'Пакеты токенов', icon: Coins },
     ],
   },
 ];

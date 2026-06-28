@@ -205,12 +205,12 @@ export default function AdminUsagePage() {
               <BizCard
                 label="Пополнения"
                 value={`${overview.data.payments.amountRub.toLocaleString('ru-RU')} ₽`}
-                hint={`${overview.data.payments.count} платежей · +${overview.data.payments.coinsAdded.toLocaleString('ru-RU')} коинов`}
+                hint={`${overview.data.payments.count} платежей · +${overview.data.payments.coinsAdded.toLocaleString('ru-RU')} токенов`}
                 accent="emerald"
               />
               <BizCard
                 label="Выручка с генераций"
-                value={`${overview.data.finance.revenueCoins.toLocaleString('ru-RU')} коинов`}
+                value={`${overview.data.finance.revenueCoins.toLocaleString('ru-RU')} токенов`}
                 hint="оплачено за завершённые генерации"
                 accent="violet"
               />
@@ -253,7 +253,7 @@ export default function AdminUsagePage() {
                         <span className="truncate font-medium text-white">{service.title}</span>
                       </span>
                       <span className="shrink-0 text-slate-400">
-                        {service.runs} запусков · {service.revenueCoins.toLocaleString('ru-RU')} коинов
+                        {service.runs} запусков · {service.revenueCoins.toLocaleString('ru-RU')} токенов
                       </span>
                     </div>
                     <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">

@@ -7,6 +7,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PricingCards } from '@/components/public/PricingCards';
+import { formatTokens } from '@allvision/shared';
 import { getPackageUsage, pricingFaqs } from '@/lib/public-content';
 import { merchantInfo } from '@/lib/merchant';
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
@@ -103,7 +104,7 @@ export function PricingPageContent() {
         <div className="divide-y dark:divide-slate-800">
           {(data?.packages ?? []).map((pkg) => (
             <div key={pkg.id} className="grid gap-3 p-6 md:grid-cols-[220px_1fr]">
-              <div className="font-semibold">На {pkg.tokens} токенов</div>
+              <div className="font-semibold">На {formatTokens(pkg.tokens)}</div>
               <div className="text-muted-foreground">{getPackageUsage(pkg.tokens)}</div>
             </div>
           ))}

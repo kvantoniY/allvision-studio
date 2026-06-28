@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Check, Loader2, Sparkles } from 'lucide-react';
+import { formatTokens } from '@allvision/shared';
 import type { PublicTokenPackage } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -126,7 +127,7 @@ function TokenPackageCard({
           <div>
             <h3 className="text-xl font-semibold">{pkg.title}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {pkg.subtitle || `${getPackageTotal(pkg)} токенов на баланс`}
+              {pkg.subtitle || `${formatTokens(getPackageTotal(pkg))} на баланс`}
             </p>
           </div>
           <div className="rounded-md bg-indigo-100 p-2 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-200">
@@ -142,7 +143,7 @@ function TokenPackageCard({
         </div>
         {pkg.bonus > 0 && (
           <Badge variant="secondary" className="w-fit bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-200">
-            +{pkg.bonus} токенов бонусом
+            +{formatTokens(pkg.bonus)} бонусом
           </Badge>
         )}
       </CardHeader>

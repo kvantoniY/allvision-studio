@@ -1,4 +1,4 @@
-import { tokensToRub, type PublicService, type PublicTokenPackage } from '@allvision/shared';
+import { formatTokens, tokensToRub, type PublicService, type PublicTokenPackage } from '@allvision/shared';
 import { legalDocumentVersion, merchantInfo } from './merchant';
 
 export const serviceLinks = [
@@ -166,7 +166,7 @@ export function getServicePriceLabel(service: PublicService) {
   if (service.slug === 'cartoon-custom') return 'от 3000 ₽/мин';
   if (service.slug === 'realistic-custom') return 'от 6000 ₽/мин';
   if (service.slug === 'fairy-tale') return 'сценарий 5 токенов, видео от 4990 ₽';
-  return `${service.priceTokens} токенов ≈ ${tokensToRub(service.priceTokens)} ₽`;
+  return `${formatTokens(service.priceTokens)} ≈ ${tokensToRub(service.priceTokens)} ₽`;
 }
 
 export function getServiceBadgeLabel(service: PublicService) {
