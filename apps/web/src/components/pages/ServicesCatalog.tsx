@@ -222,7 +222,7 @@ export function ServicesCatalog({ initialCategory }: ServicesCatalogProps) {
       </section>
 
       {/* Переключатель категорий — полноширинной строкой над услугами */}
-      <section className="container sticky top-0 z-20 mt-8 bg-background/80 py-3 backdrop-blur">
+      <section className="container sticky top-14 z-20 mt-8 py-3 md:top-0">
         <nav aria-label="Категории услуг" className="-mx-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max gap-2 px-1">
             <Link

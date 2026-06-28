@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Instagram, MessageCircle, Music2, Youtube } from 'lucide-react';
+import { Instagram, MessageCircle, Music2, Send, Youtube } from 'lucide-react';
 import { BrandLogo } from '@/components/ui/brand-logo';
 import { merchantInfo } from '@/lib/merchant';
 import { serviceLinks } from '@/lib/public-content';
@@ -14,10 +14,11 @@ const companyLinks = [
 ];
 
 const socials = [
-  { label: 'Instagram', icon: Instagram },
-  { label: 'TikTok', icon: Music2 },
-  { label: 'VK', icon: MessageCircle },
-  { label: 'YouTube', icon: Youtube },
+  { label: 'Instagram', icon: Instagram, href: 'https://www.instagram.com/allvision_ai/' },
+  { label: 'Telegram', icon: Send, href: 'https://t.me/allvision_ai' },
+  { label: 'VK', icon: MessageCircle, href: 'https://vk.com/allvision_ai' },
+  { label: 'YouTube', icon: Youtube, href: 'https://www.youtube.com/@AllvisionAI' },
+  { label: 'TikTok', icon: Music2, href: 'https://vt.tiktok.com/ZSCAmxMvY/' },
 ];
 
 export function Footer() {
@@ -36,7 +37,9 @@ export function Footer() {
             {socials.map((item) => (
               <a
                 key={item.label}
-                href="#"
+                href={item.href}
+                target="_blank"
+                rel="noopener noreferrer"
                 aria-label={item.label}
                 className="flex h-9 w-9 items-center justify-center rounded-md border border-slate-800 bg-slate-900 text-muted-foreground transition hover:-translate-y-0.5 hover:bg-slate-800 hover:text-foreground"
               >

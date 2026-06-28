@@ -62,15 +62,17 @@ export function useLivelyProgress(real: number, active: boolean, id?: string): n
       setDisplay((d) => {
         const r = realRef.current;
         const base = Math.max(d, r);
-        // Сам по себе доползаем максимум до 95%; если бэкенд уже близко к концу (>=90),
-        // разрешаем доползти до 99%. Финальные 100% — только по реальному завершению.
-        const cap = r >= 90 ? 99 : 95;
+        // Намеренно медленная шкала: лучше юзер получит результат, когда бар ещё, скажем, на 70%,
+        // чем будет долго смотреть на «залипшие» 95%. Сами по себе доползаем максимум до 92%;
+        // если бэкенд уже близко к концу (>=90), разрешаем доползти до 97%. 100% — только по факту.
+        const cap = r >= 90 ? 97 : 92;
         if (base >= cap) return base;
-        // Замедляемся у потолка, но держим минимальную скорость — шкала не «зависает».
-        const step = Math.max(0.3, (cap - base) * 0.05);
+        // Асимптотическое приближение к потолку с небольшим шагом + минимальная скорость,
+        // чтобы шкала не «зависала», но и не разгонялась к 95% за пару секунд.
+        const step = Math.max(0.05, (cap - base) * 0.015);
         return Math.min(cap, base + step);
       });
-    }, 500);
+    }, 1000);
     return () => clearInterval(intervalId);
   }, [active]);
 
@@ -90,7 +92,7 @@ export function useLivelyProgress(real: number, active: boolean, id?: string): n
 
 // True once progress has been sitting near the end (>=95%) for a while — used to show a friendly
 // "servers are busy, please wait a bit longer" note when a generation hangs at 99%.
-export function useStuckHint(progress: number, active: boolean, thresholdMs = 25_000): boolean {
+export function useStuckHint(progress: number, active: boolean, thresholdMs = 45_000): boolean {
   const [stuck, setStuck] = useState(false);
   const sinceRef = useRef<number | null>(null);
   const high = active && Number.isFinite(progress) && progress >= 95;
