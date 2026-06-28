@@ -168,25 +168,65 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
     inputImageUrl = duo.outputUrl;
   }
 
-  const result = await provider.motionTransfer({
-    inputImageUrl,
-    drivingVideoUrl: parsed.reference_video,
-    prompt: parsed.prompt,
-    durationSec: duration,
-    model: motionModel,
-    params: {
-      ...baseParams,
-      input_image: inputImageUrl,
-      video_url: parsed.reference_video,
-      duration,
-      aspect_ratio: parsed.aspect_ratio ?? 'auto',
-      resolution: parsed.resolution ?? '720p',
-      keep_original_sound: true,
-    },
-    context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
-  });
-  await ctx.reportProgress(100);
-  return providerResultToOutput(result, 'video');
+  try {
+    const result = await provider.motionTransfer({
+      inputImageUrl,
+      drivingVideoUrl: parsed.reference_video,
+      prompt: parsed.prompt,
+      durationSec: duration,
+      model: motionModel,
+      params: {
+        ...baseParams,
+        input_image: inputImageUrl,
+        video_url: parsed.reference_video,
+        duration,
+        aspect_ratio: parsed.aspect_ratio ?? 'auto',
+        resolution: parsed.resolution ?? '720p',
+        keep_original_sound: true,
+      },
+      context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
+    });
+    await ctx.reportProgress(100);
+    return providerResultToOutput(result, 'video');
+  } catch (err) {
+    // Kling Motion Control requires a human in the character image and rejects pets/objects with
+    // "Failed to upload character image (may require human in image)". That submit is not billed
+    // (consume: 0), so we transparently fall back to the Kling 3.0 Omni reference flow, which accepts
+    // any subject (person, pet, character). Humans keep using motion_control; only rejected subjects fall back.
+    if (!isNonHumanCharacterError(err)) throw err;
+    ctx.logger.warn(
+      '[trend-video-transfer] Kling Motion Control rejected the character image (likely a non-human subject); falling back to Kling 3.0 Omni',
+    );
+    return runKlingOmni({ ...parsed, prompt: neutralKlingOmniPrompt(parsed.people_count) }, primaryPhoto, ctx);
+  }
+}
+
+function isNonHumanCharacterError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return /may require human in image|failed to upload character image/i.test(message);
+}
+
+// Subject-neutral omni prompt used when the human-only motion model rejects the image.
+// Works for people, pets and characters alike.
+function neutralKlingOmniPrompt(peopleCount: ParsedParams['people_count']) {
+  if (peopleCount === 'two') {
+    return [
+      'Use @video as the exact motion, timing, rhythm, camera and framing reference.',
+      'Use @image_1 and @image_2 as the identity references for the two main subjects (people, pets or characters).',
+      'Animate those exact two subjects performing the same movement as in @video.',
+      'Preserve each subject identity from its image: for a person keep face, hair and skin; for an animal keep species, breed, fur/coat pattern, colors, facial features and body proportions.',
+      'Keep exactly two subjects, do not add, remove, duplicate or blend subjects, do not copy identity from @video.',
+      'Photorealistic vertical social video, stable identities across every frame, natural believable movement and lighting, no text, no watermark.',
+    ].join(' ');
+  }
+  return [
+    'Use @video as the exact motion, timing, rhythm, camera and framing reference.',
+    'Use @image_1 as the identity reference for the single main subject — it may be a person, a pet/animal or a character.',
+    'Animate that exact subject performing the same movement as in @video.',
+    'Preserve the subject identity and appearance from @image_1: for a person keep face, hair and skin; for an animal keep species, breed, fur/coat pattern, colors, facial features and body proportions.',
+    'Keep exactly one subject, do not add, duplicate or blend subjects, do not copy identity from @video.',
+    'Photorealistic vertical social video, stable identity across every frame, natural believable movement and lighting, no text, no watermark.',
+  ].join(' ');
 }
 
 async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {

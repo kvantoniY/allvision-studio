@@ -124,6 +124,57 @@ describe('trend-video-transfer block', () => {
     }));
   });
 
+  it('falls back to Kling 3.0 Omni when Motion Control rejects a non-human image', async () => {
+    const provider = new StubAIProvider();
+    jest
+      .spyOn(provider, 'motionTransfer')
+      .mockRejectedValue(new Error('submit: Failed to upload character image (may require human in image)'));
+    const omniSpy = jest.spyOn(provider, 'textToVideo');
+
+    const output = await trendVideoTransferBlock.executor(
+      {
+        mode: 'motion_transfer',
+        people_count: 'one',
+        reference_video: 'https://cdn.test/dance.mp4',
+        primary_photo: 'https://cdn.test/cat.jpg',
+        duration: 8,
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    expect(omniSpy).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'kling-3-omni',
+      prompt: expect.stringContaining('pet'),
+      params: expect.objectContaining({
+        images: ['https://cdn.test/cat.jpg'],
+        video: 'https://cdn.test/dance.mp4',
+      }),
+    }));
+    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
+  });
+
+  it('does not fall back when Motion Control fails for an unrelated reason', async () => {
+    const provider = new StubAIProvider();
+    jest.spyOn(provider, 'motionTransfer').mockRejectedValue(new Error('PIAPI_TIMEOUT'));
+    const omniSpy = jest.spyOn(provider, 'textToVideo');
+
+    await expect(
+      trendVideoTransferBlock.executor(
+        {
+          mode: 'motion_transfer',
+          people_count: 'one',
+          reference_video: 'https://cdn.test/dance.mp4',
+          primary_photo: 'https://cdn.test/person.jpg',
+          duration: 8,
+        },
+        undefined,
+        ctx(provider),
+      ),
+    ).rejects.toThrow('PIAPI_TIMEOUT');
+    expect(omniSpy).not.toHaveBeenCalled();
+  });
+
   it('runs two-person Kling Omni with image and video references', async () => {
     const provider = new StubAIProvider();
     const spy = jest.spyOn(provider, 'textToVideo');
