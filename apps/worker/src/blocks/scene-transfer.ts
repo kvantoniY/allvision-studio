@@ -94,7 +94,11 @@ export const sceneTransferBlock: BlockDefinition = {
     let primaryRef = primaryPhoto;
     let secondaryRef = parsed.secondary_photo;
     let videoFrom = 5;
-    const shouldStylizeCharacters = count !== 'zero' && (parsed.stylize_characters || parsed.cartoon_visual_mode === 'cartoon');
+    // In explicit "realistic" mode the character must stay a real human — never run the cartoonify
+    // step, even if the service has stylize_characters enabled or a 3D/cartoon style is selected.
+    const realisticMode = parsed.cartoon_visual_mode === 'realistic';
+    const shouldStylizeCharacters = count !== 'zero' && !realisticMode
+      && (parsed.stylize_characters || parsed.cartoon_visual_mode === 'cartoon');
     if (shouldStylizeCharacters) {
       const stylizeModel = stringModel(parsed.stylize_model, 'nano-banana');
       const stylizePrompt = parsed.stylize_prompt?.trim() || defaultStylizePrompt();
@@ -327,19 +331,28 @@ function resolveUserPrompt(parsed: ParsedParams) {
 }
 
 function buildCartoonPrompt(parsed: ParsedParams) {
+  const style = [parsed.cartoon_style?.trim(), parsed.cartoon_style_prompt?.trim()]
+    .filter((part): part is string => Boolean(part && part.length > 0))
+    .join(' ');
   const parts: string[] = [];
-  if (parsed.cartoon_style?.trim()) {
-    parts.push(parsed.cartoon_style.trim());
-  }
-  if (parsed.cartoon_style_prompt?.trim()) {
-    parts.push(parsed.cartoon_style_prompt.trim());
-  }
+
   if (parsed.cartoon_visual_mode === 'realistic') {
+    // The chosen visual style (e.g. "Современный 3д") describes the WORLD/environment only.
+    // The person must stay a real photorealistic human — never cartoon/3D/stylized.
+    if (style) parts.push(`Apply this visual style to the surrounding world, environment and background only, never to the people: ${style}.`);
     parts.push(parsed.cartoon_realistic_prompt?.trim() || defaultCartoonRealisticPrompt());
+    return parts.filter(Boolean).join(' ');
   }
+
   if (parsed.cartoon_visual_mode === 'cartoon') {
+    // Cartoon mode: the chosen style shapes how the character is stylised.
+    if (style) parts.push(style);
     parts.push(parsed.cartoon_character_prompt?.trim() || defaultCartoonCharacterPrompt());
+    return parts.filter(Boolean).join(' ');
   }
+
+  // No explicit visual mode (legacy services): apply the style as-is.
+  if (style) parts.push(style);
   return parts.filter(Boolean).join(' ');
 }
 
@@ -348,7 +361,7 @@ function defaultUserPrompt() {
 }
 
 function defaultCartoonRealisticPrompt() {
-  return 'If a real person reference is provided, keep that person photorealistic and recognizable inside the animated world: human skin texture, natural face proportions, realistic eyes and hair, correct scale, matching lighting and soft contact shadows. The background can be animated, but the referenced person must not become a cartoon.';
+  return 'Render every referenced person as a fully photorealistic real human being — real human skin with pores and texture, natural human facial proportions, realistic eyes, hair and body, like a real photograph of that person. Do NOT cartoonify, toon-shade, anime-fy, 3D-render, plasticize, smooth or stylise the person in any way, even if the surrounding world is animated, cartoon or 3D, and even if a "3D"/cartoon style was selected — that style applies only to the environment, never to the people. Keep correct human anatomy and identity, with correct scale, matching lighting and soft contact shadows so the real person is believably composited into the animated world.';
 }
 
 function defaultCartoonCharacterPrompt() {

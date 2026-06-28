@@ -289,6 +289,39 @@ describe('scene-transfer block', () => {
     expect(videoSpy.mock.calls[0][0].prompt).toContain('Turn the person into a stable animated character.');
   });
 
+  it('keeps the character realistic in realistic mode even with stylize + a 3D style selected', async () => {
+    const provider = new StubAIProvider();
+    const editSpy = jest.spyOn(provider, 'imageEdit');
+    const videoSpy = jest.spyOn(provider, 'textToVideo');
+
+    await sceneTransferBlock.executor(
+      {
+        model: 'kling-3-omni',
+        scene_mode: 'photo',
+        scene_image: 'https://cdn.test/scene.jpg',
+        primary_photo: 'https://cdn.test/person.jpg',
+        cartoon_visual_mode: 'realistic',
+        cartoon_style: 'Современный 3д',
+        stylize_characters: true,
+        stylize_model: 'gpt-image-2',
+        base_prompt: 'Animated cartoon world.',
+        duration: 5,
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    // No cartoonify step — the original photo is used directly as the character reference.
+    expect(editSpy).not.toHaveBeenCalled();
+    expect(videoSpy.mock.calls[0][0].params).toEqual(expect.objectContaining({
+      images: ['https://cdn.test/person.jpg', 'https://cdn.test/scene.jpg'],
+    }));
+    // The 3D style is scoped to the world only, and the person is forced photorealistic.
+    expect(videoSpy.mock.calls[0][0].prompt).toContain('Современный 3д');
+    expect(videoSpy.mock.calls[0][0].prompt).toMatch(/world, environment and background only/i);
+    expect(videoSpy.mock.calls[0][0].prompt).toMatch(/photorealistic real human/i);
+  });
+
   it('throws when a photo scene mode has no scene image', async () => {
     await expect(
       sceneTransferBlock.executor(

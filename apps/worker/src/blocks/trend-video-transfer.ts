@@ -207,25 +207,39 @@ function isNonHumanCharacterError(err: unknown): boolean {
 }
 
 // Subject-neutral omni prompt used when the human-only motion model rejects the image.
-// Works for people, pets and characters alike.
+// Works for people, pets and characters alike. Critically: it must NOT humanize a non-human
+// subject — a dog must keep four legs and paws, not human hands/arms; whatever the subject is,
+// keep its OWN real anatomy from the image and only borrow the motion from the reference video.
+const ANATOMY_RULE_ONE = [
+  'Use @video ONLY as the reference for motion, rhythm, timing, camera and framing — never as an appearance, body or anatomy reference.',
+  'Use @image_1 as the appearance and anatomy reference for the single main subject. The subject may be a human, an animal or a non-human creature.',
+  'Strictly keep the subject\'s real body and anatomy from @image_1: its own head, limbs, body shape and proportions.',
+  'If the subject is an animal, it MUST stay that animal with correct animal anatomy — four legs and paws/hooves, muzzle, tail, fur/feathers/scales exactly as in the image — performing the dance on its own animal body. Never give an animal human hands, human arms, a human torso or a human face.',
+  'If the subject is a human, keep a normal human body. If it is some other creature, keep its own anatomy. Never graft human limbs onto a non-human subject, and never graft animal parts onto a human.',
+  'Adapt the reference choreography naturally to the subject\'s real body instead of forcing a human skeleton onto it.',
+].join(' ');
+const ANATOMY_RULE_TWO = [
+  'Use @video ONLY as the reference for motion, rhythm, timing, camera and framing — never as an appearance, body or anatomy reference.',
+  'Use @image_1 and @image_2 as the appearance and anatomy references for the two main subjects. Each subject may be a human, an animal or a non-human creature.',
+  'Strictly keep each subject\'s real body and anatomy from its image: its own head, limbs, body shape and proportions.',
+  'If a subject is an animal, it MUST stay that animal with correct animal anatomy — four legs and paws/hooves, muzzle, tail, fur/feathers/scales exactly as in the image. Never give an animal human hands, arms, torso or face; never graft human limbs onto a non-human or animal parts onto a human.',
+  'Adapt the reference choreography naturally to each subject\'s real body instead of forcing a human skeleton onto it.',
+].join(' ');
+
 function neutralKlingOmniPrompt(peopleCount: ParsedParams['people_count']) {
   if (peopleCount === 'two') {
     return [
-      'Use @video as the exact motion, timing, rhythm, camera and framing reference.',
-      'Use @image_1 and @image_2 as the identity references for the two main subjects (people, pets or characters).',
-      'Animate those exact two subjects performing the same movement as in @video.',
-      'Preserve each subject identity from its image: for a person keep face, hair and skin; for an animal keep species, breed, fur/coat pattern, colors, facial features and body proportions.',
-      'Keep exactly two subjects, do not add, remove, duplicate or blend subjects, do not copy identity from @video.',
-      'Photorealistic vertical social video, stable identities across every frame, natural believable movement and lighting, no text, no watermark.',
+      ANATOMY_RULE_TWO,
+      'Animate those exact two subjects performing a movement matching @video, adapted to each subject\'s own body.',
+      'Keep exactly two subjects, do not add, remove, duplicate or blend subjects, do not copy identity or anatomy from @video.',
+      'Photorealistic vertical social video, stable identities and correct anatomy across every frame, natural believable movement and lighting, no text, no watermark.',
     ].join(' ');
   }
   return [
-    'Use @video as the exact motion, timing, rhythm, camera and framing reference.',
-    'Use @image_1 as the identity reference for the single main subject — it may be a person, a pet/animal or a character.',
-    'Animate that exact subject performing the same movement as in @video.',
-    'Preserve the subject identity and appearance from @image_1: for a person keep face, hair and skin; for an animal keep species, breed, fur/coat pattern, colors, facial features and body proportions.',
-    'Keep exactly one subject, do not add, duplicate or blend subjects, do not copy identity from @video.',
-    'Photorealistic vertical social video, stable identity across every frame, natural believable movement and lighting, no text, no watermark.',
+    ANATOMY_RULE_ONE,
+    'Animate that exact subject performing a movement matching @video, adapted to the subject\'s own body.',
+    'Keep exactly one subject, do not add, duplicate or blend subjects, do not copy identity or anatomy from @video.',
+    'Photorealistic vertical social video, stable identity and correct anatomy across every frame, natural believable movement and lighting, no text, no watermark.',
   ].join(' ');
 }
 

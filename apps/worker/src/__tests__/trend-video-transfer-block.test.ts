@@ -145,7 +145,7 @@ describe('trend-video-transfer block', () => {
 
     expect(omniSpy).toHaveBeenCalledWith(expect.objectContaining({
       model: 'kling-3-omni',
-      prompt: expect.stringContaining('pet'),
+      prompt: expect.stringContaining('animal'),
       params: expect.objectContaining({
         images: ['https://cdn.test/cat.jpg'],
         video: 'https://cdn.test/dance.mp4',

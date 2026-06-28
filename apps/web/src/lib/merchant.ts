@@ -6,7 +6,7 @@ export const merchantInfo = {
   ogrn: 'не применяется',
   activityRegion: 'Московская область',
   siteUrl: 'https://allvision-pulse.ru/',
-  phone: '+7 924 990-33-57',
+  phone: '+7 985 207-47-74',
   email: 'allvision_ai@internet.ru',
   supportTelegram: '@allvision_support',
   workingHours: 'ежедневно с 9:00 до 22:00 МСК',
