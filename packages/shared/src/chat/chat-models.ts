@@ -237,6 +237,16 @@ export const CHAT_MODELS: ChatModelOption[] = [
   }),
   fromCatalog({
     blockSlug: 'image-edit',
+    modelSlug: 'seedream-4',
+    category: 'image',
+    description: 'Seedream 4.0 от ByteDance — мощная модель для text-to-image и редактирования по референсу. Хорошо держит композицию, реалистичные сцены, текст на картинке и несколько референс-фото, до 4K. Бета: точные параметры PiAPI ещё уточняются.',
+    acceptsImageInput: true,
+    acceptsTextOnly: true,
+    supportedAspectRatios: ['1:1', '9:16', '16:9', '4:3', '3:4'],
+    experimental: true,
+  }),
+  fromCatalog({
+    blockSlug: 'image-edit',
     modelSlug: 'flux-schnell',
     category: 'image',
     description: 'Flux Schnell — самая быстрая и дешёвая модель Flux. Подходит для быстрых черновиков, превью и эскизов идей. Только text-to-image.',

@@ -169,6 +169,21 @@ const imageEditModels: ModelOption[] = [
     optionalParams: ['image_urls', 'aspect_ratio'],
     docsUrl: 'https://piapi.ai/docs/gpt-image/gpt-image-api',
   },
+  {
+    slug: 'seedream-4',
+    title: 'Seedream 4.0 (ByteDance)',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.03),
+    estimatedCostUsd: 0.03,
+    provider: 'piapi',
+    providerModel: 'bytedance/seedream-4-0',
+    taskType: 'txt2img',
+    description: 'Seedream 4.0 от ByteDance: сильная модель для text-to-image и редактирования по референсу. Хорошо держит композицию, реалистичные сцены, текст на изображении и несколько референс-фото, поддерживает высокое разрешение до 4K. Подходит для обложек, ассетов услуг, аватаров и правок по образцу. Точный PiAPI payload/идентификатор модели нужно подтвердить smoke-тестом перед платным запуском.',
+    limits: { maxResolution: '4K', resolutions: ['1K', '2K', '4K'], maxFileSize: '10MB', maxInputImages: 6 },
+    requiredParams: ['prompt'],
+    optionalParams: ['image_urls', 'aspect_ratio', 'output_format', 'resolution'],
+    docsUrl: 'https://piapi.ai/docs',
+  },
 ].map((model) => withPiAPICapability(model as ModelOption));
 
 const imageToVideoModels: ModelOption[] = [

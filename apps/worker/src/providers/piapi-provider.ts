@@ -137,6 +137,9 @@ const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; tas
   'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06, maxInputImages: 14 },
   'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
+  // Seedream 4.0 (ByteDance). Поддерживает text-to-image и редактирование по референс-фото (image_urls).
+  // providerModel/taskType — best-effort по конвенциям PiAPI; точные значения нужно подтвердить smoke-тестом.
+  'seedream-4': { providerModel: 'bytedance/seedream-4-0', taskType: 'txt2img', supportsImageInput: true, estimatedCostUsd: 0.03, maxInputImages: 6 },
   // GPT Image 2 (OpenAI через PiAPI). Идёт НЕ через unified /api/v1/task, а через
   // OpenAI-совместимые /v1/images/generations|edits — см. ветку gpt-image в imageEdit().
   // providerModel/taskType здесь не используются для вызова, оставлены для единообразия каталога.
@@ -2174,6 +2177,22 @@ function buildImageEditPayload(input: {
         output_format: outputFormat,
         resolution: input.resolution,
         ...(imageUrls.length > 0 ? { image_urls: imageUrls } : {}),
+        ...(ar ? { aspect_ratio: ar } : {}),
+      },
+    };
+  }
+
+  // Seedream 4.0: text-to-image и image-to-image. Передаём референсы как image_urls, формат и
+  // разрешение как у Nano Banana. Точный payload PiAPI требует smoke-проверки.
+  if (modelSlug.startsWith('seedream')) {
+    return {
+      model: modelConfig.providerModel,
+      task_type: modelConfig.taskType,
+      input: {
+        prompt: input.prompt,
+        output_format: outputFormat,
+        ...(input.resolution ? { resolution: input.resolution } : {}),
+        ...(input.imageUrls.length > 0 ? { image_urls: input.imageUrls } : {}),
         ...(ar ? { aspect_ratio: ar } : {}),
       },
     };
