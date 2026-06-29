@@ -237,13 +237,12 @@ export const CHAT_MODELS: ChatModelOption[] = [
   }),
   fromCatalog({
     blockSlug: 'image-edit',
-    modelSlug: 'seedream-4',
+    modelSlug: 'seedream-5-lite',
     category: 'image',
-    description: 'Seedream 4.0 от ByteDance — мощная модель для text-to-image и редактирования по референсу. Хорошо держит композицию, реалистичные сцены, текст на картинке и несколько референс-фото, до 4K. Бета: точные параметры PiAPI ещё уточняются.',
+    description: 'Seedream 5 Lite от ByteDance — качественная модель для text-to-image и редактирования по референсу. Хорошо держит композицию, реалистичные сцены и текст на картинке, поддерживает несколько референс-фото и вывод 2K/3K.',
     acceptsImageInput: true,
     acceptsTextOnly: true,
     supportedAspectRatios: ['1:1', '9:16', '16:9', '4:3', '3:4'],
-    experimental: true,
   }),
   fromCatalog({
     blockSlug: 'image-edit',

@@ -137,9 +137,8 @@ const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; tas
   'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06, maxInputImages: 14 },
   'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
-  // Seedream 4.0 (ByteDance). Поддерживает text-to-image и редактирование по референс-фото (image_urls).
-  // providerModel/taskType — best-effort по конвенциям PiAPI; точные значения нужно подтвердить smoke-тестом.
-  'seedream-4': { providerModel: 'bytedance/seedream-4-0', taskType: 'txt2img', supportsImageInput: true, estimatedCostUsd: 0.03, maxInputImages: 6 },
+  // Seedream 5 Lite (ByteDance). Unified /api/v1/task, text-to-image + optional image_urls для редактирования, 2K/3K.
+  'seedream-5-lite': { providerModel: 'seedream-5-lite', taskType: 'txt2img', supportsImageInput: true, estimatedCostUsd: 0.028, maxInputImages: 6 },
   // GPT Image 2 (OpenAI через PiAPI). Идёт НЕ через unified /api/v1/task, а через
   // OpenAI-совместимые /v1/images/generations|edits — см. ветку gpt-image в imageEdit().
   // providerModel/taskType здесь не используются для вызова, оставлены для единообразия каталога.
@@ -2182,16 +2181,17 @@ function buildImageEditPayload(input: {
     };
   }
 
-  // Seedream 4.0: text-to-image и image-to-image. Передаём референсы как image_urls, формат и
-  // разрешение как у Nano Banana. Точный payload PiAPI требует smoke-проверки.
+  // Seedream 5 Lite: text-to-image + опциональные image_urls для редактирования. Поддерживает
+  // только 2K/3K, поэтому 1K/прочее приводим к 2K.
   if (modelSlug.startsWith('seedream')) {
+    const resolution = input.resolution === '3K' ? '3K' : '2K';
     return {
       model: modelConfig.providerModel,
       task_type: modelConfig.taskType,
       input: {
         prompt: input.prompt,
         output_format: outputFormat,
-        ...(input.resolution ? { resolution: input.resolution } : {}),
+        resolution,
         ...(input.imageUrls.length > 0 ? { image_urls: input.imageUrls } : {}),
         ...(ar ? { aspect_ratio: ar } : {}),
       },
