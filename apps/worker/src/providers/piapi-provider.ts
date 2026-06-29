@@ -137,8 +137,9 @@ const IMAGE_EDIT_MODELS_BY_PROVIDER: Record<string, { providerModel: string; tas
   'nano-banana': { providerModel: 'gemini', taskType: 'nano-banana-2', supportsImageInput: true, estimatedCostUsd: 0.06, maxInputImages: 14 },
   'flux-schnell': { providerModel: 'Qubico/flux1-schnell', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { providerModel: 'Qubico/flux1-dev', taskType: 'txt2img', supportsImageInput: false, estimatedCostUsd: 0.025 },
-  // Seedream 5 Lite (ByteDance). Unified /api/v1/task, text-to-image + optional image_urls для редактирования, 2K/3K.
-  'seedream-5-lite': { providerModel: 'seedream-5-lite', taskType: 'txt2img', supportsImageInput: true, estimatedCostUsd: 0.028, maxInputImages: 6 },
+  // Seedream 5 Lite (ByteDance). Unified /api/v1/task: model "seedream" (семейство) + task_type
+  // "seedream-5-lite" (вариант) — проверено probe'ом на проде. text-to-image + optional image_urls, 2K/3K.
+  'seedream-5-lite': { providerModel: 'seedream', taskType: 'seedream-5-lite', supportsImageInput: true, estimatedCostUsd: 0.028, maxInputImages: 6 },
   // GPT Image 2 (OpenAI через PiAPI). Идёт НЕ через unified /api/v1/task, а через
   // OpenAI-совместимые /v1/images/generations|edits — см. ветку gpt-image в imageEdit().
   // providerModel/taskType здесь не используются для вызова, оставлены для единообразия каталога.
