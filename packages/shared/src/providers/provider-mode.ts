@@ -1,4 +1,4 @@
-export type RuntimeProviderMode = 'mock' | 'piapi' | 'stub';
+export type RuntimeProviderMode = 'mock' | 'piapi' | 'fal' | 'stub';
 
 export function resolveRuntimeProviderMode(
   rawMode: string | undefined,
@@ -7,7 +7,7 @@ export function resolveRuntimeProviderMode(
   if (nodeEnv === 'test') return 'stub';
 
   const mode = (rawMode ?? 'mock').trim();
-  if (mode === 'mock' || mode === 'piapi') return mode;
+  if (mode === 'mock' || mode === 'piapi' || mode === 'fal') return mode;
   if (mode === 'stub') {
     throw new Error('PROVIDER_MODE=stub is only allowed when NODE_ENV=test');
   }

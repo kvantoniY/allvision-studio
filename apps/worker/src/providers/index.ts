@@ -11,6 +11,7 @@ import { resolveRuntimeProviderMode } from '@allvision/shared';
 import { MockAIProvider } from './mock-ai-provider';
 import type { AIProvider as WorkerAIProvider } from './ai-provider';
 import { PiAPIProvider } from './piapi-provider';
+import { FalProvider } from './fal-provider';
 import { R2TemporaryPublisher } from './r2-temporary-publisher';
 import { LocalPublicPublisher } from './local-public-publisher';
 import { NoopPublisher } from './noop-publisher';
@@ -27,10 +28,21 @@ let storageRootDir: string | undefined;
 let mockSingleton: MockAIProvider | undefined;
 let stubSingleton: StubAIProvider | undefined;
 let piapiSingleton: PiAPIProvider | undefined;
+let falSingleton: FalProvider | undefined;
 let publisherSingleton: FilePublisher | undefined;
 
 const MOCK_ONLY_BLOCKS = new Set(['image-restore', 'image-upscale']);
 const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit', 'text-to-video', 'motion-transfer', 'trend-video-transfer', 'scene-transfer', 'carousel-slides', 'product-card', 'photo-2017', 'talking-avatar', 'video-effect', 'video-watermark-remove', 'video-upscale']);
+
+// Блоки, которые в режиме PROVIDER_MODE=fal идут через FalProvider. Остальные блоки из
+// PIAPI_BLOCKS (face-swap, motion-transfer, video-effect, talking-avatar, watermark, upscale)
+// в fal пока не реализованы и остаются на PiAPI (гибрид). Можно переопределить env-ом
+// FAL_BLOCKS="image-edit,text-to-video" чтобы мигрировать поблочно и точечно откатывать.
+const DEFAULT_FAL_BLOCKS = 'image-edit,text-to-video,image-to-video';
+function getFalBlocks(): Set<string> {
+  const raw = process.env.FAL_BLOCKS ?? DEFAULT_FAL_BLOCKS;
+  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+}
 
 /**
  * Worker использует тот же LocalFileStorage что и API — но мы не импортируем класс
@@ -110,6 +122,13 @@ export function getAIProvider(
     if (PIAPI_BLOCKS.has(blockSlug)) return getPiAPIProvider();
     return getMockProvider();
   }
+  if (providerMode === 'fal') {
+    if (!blockSlug || MOCK_ONLY_BLOCKS.has(blockSlug)) return getMockProvider();
+    if (getFalBlocks().has(blockSlug)) return getFalProvider();
+    // Не мигрированные на fal блоки остаются на PiAPI (гибрид). Требует PIAPI_API_KEY в env.
+    if (PIAPI_BLOCKS.has(blockSlug)) return getPiAPIProvider();
+    return getMockProvider();
+  }
 
   return getStubProvider();
 }
@@ -121,6 +140,15 @@ export async function initialiseWorkerProviders() {
   const providerMode = getRuntimeProviderMode();
   if (providerMode === 'piapi') {
     await getPiAPIProvider().initialise();
+  }
+  if (providerMode === 'fal') {
+    await getFalProvider().initialise();
+    // Гибрид: не-fal блоки идут на PiAPI, поэтому при наличии ключа инициализируем и его.
+    if (process.env.PIAPI_API_KEY) {
+      await getPiAPIProvider().initialise().catch((err) => {
+        logger.warn('[fal] PiAPI fallback init failed (non-fal blocks may be unavailable)', err);
+      });
+    }
   }
 }
 
@@ -157,6 +185,17 @@ function getPiAPIProvider(): PiAPIProvider {
     logger,
   });
   return piapiSingleton;
+}
+
+function getFalProvider(): FalProvider {
+  if (falSingleton) return falSingleton;
+  falSingleton = new FalProvider({
+    apiKey: requireEnv('FAL_KEY'),
+    queueBaseUrl: process.env.FAL_QUEUE_BASE_URL,
+    storage: getStorageProvider(),
+    logger,
+  });
+  return falSingleton;
 }
 
 function getFilePublisher(): FilePublisher {
@@ -204,10 +243,12 @@ export function _resetWorkerProvidersForTests() {
   mockSingleton = undefined;
   stubSingleton = undefined;
   piapiSingleton = undefined;
+  falSingleton = undefined;
   publisherSingleton = undefined;
 }
 
 export { MockAIProvider } from './mock-ai-provider';
 export { PiAPIProvider } from './piapi-provider';
+export { FalProvider } from './fal-provider';
 export { StubAIProvider } from './stub-ai-provider';
 export type { WorkerAIProvider };

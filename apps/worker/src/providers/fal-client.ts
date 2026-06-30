@@ -1,0 +1,259 @@
+import { ProviderError } from './provider-errors';
+
+/**
+ * Минимальный клиент fal.ai queue API.
+ *
+ * Поток (https://fal.ai/docs/model-apis/queue):
+ *   1. submit:  POST https://queue.fal.run/{modelId}      -> { request_id, status_url, response_url }
+ *   2. status:  GET  {status_url}                          -> { status: IN_QUEUE|IN_PROGRESS|COMPLETED }
+ *   3. result:  GET  {response_url}                        -> output JSON модели (images[]/video{}/...)
+ *
+ * Аутентификация: заголовок `Authorization: Key <FAL_KEY>`.
+ *
+ * Почему это надёжнее PiAPI на нашей РФ-ВМ: submit/status/result — короткие запросы, никаких
+ * длинных синхронных multipart-соединений (главный убийца gpt-image edits на PiAPI). Входные
+ * файлы передаём как публичные URL (наш /static уже публичен) или base64 data-uri, поэтому
+ * publish-to-R2/nginx и прокси-SPOF здесь не нужны.
+ */
+
+const DEFAULT_QUEUE_BASE = 'https://queue.fal.run';
+
+export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
+
+export interface FalClientOptions {
+  apiKey: string;
+  queueBaseUrl?: string;
+  requestTimeoutMs?: number;
+}
+
+export interface FalSubmitResult {
+  requestId: string;
+  statusUrl: string;
+  responseUrl: string;
+  raw: unknown;
+}
+
+export interface FalCompletedResult {
+  /** Сырой output модели — структура зависит от модели (images[], video{url}, image{url} и т.п.). */
+  output: Record<string, unknown>;
+  /** Стоимость запроса в USD, если fal вернул её в логах/метаданных. */
+  costUsd?: number;
+  raw: unknown;
+}
+
+interface PollOptions {
+  timeoutMs: number;
+  /** Ожидаемая длительность для плавного прогресса (видео ~минуты, картинки ~секунды). */
+  expectedDurationMs?: number;
+  onProgress?: (percent: number) => Promise<void> | void;
+}
+
+const TRANSIENT_CONNECTION_RE = /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED|UND_ERR|fetch failed|network/i;
+
+export class FalClient {
+  private apiKey: string;
+  private queueBaseUrl: string;
+  private requestTimeoutMs: number;
+
+  constructor(options: FalClientOptions) {
+    if (!options.apiKey) {
+      throw new Error('FAL_KEY is required for FalClient');
+    }
+    this.apiKey = options.apiKey;
+    this.queueBaseUrl = (options.queueBaseUrl ?? DEFAULT_QUEUE_BASE).replace(/\/+$/, '');
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 60_000;
+  }
+
+  /** Ставит задачу в очередь fal. modelId — например 'fal-ai/veo3.1' или 'fal-ai/nano-banana/edit'. */
+  async submit(modelId: string, input: Record<string, unknown>): Promise<FalSubmitResult> {
+    const url = `${this.queueBaseUrl}/${modelId.replace(/^\/+/, '')}`;
+    const res = await this.fetchWithRetry(url, {
+      method: 'POST',
+      headers: this.jsonHeaders(),
+      body: JSON.stringify(input),
+    }, { connectionRetries: 3, retries: 0 });
+
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      throw new ProviderError(
+        'FAL_SUBMIT_FAILED',
+        `fal submit failed (${res.status}): ${truncate(JSON.stringify(json))}`,
+        res.status,
+      );
+    }
+    const requestId = readString(json, 'request_id');
+    const statusUrl = readString(json, 'status_url');
+    const responseUrl = readString(json, 'response_url');
+    if (!requestId || !statusUrl || !responseUrl) {
+      throw new ProviderError('FAL_SUBMIT_MALFORMED', `fal submit returned no request handles: ${truncate(JSON.stringify(json))}`);
+    }
+    return { requestId, statusUrl, responseUrl, raw: json };
+  }
+
+  /** Поллит статус до COMPLETED и возвращает output модели. */
+  async pollUntilDone(submit: FalSubmitResult, opts: PollOptions): Promise<FalCompletedResult> {
+    const deadline = Date.now() + opts.timeoutMs;
+    const expected = opts.expectedDurationMs ?? 60_000;
+    const startedAt = Date.now();
+    let delayMs = 1_000;
+
+    while (Date.now() <= deadline) {
+      const status = await this.getStatus(submit.statusUrl);
+      if (status.status === 'COMPLETED') {
+        await opts.onProgress?.(99);
+        return this.getResult(submit.responseUrl);
+      }
+      if (status.status === 'FAILED') {
+        throw new ProviderError('FAL_TASK_FAILED', `fal task ${submit.requestId} failed: ${truncate(JSON.stringify(status.raw))}`);
+      }
+      // Плавный прогресс по прошедшему времени относительно ожидаемого.
+      const elapsed = Date.now() - startedAt;
+      const pct = Math.min(95, Math.round((elapsed / expected) * 90) + 5);
+      await opts.onProgress?.(pct);
+
+      await delay(Math.min(delayMs, Math.max(0, deadline - Date.now())));
+      delayMs = Math.min(5_000, Math.round(delayMs * 1.4));
+    }
+    throw new ProviderError('FAL_TIMEOUT', `fal task ${submit.requestId} did not complete within ${opts.timeoutMs}ms`);
+  }
+
+  private async getStatus(statusUrl: string): Promise<{ status: FalQueueStatus; raw: unknown }> {
+    const res = await this.fetchWithRetry(statusUrl, {
+      method: 'GET',
+      headers: { Authorization: `Key ${this.apiKey}` },
+    }, { connectionRetries: 3, retries: 2 });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      throw new ProviderError('FAL_STATUS_FAILED', `fal status failed (${res.status})`, res.status);
+    }
+    const raw = readString(json, 'status') ?? '';
+    const status: FalQueueStatus = raw === 'COMPLETED' || raw === 'IN_PROGRESS' || raw === 'IN_QUEUE' || raw === 'FAILED'
+      ? raw
+      : 'IN_PROGRESS';
+    return { status, raw: json };
+  }
+
+  private async getResult(responseUrl: string): Promise<FalCompletedResult> {
+    const res = await this.fetchWithRetry(responseUrl, {
+      method: 'GET',
+      headers: { Authorization: `Key ${this.apiKey}` },
+    }, { connectionRetries: 3, retries: 2 });
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      throw new ProviderError('FAL_RESULT_FAILED', `fal result fetch failed (${res.status})`, res.status);
+    }
+    return { output: json, costUsd: extractFalCost(json), raw: json };
+  }
+
+  /** Скачивает итоговый файл (картинку/видео) с fal CDN. */
+  async download(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    const res = await this.fetchWithRetry(url, { method: 'GET', headers: {} }, { connectionRetries: 3, retries: 1 });
+    if (!res.ok) {
+      throw new ProviderError('FAL_DOWNLOAD_FAILED', `fal download failed (${res.status})`, res.status);
+    }
+    const contentType = res.headers.get('content-type')?.split(';')[0]?.trim() ?? 'application/octet-stream';
+    return { buffer: Buffer.from(await res.arrayBuffer()), contentType };
+  }
+
+  /** Проверка доступности/баланса. fal не даёт публичного balance endpoint в queue API — */
+  /** делаем лёгкий ping к queue base, чтобы убедиться, что egress до fal жив. */
+  async ping(): Promise<boolean> {
+    try {
+      const res = await this.fetchWithRetry(`${this.queueBaseUrl}/`, {
+        method: 'GET',
+        headers: { Authorization: `Key ${this.apiKey}` },
+      }, { connectionRetries: 1, retries: 0 });
+      // Любой HTTP-ответ (даже 404) означает, что сеть до fal работает.
+      return res.status > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  private jsonHeaders() {
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Key ${this.apiKey}`,
+    };
+  }
+
+  /**
+   * retries — повтор на HTTP 5xx (ответ пришёл = запрос дошёл).
+   * connectionRetries — повтор ТОЛЬКО на transport-обрыв (fetch бросил, ответа не было).
+   * Наш AbortController-таймаут не повторяется.
+   */
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    opts: { retries: number; connectionRetries: number },
+  ): Promise<Response> {
+    let lastErr: unknown;
+    let httpAttempts = 0;
+    let connAttempts = 0;
+    for (let i = 0; i < 1 + opts.retries + opts.connectionRetries; i += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+      try {
+        const res = await fetch(url, { ...init, signal: controller.signal });
+        if (res.status >= 500 && httpAttempts < opts.retries) {
+          httpAttempts += 1;
+          await delay(backoff(httpAttempts));
+          continue;
+        }
+        return res;
+      } catch (err) {
+        lastErr = err;
+        const message = (err as Error)?.message ?? '';
+        const isAbort = (err as Error)?.name === 'AbortError';
+        const isTransient = !isAbort && TRANSIENT_CONNECTION_RE.test(message);
+        if (isTransient && connAttempts < opts.connectionRetries) {
+          connAttempts += 1;
+          await delay(backoff(connAttempts));
+          continue;
+        }
+        if (isAbort) {
+          throw new ProviderError('FAL_TIMEOUT', `fal request timed out after ${this.requestTimeoutMs}ms: ${url}`);
+        }
+        throw new ProviderError('FAL_NETWORK_ERROR', `fal request failed: ${message}`, undefined, {
+          cause: (err as { cause?: { code?: string } })?.cause?.code,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    throw new ProviderError('FAL_NETWORK_ERROR', `fal request failed after retries: ${(lastErr as Error)?.message ?? 'unknown'}`);
+  }
+}
+
+function backoff(attempt: number) {
+  return Math.min(8_000, 500 * 2 ** (attempt - 1));
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
+}
+
+function readString(obj: Record<string, unknown>, key: string): string | undefined {
+  const value = obj[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function truncate(value: string, max = 500) {
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+}
+
+/**
+ * fal возвращает стоимость по-разному в зависимости от модели; нередко её нет в output.
+ * Пытаемся достать из распространённых полей, иначе undefined (упадём на estimate).
+ */
+function extractFalCost(json: Record<string, unknown>): number | undefined {
+  const candidates = [
+    (json.metrics as Record<string, unknown> | undefined)?.cost,
+    (json as Record<string, unknown>).cost,
+    (json as Record<string, unknown>).price,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'number' && Number.isFinite(c) && c >= 0) return c;
+  }
+  return undefined;
+}
