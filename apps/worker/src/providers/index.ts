@@ -191,7 +191,8 @@ function getFalProvider(): FalProvider {
   if (falSingleton) return falSingleton;
   falSingleton = new FalProvider({
     apiKey: requireEnv('FAL_KEY'),
-    queueBaseUrl: process.env.FAL_QUEUE_BASE_URL,
+    // пустую строку из env трактуем как "не задано" -> FalClient подставит дефолт
+    queueBaseUrl: process.env.FAL_QUEUE_BASE_URL || undefined,
     storage: getStorageProvider(),
     logger,
   });

@@ -60,7 +60,9 @@ export class FalClient {
       throw new Error('FAL_KEY is required for FalClient');
     }
     this.apiKey = options.apiKey;
-    this.queueBaseUrl = (options.queueBaseUrl ?? DEFAULT_QUEUE_BASE).replace(/\/+$/, '');
+    // ВАЖНО: || (не ??) — пустая строка из env (FAL_QUEUE_BASE_URL=) должна падать на DEFAULT,
+    // иначе queueBaseUrl='' и URL получается относительным ('/fal-ai/...') -> fetch не парсит.
+    this.queueBaseUrl = (options.queueBaseUrl || DEFAULT_QUEUE_BASE).replace(/\/+$/, '');
     this.requestTimeoutMs = options.requestTimeoutMs ?? 60_000;
   }
 
