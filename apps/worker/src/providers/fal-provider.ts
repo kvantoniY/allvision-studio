@@ -250,7 +250,10 @@ export class FalProvider implements AIProvider {
     const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
     const resolution = readString(input.params, 'resolution');
     Object.assign(falInput, videoProfileFields(config.paramProfile, aspect, resolution));
-    if (readBoolean(input.params, 'generate_audio')) falInput.generate_audio = true;
+    // omni reference-сцены (last-kiss и т.п.) озвучиваются на шаге video-compose; модельный звук
+    // там стабильно ловит content-policy fal, поэтому его не запрашиваем.
+    const isReferenceVideo = config.endpoint.includes('reference-to-video');
+    if (!isReferenceVideo && readBoolean(input.params, 'generate_audio')) falInput.generate_audio = true;
     // omni-референсы (картинки/видео сцены) — fal-эндпоинты ждут image_urls/video_url; точные имена
     // полей зависят от модели и подтверждаются смоуком.
     const imageRefs = uniqueUrls([...readStringList(input.params, 'images'), ...readStringList(input.params, 'image_urls')]);
@@ -286,7 +289,11 @@ export class FalProvider implements AIProvider {
     const startedAt = Date.now();
     let requestId: string | undefined;
     let completed: FalCompletedResult | undefined;
+    let audioRetried = false;
     try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+      try {
       const submit = await this.client.submit(args.endpoint, args.falInput);
       requestId = submit.requestId;
       await prisma.project.update({
@@ -317,6 +324,20 @@ export class FalProvider implements AIProvider {
         durationMs,
         meta: { falRequestId: requestId, falUrl: outputUrl, model: args.model, provider: 'fal' },
       };
+      } catch (inner) {
+        // Аудио завернула модерация fal -> одноразовый повтор БЕЗ звука (видео обычно проходит).
+        const isAudioPolicy = inner instanceof ProviderError
+          && inner.code === 'FAL_CONTENT_POLICY'
+          && (inner.meta as { audio?: boolean } | undefined)?.audio === true;
+        if (isAudioPolicy && !audioRetried && args.falInput.generate_audio) {
+          audioRetried = true;
+          delete args.falInput.generate_audio;
+          this.logger.warn(`[fal] ${args.model}: audio flagged by content policy, retrying without audio`);
+          continue;
+        }
+        throw inner;
+      }
+      }
     } catch (err) {
       const durationMs = Date.now() - startedAt;
       await this.logUsage(args.context, args.model, requestId, 'failed', 0, durationMs, {

@@ -106,6 +106,10 @@ export class FalClient {
         return this.getResult(submit.responseUrl);
       }
       if (status.status === 'FAILED') {
+        const policy = findContentPolicyViolation(status.raw);
+        if (policy) {
+          throw new ProviderError('FAL_CONTENT_POLICY', policy.message, undefined, { audio: policy.audio });
+        }
         throw new ProviderError('FAL_TASK_FAILED', `fal task ${submit.requestId} failed: ${truncate(JSON.stringify(status.raw))}`);
       }
       // Плавный прогресс по прошедшему времени относительно ожидаемого.
@@ -142,7 +146,11 @@ export class FalClient {
     }, { connectionRetries: 3, retries: 2 });
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) {
-      throw new ProviderError('FAL_RESULT_FAILED', `fal result fetch failed (${res.status})`, res.status);
+      const policy = findContentPolicyViolation(json);
+      if (policy) {
+        throw new ProviderError('FAL_CONTENT_POLICY', policy.message, res.status, { audio: policy.audio });
+      }
+      throw new ProviderError('FAL_RESULT_FAILED', `fal result fetch failed (${res.status}): ${truncate(JSON.stringify(json))}`, res.status);
     }
     return { output: json, costUsd: extractFalCost(json), raw: json };
   }
@@ -248,6 +256,23 @@ function truncate(value: string, max = 500) {
  * fal возвращает стоимость по-разному в зависимости от модели; нередко её нет в output.
  * Пытаемся достать из распространённых полей, иначе undefined (упадём на estimate).
  */
+/** Ищет content_policy_violation в теле ошибки fal (detail[]) и определяет, про аудио ли это. */
+function findContentPolicyViolation(raw: unknown): { message: string; audio: boolean } | undefined {
+  const obj = raw as Record<string, unknown> | undefined;
+  const detail = obj?.detail;
+  const items = Array.isArray(detail) ? detail : [];
+  for (const item of items) {
+    const it = item as Record<string, unknown>;
+    if (it?.type === 'content_policy_violation') {
+      const msg = typeof it.msg === 'string' ? it.msg : 'content policy violation';
+      const loc = Array.isArray(it.loc) ? it.loc.join('.') : '';
+      const audio = /audio/i.test(msg) || /audio/i.test(loc);
+      return { message: msg, audio };
+    }
+  }
+  return undefined;
+}
+
 function extractFalCost(json: Record<string, unknown>): number | undefined {
   const candidates = [
     (json.metrics as Record<string, unknown> | undefined)?.cost,
