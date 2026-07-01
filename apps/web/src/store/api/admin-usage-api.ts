@@ -145,11 +145,32 @@ export const adminUsageApi = createApi({
       },
       providesTags: ['AdminUsage'],
     }),
+    getFalPricing: build.query<FalPricingResponse, { slug?: string; endpoint?: string; duration?: number; numImages?: number }>({
+      query: (q) => {
+        const params = new URLSearchParams();
+        if (q.slug) params.set('slug', q.slug);
+        if (q.endpoint) params.set('endpoint', q.endpoint);
+        if (q.duration) params.set('duration', String(q.duration));
+        if (q.numImages) params.set('numImages', String(q.numImages));
+        return { url: `/fal/pricing?${params.toString()}` };
+      },
+    }),
   }),
 });
+
+export type FalPricingResponse = {
+  available: boolean;
+  endpoint?: string;
+  unitPrice?: number;
+  unit?: string;
+  units?: number;
+  costUsd?: number;
+  reason?: string;
+};
 
 export const {
   useGetAdminUsageQuery,
   useGetFalAccountQuery,
   useGetAdminAnalyticsOverviewQuery,
+  useGetFalPricingQuery,
 } = adminUsageApi;

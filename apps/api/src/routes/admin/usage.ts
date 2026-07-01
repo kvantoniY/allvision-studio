@@ -2,6 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import IORedis from 'ioredis';
 import { Prisma, prisma } from '@allvision/database';
 import { z } from 'zod';
+import { falEndpointForModel, falBillingUnits } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { PiAPIAccountClient } from '../../services/piapi-client';
@@ -329,6 +330,52 @@ adminUsageRouter.get('/fal/account', async (req: Request, res: Response, next: N
     next(err);
   }
 });
+
+// Живая цена модели fal (по slug из каталога или прямому endpoint) + расчёт по настройкам.
+adminUsageRouter.get('/fal/pricing', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const slug = typeof req.query.slug === 'string' ? req.query.slug : undefined;
+    const rawEndpoint = typeof req.query.endpoint === 'string' ? req.query.endpoint : undefined;
+    const endpoint = (rawEndpoint || (slug ? falEndpointForModel(slug) : undefined))?.replace(/^\/+/, '');
+    if (!endpoint) { res.json({ available: false, reason: 'no-endpoint', slug }); return; }
+    const duration = req.query.duration ? Number(req.query.duration) : undefined;
+    const numImages = req.query.numImages ? Number(req.query.numImages) : undefined;
+    const pricing = await getFalPricing(endpoint);
+    if (!pricing) { res.json({ available: false, endpoint, reason: 'no-price' }); return; }
+    const units = falBillingUnits(pricing.unit, { duration, numImages });
+    res.json({
+      available: true,
+      endpoint,
+      unitPrice: pricing.unitPrice,
+      unit: pricing.unit,
+      units,
+      costUsd: Math.round(pricing.unitPrice * units * 10000) / 10000,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const falPriceCache = new Map<string, { price: { unitPrice: number; unit: string } | null; exp: number }>();
+async function getFalPricing(endpoint: string): Promise<{ unitPrice: number; unit: string } | null> {
+  const cached = falPriceCache.get(endpoint);
+  if (cached && cached.exp > Date.now()) return cached.price;
+  const apiKey = process.env.FAL_BILLING_KEY || process.env.FAL_KEY;
+  if (!apiKey) return null;
+  try {
+    const r = await fetch(`https://api.fal.ai/v1/models/pricing?endpoint_id=${encodeURIComponent(endpoint)}`, {
+      headers: { Authorization: `Key ${apiKey}` },
+    });
+    if (!r.ok) { falPriceCache.set(endpoint, { price: null, exp: Date.now() + 5 * 60 * 1000 }); return null; }
+    const json = (await r.json().catch(() => ({}))) as { prices?: Array<{ endpoint_id?: string; unit_price?: number; unit?: string }> };
+    const row = Array.isArray(json.prices) ? (json.prices.find((p) => p.endpoint_id === endpoint) ?? json.prices[0]) : undefined;
+    const price = row && typeof row.unit_price === 'number' ? { unitPrice: row.unit_price, unit: String(row.unit ?? '') } : null;
+    falPriceCache.set(endpoint, { price, exp: Date.now() + 60 * 60 * 1000 });
+    return price;
+  } catch {
+    return null;
+  }
+}
 
 type FalAccountCache = { balanceUsd: number; currency: string; username?: string; lastChecked: string; lowBalance: boolean };
 let memoryFalAccountCache: FalAccountCache | undefined;

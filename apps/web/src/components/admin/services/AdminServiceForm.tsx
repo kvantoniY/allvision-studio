@@ -90,6 +90,8 @@ import {
 import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '@/store/api/admin-settings-api';
 import { useListAdminServiceCategoriesQuery } from '@/store/api/admin-service-categories-api';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
+import { useGetFalPricingQuery } from '@/store/api/admin-usage-api';
+import { falEndpointForModel } from '@allvision/shared';
 import { SourceSelector, type AvailableSourceStep } from './SourceSelector';
 
 // Categories are now loaded dynamically from API (ServiceCategoryDef). Form fetches the list at render time.
@@ -595,6 +597,30 @@ function providerLabel(provider: ModelOption['provider']) {
   if (provider === 'piapi') return 'PiAPI';
   if (provider === 'local') return 'Local';
   return 'Mock';
+}
+
+// Живая себестоимость модели из fal (по текущим настройкам шага: длительность / кол-во картинок).
+function FalLivePrice({ slug, endpoint, duration, numImages, usdToRub }: {
+  slug?: string;
+  endpoint?: string;
+  duration?: number;
+  numImages?: number;
+  usdToRub: number;
+}) {
+  const hasTarget = Boolean(slug || endpoint);
+  const { data, isFetching } = useGetFalPricingQuery({ slug, endpoint, duration, numImages }, { skip: !hasTarget });
+  if (!hasTarget) return null;
+  if (isFetching && !data) return <div className="mt-1 text-slate-500">Себестоимость fal: загрузка…</div>;
+  if (!data) return null;
+  if (!data.available) {
+    return <div className="mt-1 text-slate-500">Себестоимость fal: нет прямой цены{data.reason ? ` (${data.reason})` : ''}</div>;
+  }
+  return (
+    <div className="mt-1 text-emerald-300/90">
+      Себестоимость fal (live): {formatMoney({ usd: data.costUsd ?? 0 }, { primary: 'usd', showAll: true, usdToRub })}
+      <span className="text-slate-500"> · {data.units} {data.unit} × ${data.unitPrice}/{data.unit}</span>
+    </div>
+  );
 }
 
 function HelpTip({ text }: { text?: string }) {
@@ -1131,7 +1157,7 @@ function BlockParamsForm({
     .flatMap((model) => {
       const maxDuration = model.limits?.maxDurationSec;
       if (duration && maxDuration && duration > maxDuration) {
-        return [`Длительность превышает лимит ${model.title} (${maxDuration} с). PiAPI может вернуть ошибку.`];
+        return [`Длительность превышает лимит ${model.title} (${maxDuration} с). Модель может вернуть ошибку.`];
       }
       return [];
     });
@@ -1169,9 +1195,15 @@ function BlockParamsForm({
           {selectedModels.map((model) => (
             <div key={model.slug} className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-3">
               <div className="font-medium text-slate-100">
-                {model.title} · {providerLabel(model.provider)} · цена {formatMoney({ coins: effectiveModelPriceCoins(model, modelPriceOverrides) }, { primary: 'coins', showAll: true, usdToRub })}
-                {model.estimatedCostUsd ? ` · ${formatMoney({ usd: model.estimatedCostUsd }, { primary: 'usd', showAll: true, usdToRub })}` : ''}
+                {model.title} · {falEndpointForModel(model.slug) ? 'fal.ai' : providerLabel(model.provider)} · цена юзеру {formatMoney({ coins: effectiveModelPriceCoins(model, modelPriceOverrides) }, { primary: 'coins', showAll: true, usdToRub })}
               </div>
+              <FalLivePrice
+                slug={model.slug}
+                endpoint={block.slug === 'fal-generic' ? (typeof value.endpoint === 'string' ? value.endpoint : undefined) : undefined}
+                duration={duration}
+                numImages={typeof value.num_images === 'number' ? value.num_images : undefined}
+                usdToRub={usdToRub}
+              />
               {model.description && <p className="mt-2 text-slate-400">{model.description}</p>}
               <ModelPriceEditor
                 model={model}
@@ -1201,8 +1233,14 @@ function BlockParamsForm({
                   {model.optionalParams?.length ? (
                     <div className="text-slate-500">Опциональные: {model.optionalParams.join(', ')}</div>
                   ) : null}
-                  {model.providerModel && <div className="mt-1 text-slate-500">Модель провайдера: {model.providerModel}</div>}
-                  {model.taskType && <div className="text-slate-500">Тип задачи: {model.taskType}</div>}
+                  {falEndpointForModel(model.slug) ? (
+                    <div className="mt-1 text-slate-500">fal endpoint: {falEndpointForModel(model.slug)}</div>
+                  ) : (
+                    <>
+                      {model.providerModel && <div className="mt-1 text-slate-500">Модель провайдера: {model.providerModel}</div>}
+                      {model.taskType && <div className="text-slate-500">Тип задачи: {model.taskType}</div>}
+                    </>
+                  )}
                 </div>
               </div>
               {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-violet-300 hover:text-violet-200">Документация</a>}
