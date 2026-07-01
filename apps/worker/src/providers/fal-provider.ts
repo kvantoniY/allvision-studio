@@ -41,7 +41,8 @@ interface FalModelConfig {
  */
 const FAL_MODELS: Record<string, FalModelConfig> = {
   // ---- image (image-edit блок) ----
-  'nano-banana': { endpoint: 'fal-ai/nano-banana', editEndpoint: 'fal-ai/nano-banana/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.06 },
+  // Nano Banana Pro (Gemini 3 Pro image) — флагман по консистентности лица и рендеру текста.
+  'nano-banana': { endpoint: 'fal-ai/nano-banana-pro', editEndpoint: 'fal-ai/nano-banana-pro/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.14 },
   'gpt-image-2': { endpoint: 'fal-ai/gpt-image-1/text-to-image', editEndpoint: 'fal-ai/gpt-image-1/edit-image', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.1 },
   'flux-schnell': { endpoint: 'fal-ai/flux/schnell', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { endpoint: 'fal-ai/flux/dev', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.025 },
@@ -61,8 +62,8 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   // ---- image-to-video ----
   'kling-std': { endpoint: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.25 },
   'kling-pro': { endpoint: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.35 },
-  'kling-3-std': { endpoint: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
-  'kling-3-pro': { endpoint: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
+  'kling-3-std': { endpoint: 'fal-ai/kling-video/v3/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
+  'kling-3-pro': { endpoint: 'fal-ai/kling-video/v3/pro/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
   'veo-3.1-i2v': { endpoint: 'fal-ai/veo3.1/image-to-video', kind: 'image-to-video', estimatedCostUsd: 1.5 },
   'veo-3.1-fast-i2v': { endpoint: 'fal-ai/veo3.1/fast/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.75 },
   'seedance-2-first-last': { endpoint: 'fal-ai/bytedance/seedance/v2/image-to-video', kind: 'image-to-video', estimatedCostUsd: 1.5 },
@@ -390,10 +391,11 @@ function normalizeAspect(value: string | undefined): string | undefined {
 }
 
 function estimateImageCost(model: string, config: FalModelConfig, resolution?: string): number {
+  // nano-banana slug теперь маппится на Nano Banana Pro — дороже базовой версии.
   if (model === 'nano-banana') {
-    if (resolution === '4K') return 0.12;
-    if (resolution === '2K') return 0.08;
-    return 0.06;
+    if (resolution === '4K') return 0.18;
+    if (resolution === '2K') return 0.14;
+    return 0.12;
   }
   return config.estimatedCostUsd;
 }
