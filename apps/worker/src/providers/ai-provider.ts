@@ -1,4 +1,4 @@
-export type ProviderName = 'piapi' | 'mock' | 'stub';
+export type ProviderName = 'piapi' | 'fal' | 'mock' | 'stub';
 
 export interface ProviderRunContext {
   projectId: string;

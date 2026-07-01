@@ -74,8 +74,7 @@ const VIDEO_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class FalProvider implements AIProvider {
-  // 'piapi' оставлен в union ProviderName; fal логируется через поле provider='fal' в AIUsageLog.
-  name = 'piapi' as const;
+  name = 'fal' as const;
 
   private client: FalClient;
   private storage: StorageProvider;
