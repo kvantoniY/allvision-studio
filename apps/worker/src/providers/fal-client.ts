@@ -54,6 +54,7 @@ export class FalClient {
   private apiKey: string;
   private queueBaseUrl: string;
   private requestTimeoutMs: number;
+  private priceCache = new Map<string, { price: { unitPrice: number; unit: string }; exp: number }>();
 
   constructor(options: FalClientOptions) {
     if (!options.apiKey) {
@@ -153,6 +154,37 @@ export class FalClient {
       throw new ProviderError('FAL_RESULT_FAILED', `fal result fetch failed (${res.status}): ${truncate(JSON.stringify(json))}`, res.status);
     }
     return { output: json, costUsd: extractFalCost(json), raw: json };
+  }
+
+  /**
+   * Реальная цена модели из fal Platform API (api.fal.ai/v1/models/pricing).
+   * Возвращает { unitPrice, unit } (unit: 'seconds' | 'images' | 'megapixels' | 'compute_seconds' ...).
+   * Кэш на 1 час, чтобы не дёргать на каждый вызов.
+   */
+  async getEndpointPricing(endpoint: string): Promise<{ unitPrice: number; unit: string } | undefined> {
+    const key = endpoint.replace(/^\/+/, '');
+    const cached = this.priceCache.get(key);
+    if (cached && cached.exp > Date.now()) return cached.price;
+    try {
+      const url = `https://api.fal.ai/v1/models/pricing?endpoint_id=${encodeURIComponent(key)}`;
+      const res = await this.fetchWithRetry(url, {
+        method: 'GET',
+        headers: { Authorization: `Key ${this.apiKey}` },
+      }, { connectionRetries: 2, retries: 1 });
+      if (!res.ok) return undefined;
+      const json = (await res.json().catch(() => ({}))) as { prices?: Array<{ endpoint_id?: string; unit_price?: number; unit?: string }> };
+      const row = Array.isArray(json.prices)
+        ? (json.prices.find((p) => p.endpoint_id === key) ?? json.prices[0])
+        : undefined;
+      if (row && typeof row.unit_price === 'number') {
+        const price = { unitPrice: row.unit_price, unit: String(row.unit ?? '') };
+        this.priceCache.set(key, { price, exp: Date.now() + 60 * 60 * 1000 });
+        return price;
+      }
+    } catch {
+      // сеть/парсинг — молча падаем на estimate
+    }
+    return undefined;
   }
 
   /** Скачивает итоговый файл (картинку/видео) с fal CDN. */

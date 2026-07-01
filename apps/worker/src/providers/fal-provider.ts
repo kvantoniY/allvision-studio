@@ -312,7 +312,8 @@ export class FalProvider implements AIProvider {
         throw new ProviderError('FAL_EMPTY_OUTPUT', `fal ${args.model} completed without an output URL`);
       }
       const local = await this.persistOutput(outputUrl, args.context, args.ext);
-      const costUsd = completed.costUsd ?? args.estimatedCost;
+      const cost = await this.resolveActualCost(args.endpoint, args.falInput, completed.costUsd, args.estimatedCost);
+      const costUsd = cost.costUsd;
       const durationMs = Date.now() - startedAt;
       await this.logUsage(args.context, args.model, requestId, 'success', costUsd, durationMs, {
         requestPayload: { endpoint: args.endpoint, input: args.falInput },
@@ -322,7 +323,14 @@ export class FalProvider implements AIProvider {
         outputUrl: local.url,
         costUsd,
         durationMs,
-        meta: { falRequestId: requestId, falUrl: outputUrl, model: args.model, provider: 'fal' },
+        meta: {
+          falRequestId: requestId,
+          falUrl: outputUrl,
+          model: args.model,
+          provider: 'fal',
+          costSource: cost.source,
+          ...(cost.unit ? { falUnit: cost.unit, falUnitPrice: cost.unitPrice, falUnits: cost.units } : {}),
+        },
       };
       } catch (inner) {
         // Аудио завернула модерация fal -> одноразовый повтор БЕЗ звука (видео обычно проходит).
@@ -348,6 +356,35 @@ export class FalProvider implements AIProvider {
       }).catch(() => undefined);
       throw err;
     }
+  }
+
+  /**
+   * Фактическая себестоимость: сначала цена, которую вернул сам fal (если есть), иначе
+   * реальная цена модели из fal pricing API (unit_price × units), иначе estimate.
+   */
+  private async resolveActualCost(
+    endpoint: string,
+    falInput: Record<string, unknown>,
+    providerReported: number | undefined,
+    fallback: number,
+  ): Promise<{ costUsd: number; source: 'fal-reported' | 'fal-priced' | 'estimated'; unit?: string; unitPrice?: number; units?: number }> {
+    if (typeof providerReported === 'number' && providerReported > 0) {
+      return { costUsd: providerReported, source: 'fal-reported' };
+    }
+    const pricing = await this.client.getEndpointPricing(endpoint).catch(() => undefined);
+    if (pricing) {
+      const units = unitsForPricing(pricing.unit, falInput);
+      if (units > 0) {
+        return {
+          costUsd: Math.round(pricing.unitPrice * units * 10000) / 10000,
+          source: 'fal-priced',
+          unit: pricing.unit,
+          unitPrice: pricing.unitPrice,
+          units,
+        };
+      }
+    }
+    return { costUsd: fallback, source: 'estimated' };
   }
 
   private async persistOutput(providerUrl: string, context: ProviderRunContext, fallbackExt: string) {
@@ -528,6 +565,21 @@ function extFor(contentType: string, url: string, fallback: string): string {
   const m = url.split('?')[0]?.match(/\.([a-z0-9]{3,4})$/i);
   if (m) return m[1].toLowerCase();
   return fallback;
+}
+
+/** Сколько единиц биллинга у fal-запроса по типу unit'а (для unit_price × units). */
+function unitsForPricing(unit: string, falInput: Record<string, unknown>): number {
+  const u = unit.toLowerCase();
+  if (u.includes('second')) {
+    const d = Number(falInput.duration);
+    return Number.isFinite(d) && d > 0 ? d : 5;
+  }
+  if (u.includes('image')) {
+    const n = Number(falInput.num_images);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }
+  // megapixels / compute_seconds / unknown — точных units нет, откатываемся на estimate.
+  return 0;
 }
 
 function normalizeAspect(value: string | undefined): string | undefined {
