@@ -43,7 +43,8 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   // ---- image (image-edit блок) ----
   // Nano Banana Pro (Gemini 3 Pro image) — флагман по консистентности лица и рендеру текста.
   'nano-banana': { endpoint: 'fal-ai/nano-banana-pro', editEndpoint: 'fal-ai/nano-banana-pro/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.14 },
-  'gpt-image-2': { endpoint: 'fal-ai/gpt-image-1/text-to-image', editEndpoint: 'fal-ai/gpt-image-1/edit-image', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.1 },
+  // GPT Image 2 (последняя image-модель OpenAI) живёт в неймспейсе openai/ на fal.
+  'gpt-image-2': { endpoint: 'openai/gpt-image-2', editEndpoint: 'openai/gpt-image-2/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.1 },
   'flux-schnell': { endpoint: 'fal-ai/flux/schnell', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { endpoint: 'fal-ai/flux/dev', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.025 },
   'seedream-5-lite': { endpoint: 'fal-ai/bytedance/seedream/v4/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v4/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.028 },
