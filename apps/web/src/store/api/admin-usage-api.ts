@@ -82,11 +82,12 @@ export type AdminUsageResponse = {
   }>;
 };
 
-export type PiAPIAccountResponse = {
+export type FalAccountResponse = {
   balanceUsd: number;
+  currency?: string;
+  username?: string;
   lastChecked: string;
   lowBalance: boolean;
-  raw: unknown;
 };
 
 export type AdminAnalyticsOverview = {
@@ -116,7 +117,7 @@ export type AdminAnalyticsOverview = {
 export const adminUsageApi = createApi({
   reducerPath: 'adminUsageApi',
   baseQuery: createBaseQueryWithReauth('/api/admin'),
-  tagTypes: ['AdminUsage', 'PiAPIAccount'],
+  tagTypes: ['AdminUsage', 'FalAccount'],
   endpoints: (build) => ({
     getAdminUsage: build.query<AdminUsageResponse, AdminUsageQuery | void>({
       query: (q) => {
@@ -130,9 +131,9 @@ export const adminUsageApi = createApi({
       },
       providesTags: ['AdminUsage'],
     }),
-    getPiAPIAccount: build.query<PiAPIAccountResponse, { refresh?: boolean } | void>({
-      query: (q) => ({ url: `/piapi/account${q?.refresh ? '?refresh=true' : ''}` }),
-      providesTags: ['PiAPIAccount'],
+    getFalAccount: build.query<FalAccountResponse, { refresh?: boolean } | void>({
+      query: (q) => ({ url: `/fal/account${q?.refresh ? '?refresh=true' : ''}` }),
+      providesTags: ['FalAccount'],
     }),
     getAdminAnalyticsOverview: build.query<AdminAnalyticsOverview, { dateFrom?: string; dateTo?: string } | void>({
       query: (q) => {
@@ -149,6 +150,6 @@ export const adminUsageApi = createApi({
 
 export const {
   useGetAdminUsageQuery,
-  useGetPiAPIAccountQuery,
+  useGetFalAccountQuery,
   useGetAdminAnalyticsOverviewQuery,
 } = adminUsageApi;

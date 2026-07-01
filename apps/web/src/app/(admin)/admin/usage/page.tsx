@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { type AdminUsageLog, useGetAdminAnalyticsOverviewQuery, useGetAdminUsageQuery, useGetPiAPIAccountQuery } from '@/store/api/admin-usage-api';
+import { type AdminUsageLog, useGetAdminAnalyticsOverviewQuery, useGetAdminUsageQuery, useGetFalAccountQuery } from '@/store/api/admin-usage-api';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 
 function statusClass(status: string) {
@@ -165,7 +165,7 @@ export default function AdminUsagePage() {
     model: filters.model || undefined,
     status: filters.status || undefined,
   });
-  const account = useGetPiAPIAccountQuery();
+  const account = useGetFalAccountQuery();
   const overview = useGetAdminAnalyticsOverviewQuery();
   const settings = useGetAdminSettingsQuery();
   const usdToRub = settings.data?.settings.usdToRub ?? 80;
@@ -271,7 +271,7 @@ export default function AdminUsagePage() {
         {account.data ? (
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="text-sm text-slate-400">Баланс PiAPI</div>
+              <div className="text-sm text-slate-400">Баланс fal.ai{account.data.username ? ` · ${account.data.username}` : ''}</div>
               <div className={account.data.lowBalance ? 'text-2xl font-bold text-red-300' : 'text-2xl font-bold text-emerald-300'}>
                 {formatMoney({ usd: account.data.balanceUsd }, { primary: 'usd', showAll: true, usdToRub })}
               </div>
@@ -279,7 +279,7 @@ export default function AdminUsagePage() {
             <div className="text-sm text-slate-500">Проверено {new Date(account.data.lastChecked).toLocaleString()}</div>
           </div>
         ) : (
-          <div className="text-sm text-amber-200">Баланс PiAPI недоступен: {account.error ? 'проверьте env API или доступ провайдера' : 'загрузка...'}</div>
+          <div className="text-sm text-amber-200">Баланс fal.ai недоступен: {account.error ? 'проверьте FAL_BILLING_KEY или доступ' : 'загрузка...'}</div>
         )}
       </div>
 

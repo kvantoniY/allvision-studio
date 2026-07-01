@@ -189,7 +189,7 @@ adminUsageRouter.get('/overview', async (req: Request, res: Response, next: Next
         _sum: { amountRub: true, tokensAdded: true },
         _count: true,
       }),
-      prisma.aIUsageLog.aggregate({ where: { provider: 'piapi', createdAt: range }, _sum: { costUsd: true }, _count: true }),
+      prisma.aIUsageLog.aggregate({ where: { createdAt: range }, _sum: { costUsd: true }, _count: true }),
       prisma.project.aggregate({ where: { status: 'COMPLETED', createdAt: range }, _sum: { tokensCost: true } }),
       prisma.project.count({ where: { createdAt: range } }),
       prisma.project.count({ where: { status: 'COMPLETED', createdAt: range } }),
@@ -298,6 +298,56 @@ adminUsageRouter.get('/piapi/account', async (req: Request, res: Response, next:
     next(err);
   }
 });
+
+adminUsageRouter.get('/fal/account', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const force = req.query.refresh === 'true';
+    if (!force) {
+      const cached = await readCachedFalAccount();
+      if (cached) { res.json(cached); return; }
+    }
+    const apiKey = process.env.FAL_BILLING_KEY || process.env.FAL_KEY;
+    if (!apiKey) throw new HttpError(503, 'FAL_KEY_MISSING', 'FAL_BILLING_KEY/FAL_KEY не настроен');
+    const r = await fetch('https://api.fal.ai/v1/account/billing?expand=credits', {
+      headers: { Authorization: `Key ${apiKey}` },
+    });
+    const json = (await r.json().catch(() => ({}))) as { username?: string; credits?: { current_balance?: number; currency?: string }; error?: { message?: string } };
+    if (!r.ok) {
+      throw new HttpError(502, 'FAL_BILLING_ERROR', `fal billing вернул ${r.status}: ${json?.error?.message ?? ''}`.trim());
+    }
+    const balanceUsd = Number(json?.credits?.current_balance ?? 0);
+    const payload = {
+      balanceUsd,
+      currency: json?.credits?.currency ?? 'USD',
+      username: json?.username,
+      lastChecked: new Date().toISOString(),
+      lowBalance: balanceUsd < Number(process.env.FAL_BALANCE_MIN_USD ?? '2'),
+    };
+    await writeCachedFalAccount(payload);
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+});
+
+type FalAccountCache = { balanceUsd: number; currency: string; username?: string; lastChecked: string; lowBalance: boolean };
+let memoryFalAccountCache: FalAccountCache | undefined;
+
+async function readCachedFalAccount(): Promise<FalAccountCache | undefined> {
+  if (memoryFalAccountCache && Date.now() - Date.parse(memoryFalAccountCache.lastChecked) < 60_000) return memoryFalAccountCache;
+  const redis = await getRedis().catch(() => undefined);
+  if (!redis) return undefined;
+  const raw = await redis.get('admin:fal:account').catch(() => undefined);
+  if (!raw) return undefined;
+  try { return JSON.parse(raw) as FalAccountCache; } catch { return undefined; }
+}
+
+async function writeCachedFalAccount(payload: FalAccountCache) {
+  memoryFalAccountCache = payload;
+  const redis = await getRedis().catch(() => undefined);
+  if (!redis) return;
+  await redis.set('admin:fal:account', JSON.stringify(payload), 'EX', 60).catch(() => undefined);
+}
 
 function groupByDay(rows: Array<{ createdAt: Date; costUsd: number }>) {
   const map = new Map<string, { date: string; totalCostUsd: number; requestCount: number }>();
