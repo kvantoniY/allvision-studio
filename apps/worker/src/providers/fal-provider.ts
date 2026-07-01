@@ -47,7 +47,7 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'gpt-image-2': { endpoint: 'openai/gpt-image-2', editEndpoint: 'openai/gpt-image-2/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.1 },
   'flux-schnell': { endpoint: 'fal-ai/flux/schnell', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { endpoint: 'fal-ai/flux/dev', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.025 },
-  'seedream-5-lite': { endpoint: 'fal-ai/bytedance/seedream/v4/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v4/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.028 },
+  'seedream-5-lite': { endpoint: 'fal-ai/bytedance/seedream/v5/lite/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v5/lite/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.03 },
 
   // ---- text-to-video ----
   'veo-3.1': { endpoint: 'fal-ai/veo3.1', kind: 'text-to-video', estimatedCostUsd: 1.5 },
