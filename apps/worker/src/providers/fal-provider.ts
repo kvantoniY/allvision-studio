@@ -121,10 +121,10 @@ export class FalProvider implements AIProvider {
     const resolution = readString(input.params, 'resolution');
     if (resolution) falInput.resolution = resolution;
     if (useEdit) {
-      // fal edit-эндпоинты обычно принимают image_urls[]; одиночные — image_url. Шлём оба варианта
-      // совместимости ради безопасно нельзя (лишнее поле может отклониться), поэтому по числу рефов.
-      if (refs.length > 1) falInput.image_urls = refs;
-      else falInput.image_url = refs[0];
+      // Все наши image-edit эндпоинты (nano-banana/edit, gpt-image-1/edit-image, seedream/v4/edit)
+      // требуют image_urls[] — даже для одного фото. Раньше при одном реф-фото слали image_url
+      // (singular) -> fal 422 "image_urls: Field required". Всегда шлём массив.
+      falInput.image_urls = refs;
     }
 
     return this.run({
