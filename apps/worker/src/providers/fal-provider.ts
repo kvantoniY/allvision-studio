@@ -30,6 +30,13 @@ interface FalModelConfig {
   supportsImageInput?: boolean;
   /** Грубая оценка стоимости USD на случай, если fal не вернул цену. */
   estimatedCostUsd: number;
+  /**
+   * Как строить aspect_ratio/resolution для этой модели:
+   * - default: наши aspect_ratio + resolution (nano/gpt/seedream/flux/kling/veo — принимают/игнорят лишнее).
+   * - minimal: только prompt/refs/duration, без aspect/resolution (безопасно для моделей с чужим enum).
+   * - grok-image / grok-video: свой словарь (resolution 1k/2k и 480p/720p, ограниченный набор aspect).
+   */
+  paramProfile?: 'default' | 'minimal' | 'aspect-only' | 'grok-image' | 'grok-video';
 }
 
 /**
@@ -48,6 +55,11 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'flux-schnell': { endpoint: 'fal-ai/flux/schnell', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { endpoint: 'fal-ai/flux/dev', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.025 },
   'seedream-5-lite': { endpoint: 'fal-ai/bytedance/seedream/v5/lite/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v5/lite/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.03 },
+  // Grok Imagine (xAI). resolution 1k/2k, ограниченный набор aspect — профиль grok-image.
+  'grok-image': { endpoint: 'xai/grok-imagine-image', editEndpoint: 'xai/grok-imagine-image/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.05, paramProfile: 'grok-image' },
+  'flux-pro-ultra': { endpoint: 'fal-ai/flux-pro/v1.1-ultra', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.06, paramProfile: 'aspect-only' },
+  'recraft-v3': { endpoint: 'fal-ai/recraft/v3/text-to-image', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.04, paramProfile: 'minimal' },
+  'ideogram-v3': { endpoint: 'fal-ai/ideogram/v3', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.06, paramProfile: 'minimal' },
 
   // ---- text-to-video ----
   'veo-3.1': { endpoint: 'fal-ai/veo3.1', kind: 'text-to-video', estimatedCostUsd: 1.5 },
@@ -59,6 +71,7 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'hailuo-2.3': { endpoint: 'fal-ai/minimax/hailuo-02/standard/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
   'hailuo-2.3-fast': { endpoint: 'fal-ai/minimax/hailuo-02/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.3 },
   'wan-2.6': { endpoint: 'fal-ai/wan/v2.2-a14b/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.4 },
+  'luma-ray2': { endpoint: 'fal-ai/luma-dream-machine/ray-2', kind: 'text-to-video', estimatedCostUsd: 0.5, paramProfile: 'aspect-only' },
 
   // ---- image-to-video ----
   'kling-std': { endpoint: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.25 },
@@ -70,7 +83,46 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'seedance-2-first-last': { endpoint: 'fal-ai/bytedance/seedance/v2/image-to-video', kind: 'image-to-video', estimatedCostUsd: 1.5 },
   'hailuo-2.3-i2v': { endpoint: 'fal-ai/minimax/hailuo-02/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
   'wan-2.6-i2v': { endpoint: 'fal-ai/wan/v2.2-a14b/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.4 },
+  'grok-video': { endpoint: 'xai/grok-imagine-video/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.4, paramProfile: 'grok-video' },
+  'luma-ray2-i2v': { endpoint: 'fal-ai/luma-dream-machine/ray-2/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5, paramProfile: 'aspect-only' },
 };
+
+// Наборы допустимых aspect для моделей с ограниченным словарём (иначе fal 422 по enum).
+const GROK_IMAGE_ASPECTS = new Set(['1:1', '16:9', '9:16', '2:3', '3:2']);
+const GROK_VIDEO_ASPECTS = new Set(['auto', '16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16']);
+
+/** Возвращает extra-поля aspect_ratio/resolution по профилю модели, безопасно (без enum-422). */
+function imageProfileFields(profile: FalModelConfig['paramProfile'], aspect: string | undefined, resolution: string | undefined): Record<string, unknown> {
+  if (profile === 'minimal') return {};
+  if (profile === 'aspect-only') return aspect ? { aspect_ratio: aspect } : {};
+  if (profile === 'grok-image') {
+    const out: Record<string, unknown> = {};
+    if (aspect && GROK_IMAGE_ASPECTS.has(aspect)) out.aspect_ratio = aspect;
+    // grok resolution — только 1k/2k строчными
+    if (resolution) out.resolution = /4k|3k|2k/i.test(resolution) ? '2k' : '1k';
+    return out;
+  }
+  const out: Record<string, unknown> = {};
+  if (aspect) out.aspect_ratio = aspect;
+  if (resolution) out.resolution = resolution;
+  return out;
+}
+
+function videoProfileFields(profile: FalModelConfig['paramProfile'], aspect: string | undefined, resolution: string | undefined): Record<string, unknown> {
+  if (profile === 'minimal') return {};
+  if (profile === 'aspect-only') return aspect ? { aspect_ratio: aspect } : {};
+  if (profile === 'grok-video') {
+    const out: Record<string, unknown> = {};
+    if (aspect && GROK_VIDEO_ASPECTS.has(aspect)) out.aspect_ratio = aspect;
+    if (resolution && /480/.test(resolution)) out.resolution = '480p';
+    else if (resolution) out.resolution = '720p';
+    return out;
+  }
+  const out: Record<string, unknown> = {};
+  if (aspect) out.aspect_ratio = aspect;
+  if (resolution) out.resolution = resolution;
+  return out;
+}
 
 const VIDEO_TIMEOUT_MS = 20 * 60 * 1000;
 const IMAGE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -119,9 +171,8 @@ export class FalProvider implements AIProvider {
       ...(input.negativePrompt ? { negative_prompt: input.negativePrompt } : {}),
     };
     const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
-    if (aspect) falInput.aspect_ratio = aspect;
     const resolution = readString(input.params, 'resolution');
-    if (resolution) falInput.resolution = resolution;
+    Object.assign(falInput, imageProfileFields(config.paramProfile, aspect, resolution));
     if (useEdit) {
       // Все наши image-edit эндпоинты (nano-banana/edit, gpt-image-1/edit-image, seedream/v4/edit)
       // требуют image_urls[] — даже для одного фото. Раньше при одном реф-фото слали image_url
@@ -157,9 +208,8 @@ export class FalProvider implements AIProvider {
       duration: input.durationSec,
     };
     const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
-    if (aspect) falInput.aspect_ratio = aspect;
     const resolution = readString(input.params, 'resolution');
-    if (resolution) falInput.resolution = resolution;
+    Object.assign(falInput, videoProfileFields(config.paramProfile, aspect, resolution));
 
     return this.run({
       endpoint: config.endpoint,
@@ -187,9 +237,8 @@ export class FalProvider implements AIProvider {
       duration: input.durationSec,
     };
     const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
-    if (aspect) falInput.aspect_ratio = aspect;
     const resolution = readString(input.params, 'resolution');
-    if (resolution) falInput.resolution = resolution;
+    Object.assign(falInput, videoProfileFields(config.paramProfile, aspect, resolution));
     if (readBoolean(input.params, 'generate_audio')) falInput.generate_audio = true;
     // omni-референсы (картинки/видео сцены) — fal-эндпоинты ждут image_urls/video_url; точные имена
     // полей зависят от модели и подтверждаются смоуком.
