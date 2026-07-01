@@ -16,6 +16,7 @@ import { talkingAvatarBlock } from './talking-avatar';
 import { videoEffectBlock } from './video-effect';
 import { videoWatermarkRemoveBlock } from './video-watermark-remove';
 import { videoUpscaleBlock } from './video-upscale';
+import { falGenericBlock } from './fal-generic';
 
 export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'image-restore': imageRestoreBlock,
@@ -35,6 +36,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'video-effect': videoEffectBlock,
   'video-watermark-remove': videoWatermarkRemoveBlock,
   'video-upscale': videoUpscaleBlock,
+  'fal-generic': falGenericBlock,
 };
 
 export function getBlock(slug: string): BlockDefinition {

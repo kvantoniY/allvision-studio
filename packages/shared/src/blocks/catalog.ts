@@ -752,6 +752,86 @@ const sceneTransferModels: ModelOption[] = textToVideoModels.filter(
 
 export const BLOCK_CATALOG: BlockCatalogItem[] = [
   {
+    slug: 'fal-generic',
+    title: 'Fal: любая модель (свой endpoint)',
+    description: 'Универсальный блок: вызывает ЛЮБУЮ модель fal.ai по её endpoint-id, без хардкода в каталоге. Укажите endpoint (например fal-ai/kling-video/v3/pro/text-to-video), выберите тип результата (картинка/видео) и заполните нужные входы. Необычные поля модели задаются через «Доп. параметры (JSON)». Список endpoint-id и их полей — на fal.ai/models.',
+    category: 'video',
+    useWhen: 'Когда нужна модель или функция fal, которой ещё нет отдельным блоком в каталоге.',
+    compatibleInputs: ['prompt', 'image source(s)', 'video source'],
+    examples: [
+      'endpoint=fal-ai/kling-video/v3/pro/text-to-video, kind=video, prompt=... — Kling v3 текст-в-видео.',
+      'endpoint=fal-ai/recraft/v3/text-to-image, kind=image, prompt=... — картинка Recraft.',
+      'endpoint=fal-ai/kling-video/v3/pro/motion-control, kind=video, image_url + video_url — motion control.',
+    ],
+    paramsSchema: objectSchema(
+      {
+        endpoint: {
+          type: 'string',
+          title: 'Fal endpoint (обязательно)',
+          description: 'ID модели fal, напр. «fal-ai/veo3.1» или «fal-ai/kling-video/v3/pro/image-to-video». Берётся со страницы модели на fal.ai/models.',
+        },
+        kind: {
+          type: 'string',
+          title: 'Тип результата',
+          enum: ['image', 'video'],
+          default: 'video',
+          description: 'Что возвращает модель: изображение или видео.',
+        },
+        prompt: { type: 'string', title: 'Промпт', description: 'Текстовый промпт (если модель его принимает).' },
+        image_url: {
+          type: 'string',
+          title: 'Картинка-вход 1',
+          description: sourceSelect('image', 'Основной image-вход', 'Первое входное изображение (image_url / image_urls[0]).'),
+        },
+        image_url_2: {
+          type: 'string',
+          title: 'Картинка-вход 2',
+          description: sourceSelect('image', 'Второй image-вход', 'Второе изображение (для моделей с несколькими референсами).'),
+        },
+        image_url_3: {
+          type: 'string',
+          title: 'Картинка-вход 3',
+          description: sourceSelect('image', 'Третий image-вход', 'Третье изображение (для моделей с несколькими референсами).'),
+        },
+        video_url: {
+          type: 'string',
+          title: 'Видео-вход',
+          description: sourceSelect('video', 'Видео-вход', 'Входное видео (video_url) — для motion-control, video-to-video и т.п.'),
+        },
+        duration: { ...durationSchema, description: 'Длительность видео, если модель это поддерживает.' },
+        aspect_ratio: aspectRatioSchema,
+        resolution: { type: 'string', title: 'Разрешение', description: 'Значение как в схеме модели (напр. 720p / 1080p / 2K). Оставьте пустым, если не уверены.' },
+        extra_params: {
+          type: 'string',
+          title: 'Доп. параметры (JSON)',
+          description: 'JSON-объект с любыми доп. полями модели, напр. {"num_images":2,"negative_prompt":"...","generate_audio":false}. Переопределяет остальные поля.',
+        },
+      },
+      ['endpoint'],
+    ),
+    supportedModels: [
+      {
+        slug: 'fal-custom-video',
+        title: 'Fal — своя видео-модель',
+        tierHint: 'both',
+        estimatedCostCoins: coins(0.5),
+        estimatedCostUsd: 0.5,
+        provider: 'piapi',
+        description: 'Любой fal video endpoint по указанному endpoint-id.',
+        limits: { maxDurationSec: 30 },
+      },
+      {
+        slug: 'fal-custom-image',
+        title: 'Fal — своя image-модель',
+        tierHint: 'both',
+        estimatedCostCoins: coins(0.06),
+        estimatedCostUsd: 0.06,
+        provider: 'piapi',
+        description: 'Любой fal image endpoint по указанному endpoint-id.',
+      },
+    ],
+  },
+  {
     slug: 'image-restore',
     title: 'Восстановление старого фото',
     description: 'Локальный тестовый блок для старых pipeline восстановления фото. В production лучше использовать image-edit с Nano Banana 2, потому что отдельного проверенного PiAPI old-photo endpoint сейчас нет.',

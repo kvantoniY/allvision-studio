@@ -106,4 +106,14 @@ export interface AIProvider {
     params?: Record<string, unknown>;
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
+
+  // Обобщённый вызов ЛЮБОГО fal-endpoint'а: админ/юзер задаёт endpoint + функцию (image|video)
+  // + готовый input. Используется блоком fal-generic (выбор любой модели fal без хардкода).
+  falRaw(input: {
+    endpoint: string;
+    kind: 'image' | 'video';
+    falInput: Record<string, unknown>;
+    estimatedCostUsd?: number;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
 }

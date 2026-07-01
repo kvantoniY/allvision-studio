@@ -399,6 +399,32 @@ export class FalProvider implements AIProvider {
     return config;
   }
 
+  // Обобщённый вызов любого fal-endpoint'а (блок fal-generic). Админ/юзер задаёт endpoint + функцию.
+  async falRaw(input: {
+    endpoint: string;
+    kind: 'image' | 'video';
+    falInput: Record<string, unknown>;
+    estimatedCostUsd?: number;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    const endpoint = (input.endpoint ?? '').trim().replace(/^https?:\/\/[^/]+\//, '').replace(/^\/+/, '');
+    if (!endpoint) {
+      throw new ProviderError('FAL_ENDPOINT_REQUIRED', 'Не задан fal endpoint для fal-generic');
+    }
+    const isImage = input.kind === 'image';
+    return this.run({
+      endpoint,
+      falInput: input.falInput,
+      model: endpoint,
+      kind: isImage ? 'image' : 'image-to-video',
+      ext: isImage ? 'jpg' : 'mp4',
+      estimatedCost: input.estimatedCostUsd ?? (isImage ? 0.05 : 0.5),
+      context: input.context,
+      timeoutMs: isImage ? IMAGE_TIMEOUT_MS : VIDEO_TIMEOUT_MS,
+      expectedDurationMs: isImage ? 30 * 1000 : 8 * 60 * 1000,
+    });
+  }
+
   // ---- нишевые блоки пока остаются на PiAPI (гибридный роутинг в providers/index.ts) ----
   async imageRestore(): Promise<ProviderResult> {
     throw new ProviderError('FAL_NOT_IMPLEMENTED', 'image-restore not implemented on fal yet');

@@ -1,0 +1,210 @@
+restorestep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}negative_prompt
+restorestep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}promptUse the uploaded image as the only source reference. Restore the old photograph into a clean full-frame digital photo.
+
+Important: if the uploaded image shows a physical printed photo being held in someone’s hand, lying on a table, inside an album, under glass, photographed at an angle, with visible paper borders, fingers, shadows, glare, desk texture, background objects, or phone-camera perspective — do not keep any of those physical elements. Do not show the hand, table, album, paper border, frame, glare, or surrounding environment. Instead, extract the actual image content from the printed photo, correct the perspective, straighten it, crop it cleanly, and reconstruct it as if it is the original digital photograph displayed full-screen on a phone.
+
+The final result must be a restored, full-screen, edge-to-edge digital image, not a photo of a photo.
+
+Carefully analyze the original photo content and preserve the real identity of every person exactly: face shape, eyes, nose, lips, jawline, hairstyle, age, skin tone, facial proportions, natural expression, posture, clothing, body proportions, and the relationship between people in the image. Do not beautify, modernize, replace faces, change age, change ethnicity, change hairstyle, change clothing style, or make the person look like a different person.
+
+Restore the photograph with high realism:
+
+* remove dust, scratches, stains, cracks, folds, paper damage, fingerprints, blur, faded areas, discoloration, yellowing, scanning artifacts, compression artifacts, and uneven exposure;
+* recover lost details naturally where possible;
+* improve sharpness without making the image look artificial;
+* restore realistic skin texture, natural pores, hair texture, fabric texture, and background details;
+* balance contrast, brightness, and shadows;
+* correct color fading while keeping the original historical atmosphere;
+* preserve the original lighting direction and realistic depth;
+* keep the image natural, documentary, and believable.
+
+If the original is black-and-white, keep it black-and-white unless colorization is explicitly requested. If colorization is requested, colorize carefully and historically plausibly, with natural skin tones, realistic clothing colors, and believable environmental colors. Do not use oversaturated modern colors.
+
+If the original has missing or damaged facial areas, reconstruct them conservatively using the visible surrounding features. Do not invent a new face. If details are uncertain, choose the most natural and least stylized restoration.
+
+If the original image contains multiple people, preserve all people separately and clearly. Do not merge identities, duplicate faces, add extra people, remove people, swap faces, or change their relative positions.
+
+If the old photo is small, low-resolution, blurry, or damaged, upscale it naturally into a clean high-resolution image while keeping the original composition. The result should look like a professionally restored archival photo, not an AI-generated portrait.
+
+Composition rules:
+
+* final image fills the entire frame;
+* no visible photo paper;
+* no white border unless it was part of the actual original composition and should be preserved;
+* no hand holding the picture;
+* no table, album, phone screen, scanner bed, frame, or background outside the original photo;
+* no tilted perspective;
+* no crop that cuts off important faces or bodies unless they were already cut off in the original photo;
+* keep the original scene and framing as much as possible after perspective correction.
+
+Output style:
+photorealistic restoration, natural detail, clean digital photograph, realistic archival restoration, high-resolution, balanced tones, believable skin texture, no plastic skin, no beauty filter, no painterly effect, no cartoon style, no waxy AI look, no excessive sharpening, no fake HDR, no modern glamour retouching, no cinematic redesign, no added objects, no new background.
+
+Final result: a clean restored digital version of the original photo, full-screen, straightened, perspective-corrected, realistically enhanced, emotionally authentic, and faithful to the original.
+Colorize the photo carefully and realistically while preserving the historical look. Use natural skin tones, muted realistic clothing colors, and believable environmental colors. Do not oversaturate.
+
+last-kiss-meteorstep_1text-to-video{"pro": "sora-2-pro", "standard": "sora-2-pro"}negative_promptcartoon, low detail, extra people, distorted faces, deformed hands, bad anatomy, blurry faces, face swapping errors, duplicate people, unrealistic kiss, comedic tone, low realism.
+revive-old-photostep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}promptUse the uploaded image as the only source reference. Restore the old photograph into a clean full-frame digital photo.
+
+Important: if the uploaded image shows a physical printed photo being held in someone’s hand, lying on a table, inside an album, under glass, photographed at an angle, with visible paper borders, fingers, shadows, glare, desk texture, background objects, or phone-camera perspective — do not keep any of those physical elements. Do not show the hand, table, album, paper border, frame, glare, or surrounding environment. Instead, extract the actual image content from the printed photo, correct the perspective, straighten it, crop it cleanly, and reconstruct it as if it is the original digital photograph displayed full-screen on a phone.
+
+The final result must be a restored, full-screen, edge-to-edge digital image, not a photo of a photo.
+
+Carefully analyze the original photo content and preserve the real identity of every person exactly: face shape, eyes, nose, lips, jawline, hairstyle, age, skin tone, facial proportions, natural expression, posture, clothing, body proportions, and the relationship between people in the image. Do not beautify, modernize, replace faces, change age, change ethnicity, change hairstyle, change clothing style, or make the person look like a different person.
+
+Restore the photograph with high realism:
+
+* remove dust, scratches, stains, cracks, folds, paper damage, fingerprints, blur, faded areas, discoloration, yellowing, scanning artifacts, compression artifacts, and uneven exposure;
+* recover lost details naturally where possible;
+* improve sharpness without making the image look artificial;
+* restore realistic skin texture, natural pores, hair texture, fabric texture, and background details;
+* balance contrast, brightness, and shadows;
+* correct color fading while keeping the original historical atmosphere;
+* preserve the original lighting direction and realistic depth;
+* keep the image natural, documentary, and believable.
+
+If the original is black-and-white, keep it black-and-white unless colorization is explicitly requested. If colorization is requested, colorize carefully and historically plausibly, with natural skin tones, realistic clothing colors, and believable environmental colors. Do not use oversaturated modern colors.
+
+If the original has missing or damaged facial areas, reconstruct them conservatively using the visible surrounding features. Do not invent a new face. If details are uncertain, choose the most natural and least stylized restoration.
+
+If the original image contains multiple people, preserve all people separately and clearly. Do not merge identities, duplicate faces, add extra people, remove people, swap faces, or change their relative positions.
+
+If the old photo is small, low-resolution, blurry, or damaged, upscale it naturally into a clean high-resolution image while keeping the original composition. The result should look like a professionally restored archival photo, not an AI-generated portrait.
+
+Composition rules:
+
+* final image fills the entire frame;
+* no visible photo paper;
+* no white border unless it was part of the actual original composition and should be preserved;
+* no hand holding the picture;
+* no table, album, phone screen, scanner bed, frame, or background outside the original photo;
+* no tilted perspective;
+* no crop that cuts off important faces or bodies unless they were already cut off in the original photo;
+* keep the original scene and framing as much as possible after perspective correction.
+
+Output style:
+photorealistic restoration, natural detail, clean digital photograph, realistic archival restoration, high-resolution, balanced tones, believable skin texture, no plastic skin, no beauty filter, no painterly effect, no cartoon style, no waxy AI look, no excessive sharpening, no fake HDR, no modern glamour retouching, no cinematic redesign, no added objects, no new background.
+
+Final result: a clean restored digital version of the original photo, full-screen, straightened, perspective-corrected, realistically enhanced, emotionally authentic, and faithful to the original.
+Colorize the photo carefully and realistically while preserving the historical look. Use natural skin tones, muted realistic clothing colors, and believable environmental colors. Do not oversaturate.
+
+old-age-portraitstep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}promptTransform the person in the reference photo into a realistic older version at about 75-85 years old while preserving the exact identity. Keep the same person, same gender, ethnicity, face geometry, eye shape, nose, mouth, eyebrows, recognizable smile/gaze, hairstyle logic and overall personality. Add believable age details: natural wrinkles, softer skin elasticity, subtle age spots, grey or silver hair where appropriate, mature facial structure, but no caricature and no horror look. Do not change the person into someone else, do not beautify into a generic model, do not add extra people, text or watermark. Photorealistic portrait, natural everyday light, clear face, realistic skin texture, no plastic smoothing, no AI-gloss, no excessive makeup, no dramatic studio retouch. The result should look like an authentic future portrait photo of the same person.
+last-kiss-meteorstep_1text-to-video{"pro": "sora-2-pro", "standard": "sora-2-pro"}promptUltra-cinematic photorealistic dramatic romance video.
+Create a dramatic end-of-the-world scene on a real ocean shore at sunset. In frame: an adult woman with the exact identity of @image_1 and an adult man with the exact identity of @image_2. Preserve their faces максимально точно: same facial features, skin tone, hairstyle, age, proportions, and recognizable identity. No face distortion, no beauty filter, no identity drift.
+
+The scene begins with both characters standing close to each other on the beach during a stormy golden-hour dusk. Wind moves their hair and clothes, waves roll behind them, wet sand reflects the sky. At first there is emotional tension, as if they had just argued, then they look at each other with sadness and love. In the distance behind them, a huge fiery meteor starts falling from the sky toward the ocean horizon. The sky becomes brighter and more apocalyptic, with glowing clouds, smoke, and shockwave light.
+
+As the meteor gets closer, both characters realize the end is near. They move toward each other, embrace tightly, and share a final emotional kiss. Right as they kiss, the meteor impacts in the background, creating a massive explosion, bright flash, fireball, flying debris, ocean spray, and cinematic shockwave. The couple remains the emotional focus in the foreground while the disaster happens behind them.
+
+Style: photorealistic, emotional, viral cinematic trend, high detail, natural motion, realistic body movement, realistic facial expressions, dramatic lighting, shallow depth of field, strong atmosphere, blockbuster feel.
+Camera: smooth cinematic movement, slightly handheld or slow push-in, like a movie scene.
+Framing: medium-wide to medium shot, both characters visible clearly during the whole scene.
+Mood: tragic, romantic, epic, beautiful, emotional last-kiss before the end of the world.
+revive-old-photostep_2image-to-video{"pro": "kling-3-pro", "standard": "kling-3-pro"}promptSubject moves naturally, slight head turn, gentle smile, slow cinematic camera push-in, soft warm light, photorealistic
+single-photo-2017step_1image-editgpt-image-2negative_promptselfie, self-portrait, outstretched arm, phone in hand, mirror selfie, close-up selfie composition, front-camera look, fisheye selfie distortion, modern influencer photo, studio lighting, cinematic fashion editorial, perfect retouching, beauty filter, AI-smooth skin
+single-photo-2017step_1image-editgpt-image-2promptGPT Image 2 edit. Use the uploaded photo ONLY as a face and identity reference. Reproduce the same person exactly and recognizably: same face shape, eyes, eyebrows, nose, mouth, jawline, hairstyle, hair color, skin tone, age and natural expression. Do NOT copy the original selfie pose, framing, clothing or background from the reference, and do NOT beautify, re-age or change the face.
+
+Build a brand new authentic photo from the CIS / post-Soviet summer of 2016-2017, the nostalgic VK era. It must look like a real amateur phone snapshot taken by a friend from a few meters away, never a selfie.
+
+MANDATORY wardrobe change: replace whatever the person is wearing in the reference with authentic 2017 raion (двор) street style. Pick a believable combination: an adidas-style retro track jacket (олимпийка) with side stripes, OR a Thrasher-style flame-logo hoodie, OR a plain dark hoodie or tracksuit top; paired with dark tracksuit pants or fitted jeans and white sneakers; optionally a cap, beanie or small shoulder bag (барсетка). The outfit must clearly read as 2016-2017 CIS youth streetwear. Never keep the original clothing.
+
+Scene: an ordinary post-Soviet courtyard at dusk. Grey panel apartment blocks (панельки / хрущёвки) in the background, asphalt, a bench, metal garages, workout bars (турники), old parked cars, a simple playground. Strong малиновый закат: a crimson-pink-purple sunset gradient sky glowing behind the buildings, warm low sunlight, long soft shadows.
+
+Framing and pose: candid full-body or knees-up shot, the person standing or leaning casually in the yard against the sunset and the panelki, slightly off-center, relaxed and natural - hands in pockets or loosely at the sides, calm confident posture, looking at the camera or slightly away. Not a model pose, no outstretched arm, no phone in hand, no mirror.
+
+Look and quality: this must look like a REAL amateur 2017 smartphone photo, not a polished studio render. Slightly soft focus, mild sensor noise and grain, slightly uneven natural exposure, warm color cast, simple flat phone-camera depth (no fake bokeh), authentic imperfect VK vibe. Keep the FACE sharp and clearly recognizable even inside this amateur look. Realistic skin texture, natural body proportions, correct hands.
+
+Avoid: glossy AI skin, beauty filter, glamour retouch, cinematic editorial polish, heavy HDR, oversaturation, selfie framing, close-up face crop, outstretched arm, phone or mirror in frame, modern influencer aesthetic, extra people, duplicated or distorted faces, deformed hands, text, captions, logos or watermarks.
+group-photo-2017step_1image-editgpt-image-2promptGPT Image 2 edit. You are given several reference images. Each uploaded reference image is ONE separate real person. Create one new photorealistic group photo from the CIS / post-Soviet summer of 2016-2017, the nostalgic VK era.
+
+CRITICAL identity and count rules:
+- The number of people in the result MUST exactly equal the number of provided reference images: 2 references means exactly 2 people, 3 references means exactly 3 people, 4 references means exactly 4 people.
+- Each person must be reproduced exactly and recognizably from their OWN reference image: same face shape, eyes, eyebrows, nose, mouth, jawline, hairstyle, hair color, skin tone, age and natural expression. Treat every reference as a distinct individual.
+- Do NOT blend, average, mix or swap faces between people. Do NOT duplicate the same person, do NOT invent extra people, do NOT add background friends, crowds or faces on posters. Keep each face sharp, clearly separated and recognizable.
+
+It must look like a real amateur phone snapshot taken by a friend from a few meters away, never a selfie. The group stands or sits close together, relaxed and natural, in an ordinary post-Soviet courtyard at dusk.
+
+MANDATORY wardrobe change for everyone: replace whatever each person is wearing in their reference with authentic 2016-2017 raion (двор) street style - adidas-style retro track jackets (олимпийки) with side stripes, Thrasher-style flame-logo hoodies, plain dark hoodies or tracksuit tops, dark tracksuit pants or fitted jeans, white sneakers, optional caps or beanies. Vary the outfits naturally between people. Never keep the original clothing.
+
+Scene: grey panel apartment blocks (панельки / хрущёвки) in the background, asphalt, benches, metal garages, workout bars, old parked cars, a simple playground. Strong малиновый закат: a crimson-pink-purple sunset gradient sky glowing behind the buildings, warm low sunlight, long soft shadows.
+
+Framing and pose: candid full-body or knees-up group shot from a few meters away, people standing or sitting casually together against the sunset and the panelki, slightly off-center, relaxed natural posture, hands in pockets or loosely at the sides, looking at the camera or slightly away. Not model poses, no outstretched arm, no phone in hand, no mirror.
+
+Look and quality: a REAL amateur 2017 smartphone photo, not a polished studio render. Slightly soft focus, mild sensor noise and grain, slightly uneven natural exposure, warm color cast, simple flat phone-camera depth, authentic imperfect VK vibe. Keep every FACE sharp and clearly recognizable. Realistic skin texture, natural proportions, correct hands.
+
+Avoid: glossy AI skin, beauty filter, glamour retouch, cinematic editorial polish, heavy HDR, oversaturation, selfie framing, outstretched arm, phone or mirror in frame, modern influencer aesthetic, merged or duplicated faces, wrong number of people, distorted faces, deformed hands, text, captions, logos or watermarks.
+face-in-trend-prostep_1trend-video-transferpromptRepeat the main person motion from the reference trend video while preserving the uploaded person identity. Natural body movement, stable face, realistic lighting, vertical social-video framing.
+test-revievestep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}negative_prompt
+test-revievestep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}promptСоздай минималистичную инфографику на основе моих селфи с анализом причёски.
+
+1. Вверху — компактный блок с иконками (в одну колонку):
+
+* Форма лица — значение
+* Тип волос — значение
+* Густота — значение
+* Оптимальная длина — значение
+
+2. Ниже — 3 ряда с примерами причёсок (только визуал + короткие подписи):
+
+* Ряд 1: лучшие варианты
+* Ряд 2: рекомендуемые альтернативы
+* Ряд 3: неподходящие варианты
+
+Требования:
+
+* Все причёски разные (без повторов)
+* Чистый, аккуратный дизайн (как UI/барбершоп-гайд)
+* Нейтральный фон, единый стиль лиц
+* Короткие подписи, без длинных описаний
+toxis-dancestep_1trend-video-transferpromptRepeat the dance movement from the reference video while preserving the uploaded person identity. Natural energetic dance, stable face, realistic lighting, vertical social-video framing.
+toxis-dance-copystep_1trend-video-transferpromptRepeat the dance movement from the reference video while preserving the uploaded person identity. Natural energetic dance, stable face, realistic lighting, vertical social-video framing.
+toxis-dance-copy-2step_1trend-video-transferpromptUse the reference video only for the dance motion, body rhythm, timing, camera framing and overall choreography. 
+Preserve the uploaded person's identity exactly: same face shape, facial proportions, eyes, nose, lips, jawline, hairstyle, skin tone and recognizable personal features. 
+
+The person performs the same dance movement from the reference video in a natural energetic way. 
+Keep the face stable and realistic during motion, with no warping, no morphing, no face replacement, no identity drift and no changes to facial structure. 
+Facial expressions should be natural and consistent with the dance: subtle smiles, realistic micro-expressions, relaxed eyes and mouth, without exaggerated or distorted mimicry. 
+
+Maintain accurate head position, natural neck movement and realistic body motion while keeping the face sharp and recognizable in every frame. 
+Use realistic lighting, natural skin texture, stable facial details, clean motion, smooth transitions and vertical social-video framing. 
+The final video should look like the same person genuinely dancing, not like a generated or swapped face.
+me-in-moviestep_1scene-transferkling-3-omnicharacter_promptWhen a user photo is provided, preserve identity with high priority: same face structure, eyes, eyebrows, nose, mouth, hairstyle, hair color, skin tone, age impression and natural facial character. Match perspective, scale, shadows and lighting to the scene. Do not beautify, de-age, change gender, duplicate, morph or replace the person.
+me-in-moviestep_1scene-transferkling-3-omnidefault_photo_promptAnimate the uploaded film frame with subtle believable movement: gentle camera motion, natural environmental motion, realistic depth and atmosphere. Keep the scene coherent and cinematic.
+me-in-moviestep_1scene-transferkling-3-omnidefault_prompt_promptCreate a coherent cinematic scene with clear action, realistic camera movement and polished film lighting.
+me-in-moviestep_1scene-transferkling-3-omnino_reference_promptNo user photo was provided. Generate the movie scene directly from the prompt/reference frame without preserving any specific real-person identity.
+me-in-moviestep_1scene-transferkling-3-omniphoto_base_promptKling 3.0 Omni cinematic photo-to-video. Use the uploaded film still as the exact scene reference: preserve its location, era, composition, lens feeling, lighting, color palette, wardrobe logic, props and atmosphere. If a user photo is provided, integrate that person into the scene as a believable live-action character, not a pasted cutout.
+me-in-moviestep_1scene-transferkling-3-omniprompt_base_promptSeedance 2.0 cinematic text-to-video. Create a photorealistic live-action film scene from the user prompt with professional movie camera language: coherent story action, natural blocking, realistic physics, filmic lighting, controlled depth of field, high production value, stable faces and clean motion.
+me-in-moviestep_1scene-transferkling-3-omniprompt_modelseedance-2-omni
+me-in-moviestep_1scene-transferkling-3-omniprompt_text_modelseedance-2
+me-in-moviestep_1scene-transferkling-3-omniuser_prompt{{user.prompt}}
+me-in-cartoonstep_1scene-transferkling-3-omnicartoon_character_promptCartoon visual mode: if a user photo is provided, transform the referenced person into a polished animated character while preserving identity. Keep the same face structure, eye shape, nose, mouth, hairstyle, age impression and personality, but render them in the selected cartoon style with clean shapes, stable face, appealing design and natural animation.
+me-in-cartoonstep_1scene-transferkling-3-omnicartoon_realistic_promptRealistic visual mode: if a user photo is provided, keep the referenced person photorealistic and instantly recognizable inside the animated world. Preserve real human skin texture, natural face proportions, realistic eyes and hair, correct scale, contact shadows and scene-matched lighting. The world is animated, but the referenced person should look like a real person genuinely filmed inside it, not a sticker and not a cartoon.
+me-in-cartoonstep_1scene-transferkling-3-omnicartoon_style{{user.cartoon_style}}
+me-in-cartoonstep_1scene-transferkling-3-omnicartoon_style_promptApply the selected cartoon style consistently to the environment, color palette, character design, lighting and motion. Avoid copyrighted logos, text, watermarks, malformed faces, flicker and random extra characters.
+me-in-cartoonstep_1scene-transferkling-3-omnicharacter_promptIf a user photo is provided, preserve the person identity according to the selected visual mode. Keep the face stable and recognizable across frames. Do not blend the person with background characters, do not duplicate them, do not add extra copies, and do not distort eyes, mouth or hands.
+me-in-cartoonstep_1scene-transferkling-3-omnidefault_photo_promptAnimate the uploaded cartoon frame with charming natural motion: gentle camera movement, lively background details, expressive but stable character motion and coherent scene physics.
+me-in-cartoonstep_1scene-transferkling-3-omnidefault_prompt_promptCreate a charming animated scene with clear action, appealing characters, polished motion and a coherent cartoon world.
+me-in-cartoonstep_1scene-transferkling-3-omnino_reference_promptNo user photo was provided. Generate the cartoon scene directly from the prompt/reference frame without preserving any specific real-person identity.
+me-in-cartoonstep_1scene-transferkling-3-omniphoto_base_promptKling 3.0 Omni cartoon photo-to-video. Use the uploaded cartoon still as the exact scene reference: preserve its composition, world, colors, props, camera framing and animation atmosphere. If a user photo is provided, integrate the referenced person into the cartoon scene according to the selected visual mode.
+me-in-cartoonstep_1scene-transferkling-3-omniprompt_base_promptSeedance 2.0 animated text-to-video. Create a coherent high-quality cartoon scene from the user prompt with clear staging, appealing animation design, stable characters, expressive motion, polished lighting and a family-friendly adventure feeling.
+me-in-cartoonstep_1scene-transferkling-3-omniprompt_modelseedance-2-omni
+me-in-cartoonstep_1scene-transferkling-3-omniprompt_text_modelseedance-2
+me-in-cartoonstep_1scene-transferkling-3-omnistylize_promptCreate a polished animated character from the uploaded person reference while preserving recognizable identity: same face structure, eye shape, nose, mouth, hairstyle, age impression and personality. Match this selected animation direction: {{user.cartoon_style}}. Clean production-quality character design, stable face, expressive but not exaggerated, no text, no watermark, no extra people.
+me-in-cartoonstep_1scene-transferkling-3-omniuser_prompt{{user.prompt}}
+future-childstep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}promptCreate ONE photorealistic portrait of a {{user.child_age}} year old {{user.child_gender}} child as a creative visualization based on the two parent reference photos: @image_1 is the mother and @image_2 is the father. The child must look biologically plausible as their child, blending recognizable family traits from both parents: face shape, eyes, eyebrows, nose, lips, skin tone, hair color/texture and natural expression. Keep the child age exactly {{user.child_age}} years old and the gender exactly {{user.child_gender}}. Do not copy either parent as an adult, do not make a sibling clone, do not add extra people, do not add text or watermarks. Natural realistic skin texture, clear eyes, believable child proportions, soft everyday lighting, warm studio-quality but not glossy, no plastic smoothing, no caricature, no fantasy styling, no medical prediction framing. The final image should feel like a real family portrait photo with a clean background and maximum realism.
+road-camera-couplestep_1image-editgpt-image-2promptGPT Image 2 edit. Use exactly three provided references. Reference image 1 is the man/driver. Reference image 2 is the woman/passenger. Reference image 3 is the car. Preserve each person identity separately and clearly; preserve the car make, model, body, headlights, grille, proportions and license plates as closely as possible. Чёрно-белый фотореалистичный уличный кадр в стиле камеры дорожного наблюдения. Вид строго сверху и спереди. Автомобиль полностью идентичен фото-референсу: марка, модель, кузов, фары, решётка, пропорции и номерные знаки совпадают 1в1. Машина едет по городской дороге, расположена строго по центру кадра, симметричная композиция, подчёркнутый капот и решётка радиатора. В салоне два человека на передних сиденьях, их внешность, лица, причёски и пропорции полностью соответствуют фото-референсу (1в1). Водитель держит руль одной рукой и смотрит вперёд с лёгкой улыбкой, пассажирка наклоняется к нему и целует в щёку — интимный, спонтанный момент. Лобовое стекло слегка отражает свет, но лица хорошо читаемы. Асфальт с детализированной текстурой, бордюр слева, ощущение движения. Внизу кадра интерфейс камеры контроля скорости: моноширинный шрифт, надписи «CAM 09», дата и время «2026-03-16», скорость 217 km/h. Контрастный чёрно-белый тон, высокая резкость, документальная эстетика, gritty realism, street photography, surveillance camera look, cinematic raw mood.
+carousel-poststep_1carousel-slidesgpt-image-2style_promptPremium, modern personal-brand social-media carousel. Keep ONE consistent template across all slides: soft neutral cream and beige background with subtle warm gold accents, elegant serif headings paired with a clean sans-serif body, generous margins, a clear photo area for the person and a tidy text block. Cohesive, professional, aesthetic, editorial magazine-like layout, sharp readable typography.
+product-adstep_1product-cardad_style{{user.style}}
+group-photo-2017-copy-copystep_1image-edit{"pro": "gpt-image-2", "standard": "gpt-image-2"}promptGPT Image 2 edit. Combine the provided reference photos into ONE photorealistic cinematic close-up portrait.
+
+Critical count and identity rule: use exactly 2 people and no one else. Reference image 1 is the man in the extreme foreground. Reference image 2 is the woman standing directly behind him. Preserve each identity separately and clearly. Do not change facial features. Keep the exact face structure, proportions, natural asymmetry, eye shape, nose, mouth, eyebrows, skin tone, hairstyle, age, and natural facial character from each person's own reference. Do not blend identities, swap faces, duplicate people, add background people, extra faces, partial bodies, posters with faces, reflections with faces, or crowds.
+
+Composition: extreme close-up cinematic portrait with a very tight crop. Only part of the man's face is visible, approximately half of his face filling most of the frame. The man is in the foreground, facing forward with a slight turn to the side. The woman is positioned very close directly behind him. Her face is partially hidden behind his head and shoulder, visible only in fragments. Strong layered depth composition: man in sharp foreground dominance, woman behind him but still recognizable.
+
+Mood and expressions: emotional tension, not romance. The man has a calm, neutral, slightly serious expression. The woman has an intense gaze with slightly narrowed eyes. Lips softly pressed together or slightly parted. The scene should feel psychologically tense, intimate, restrained, and cinematic.
+
+Visual style: realistic cinematic photography, dramatic but natural lighting, shallow depth of field, rich shadows, detailed skin texture, visible pores, natural hair strands, realistic eyes, subtle film grain, soft contrast, high-end editorial portrait look. Keep faces sharp and recognizable. No beauty filter, no glossy AI skin, no CGI look, no heavy HDR, no fake bokeh, no deformed hands, no distorted faces, no text, no logo, no watermark.
+video-quality-klingstep_1text-to-video{"pro": "kling-3-omni", "standard": "kling-3-omni"}promptUse the uploaded video as the strict source reference. Create the same video again with visibly improved quality while preserving the original duration, timing, camera motion, composition, subject identity, scene, action, framing, and rhythm. Do not invent a new story, do not change people, clothing, environment, camera angle, or motion. Improve clarity, sharpness, fine detail, compression artifacts, flicker, low-light noise, color balance, local contrast, facial stability, edge definition, and temporal consistency. Keep natural realistic texture, no plastic skin, no over-sharpening halos, no HDR look, no added text, no watermark, no extra objects. The output must feel like a cleaner high-quality restoration of the exact same clip.
+last-kiss-meteor-copystep_1text-to-video{"pro": "kling-3-omni", "standard": "kling-3-omni"}promptRealistic candid sports-broadcast video captured at a Korean professional baseball game. Use @image1 as the identity reference for one adult female spectator in the stands; preserve her likeness, facial structure, hairstyle, age and natural look. Calm, relaxed, slightly aloof and sultry expression: pretty and cute with a faint confident, slightly sassy look. She is NOT smiling widely, NOT cheering, NOT excited; she simply watches the game, unaware of the camera. Natural subtle motion only: gentle blinking, slow small head movement, calm breathing, a quiet glance; no big gestures, no clapping. Distant telephoto broadcast camera: heavy zoom-lens compression, shallow depth of field, the crowd softly blurred, as if the operator zoomed in on her from far across the stadium. Plain white baseball-style jersey, realistic fabric, no logos, no readable brand text. Warm evening floodlights, candid documentary broadcast style, slight motion blur, realistic skin texture, ultra realistic. This is NOT a close nearby shot and NOT a selfie: it is a distant zoomed-in broadcast frame. 16:9 horizontal composition.
+last-kiss-meteor-copystep_3image-editgpt-image-2negative_prompt
+last-kiss-meteor-copystep_3image-editgpt-image-2promptCinematic candid broadcast still captured at a Korean professional baseball stadium. The person from @image1 is sitting in the spectator stands, randomly caught by the live TV broadcast camera and unaware of it. Calm, relaxed, slightly aloof and sultry expression: pretty and cute with a faint confident, slightly sassy look. She is NOT smiling widely, NOT cheering, NOT excited, NOT reacting; she simply sits and watches the game quietly. Distant telephoto broadcast lens: strong zoom compression, shallow depth of field, the crowded stands softly blurred around her, as if a camera operator zoomed in on her from far across the stadium. She wears a plain white baseball-style jersey, realistic fabric, no logos, no readable text. Warm evening floodlights, realistic skin texture, slight grain, photojournalistic candid feel, ultra realistic. This is NOT a close-up selfie and NOT shot from nearby: it is a distant zoomed-in broadcast frame. 16:9 horizontal composition.

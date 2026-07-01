@@ -45,6 +45,16 @@ export class StubAIProvider implements AIProvider {
     return result('stub://result.mp4', { type: 'video' });
   }
 
+  async falRaw(input: {
+    endpoint: string;
+    kind: 'image' | 'video';
+    falInput: Record<string, unknown>;
+    estimatedCostUsd?: number;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result(input.kind === 'image' ? 'stub://fal-generic.jpg' : 'stub://fal-generic.mp4', { type: input.kind });
+  }
+
   async textToVideo(_input: {
     prompt: string;
     durationSec: number;

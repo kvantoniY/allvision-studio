@@ -270,6 +270,16 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     return this.createImmediateResult('trend', params.context);
   }
 
+  async falRaw(params: {
+    endpoint: string;
+    kind: 'image' | 'video';
+    falInput: Record<string, unknown>;
+    estimatedCostUsd?: number;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return this.createImmediateResult(params.kind === 'image' ? 'photo-restore' : 'photo-animate', params.context);
+  }
+
   async motionTransfer(params: {
     inputImageUrl: string;
     drivingVideoUrl?: string;

@@ -29,7 +29,8 @@
       "WebFetch(domain:piapi.ai)",
       "Bash(npm.cmd run *)",
       "Bash(npm.cmd test *)",
-      "Bash(npx.cmd jest *)"
+      "Bash(npx.cmd jest *)",
+      "Bash(awk 'NR>=1307 && NR<=2300 && /^const |^];|^] as|legacyTrendServiceSlugs|^const stylePresets|^const tokenPackages|^const trendSeed|^const scenarioTemplates|^const publicSettings/ {print NR\": \"$0}' packages/database/src/seed.ts)"
     ]
   }
 }

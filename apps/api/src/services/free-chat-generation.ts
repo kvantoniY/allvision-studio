@@ -181,6 +181,9 @@ function buildPipeline(params: {
   if (params.blockSlug === 'text-to-video' && baseParams.mode === undefined) {
     baseParams.mode = params.modelSlug.includes('-omni') ? 'omni_reference' : 'text_to_video';
   }
+  if (params.blockSlug === 'fal-generic' && baseParams.kind === undefined) {
+    baseParams.kind = params.modelSlug === 'fal-custom-image' ? 'image' : 'video';
+  }
   return [
     {
       id: 'step_1',
@@ -238,6 +241,12 @@ async function normaliseChatParams(raw: Record<string, unknown> | undefined, use
     'camera_control',
     'enable_audio',
     'generate_audio',
+    // fal-generic (своя модель fal) — пользователь задаёт endpoint/функцию/доп. поля.
+    'endpoint',
+    'kind',
+    'extra_params',
+    'image_url',
+    'video_url',
   ]);
   const source = raw ?? {};
   const entries = await Promise.all(Object.entries(source)
@@ -358,6 +367,9 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   }
   if (model.blockSlug === 'face-swap-video' && !paramsWithAudio.target_video) {
     throw new HttpError(400, 'TARGET_VIDEO_REQUIRED', 'Для face swap нужно выбрать target video');
+  }
+  if (model.blockSlug === 'fal-generic' && !(typeof paramsWithAudio.endpoint === 'string' && paramsWithAudio.endpoint.trim())) {
+    throw new HttpError(400, 'FAL_ENDPOINT_REQUIRED', 'Укажите fal endpoint (напр. fal-ai/veo3.1)');
   }
   const tokensCost = estimateChatGenerationPriceCoins(model.slug, {
     duration,
