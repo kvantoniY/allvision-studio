@@ -68,12 +68,19 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'sora-2-pro': { endpoint: 'fal-ai/sora-2/text-to-video/pro', kind: 'text-to-video', estimatedCostUsd: 2.0 },
   'seedance-2': { endpoint: 'fal-ai/bytedance/seedance/v2/text-to-video', kind: 'text-to-video', estimatedCostUsd: 1.5 },
   'seedance-2-fast': { endpoint: 'fal-ai/bytedance/seedance/v2/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.75 },
-  'hailuo-2.3': { endpoint: 'fal-ai/minimax/hailuo-02/standard/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
-  'hailuo-2.3-fast': { endpoint: 'fal-ai/minimax/hailuo-02/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.3 },
+  // omni (референс-модели) на fal исполняются как seedance v2 t2v: image_urls/video_urls прокидываются в payload.
+  'seedance-2-omni': { endpoint: 'fal-ai/bytedance/seedance/v2/text-to-video', kind: 'text-to-video', estimatedCostUsd: 1.5 },
+  'seedance-2-fast-omni': { endpoint: 'fal-ai/bytedance/seedance/v2/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.75 },
+  'kling-3-omni': { endpoint: 'fal-ai/kling-video/v2.5-turbo/pro/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
+  // hailuo text-to-video: слуги *-text (в чате hailuo-2.3/hailuo-2.3-fast — это image-to-video, см. ниже).
+  'hailuo-2.3-text': { endpoint: 'fal-ai/minimax/hailuo-02/standard/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
+  'hailuo-2.3-fast-text': { endpoint: 'fal-ai/minimax/hailuo-02/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.3 },
   'wan-2.6': { endpoint: 'fal-ai/wan/v2.2-a14b/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.4 },
   'luma-ray2': { endpoint: 'fal-ai/luma-dream-machine/ray-2', kind: 'text-to-video', estimatedCostUsd: 0.5, paramProfile: 'aspect-only' },
 
   // ---- image-to-video ----
+  'hailuo-2.3': { endpoint: 'fal-ai/minimax/hailuo-02/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
+  'hailuo-2.3-fast': { endpoint: 'fal-ai/minimax/hailuo-02/fast/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.3 },
   'kling-std': { endpoint: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.25 },
   'kling-pro': { endpoint: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.35 },
   'kling-3-std': { endpoint: 'fal-ai/kling-video/v3/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
@@ -81,6 +88,7 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'veo-3.1-i2v': { endpoint: 'fal-ai/veo3.1/image-to-video', kind: 'image-to-video', estimatedCostUsd: 1.5 },
   'veo-3.1-fast-i2v': { endpoint: 'fal-ai/veo3.1/fast/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.75 },
   'seedance-2-first-last': { endpoint: 'fal-ai/bytedance/seedance/v2/image-to-video', kind: 'image-to-video', estimatedCostUsd: 1.5 },
+  'seedance-2-fast-first-last': { endpoint: 'fal-ai/bytedance/seedance/v2/fast/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.75 },
   'hailuo-2.3-i2v': { endpoint: 'fal-ai/minimax/hailuo-02/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
   'wan-2.6-i2v': { endpoint: 'fal-ai/wan/v2.2-a14b/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.4 },
   'grok-video': { endpoint: 'xai/grok-imagine-video/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.4, paramProfile: 'grok-video' },
