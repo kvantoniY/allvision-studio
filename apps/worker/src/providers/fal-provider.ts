@@ -385,8 +385,45 @@ export class FalProvider implements AIProvider {
   async faceSwapVideo(): Promise<ProviderResult> {
     throw new ProviderError('FAL_NOT_IMPLEMENTED', 'face-swap not implemented on fal yet');
   }
-  async motionTransfer(): Promise<ProviderResult> {
-    throw new ProviderError('FAL_NOT_IMPLEMENTED', 'motion-transfer not implemented on fal yet');
+  // Kling v3 Motion Control (video-to-video): персонаж с image_url повторяет движение из video_url.
+  async motionTransfer(input: {
+    inputImageUrl: string;
+    drivingVideoUrl?: string;
+    prompt?: string;
+    durationSec: number;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    if (!input.drivingVideoUrl) {
+      throw new ProviderError('MOTION_REFERENCE_REQUIRED', 'Kling motion-control требует референс-видео движения (video_url)');
+    }
+    const isPro = input.model.endsWith('-pro');
+    const endpoint = isPro
+      ? 'fal-ai/kling-video/v3/pro/motion-control'
+      : 'fal-ai/kling-video/v3/standard/motion-control';
+    const falInput: Record<string, unknown> = {
+      image_url: input.inputImageUrl,
+      video_url: input.drivingVideoUrl,
+      // required enum: image|video. 'video' -> ориентация и длительность берутся из референс-видео (до 30с).
+      character_orientation: readString(input.params, 'character_orientation') ?? 'video',
+      ...(input.prompt ? { prompt: input.prompt } : {}),
+      ...(readBoolean(input.params, 'keep_original_sound') !== undefined
+        ? { keep_original_sound: readBoolean(input.params, 'keep_original_sound') }
+        : {}),
+    };
+    const perSec = isPro ? 0.168 : 0.126;
+    return this.run({
+      endpoint,
+      falInput,
+      model: input.model,
+      kind: 'image-to-video',
+      ext: 'mp4',
+      estimatedCost: perSec * Math.max(5, input.durationSec || 5),
+      context: input.context,
+      timeoutMs: VIDEO_TIMEOUT_MS,
+      expectedDurationMs: 8 * 60 * 1000,
+    });
   }
   async videoEffect(): Promise<ProviderResult> {
     throw new ProviderError('FAL_NOT_IMPLEMENTED', 'video-effect not implemented on fal yet');

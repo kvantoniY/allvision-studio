@@ -1279,18 +1279,9 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
       },
       [],
     ),
-    supportedModels: [
-      {
-        slug: 'photo-2017-router',
-        title: 'Photo 2k17 Router',
-        tierHint: 'both',
-        estimatedCostCoins: coins(0.43),
-        estimatedCostUsd: 0.43,
-        provider: 'piapi',
-        description: 'Внутренний роутер: GPT Image 2 (фото на 1 или 2 человек) + опционально Kling 3.0 (оживление).',
-        limits: { maxDurationSec: 15, maxInputImages: 2 },
-      },
-    ],
+    // Модель фото выбирается админом из полного списка image-edit моделей (worker читает params.model,
+    // дефолт gpt-image-2). Раньше был единственный фиктивный router -> нельзя было сменить модель.
+    supportedModels: imageEditModels,
   },
   {
     slug: 'video-compose',
