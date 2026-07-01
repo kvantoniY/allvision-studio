@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Один деплой за раз: следующий push ждёт завершения текущего (не рвём идущую сборку на ВМ).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
