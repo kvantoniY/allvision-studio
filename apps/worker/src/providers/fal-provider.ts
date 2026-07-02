@@ -1,9 +1,18 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { prisma } from '@allvision/database';
 import type { StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
 import { FalClient, type FalCompletedResult } from './fal-client';
 import { ProviderError } from './provider-errors';
 import { createAIUsageLog } from './usage-limits';
+import { resolveWorkspacePath } from '../utils/paths';
+
+// fal (US) ненадёжно скачивает файлы с нашего RU-хостинга -> входные файлы отдаём как data-uri
+// (fal читает байты из тела, ничего не качает). Ограничение размера, чтобы не раздувать запрос.
+const UPLOADS_DIR = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
+const MAX_DATAURI_BYTES = Number(process.env.FAL_MAX_DATAURI_BYTES ?? String(25 * 1024 * 1024));
+const URL_INPUT_KEYS = ['image_url', 'image_urls', 'video_url', 'video_urls'];
 
 type Logger = {
   info: (message: string, meta?: unknown) => void;
@@ -290,6 +299,8 @@ export class FalProvider implements AIProvider {
     let requestId: string | undefined;
     let completed: FalCompletedResult | undefined;
     let audioRetried = false;
+    // Наши /static-URL превращаем в data-uri (fal не тянет их с RU-хостинга).
+    await this.localizeInputUrls(args.falInput);
     try {
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -385,6 +396,37 @@ export class FalProvider implements AIProvider {
       }
     }
     return { costUsd: fallback, source: 'estimated' };
+  }
+
+  /** Заменяет наши /static-URL во входных полях на data-uri (по месту, in-place). */
+  private async localizeInputUrls(falInput: Record<string, unknown>): Promise<void> {
+    for (const key of URL_INPUT_KEYS) {
+      const value = falInput[key];
+      if (typeof value === 'string') {
+        falInput[key] = await this.localizeUrl(value);
+      } else if (Array.isArray(value)) {
+        falInput[key] = await Promise.all(value.map((v) => (typeof v === 'string' ? this.localizeUrl(v) : v)));
+      }
+    }
+  }
+
+  private async localizeUrl(url: string): Promise<string> {
+    if (!url || url.startsWith('data:')) return url;
+    const key = localStaticKey(url);
+    if (!key) return url; // внешний URL (fal CDN, библиотека и т.п.) — оставляем
+    try {
+      const filePath = path.join(UPLOADS_DIR, ...key.split('/'));
+      const stat = await fs.promises.stat(filePath);
+      if (stat.size > MAX_DATAURI_BYTES) {
+        this.logger.warn(`[fal] ${key} too large for data-uri (${stat.size}b), passing URL as-is`);
+        return url;
+      }
+      const buf = await fs.promises.readFile(filePath);
+      return `data:${contentTypeForKey(key)};base64,${buf.toString('base64')}`;
+    } catch (err) {
+      this.logger.warn(`[fal] failed to inline ${key}, passing URL as-is`, err);
+      return url;
+    }
   }
 
   private async persistOutput(providerUrl: string, context: ProviderRunContext, fallbackExt: string) {
@@ -565,6 +607,29 @@ function extFor(contentType: string, url: string, fallback: string): string {
   const m = url.split('?')[0]?.match(/\.([a-z0-9]{3,4})$/i);
   if (m) return m[1].toLowerCase();
   return fallback;
+}
+
+/** Если URL — наш /static, возвращает ключ файла (путь после /static/), иначе undefined. */
+function localStaticKey(url: string): string | undefined {
+  const clean = (k: string) => decodeURIComponent(k.split('?')[0].replace(/^\/+/, ''));
+  const base = (process.env.PUBLIC_API_URL ?? '').replace(/\/+$/, '');
+  if (url.startsWith('/static/')) return clean(url.slice('/static/'.length));
+  if (base && url.startsWith(`${base}/static/`)) return clean(url.slice(base.length + '/static/'.length));
+  return undefined;
+}
+
+function contentTypeForKey(key: string): string {
+  const ext = key.split('.').pop()?.toLowerCase();
+  if (ext === 'png') return 'image/png';
+  if (ext === 'webp') return 'image/webp';
+  if (ext === 'gif') return 'image/gif';
+  if (ext === 'mp4' || ext === 'm4v') return 'video/mp4';
+  if (ext === 'webm') return 'video/webm';
+  if (ext === 'mov') return 'video/quicktime';
+  if (ext === 'mp3') return 'audio/mpeg';
+  if (ext === 'wav') return 'audio/wav';
+  if (ext === 'ogg') return 'audio/ogg';
+  return 'image/jpeg';
 }
 
 /** Сколько единиц биллинга у fal-запроса по типу unit'а (для unit_price × units). */
