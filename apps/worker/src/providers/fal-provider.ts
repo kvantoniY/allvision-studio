@@ -199,6 +199,7 @@ export class FalProvider implements AIProvider {
       // (singular) -> fal 422 "image_urls: Field required". Всегда шлём массив.
       falInput.image_urls = refs;
     }
+    mergePassthrough(falInput, input.params); // quality, num_images, output_format, seed, style...
 
     return this.run({
       endpoint,
@@ -230,6 +231,7 @@ export class FalProvider implements AIProvider {
     const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
     const resolution = readString(input.params, 'resolution');
     Object.assign(falInput, videoProfileFields(config.paramProfile, aspect, resolution));
+    mergePassthrough(falInput, input.params);
 
     return this.run({
       endpoint: config.endpoint,
@@ -269,6 +271,7 @@ export class FalProvider implements AIProvider {
     if (imageRefs.length > 0) falInput.image_urls = imageRefs;
     const videoRefs = uniqueUrls([readString(input.params, 'video'), ...readStringList(input.params, 'video_urls')]);
     if (videoRefs.length > 0) falInput.video_url = videoRefs[0];
+    mergePassthrough(falInput, input.params);
 
     return this.run({
       endpoint: config.endpoint,
@@ -550,6 +553,7 @@ export class FalProvider implements AIProvider {
         ? { keep_original_sound: readBoolean(input.params, 'keep_original_sound') }
         : {}),
     };
+    mergePassthrough(falInput, input.params);
     const perSec = isPro ? 0.168 : 0.126;
     return this.run({
       endpoint,
@@ -619,6 +623,28 @@ function extFor(contentType: string, url: string, fallback: string): string {
   const m = url.split('?')[0]?.match(/\.([a-z0-9]{3,4})$/i);
   if (m) return m[1].toLowerCase();
   return fallback;
+}
+
+// Эти ключи собираются явно (источники/промпт/формат) или служебные — их НЕ пробрасываем «как есть».
+const NEVER_FORWARD = new Set([
+  'model', 'mode', 'endpoint', 'kind', 'prompt', 'negative_prompt', 'aspect_ratio', 'resolution', 'duration',
+  'image_url', 'image_urls', 'video_url', 'video_urls', 'images', 'video', 'generate_audio',
+  'target_video', 'driving_video', 'input_image',
+]);
+
+/**
+ * Пробрасывает ОСТАЛЬНЫЕ параметры шага (quality, num_images, output_format, seed, guidance_scale,
+ * num_inference_steps, style, steps, cfg_scale и т.п.) прямо в fal. Модель берёт свои поля, лишнее
+ * игнорит. Не перезатирает уже собранные ключи. Это и даёт «управление всеми критериями модели».
+ */
+function mergePassthrough(falInput: Record<string, unknown>, params: Record<string, unknown> | undefined): void {
+  if (!params) return;
+  for (const [key, value] of Object.entries(params)) {
+    if (NEVER_FORWARD.has(key)) continue;
+    if (value === undefined || value === null || value === '') continue;
+    if (key in falInput) continue;
+    falInput[key] = value;
+  }
 }
 
 /** Если URL — наш /static, возвращает ключ файла (путь после /static/), иначе undefined. */
