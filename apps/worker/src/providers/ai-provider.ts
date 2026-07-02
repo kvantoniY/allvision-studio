@@ -6,6 +6,8 @@ export interface ProviderRunContext {
   blockSlug: string;
   stepId: string;
   reportProgress?: (percent: number) => Promise<void>;
+  // Человекочитаемый этап для админ-консоли (опционально).
+  reportStage?: (stage: string) => Promise<void>;
 }
 
 export interface ProviderResult {

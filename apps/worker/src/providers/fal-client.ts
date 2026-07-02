@@ -46,6 +46,8 @@ interface PollOptions {
   /** Ожидаемая длительность для плавного прогресса (видео ~минуты, картинки ~секунды). */
   expectedDurationMs?: number;
   onProgress?: (percent: number) => Promise<void> | void;
+  /** Вызывается при смене статуса очереди fal (IN_QUEUE -> IN_PROGRESS). */
+  onStage?: (stage: FalQueueStatus) => Promise<void> | void;
 }
 
 const TRANSIENT_CONNECTION_RE = /ECONNRESET|socket hang up|EPIPE|ETIMEDOUT|ECONNREFUSED|UND_ERR|fetch failed|network/i;
@@ -99,9 +101,14 @@ export class FalClient {
     const expected = opts.expectedDurationMs ?? 60_000;
     const startedAt = Date.now();
     let delayMs = 1_000;
+    let lastStage: FalQueueStatus | undefined;
 
     while (Date.now() <= deadline) {
       const status = await this.getStatus(submit.statusUrl);
+      if (status.status !== lastStage) {
+        lastStage = status.status;
+        await opts.onStage?.(status.status);
+      }
       if (status.status === 'COMPLETED') {
         await opts.onProgress?.(99);
         return this.getResult(submit.responseUrl);

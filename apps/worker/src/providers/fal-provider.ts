@@ -299,12 +299,14 @@ export class FalProvider implements AIProvider {
     let requestId: string | undefined;
     let completed: FalCompletedResult | undefined;
     let audioRetried = false;
+    await args.context.reportStage?.('Подготовка входных файлов');
     // Наши /static-URL превращаем в data-uri (fal не тянет их с RU-хостинга).
     await this.localizeInputUrls(args.falInput);
     try {
       // eslint-disable-next-line no-constant-condition
       while (true) {
       try {
+      await args.context.reportStage?.('Отправка запроса на fal.ai');
       const submit = await this.client.submit(args.endpoint, args.falInput);
       requestId = submit.requestId;
       await prisma.project.update({
@@ -316,6 +318,16 @@ export class FalProvider implements AIProvider {
         timeoutMs: args.timeoutMs,
         expectedDurationMs: args.expectedDurationMs,
         onProgress: args.context.reportProgress,
+        onStage: async (queueStatus) => {
+          const label = queueStatus === 'IN_QUEUE'
+            ? 'В очереди на fal.ai'
+            : queueStatus === 'IN_PROGRESS'
+              ? 'Генерация на fal.ai'
+              : queueStatus === 'COMPLETED'
+                ? 'Скачиваем результат'
+                : 'fal.ai';
+          await args.context.reportStage?.(label);
+        },
       });
 
       const outputUrl = extractOutputUrl(completed.output, args.kind);

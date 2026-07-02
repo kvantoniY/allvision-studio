@@ -46,6 +46,8 @@ interface StepProgressEntry {
   progress: number;
   output?: unknown;
   errorMessage?: string;
+  // Человекочитаемый этап для админ-консоли: «Отправлено на fal.ai», «В очереди fal», «Генерация»…
+  stage?: string;
 }
 
 export interface PlaceholderContext {
@@ -153,6 +155,16 @@ export async function runPipeline(
               index,
               steps.length,
               safePercent,
+            );
+          },
+          reportStage: async (stage: string) => {
+            stepProgress[index] = { ...stepProgress[index], status: 'processing', stage };
+            await persistProgress(
+              params.generationId,
+              stepProgress,
+              index,
+              steps.length,
+              stepProgress[index].progress ?? 0,
             );
           },
         },

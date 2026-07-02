@@ -25,7 +25,7 @@ const usageStatusLabels: Record<string, string> = {
 };
 
 const usageFilterFields = [
-  { key: 'provider', label: 'Провайдер', placeholder: 'piapi' },
+  { key: 'provider', label: 'Провайдер', placeholder: 'fal' },
   { key: 'blockSlug', label: 'Блок', placeholder: 'image-to-video' },
   { key: 'model', label: 'Модель', placeholder: 'kling-3-pro' },
 ] as const satisfies ReadonlyArray<{ key: 'provider' | 'blockSlug' | 'model'; label: string; placeholder: string }>;
@@ -186,7 +186,7 @@ export default function AdminUsagePage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white">AI-консоль генераций</h1>
-          <p className="mt-2 text-sm text-slate-400">Расход PiAPI, здоровье запросов, история генераций, ошибки, request и response провайдера.</p>
+          <p className="mt-2 text-sm text-slate-400">Расход fal.ai, здоровье запросов, история генераций, ошибки, request и response провайдера.</p>
         </div>
         <Button type="button" variant="outline" onClick={() => { usage.refetch(); account.refetch(); overview.refetch(); }}>
           <RefreshCw className="h-4 w-4" />
@@ -215,7 +215,7 @@ export default function AdminUsagePage() {
                 accent="violet"
               />
               <BizCard
-                label="Расход PiAPI"
+                label="Расход fal.ai"
                 value={formatMoney({ usd: overview.data.finance.providerCostUsd }, { primary: 'usd', showAll: true, usdToRub })}
                 hint={`${overview.data.finance.providerRequests} вызовов провайдера`}
                 accent="rose"

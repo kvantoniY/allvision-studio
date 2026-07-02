@@ -173,6 +173,8 @@ export default function AdminProjectDetailPage() {
         <Metric label="Цена" value={formatMoney({ coins: item.userPriceCoins }, { primary: 'coins', showAll: true, usdToRub: rate })} />
       </section>
 
+      <StepStagesPanel stepProgress={item.stepProgress} status={item.status} />
+
       {item.errorCode && (
         <section className="rounded-lg border border-red-900/70 bg-red-950/30 p-5">
           <h2 className="font-semibold text-red-100">Ошибка</h2>
@@ -304,5 +306,32 @@ function Metric({ label, value }: { label: string; value: string }) {
       <div className="text-xs uppercase text-slate-500">{label}</div>
       <div className="mt-2 text-lg font-semibold text-white">{value}</div>
     </div>
+  );
+}
+
+type StepEntry = { stepId?: string; blockSlug?: string; status?: string; progress?: number; stage?: string };
+function StepStagesPanel({ stepProgress, status }: { stepProgress: unknown; status: string }) {
+  const steps: StepEntry[] = Array.isArray(stepProgress) ? (stepProgress as StepEntry[]) : [];
+  if (steps.length === 0) return null;
+  const stageBadge = (s?: string) => s === 'completed' ? 'bg-emerald-600' : s === 'failed' ? 'bg-red-700' : s === 'processing' ? 'bg-amber-600' : 'bg-zinc-700';
+  const stageText = (s?: string) => s === 'completed' ? 'готово' : s === 'failed' ? 'ошибка' : s === 'processing' ? 'в процессе' : 'ожидает';
+  const active = steps.find((st) => st.status === 'processing');
+  return (
+    <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
+      <h2 className="font-semibold text-white">Этапы генерации</h2>
+      {status === 'PROCESSING' && active?.stage && (
+        <div className="mt-2 text-sm text-amber-200">Сейчас: {active.stage}</div>
+      )}
+      <div className="mt-4 space-y-2">
+        {steps.map((st, i) => (
+          <div key={st.stepId ?? i} className="flex items-center gap-3 text-sm">
+            <span className={`inline-block rounded px-2 py-0.5 text-[11px] text-white ${stageBadge(st.status)}`}>{stageText(st.status)}</span>
+            <span className="font-mono text-xs text-slate-400">{st.blockSlug ?? st.stepId}</span>
+            {typeof st.progress === 'number' && st.status === 'processing' && <span className="text-slate-500">{st.progress}%</span>}
+            {st.stage && <span className="text-slate-300">· {st.stage}</span>}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

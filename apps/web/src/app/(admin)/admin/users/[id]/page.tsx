@@ -164,7 +164,7 @@ export default function AdminUserDetailPage() {
             <StatCard label="Генераций всего" value={String(item.stats.totalProjects)} hint={`Завершено ${item.stats.completedProjects} · ошибок ${item.stats.failedProjects}`} accent="violet" />
             <StatCard label="Потрачено на генерации" value={`${item.stats.spentCoins.toLocaleString('ru-RU')} токенов`} hint="по завершённым проектам" accent="amber" />
             <StatCard label="Пополнено" value={`${item.stats.topupRub.toLocaleString('ru-RU')} ₽`} hint={`${item.stats.topupCount} платежей · +${item.stats.topupCoins.toLocaleString('ru-RU')} токенов`} accent="emerald" />
-            <StatCard label="Себестоимость PiAPI" value={`$${item.stats.providerCostUsd.toFixed(2)}`} hint="реальные расходы провайдера" accent="slate" />
+            <StatCard label="Себестоимость fal.ai" value={`$${item.stats.providerCostUsd.toFixed(2)}`} hint="реальные расходы провайдера" accent="slate" />
           </div>
         </section>
       )}
