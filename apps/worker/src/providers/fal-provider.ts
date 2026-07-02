@@ -107,6 +107,17 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'luma-ray2-i2v': { endpoint: 'fal-ai/luma-dream-machine/ray-2/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5, paramProfile: 'aspect-only' },
 };
 
+// Движки motion transfer: slug -> fal endpoint + стиль payload + цена/сек (из fal pricing).
+const MOTION_ENGINES: Record<string, { endpoint: string; perSec: number; style: 'kling' | 'wan-motion' | 'wan-animate' }> = {
+  'kling-motion-3.0-pro': { endpoint: 'fal-ai/kling-video/v3/pro/motion-control', perSec: 0.168, style: 'kling' },
+  'kling-motion-3.0-std': { endpoint: 'fal-ai/kling-video/v3/standard/motion-control', perSec: 0.126, style: 'kling' },
+  'kling-motion-2.6-pro': { endpoint: 'fal-ai/kling-video/v2.6/pro/motion-control', perSec: 0.112, style: 'kling' },
+  'kling-motion-2.6-std': { endpoint: 'fal-ai/kling-video/v2.6/standard/motion-control', perSec: 0.07, style: 'kling' },
+  'wan-motion': { endpoint: 'fal-ai/wan-motion', perSec: 0.05, style: 'wan-motion' },
+  'wan-animate-move': { endpoint: 'fal-ai/wan/v2.2-14b/animate/move', perSec: 0.08, style: 'wan-animate' },
+  'wan-animate-replace': { endpoint: 'fal-ai/wan/v2.2-14b/animate/replace', perSec: 0.08, style: 'wan-animate' },
+};
+
 // Наборы допустимых aspect для моделей с ограниченным словарём (иначе fal 422 по enum).
 const GROK_IMAGE_ASPECTS = new Set(['1:1', '16:9', '9:16', '2:3', '3:2']);
 const GROK_VIDEO_ASPECTS = new Set(['auto', '16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16']);
@@ -523,10 +534,44 @@ export class FalProvider implements AIProvider {
   async imageRestore(): Promise<ProviderResult> {
     throw new ProviderError('FAL_NOT_IMPLEMENTED', 'image-restore not implemented on fal yet');
   }
-  async faceSwapVideo(): Promise<ProviderResult> {
-    throw new ProviderError('FAL_NOT_IMPLEMENTED', 'face-swap not implemented on fal yet');
+  // «Я в этом видео»: fal-native через Wan 2.2 Animate Replace — вставляет персонажа с фото в
+  // референс-видео, заменяя оригинального и сохраняя сцену/свет. Лучше классического face-swap
+  // (переносит всего персонажа, а не только лицо) и сохраняет анатомию (в т.ч. животных).
+  async faceSwapVideo(input: {
+    swapImageUrl: string;
+    targetVideoUrl: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    const falInput: Record<string, unknown> = {
+      image_url: input.swapImageUrl,
+      video_url: input.targetVideoUrl,
+    };
+    const resolution = readString(input.params, 'resolution');
+    if (resolution && /480|580|720/.test(resolution)) falInput.resolution = resolution.replace(/[^0-9]/g, '') + 'p';
+    mergePassthrough(falInput, input.params);
+    const d = Number(input.params?.duration);
+    const durationSec = Number.isFinite(d) && d > 0 ? d : 10;
+    return this.run({
+      endpoint: 'fal-ai/wan/v2.2-14b/animate/replace',
+      falInput,
+      model: input.model,
+      kind: 'image-to-video',
+      ext: 'mp4',
+      estimatedCost: 0.08 * Math.max(5, durationSec),
+      context: input.context,
+      timeoutMs: VIDEO_TIMEOUT_MS,
+      expectedDurationMs: 8 * 60 * 1000,
+    });
   }
-  // Kling v3 Motion Control (video-to-video): персонаж с image_url повторяет движение из video_url.
+  /**
+   * Motion transfer (перенос движения из driving video на персонажа с фото). Мульти-движок:
+   * - kling-motion-*  -> Kling Motion Control (человекоцентричный skeleton; животным даёт человеческие руки).
+   * - wan-motion      -> Wan Motion: pose-retargeting под тело персонажа (adapt_motion) — сохраняет
+   *                      анатомию животных/нелюдей. Лучший выбор для питомцев/детей/нелюдей.
+   * - wan-animate-*   -> Wan 2.2 Animate move/replace.
+   */
   async motionTransfer(input: {
     inputImageUrl: string;
     drivingVideoUrl?: string;
@@ -537,31 +582,36 @@ export class FalProvider implements AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
     if (!input.drivingVideoUrl) {
-      throw new ProviderError('MOTION_REFERENCE_REQUIRED', 'Kling motion-control требует референс-видео движения (video_url)');
+      throw new ProviderError('MOTION_REFERENCE_REQUIRED', 'Motion Control требует референс-видео движения (video_url)');
     }
-    const isPro = input.model.endsWith('-pro');
-    const endpoint = isPro
-      ? 'fal-ai/kling-video/v3/pro/motion-control'
-      : 'fal-ai/kling-video/v3/standard/motion-control';
+    const engine = MOTION_ENGINES[input.model] ?? MOTION_ENGINES['kling-motion-3.0-pro'];
     const falInput: Record<string, unknown> = {
       image_url: input.inputImageUrl,
       video_url: input.drivingVideoUrl,
-      // required enum: image|video. 'video' -> ориентация и длительность берутся из референс-видео (до 30с).
-      character_orientation: readString(input.params, 'character_orientation') ?? 'video',
       ...(input.prompt ? { prompt: input.prompt } : {}),
-      ...(readBoolean(input.params, 'keep_original_sound') !== undefined
-        ? { keep_original_sound: readBoolean(input.params, 'keep_original_sound') }
-        : {}),
     };
+    if (engine.style === 'kling') {
+      // required enum image|video. 'video' -> ориентация/длительность из референс-видео (до 30с).
+      falInput.character_orientation = readString(input.params, 'character_orientation') ?? 'video';
+      const keep = readBoolean(input.params, 'keep_original_sound');
+      if (keep !== undefined) falInput.keep_original_sound = keep;
+    } else if (engine.style === 'wan-motion') {
+      // adapt_motion=true -> ретаргет позы под тело персонажа: животное остаётся животным.
+      falInput.adapt_motion = readBoolean(input.params, 'adapt_motion') ?? true;
+      const enhance = readBoolean(input.params, 'enhance_identity');
+      if (enhance !== undefined) falInput.enhance_identity = enhance;
+    } else {
+      const resolution = readString(input.params, 'resolution');
+      if (resolution && /480|580|720/.test(resolution)) falInput.resolution = resolution.replace(/[^0-9]/g, '') + 'p';
+    }
     mergePassthrough(falInput, input.params);
-    const perSec = isPro ? 0.168 : 0.126;
     return this.run({
-      endpoint,
+      endpoint: engine.endpoint,
       falInput,
       model: input.model,
       kind: 'image-to-video',
       ext: 'mp4',
-      estimatedCost: perSec * Math.max(5, input.durationSec || 5),
+      estimatedCost: engine.perSec * Math.max(5, input.durationSec || 5),
       context: input.context,
       timeoutMs: VIDEO_TIMEOUT_MS,
       expectedDurationMs: 8 * 60 * 1000,

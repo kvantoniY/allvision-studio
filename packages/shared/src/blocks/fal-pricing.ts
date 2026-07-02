@@ -46,8 +46,11 @@ export const FAL_PRICING_ENDPOINTS: Record<string, string> = {
   // motion-control (video-to-video)
   'kling-motion-3.0-pro': 'fal-ai/kling-video/v3/pro/motion-control',
   'kling-motion-3.0-std': 'fal-ai/kling-video/v3/standard/motion-control',
-  'kling-motion-2.6-pro': 'fal-ai/kling-video/v3/pro/motion-control',
-  'kling-motion-2.6-std': 'fal-ai/kling-video/v3/standard/motion-control',
+  'kling-motion-2.6-pro': 'fal-ai/kling-video/v2.6/pro/motion-control',
+  'kling-motion-2.6-std': 'fal-ai/kling-video/v2.6/standard/motion-control',
+  'wan-motion': 'fal-ai/wan-motion',
+  'wan-animate-move': 'fal-ai/wan/v2.2-14b/animate/move',
+  'wan-animate-replace': 'fal-ai/wan/v2.2-14b/animate/replace',
 };
 
 export function falEndpointForModel(slug: string): string | undefined {

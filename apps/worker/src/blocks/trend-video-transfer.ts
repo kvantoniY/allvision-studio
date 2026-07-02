@@ -147,7 +147,9 @@ async function runFaceSwap(parsed: ParsedParams, primaryPhoto: string, ctx: Bloc
 
 async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
-  const motionModel = stringModel(parsed.motion_model, 'kling-motion-3.0-std');
+  // Дефолт — Wan Motion: pose-retargeting под тело персонажа, животные не получают человеческих рук.
+  // Kling Motion Control (человеко-скелетный) остаётся выбираемой альтернативой через motion_model.
+  const motionModel = stringModel(parsed.motion_model, 'wan-motion');
   const duration = await referenceDurationSec(parsed, 5, ctx);
   const baseParams = asObject(parsed);
   let inputImageUrl = primaryPhoto;
@@ -168,11 +170,14 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
     inputImageUrl = duo.outputUrl;
   }
 
+  // Промпт по умолчанию усиливает сохранение реальной анатомии субъекта (важно для животных/детей).
+  const motionPrompt = parsed.prompt
+    ?? (parsed.people_count === 'two' ? ANATOMY_RULE_TWO : ANATOMY_RULE_ONE);
   try {
     const result = await provider.motionTransfer({
       inputImageUrl,
       drivingVideoUrl: parsed.reference_video,
-      prompt: parsed.prompt,
+      prompt: motionPrompt,
       durationSec: duration,
       model: motionModel,
       params: {
