@@ -7,7 +7,6 @@ import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { getQueue } from '../../queues';
 import { getPaymentProvider } from '../../services/payment-provider';
-import { PiAPIAccountClient } from '../../services/piapi-client';
 import { HttpError } from '../../utils/http-error';
 import { resolveWorkspacePath } from '../../utils/paths';
 
@@ -17,7 +16,7 @@ adminDiagnosticsRouter.use(requireAuth, requireAdmin);
 
 adminDiagnosticsRouter.get('/state', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    const [queues, recentProjects, recentErrors, mediaAssets, piapiBalance, disk] = await Promise.all([
+    const [queues, recentProjects, recentErrors, mediaAssets, falBalance, disk] = await Promise.all([
       readQueueState(),
       prisma.project.findMany({
         orderBy: { createdAt: 'desc' },
@@ -37,11 +36,11 @@ adminDiagnosticsRouter.get('/state', async (_req: Request, res: Response, next: 
       }),
       readRecentErrors(),
       readMediaAssetsWithFileState(),
-      readPiapiBalance().catch((err) => ({
+      readFalBalance().catch((err) => ({
         balanceUsd: null,
         lastChecked: null,
         lowBalance: false,
-        errorCode: err instanceof HttpError ? err.code : 'PIAPI_BALANCE_UNAVAILABLE',
+        errorCode: err instanceof HttpError ? err.code : 'FAL_BALANCE_UNAVAILABLE',
       })),
       readDiskState(),
     ]);
@@ -62,7 +61,7 @@ adminDiagnosticsRouter.get('/state', async (_req: Request, res: Response, next: 
       mediaAssets,
       disk,
       env: maskedEnv(),
-      piapiBalance,
+      falBalance,
     });
   } catch (err) {
     next(err);
@@ -71,7 +70,7 @@ adminDiagnosticsRouter.get('/state', async (_req: Request, res: Response, next: 
 
 adminDiagnosticsRouter.post('/refresh-balance', async (_req: Request, res: Response, next: NextFunction) => {
   try {
-    res.json(await readPiapiBalance());
+    res.json(await readFalBalance());
   } catch (err) {
     next(err);
   }
@@ -179,20 +178,22 @@ adminDiagnosticsRouter.get('/robokassa-probe/:invId', async (req: Request, res: 
   }
 });
 
-async function readPiapiBalance() {
-  const apiKey = process.env.PIAPI_API_KEY;
-  if (!apiKey) throw new HttpError(503, 'PIAPI_API_KEY_MISSING', 'PIAPI_API_KEY не настроен');
-  const client = new PiAPIAccountClient({
-    apiKey,
-    baseUrl: process.env.PIAPI_BASE_URL ?? 'https://api.piapi.ai',
+async function readFalBalance() {
+  const apiKey = process.env.FAL_BILLING_KEY || process.env.FAL_KEY;
+  if (!apiKey) throw new HttpError(503, 'FAL_KEY_MISSING', 'FAL_BILLING_KEY/FAL_KEY не настроен');
+  const r = await fetch('https://api.fal.ai/v1/account/billing?expand=credits', {
+    headers: { Authorization: `Key ${apiKey}` },
   });
-  const account = await client.getAccountInfo();
-  const balanceMin = Number(process.env.PIAPI_BALANCE_MIN_USD ?? '2');
+  const json = (await r.json().catch(() => ({}))) as { username?: string; credits?: { current_balance?: number; currency?: string }; error?: { message?: string } };
+  if (!r.ok) throw new HttpError(502, 'FAL_BILLING_ERROR', `fal billing вернул ${r.status}: ${json?.error?.message ?? ''}`.trim());
+  const balanceUsd = Number(json?.credits?.current_balance ?? 0);
+  const balanceMin = Number(process.env.FAL_BALANCE_MIN_USD ?? '2');
   return {
-    balanceUsd: account.equivalentUsd,
+    balanceUsd,
+    currency: json?.credits?.currency ?? 'USD',
+    username: json?.username,
     lastChecked: new Date().toISOString(),
-    lowBalance: account.equivalentUsd < balanceMin,
-    raw: account.raw,
+    lowBalance: balanceUsd < balanceMin,
   };
 }
 

@@ -145,6 +145,9 @@ export const adminUsageApi = createApi({
       },
       providesTags: ['AdminUsage'],
     }),
+    getFalModels: build.query<FalModelsResponse, void>({
+      query: () => ({ url: '/fal/models' }),
+    }),
     getFalPricing: build.query<FalPricingResponse, { slug?: string; endpoint?: string; duration?: number; numImages?: number }>({
       query: (q) => {
         const params = new URLSearchParams();
@@ -157,6 +160,19 @@ export const adminUsageApi = createApi({
     }),
   }),
 });
+
+export type FalModelsResponse = {
+  count: number;
+  models: Array<{
+    slug: string;
+    endpoint: string;
+    title: string;
+    category: string;
+    description?: string;
+    unitPrice: number | null;
+    unit: string | null;
+  }>;
+};
 
 export type FalPricingResponse = {
   available: boolean;
@@ -173,4 +189,5 @@ export const {
   useGetFalAccountQuery,
   useGetAdminAnalyticsOverviewQuery,
   useGetFalPricingQuery,
+  useGetFalModelsQuery,
 } = adminUsageApi;

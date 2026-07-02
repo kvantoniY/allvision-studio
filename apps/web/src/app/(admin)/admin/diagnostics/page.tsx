@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import {
   useGetAdminDiagnosticsStateQuery,
-  useRefreshPiAPIBalanceMutation,
+  useRefreshFalBalanceMutation,
   useReloadServicesCatalogMutation,
 } from '@/store/api/admin-diagnostics-api';
 import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '@/store/api/admin-settings-api';
@@ -49,14 +49,14 @@ export default function AdminDiagnosticsPage() {
   const usage = useGetAdminUsageQuery();
   const settings = useGetAdminSettingsQuery();
   const [updateSettings, updateSettingsState] = useUpdateAdminSettingsMutation();
-  const [refreshBalance, refreshState] = useRefreshPiAPIBalanceMutation();
+  const [refreshBalance, refreshState] = useRefreshFalBalanceMutation();
   const [reloadCatalog, reloadState] = useReloadServicesCatalogMutation();
   const [rateDraft, setRateDraft] = useState('80');
   const data = state.data;
   const usdToRub = settings.data?.settings.usdToRub ?? 80;
   const sevenDaySpend = usage.data?.summary.totalCostUsd ?? 0;
   const dailySpend = sevenDaySpend / 7;
-  const balanceDays = data?.piapiBalance.balanceUsd && dailySpend > 0 ? Math.floor(data.piapiBalance.balanceUsd / dailySpend) : null;
+  const balanceDays = data?.falBalance.balanceUsd && dailySpend > 0 ? Math.floor(data.falBalance.balanceUsd / dailySpend) : null;
   const diskUsedPercent = typeof data?.disk?.usedPercent === 'number' ? Math.round(data.disk.usedPercent) : null;
   const diskDetail = data?.disk?.error
     ? data.disk.error
@@ -91,7 +91,7 @@ export default function AdminDiagnosticsPage() {
           </Button>
           <Button type="button" variant="outline" disabled={refreshState.isLoading} onClick={() => refreshBalance()}>
             <RefreshCw className="h-4 w-4" />
-            Обновить баланс PiAPI
+            Обновить баланс fal.ai
           </Button>
           <Button type="button" variant="outline" disabled={reloadState.isLoading} onClick={() => reloadCatalog()}>
             <RotateCcw className="h-4 w-4" />
@@ -111,10 +111,10 @@ export default function AdminDiagnosticsPage() {
           tone={data?.disk?.error || (diskUsedPercent !== null && diskUsedPercent >= 90) ? 'danger' : 'ok'}
         />
         <Metric
-          label="Баланс PiAPI"
-          value={typeof data?.piapiBalance.balanceUsd === 'number' ? formatMoney({ usd: data.piapiBalance.balanceUsd }, { primary: 'usd', showAll: true, usdToRub }) : 'н/д'}
-          detail={balanceDays === null ? (data?.piapiBalance.errorCode ?? data?.piapiBalance.lastChecked ?? '') : `Хватит на ~${balanceDays} дней · ${formatMoney({ usd: dailySpend }, { primary: 'usd', showAll: true, usdToRub })}/день`}
-          tone={data?.piapiBalance.lowBalance ? 'danger' : 'ok'}
+          label="Баланс fal.ai"
+          value={typeof data?.falBalance.balanceUsd === 'number' ? formatMoney({ usd: data.falBalance.balanceUsd }, { primary: 'usd', showAll: true, usdToRub }) : 'н/д'}
+          detail={balanceDays === null ? (data?.falBalance.errorCode ?? data?.falBalance.lastChecked ?? '') : `Хватит на ~${balanceDays} дней · ${formatMoney({ usd: dailySpend }, { primary: 'usd', showAll: true, usdToRub })}/день`}
+          tone={data?.falBalance.lowBalance ? 'danger' : 'ok'}
         />
       </div>
 

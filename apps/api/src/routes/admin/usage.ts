@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import IORedis from 'ioredis';
 import { Prisma, prisma } from '@allvision/database';
 import { z } from 'zod';
-import { falEndpointForModel, falBillingUnits } from '@allvision/shared';
+import { falEndpointForModel, falBillingUnits, FAL_PRICING_ENDPOINTS, BLOCK_CATALOG } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { PiAPIAccountClient } from '../../services/piapi-client';
@@ -351,6 +351,39 @@ adminUsageRouter.get('/fal/pricing', async (req: Request, res: Response, next: N
       units,
       costUsd: Math.round(pricing.unitPrice * units * 10000) / 10000,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Каталог всех fal-моделей с живыми ценами (отдельная вкладка в админке).
+adminUsageRouter.get('/fal/models', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const titleBySlug = new Map<string, { title: string; category: string; description?: string }>();
+    for (const block of BLOCK_CATALOG) {
+      for (const m of block.supportedModels) {
+        if (!titleBySlug.has(m.slug)) {
+          titleBySlug.set(m.slug, { title: m.title, category: block.category, description: m.description });
+        }
+      }
+    }
+    const slugs = Object.keys(FAL_PRICING_ENDPOINTS);
+    const models = await Promise.all(slugs.map(async (slug) => {
+      const endpoint = FAL_PRICING_ENDPOINTS[slug];
+      const pricing = await getFalPricing(endpoint);
+      const meta = titleBySlug.get(slug);
+      return {
+        slug,
+        endpoint,
+        title: meta?.title ?? slug,
+        category: meta?.category ?? '',
+        description: meta?.description,
+        unitPrice: pricing?.unitPrice ?? null,
+        unit: pricing?.unit ?? null,
+      };
+    }));
+    models.sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title));
+    res.json({ models, count: models.length });
   } catch (err) {
     next(err);
   }

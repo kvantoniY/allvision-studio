@@ -47,8 +47,10 @@ export type AdminDiagnosticsState = {
     error?: string;
   };
   env: Record<string, string | null>;
-  piapiBalance: {
+  falBalance: {
     balanceUsd: number | null;
+    currency?: string;
+    username?: string;
     lastChecked: string | null;
     lowBalance: boolean;
     errorCode?: string;
@@ -66,7 +68,7 @@ export const adminDiagnosticsApi = createApi({
       query: () => ({ url: '/diagnostics/state' }),
       providesTags: ['AdminDiagnostics'],
     }),
-    refreshPiAPIBalance: build.mutation<AdminDiagnosticsState['piapiBalance'], void>({
+    refreshFalBalance: build.mutation<AdminDiagnosticsState['falBalance'], void>({
       query: () => ({ url: '/diagnostics/refresh-balance', method: 'POST' }),
       invalidatesTags: ['AdminDiagnostics'],
     }),
@@ -86,7 +88,7 @@ export const adminDiagnosticsApi = createApi({
 
 export const {
   useGetAdminDiagnosticsStateQuery,
-  useRefreshPiAPIBalanceMutation,
+  useRefreshFalBalanceMutation,
   useReloadServicesCatalogMutation,
   useGetPaymentsHealthQuery,
   useProbeRobokassaMutation,
