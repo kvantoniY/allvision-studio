@@ -603,38 +603,46 @@ function providerLabel(provider: ModelOption['provider']) {
 // Для fal-generic — редактируемые (пишутся в extra_params JSON); для остальных — справочно.
 const CRITERIA_HIDDEN = new Set(['prompt', 'image_url', 'image_urls', 'video_url', 'video_urls', 'duration', 'aspect_ratio', 'sync_mode', 'enable_safety_checker', 'loras', 'seed']);
 
-function FalModelCriteria({ slug, endpoint, editable, extraParamsValue, onChangeExtra }: {
+// mode='extra' (fal-generic -> extra_params JSON); mode='step' (обычные блоки -> прямо в параметры шага).
+function FalModelCriteria({ slug, endpoint, mode, extraParamsValue, stepParams, onChangeExtra, onSetParam, blockParamKeys }: {
   slug?: string;
   endpoint?: string;
-  editable: boolean;
+  mode: 'extra' | 'step';
   extraParamsValue?: string;
+  stepParams?: Record<string, unknown>;
   onChangeExtra?: (json: string) => void;
+  onSetParam?: (key: string, value: unknown) => void;
+  blockParamKeys?: Set<string>;
 }) {
   const hasTarget = Boolean(slug || endpoint);
   const { data } = useGetFalSchemaQuery({ slug, endpoint }, { skip: !hasTarget });
   if (!hasTarget || !data?.available || !data.fields?.length) return null;
-  const fields = data.fields.filter((f) => !CRITERIA_HIDDEN.has(f.name));
+  // В step-режиме прячем поля, которые у блока уже есть отдельным контролом (quality/resolution и т.п.).
+  const fields = data.fields.filter((f) => !CRITERIA_HIDDEN.has(f.name) && !(mode === 'step' && blockParamKeys?.has(f.name)));
   if (!fields.length) return null;
 
-  let current: Record<string, unknown> = {};
-  try { current = extraParamsValue ? (JSON.parse(extraParamsValue) as Record<string, unknown>) : {}; } catch { current = {}; }
+  let extraCurrent: Record<string, unknown> = {};
+  if (mode === 'extra') {
+    try { extraCurrent = extraParamsValue ? (JSON.parse(extraParamsValue) as Record<string, unknown>) : {}; } catch { extraCurrent = {}; }
+  }
+  const current = mode === 'extra' ? extraCurrent : (stepParams ?? {});
   const setField = (name: string, val: unknown) => {
-    const next = { ...current };
+    if (mode === 'step') { onSetParam?.(name, val === '' ? undefined : val); return; }
+    const next = { ...extraCurrent };
     if (val === '' || val === undefined || val === null) delete next[name]; else next[name] = val;
     onChangeExtra?.(Object.keys(next).length ? JSON.stringify(next) : '');
   };
 
   return (
     <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-2.5">
-      <div className="mb-2 font-medium text-slate-200">Критерии модели (из fal){editable ? '' : ' — справочно'}</div>
+      <div className="mb-2 font-medium text-slate-200">Критерии модели (из fal) — редактируемые</div>
       <div className="grid gap-2 md:grid-cols-2">
         {fields.map((f) => (
           <div key={f.name} className="text-xs">
             <div className="text-slate-300">{f.title || f.name}{f.required ? ' *' : ''}
               {typeof f.default !== 'undefined' ? <span className="text-slate-600"> · default: {String(f.default)}</span> : null}
             </div>
-            {editable ? <CriteriaInput field={f} value={current[f.name]} onChange={(v) => setField(f.name, v)} />
-              : <div className="text-slate-500">{f.enum ? f.enum.join(' / ') : f.type}</div>}
+            <CriteriaInput field={f} value={current[f.name]} onChange={(v) => setField(f.name, v)} />
             {f.description ? <div className="mt-0.5 text-[11px] text-slate-600 line-clamp-2">{f.description}</div> : null}
           </div>
         ))}
@@ -1320,9 +1328,12 @@ function BlockParamsForm({
               <FalModelCriteria
                 slug={model.slug}
                 endpoint={block.slug === 'fal-generic' ? (typeof value.endpoint === 'string' ? value.endpoint : undefined) : undefined}
-                editable={block.slug === 'fal-generic'}
+                mode={block.slug === 'fal-generic' ? 'extra' : 'step'}
                 extraParamsValue={typeof value.extra_params === 'string' ? value.extra_params : ''}
+                stepParams={value}
                 onChangeExtra={(json) => update('extra_params', json)}
+                onSetParam={(key, val) => update(key, val)}
+                blockParamKeys={new Set(Object.keys(block.paramsSchema.properties ?? {}))}
               />
               {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-violet-300 hover:text-violet-200">Документация</a>}
             </div>

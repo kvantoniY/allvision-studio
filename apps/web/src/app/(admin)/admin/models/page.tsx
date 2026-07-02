@@ -17,9 +17,11 @@ export default function AdminModelsPage() {
   const runReconcile = async () => {
     try {
       const r = await reconcile().unwrap();
-      setReconcileMsg(`Сверено с fal billing: обновлено ${r.updated} записей (из ${r.matchedRequests} запросов, просмотрено ${r.scanned} событий).`);
-    } catch {
-      setReconcileMsg('Не удалось свериться с fal billing (нужен FAL_BILLING_KEY).');
+      const base = `Сверено с fal billing: обновлено ${r.updated} записей (из ${r.matchedRequests} запросов, просмотрено ${r.scanned} событий).`;
+      setReconcileMsg(r.partial ? `${base} Частично: ${r.lastError ?? 'сеть до fal оборвалась'} — нажмите ещё раз, чтобы догрузить.` : base);
+    } catch (e) {
+      const err = e as { data?: { error?: { message?: string } }; status?: number };
+      setReconcileMsg(`Ошибка сверки: ${err?.data?.error?.message ?? `код ${err?.status ?? '—'}`}`);
     }
   };
 

@@ -393,31 +393,42 @@ adminUsageRouter.get('/fal/models', async (_req: Request, res: Response, next: N
 adminUsageRouter.post('/fal/reconcile-costs', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const apiKey = process.env.FAL_BILLING_KEY || process.env.FAL_KEY;
-    if (!apiKey) throw new HttpError(503, 'FAL_KEY_MISSING', 'FAL_BILLING_KEY/FAL_KEY не настроен');
-    const maxPages = Math.min(Number(req.query.pages ?? 20), 50);
+    if (!apiKey) throw new HttpError(503, 'FAL_KEY_MISSING', 'FAL_BILLING_KEY/FAL_KEY не настроен в env API');
+    const maxPages = Math.min(Number(req.query.pages ?? 10), 30);
     const costByRequest = new Map<string, number>();
     let cursor: string | undefined;
     let scanned = 0;
+    let pagesOk = 0;
+    let lastError: string | undefined;
     for (let page = 0; page < maxPages; page += 1) {
       const url = new URL('https://api.fal.ai/v1/models/billing-events');
       url.searchParams.set('limit', '100');
       if (cursor) url.searchParams.set('cursor', cursor);
-      const r = await fetch(url.toString(), { headers: { Authorization: `Key ${apiKey}` } });
-      if (!r.ok) throw new HttpError(502, 'FAL_BILLING_ERROR', `billing-events вернул ${r.status}`);
-      const json = (await r.json().catch(() => ({}))) as {
-        billing_events?: Array<{ request_id?: string; cost_estimate_nano_usd?: number }>;
-        next_cursor?: string | null;
-        has_more?: boolean;
-      };
-      for (const ev of json.billing_events ?? []) {
+      // Каждая страница — отдельный запрос к fal с RU-ВМ (сеть флапает). Не валим всю сверку из-за
+      // одной неудачной страницы: берём, что успели собрать.
+      let json: { billing_events?: Array<{ request_id?: string; cost_estimate_nano_usd?: number }>; next_cursor?: string | null; has_more?: boolean } | undefined;
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        const r = await fetch(url.toString(), { headers: { Authorization: `Key ${apiKey}` }, signal: controller.signal });
+        clearTimeout(timer);
+        if (!r.ok) { lastError = `HTTP ${r.status} на странице ${page + 1}`; break; }
+        json = await r.json();
+        pagesOk += 1;
+      } catch (e) {
+        lastError = `сеть до fal оборвалась на странице ${page + 1}: ${(e as Error).message}`;
+        break;
+      }
+      for (const ev of json?.billing_events ?? []) {
         scanned += 1;
         if (ev.request_id && typeof ev.cost_estimate_nano_usd === 'number') {
           costByRequest.set(ev.request_id, (costByRequest.get(ev.request_id) ?? 0) + ev.cost_estimate_nano_usd / 1e9);
         }
       }
-      if (!json.has_more || !json.next_cursor) break;
+      if (!json?.has_more || !json.next_cursor) break;
       cursor = json.next_cursor;
     }
+    if (pagesOk === 0 && lastError) throw new HttpError(502, 'FAL_BILLING_ERROR', `Не удалось получить billing-events от fal: ${lastError}`);
     let updated = 0;
     for (const [requestId, costUsd] of costByRequest) {
       const rounded = Math.round(costUsd * 1000000) / 1000000;
@@ -427,7 +438,7 @@ adminUsageRouter.post('/fal/reconcile-costs', async (req: Request, res: Response
       });
       updated += result.count;
     }
-    res.json({ scanned, matchedRequests: costByRequest.size, updated });
+    res.json({ scanned, matchedRequests: costByRequest.size, updated, pagesOk, partial: Boolean(lastError), lastError });
   } catch (err) {
     next(err);
   }

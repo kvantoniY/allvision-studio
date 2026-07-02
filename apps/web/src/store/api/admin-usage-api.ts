@@ -148,7 +148,7 @@ export const adminUsageApi = createApi({
     getFalModels: build.query<FalModelsResponse, void>({
       query: () => ({ url: '/fal/models' }),
     }),
-    reconcileFalCosts: build.mutation<{ scanned: number; matchedRequests: number; updated: number }, void>({
+    reconcileFalCosts: build.mutation<{ scanned: number; matchedRequests: number; updated: number; pagesOk?: number; partial?: boolean; lastError?: string }, void>({
       query: () => ({ url: '/fal/reconcile-costs', method: 'POST' }),
       invalidatesTags: ['AdminUsage'],
     }),
