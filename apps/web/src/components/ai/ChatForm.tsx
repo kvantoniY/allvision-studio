@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
-import { CHAT_MODELS, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type PiAPIParamCapability } from '@allvision/shared';
+import { CHAT_MODELS, chatReferenceSlots, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type ChatReferenceSlot, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -223,6 +223,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [isDraggingReference, setIsDraggingReference] = useState(false);
   const [advancedParams, setAdvancedParams] = useState<ChatAdvancedParams>(() => defaultAdvancedParams(defaultModel('image')));
+  // Доп. референс-слоты (2-й персонаж, последний кадр, видео движения...) — по метаданным модели.
+  const [extraRefs, setExtraRefs] = useState<Record<string, SelectedInputSource | null>>({});
 
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
   const selectedModel = models.find((model) => model.slug === modelSlug) ?? models[0] ?? CHAT_MODELS[0];
@@ -252,7 +254,15 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const requiresPrompt = selectedModel.requiresPrompt !== false;
   // Talking-avatar: needs BOTH a character image (source) and a voice audio (audioSource).
   const dualInput = selectedModel.acceptsImageInput && selectedModel.acceptsAudioInput;
-  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
+  // Референс-слоты: slot[0] = основной (source), остальные (кроме аудио) — доп-пикеры на форме.
+  const referenceSlots = useMemo(() => chatReferenceSlots(selectedModel), [selectedModel]);
+  const mainSlot = referenceSlots[0];
+  const extraSlots = useMemo(() => referenceSlots.slice(1).filter((s) => s.mediaKind !== 'audio'), [referenceSlots]);
+  const filledExtra = extraSlots.filter((s) => !!extraRefs[s.key]?.ref).length;
+  const requiredExtraMissing = extraSlots.some((s) => s.required && !extraRefs[s.key]?.ref);
+  const slotTotal = referenceSlots.filter((s) => s.mediaKind !== 'audio').length;
+  const slotFilled = (source ? 1 : 0) + filledExtra;
+  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !requiredExtraMissing && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -287,6 +297,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   useEffect(() => {
     setAdvancedParams(defaultAdvancedParams(selectedModel));
     setGenerateAudio(selectedModel.supportsAudio);
+    setExtraRefs({});
     // Drop the voice-audio attachment when the model is not a talking-avatar (dual-input) model.
     if (!(selectedModel.acceptsImageInput && selectedModel.acceptsAudioInput)) {
       setAudioSource(null);
@@ -367,6 +378,25 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       return;
     }
     try {
+      // Доп-референсы -> params. Для omni порядок = @image_1 (основной), @image_2 (доп) и т.д.
+      const slotParams: Record<string, unknown> = {};
+      const imagesList: string[] = [];
+      const imageUrlsList: string[] = [];
+      if (source?.mediaKind === 'image' && source.ref) {
+        if (extraSlots.some((s) => s.param === 'images')) imagesList.push(source.ref);
+        if (extraSlots.some((s) => s.param === 'image_urls')) imageUrlsList.push(source.ref);
+      }
+      for (const s of extraSlots) {
+        const ref = extraRefs[s.key]?.ref;
+        if (!ref) continue;
+        if (s.param === 'images') imagesList.push(ref);
+        else if (s.param === 'image_urls') imageUrlsList.push(ref);
+        else if (s.param === 'video_urls') slotParams.video_urls = [ref];
+        else slotParams[s.param] = ref;
+      }
+      if (imagesList.length) slotParams.images = imagesList;
+      if (imageUrlsList.length) slotParams.image_urls = imageUrlsList;
+      const mergedParams = { ...cleanedAdvancedParams, ...slotParams };
       await createMessage({
         chatId,
         body: {
@@ -379,7 +409,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           imageInputRef: source?.mediaKind === 'image' ? source.ref : undefined,
           videoInputRef: source?.mediaKind === 'video' ? source.ref : undefined,
           audioInputRef: audioSource?.ref ?? (source?.mediaKind === 'audio' ? source.ref : undefined),
-          params: Object.keys(cleanedAdvancedParams).length > 0 ? cleanedAdvancedParams : undefined,
+          params: Object.keys(mergedParams).length > 0 ? mergedParams : undefined,
         },
       }).unwrap();
       toast({ title: 'Генерация запущена' });
@@ -399,7 +429,9 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     : referenceUnsupported
       ? 'Референс не подходит модели'
       : needsInput && !source
-      ? (dualInput ? 'Прикрепите фото персонажа' : 'Нужен референс')
+      ? (dualInput ? 'Прикрепите фото персонажа' : `Прикрепите: ${mainSlot?.label ?? 'референс'}`)
+      : requiredExtraMissing
+      ? `Прикрепите: ${extraSlots.find((s) => s.required && !extraRefs[s.key]?.ref)?.label ?? 'референс'}`
       : dualInput && !audioSource
       ? 'Прикрепите аудио-озвучку'
       : missingAdvanced
@@ -469,6 +501,40 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        {(extraSlots.length > 0 || referenceSlots.some((s) => s.anchor)) && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/30 px-3 py-2">
+            <span className="text-[11px] font-medium text-slate-400">Референсы {slotFilled}/{slotTotal}</span>
+            {mainSlot && (
+              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
+                {mainSlot.label}{mainSlot.anchor ? ` ${mainSlot.anchor}` : ''}{source ? ' ✓' : ''}
+              </span>
+            )}
+            {extraSlots.map((s) => (
+              <div key={s.key} className="flex items-center gap-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1">
+                <span className="text-[10px] text-slate-400">{s.label}{s.required ? '*' : ''}{s.anchor ? ` ${s.anchor}` : ''}</span>
+                <InputSourcePicker
+                  mediaKind={s.mediaKind}
+                  value={extraRefs[s.key] ?? null}
+                  required={s.required}
+                  compact
+                  iconOnly
+                  onChange={(v) => setExtraRefs((prev) => ({ ...prev, [s.key]: v }))}
+                />
+              </div>
+            ))}
+            {referenceSlots.filter((s) => s.anchor).map((s) => (
+              <button
+                key={`anchor-${s.key}`}
+                type="button"
+                onClick={() => setPrompt((p) => `${p}${p && !p.endsWith(' ') ? ' ' : ''}${s.anchor} `)}
+                className="rounded bg-violet-600/20 px-1.5 py-0.5 text-[10px] text-violet-200 hover:bg-violet-600/30"
+                title="Вставить упоминание референса в промпт"
+              >
+                {s.anchor}
+              </button>
+            ))}
+          </div>
+        )}
         {(source || referenceUnsupported || !canPay || selectedModel.experimental) && (
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/45 px-3 py-2">
             {source && (
