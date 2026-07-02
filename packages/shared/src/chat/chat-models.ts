@@ -7,7 +7,8 @@ export type ChatCategory = 'image' | 'video';
 export type ChatAspectRatio = '1:1' | '9:16' | '16:9' | '4:3' | '3:4' | '21:9' | '9:21' | 'auto';
 export type ModelPriceOverrides = Record<string, number>;
 
-const VIDEO_PRICE_MULTIPLIER = 3;
+// Цена юзеру = себестоимость × 2 (единообразно для картинок и видео).
+const PRICE_MULTIPLIER = 2;
 
 export interface ChatModelOption {
   slug: string;
@@ -204,11 +205,8 @@ export function estimateChatGenerationPriceCoins(
   modelSlug: string,
   options: { duration?: number; generateAudio?: boolean; params?: Record<string, unknown>; priceOverrides?: ModelPriceOverrides } = {},
 ) {
-  const chatModel = getChatModel(modelSlug);
   const costCoins = estimateChatGenerationCostCoins(modelSlug, options);
-  const defaultPriceCoins = chatModel?.category === 'video'
-    ? Math.max(1, costCoins * VIDEO_PRICE_MULTIPLIER)
-    : costCoins;
+  const defaultPriceCoins = Math.max(1, Math.ceil(costCoins * PRICE_MULTIPLIER));
   return applyModelPriceOverride(
     modelSlug,
     defaultPriceCoins,
