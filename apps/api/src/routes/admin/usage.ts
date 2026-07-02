@@ -389,6 +389,110 @@ adminUsageRouter.get('/fal/models', async (_req: Request, res: Response, next: N
   }
 });
 
+// Сверка себестоимости с fal billing-events: точная стоимость по request_id (= AIUsageLog.taskId).
+adminUsageRouter.post('/fal/reconcile-costs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const apiKey = process.env.FAL_BILLING_KEY || process.env.FAL_KEY;
+    if (!apiKey) throw new HttpError(503, 'FAL_KEY_MISSING', 'FAL_BILLING_KEY/FAL_KEY не настроен');
+    const maxPages = Math.min(Number(req.query.pages ?? 20), 50);
+    const costByRequest = new Map<string, number>();
+    let cursor: string | undefined;
+    let scanned = 0;
+    for (let page = 0; page < maxPages; page += 1) {
+      const url = new URL('https://api.fal.ai/v1/models/billing-events');
+      url.searchParams.set('limit', '100');
+      if (cursor) url.searchParams.set('cursor', cursor);
+      const r = await fetch(url.toString(), { headers: { Authorization: `Key ${apiKey}` } });
+      if (!r.ok) throw new HttpError(502, 'FAL_BILLING_ERROR', `billing-events вернул ${r.status}`);
+      const json = (await r.json().catch(() => ({}))) as {
+        billing_events?: Array<{ request_id?: string; cost_estimate_nano_usd?: number }>;
+        next_cursor?: string | null;
+        has_more?: boolean;
+      };
+      for (const ev of json.billing_events ?? []) {
+        scanned += 1;
+        if (ev.request_id && typeof ev.cost_estimate_nano_usd === 'number') {
+          costByRequest.set(ev.request_id, (costByRequest.get(ev.request_id) ?? 0) + ev.cost_estimate_nano_usd / 1e9);
+        }
+      }
+      if (!json.has_more || !json.next_cursor) break;
+      cursor = json.next_cursor;
+    }
+    let updated = 0;
+    for (const [requestId, costUsd] of costByRequest) {
+      const rounded = Math.round(costUsd * 1000000) / 1000000;
+      const result = await prisma.aIUsageLog.updateMany({
+        where: { provider: 'fal', taskId: requestId, NOT: { costUsd: rounded } },
+        data: { costUsd: rounded },
+      });
+      updated += result.count;
+    }
+    res.json({ scanned, matchedRequests: costByRequest.size, updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Input-схема модели fal (для выбора критериев: quality low/med/high, steps, guidance и т.п.).
+adminUsageRouter.get('/fal/schema', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const slug = typeof req.query.slug === 'string' ? req.query.slug : undefined;
+    const rawEndpoint = typeof req.query.endpoint === 'string' ? req.query.endpoint : undefined;
+    const endpoint = (rawEndpoint || (slug ? falEndpointForModel(slug) : undefined))?.replace(/^\/+/, '');
+    if (!endpoint) { res.json({ available: false, reason: 'no-endpoint' }); return; }
+    const fields = await getFalInputSchema(endpoint);
+    if (!fields) { res.json({ available: false, endpoint, reason: 'no-schema' }); return; }
+    res.json({ available: true, endpoint, fields });
+  } catch (err) {
+    next(err);
+  }
+});
+
+type FalSchemaField = { name: string; type: string; enum?: string[]; default?: unknown; title?: string; description?: string; minimum?: number; maximum?: number; required: boolean };
+const falSchemaCache = new Map<string, { fields: FalSchemaField[] | null; exp: number }>();
+
+async function getFalInputSchema(endpoint: string): Promise<FalSchemaField[] | null> {
+  const cached = falSchemaCache.get(endpoint);
+  if (cached && cached.exp > Date.now()) return cached.fields;
+  try {
+    const r = await fetch(`https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=${encodeURIComponent(endpoint)}`);
+    if (!r.ok) { falSchemaCache.set(endpoint, { fields: null, exp: Date.now() + 5 * 60 * 1000 }); return null; }
+    const spec = (await r.json().catch(() => ({}))) as {
+      paths?: Record<string, { post?: { requestBody?: { content?: Record<string, { schema?: { $ref?: string } }> } } }>;
+      components?: { schemas?: Record<string, { properties?: Record<string, Record<string, unknown>>; required?: string[] }> };
+    };
+    // Находим schema тела POST-запроса (submit) и резолвим $ref.
+    let ref: string | undefined;
+    for (const p of Object.values(spec.paths ?? {})) {
+      const s = p.post?.requestBody?.content?.['application/json']?.schema;
+      if (s?.$ref) { ref = s.$ref; break; }
+    }
+    const name = ref?.split('/').pop();
+    const schema = name ? spec.components?.schemas?.[name] : undefined;
+    if (!schema?.properties) { falSchemaCache.set(endpoint, { fields: null, exp: Date.now() + 60 * 60 * 1000 }); return null; }
+    const required = new Set(schema.required ?? []);
+    const fields: FalSchemaField[] = Object.entries(schema.properties).map(([key, prop]) => {
+      const p = prop as Record<string, unknown>;
+      const enumVals = Array.isArray(p.enum) ? p.enum.map((v) => String(v)) : undefined;
+      return {
+        name: key,
+        type: typeof p.type === 'string' ? p.type : (enumVals ? 'string' : 'unknown'),
+        enum: enumVals,
+        default: p.default,
+        title: typeof p.title === 'string' ? p.title : undefined,
+        description: typeof p.description === 'string' ? p.description : undefined,
+        minimum: typeof p.minimum === 'number' ? p.minimum : undefined,
+        maximum: typeof p.maximum === 'number' ? p.maximum : undefined,
+        required: required.has(key),
+      };
+    });
+    falSchemaCache.set(endpoint, { fields, exp: Date.now() + 60 * 60 * 1000 });
+    return fields;
+  } catch {
+    return null;
+  }
+}
+
 const falPriceCache = new Map<string, { price: { unitPrice: number; unit: string } | null; exp: number }>();
 async function getFalPricing(endpoint: string): Promise<{ unitPrice: number; unit: string } | null> {
   const cached = falPriceCache.get(endpoint);

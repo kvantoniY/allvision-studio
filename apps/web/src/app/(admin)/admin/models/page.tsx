@@ -1,15 +1,27 @@
 'use client';
 
+import { useState } from 'react';
 import { formatMoney } from '@allvision/shared';
-import { useGetFalModelsQuery } from '@/store/api/admin-usage-api';
+import { useGetFalModelsQuery, useReconcileFalCostsMutation } from '@/store/api/admin-usage-api';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
 
 export default function AdminModelsPage() {
   const { data, isLoading, isError, refetch, isFetching } = useGetFalModelsQuery();
   const settings = useGetAdminSettingsQuery();
   const usdToRub = settings.data?.settings.usdToRub ?? 80;
+  const [reconcile, reconcileState] = useReconcileFalCostsMutation();
+  const [reconcileMsg, setReconcileMsg] = useState<string>('');
 
   const models = data?.models ?? [];
+
+  const runReconcile = async () => {
+    try {
+      const r = await reconcile().unwrap();
+      setReconcileMsg(`Сверено с fal billing: обновлено ${r.updated} записей (из ${r.matchedRequests} запросов, просмотрено ${r.scanned} событий).`);
+    } catch {
+      setReconcileMsg('Не удалось свериться с fal billing (нужен FAL_BILLING_KEY).');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -21,14 +33,26 @@ export default function AdminModelsPage() {
             генерации = цена за единицу × количество единиц (секунды видео / картинки). Курс USD→RUB: {usdToRub}.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => refetch()}
-          className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-zinc-800"
-        >
-          {isFetching ? 'Обновление…' : 'Обновить'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={runReconcile}
+            disabled={reconcileState.isLoading}
+            className="rounded-md border border-emerald-700 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-900/30 disabled:opacity-50"
+            title="Подтянуть фактическую стоимость каждой генерации из fal billing-events по request_id"
+          >
+            {reconcileState.isLoading ? 'Сверка…' : 'Сверить факт. стоимость с fal'}
+          </button>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-zinc-800"
+          >
+            {isFetching ? 'Обновление…' : 'Обновить'}
+          </button>
+        </div>
       </div>
+      {reconcileMsg && <div className="text-sm text-emerald-300">{reconcileMsg}</div>}
 
       {isLoading && <div className="text-sm text-slate-400">Загрузка цен…</div>}
       {isError && <div className="text-sm text-red-300">Не удалось загрузить цены fal. Проверьте FAL_BILLING_KEY/FAL_KEY.</div>}

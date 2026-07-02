@@ -148,6 +148,18 @@ export const adminUsageApi = createApi({
     getFalModels: build.query<FalModelsResponse, void>({
       query: () => ({ url: '/fal/models' }),
     }),
+    reconcileFalCosts: build.mutation<{ scanned: number; matchedRequests: number; updated: number }, void>({
+      query: () => ({ url: '/fal/reconcile-costs', method: 'POST' }),
+      invalidatesTags: ['AdminUsage'],
+    }),
+    getFalSchema: build.query<FalSchemaResponse, { slug?: string; endpoint?: string }>({
+      query: (q) => {
+        const params = new URLSearchParams();
+        if (q.slug) params.set('slug', q.slug);
+        if (q.endpoint) params.set('endpoint', q.endpoint);
+        return { url: `/fal/schema?${params.toString()}` };
+      },
+    }),
     getFalPricing: build.query<FalPricingResponse, { slug?: string; endpoint?: string; duration?: number; numImages?: number }>({
       query: (q) => {
         const params = new URLSearchParams();
@@ -174,6 +186,24 @@ export type FalModelsResponse = {
   }>;
 };
 
+export type FalSchemaField = {
+  name: string;
+  type: string;
+  enum?: string[];
+  default?: unknown;
+  title?: string;
+  description?: string;
+  minimum?: number;
+  maximum?: number;
+  required: boolean;
+};
+export type FalSchemaResponse = {
+  available: boolean;
+  endpoint?: string;
+  fields?: FalSchemaField[];
+  reason?: string;
+};
+
 export type FalPricingResponse = {
   available: boolean;
   endpoint?: string;
@@ -190,4 +220,6 @@ export const {
   useGetAdminAnalyticsOverviewQuery,
   useGetFalPricingQuery,
   useGetFalModelsQuery,
+  useReconcileFalCostsMutation,
+  useGetFalSchemaQuery,
 } = adminUsageApi;

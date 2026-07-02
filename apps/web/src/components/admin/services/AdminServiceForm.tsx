@@ -90,7 +90,7 @@ import {
 import { useGetAdminSettingsQuery, useUpdateAdminSettingsMutation } from '@/store/api/admin-settings-api';
 import { useListAdminServiceCategoriesQuery } from '@/store/api/admin-service-categories-api';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
-import { useGetFalPricingQuery } from '@/store/api/admin-usage-api';
+import { useGetFalPricingQuery, useGetFalSchemaQuery, type FalSchemaField } from '@/store/api/admin-usage-api';
 import { falEndpointForModel } from '@allvision/shared';
 import { SourceSelector, type AvailableSourceStep } from './SourceSelector';
 
@@ -597,6 +597,80 @@ function providerLabel(provider: ModelOption['provider']) {
   if (provider === 'piapi') return 'PiAPI';
   if (provider === 'local') return 'Local';
   return 'Mock';
+}
+
+// Критерии модели из реальной input-схемы fal (quality low/med/high, steps, guidance…).
+// Для fal-generic — редактируемые (пишутся в extra_params JSON); для остальных — справочно.
+const CRITERIA_HIDDEN = new Set(['prompt', 'image_url', 'image_urls', 'video_url', 'video_urls', 'duration', 'aspect_ratio', 'sync_mode', 'enable_safety_checker', 'loras', 'seed']);
+
+function FalModelCriteria({ slug, endpoint, editable, extraParamsValue, onChangeExtra }: {
+  slug?: string;
+  endpoint?: string;
+  editable: boolean;
+  extraParamsValue?: string;
+  onChangeExtra?: (json: string) => void;
+}) {
+  const hasTarget = Boolean(slug || endpoint);
+  const { data } = useGetFalSchemaQuery({ slug, endpoint }, { skip: !hasTarget });
+  if (!hasTarget || !data?.available || !data.fields?.length) return null;
+  const fields = data.fields.filter((f) => !CRITERIA_HIDDEN.has(f.name));
+  if (!fields.length) return null;
+
+  let current: Record<string, unknown> = {};
+  try { current = extraParamsValue ? (JSON.parse(extraParamsValue) as Record<string, unknown>) : {}; } catch { current = {}; }
+  const setField = (name: string, val: unknown) => {
+    const next = { ...current };
+    if (val === '' || val === undefined || val === null) delete next[name]; else next[name] = val;
+    onChangeExtra?.(Object.keys(next).length ? JSON.stringify(next) : '');
+  };
+
+  return (
+    <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-950 p-2.5">
+      <div className="mb-2 font-medium text-slate-200">Критерии модели (из fal){editable ? '' : ' — справочно'}</div>
+      <div className="grid gap-2 md:grid-cols-2">
+        {fields.map((f) => (
+          <div key={f.name} className="text-xs">
+            <div className="text-slate-300">{f.title || f.name}{f.required ? ' *' : ''}
+              {typeof f.default !== 'undefined' ? <span className="text-slate-600"> · default: {String(f.default)}</span> : null}
+            </div>
+            {editable ? <CriteriaInput field={f} value={current[f.name]} onChange={(v) => setField(f.name, v)} />
+              : <div className="text-slate-500">{f.enum ? f.enum.join(' / ') : f.type}</div>}
+            {f.description ? <div className="mt-0.5 text-[11px] text-slate-600 line-clamp-2">{f.description}</div> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CriteriaInput({ field, value, onChange }: { field: FalSchemaField; value: unknown; onChange: (v: unknown) => void }) {
+  const cls = 'mt-1 h-8 w-full rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-slate-100';
+  if (field.enum && field.enum.length) {
+    return (
+      <select className={cls} value={typeof value === 'string' ? value : ''} onChange={(e) => onChange(e.target.value || undefined)}>
+        <option value="">— (по умолчанию)</option>
+        {field.enum.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+      </select>
+    );
+  }
+  if (field.type === 'boolean') {
+    return (
+      <label className="mt-1 flex items-center gap-2 text-slate-300">
+        <input type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked ? true : undefined)} />
+        включить
+      </label>
+    );
+  }
+  if (field.type === 'integer' || field.type === 'number') {
+    return (
+      <input type="number" className={cls} value={typeof value === 'number' ? value : ''} min={field.minimum} max={field.maximum}
+        onChange={(e) => onChange(e.target.value === '' ? undefined : Number(e.target.value))} />
+    );
+  }
+  return (
+    <input type="text" className={cls} value={typeof value === 'string' ? value : ''}
+      onChange={(e) => onChange(e.target.value || undefined)} />
+  );
 }
 
 // Живая себестоимость модели из fal (по текущим настройкам шага: длительность / кол-во картинок).
@@ -1243,6 +1317,13 @@ function BlockParamsForm({
                   )}
                 </div>
               </div>
+              <FalModelCriteria
+                slug={model.slug}
+                endpoint={block.slug === 'fal-generic' ? (typeof value.endpoint === 'string' ? value.endpoint : undefined) : undefined}
+                editable={block.slug === 'fal-generic'}
+                extraParamsValue={typeof value.extra_params === 'string' ? value.extra_params : ''}
+                onChangeExtra={(json) => update('extra_params', json)}
+              />
               {model.docsUrl && <a href={model.docsUrl} target="_blank" className="mt-3 inline-block text-violet-300 hover:text-violet-200">Документация</a>}
             </div>
           ))}
