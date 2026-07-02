@@ -625,6 +625,74 @@ export const CHAT_MODELS: ChatModelOption[] = [
   }),
 ];
 
+/**
+ * Референс-слот — что можно прикрепить скрепкой в чате: подпись, тип медиа, обязательность и
+ * (для omni-моделей) anchor вида @image_1, который вставляется в промпт и модель его понимает.
+ * `param` — куда значение маппится в запросе (см. free-chat-generation).
+ */
+export type ChatReferenceSlot = {
+  key: string;
+  label: string;
+  mediaKind: 'image' | 'video' | 'audio';
+  required: boolean;
+  anchor?: string; // только omni (@image_1/@video); у остальных моделей — undefined
+  param: string; // 'main' | 'tail_image_url' | 'video_url' | 'target_video' | 'audio_url' | 'images' | 'image_urls' | 'video' | 'video_urls'
+};
+
+/** Слоты референсов для чата. @-anchors — ТОЛЬКО у omni-моделей (проверено: их понимают). */
+export function chatReferenceSlots(model: ChatModelOption): ChatReferenceSlot[] {
+  const slug = model.slug;
+  // omni kling: @image_1/@image_2/@video
+  if (slug === 'kling-3-omni') {
+    return [
+      { key: 'k1', label: 'Персонаж 1', mediaKind: 'image', required: true, anchor: '@image_1', param: 'images' },
+      { key: 'k2', label: 'Персонаж 2', mediaKind: 'image', required: false, anchor: '@image_2', param: 'images' },
+      { key: 'kv', label: 'Видео-референс', mediaKind: 'video', required: false, anchor: '@video', param: 'video' },
+    ];
+  }
+  // omni seedance: @image1/@image2/@video1
+  if (slug === 'seedance-2-omni' || slug === 'seedance-2-fast-omni') {
+    return [
+      { key: 's1', label: 'Персонаж 1', mediaKind: 'image', required: true, anchor: '@image1', param: 'image_urls' },
+      { key: 's2', label: 'Персонаж 2', mediaKind: 'image', required: false, anchor: '@image2', param: 'image_urls' },
+      { key: 'sv', label: 'Видео-референс', mediaKind: 'video', required: false, anchor: '@video1', param: 'video_urls' },
+    ];
+  }
+  // first/last frame — позиционно, без @
+  if (slug === 'seedance-2-first-last' || slug === 'seedance-2-fast-first-last') {
+    return [
+      { key: 'f', label: 'Первый кадр', mediaKind: 'image', required: true, param: 'main' },
+      { key: 'l', label: 'Последний кадр', mediaKind: 'image', required: false, param: 'tail_image_url' },
+    ];
+  }
+  if (model.blockSlug === 'motion-transfer') {
+    return [
+      { key: 'c', label: 'Фото персонажа', mediaKind: 'image', required: true, param: 'main' },
+      { key: 'm', label: 'Видео движения', mediaKind: 'video', required: true, param: 'video_url' },
+    ];
+  }
+  if (model.blockSlug === 'face-swap-video') {
+    return [
+      { key: 'p', label: 'Ваше фото', mediaKind: 'image', required: true, param: 'main' },
+      { key: 't', label: 'Видео (куда вставить)', mediaKind: 'video', required: true, param: 'target_video' },
+    ];
+  }
+  if (model.blockSlug === 'talking-avatar') {
+    return [
+      { key: 'a', label: 'Фото персонажа', mediaKind: 'image', required: true, param: 'main' },
+      { key: 'v', label: 'Голос (аудио)', mediaKind: 'audio', required: true, param: 'audio_url' },
+    ];
+  }
+  // Обычные: один референс, если модель принимает вход.
+  if (!model.acceptsTextOnly || model.acceptsImageInput || model.acceptsVideoInput) {
+    const kind: 'image' | 'video' = model.acceptsImageInput ? 'image' : model.acceptsVideoInput ? 'video' : 'image';
+    if (model.acceptsImageInput || model.acceptsVideoInput) {
+      return [{ key: 'r', label: 'Референс', mediaKind: kind, required: !model.acceptsTextOnly, param: 'main' }];
+    }
+  }
+  return [];
+}
+
 export function getChatModel(slug: string): ChatModelOption | undefined {
   return CHAT_MODELS.find((model) => model.slug === slug);
 }
