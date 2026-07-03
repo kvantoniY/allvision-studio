@@ -3,7 +3,7 @@ import { Prisma, prisma } from '@allvision/database';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { HttpError } from '../../utils/http-error';
-import { createFreeChatProject, parseChatGenerationMeta, titleFromPrompt } from '../../services/free-chat-generation';
+import { createFreeChatProject, extractChatReferences, parseChatGenerationMeta, titleFromPrompt } from '../../services/free-chat-generation';
 import { tryRecoverPiAPIProject } from '../../services/piapi-recovery-service';
 
 export const userChatsRouter = Router();
@@ -74,6 +74,7 @@ function toMessageResponse(message: Prisma.ChatMessageGetPayload<{ include: { pr
     duration: message.duration,
     inputRef: message.inputRef,
     projectId: message.projectId,
+    references: extractChatReferences(message.project.userInputs),
     project: toProjectState(message.project),
   };
 }

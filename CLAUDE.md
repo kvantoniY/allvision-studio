@@ -637,6 +637,19 @@ trend-video-transfer переописан:
 
 Проверки P11.5: `npm.cmd run build -w @allvision/worker` — зелёный; worker `trend-video-transfer-block` — 9 passed (добавлен тест на отказ по upper body; тест «unrelated reason» с PIAPI_TIMEOUT по-прежнему НЕ фолбэчит).
 
+## Этап P12 ✅ — Allvision AI чат: буфер, очистка формы, @-референсы, референсы в результате
+
+Доработки UX чата (`apps/web/src/components/ai/*`):
+
+1. **Вставка из буфера (Ctrl+V)**: `handlePaste` на контейнере поля ввода ловит `image/*` из clipboard, грузит через существующий `uploadReferenceFile` (первый свободный слот). Текстовая вставка не перехватывается. Drag&drop уже был.
+2. **Подписи слотов**: omni «Персонаж 1/2» → «Референс 1/2» в `chatReferenceSlots` (kling-3-omni, seedance omni).
+3. **Очистка формы после запуска**: submit чистит `prompt`, `source`, `audioSource`, `extraRefs`, `pickerSlot` (раньше промпт + иногда source).
+4. **Клики по чипу + @-меню**: иконка чипа → полноэкранный просмотр (`ReferenceLightbox`); текст чипа → вставка `@image_1` в промпт (у omni) либо toast «модель не понимает @-референсы». При вводе `@` в промпте — dropdown с прикреплёнными anchor-референсами (@image_1/@image_2/@video), выбор подставляет anchor у каретки; если модель без anchor'ов — подсказка «не поддерживает @-референсы». `anchorSlots = visibleSlots.filter(anchor)`; anchors только у omni.
+5. **Референсы в результате**: новый `ReferenceLightbox` (картинка/видео/аудио + скачать + опц. «переиспользовать»). Backend `extractChatReferences(userInputs)` собирает публичные URL из `chatGeneration.params` (`images/image_urls/video/video_url/video_urls/tail_image_url/target_video/audio_url/audio_urls`) + `inputPreviewUrl`, дедуп, mediaKind по расширению; отдаётся в `message.references`. `ChatResultView` рисует мини-превью референсов у промпта: клик → лайтбокс, hover → значок «переиспользовать» (кнопка и в лайтбоксе, и на превью). «Переиспользовать» ставит референс в форму (`reuseReference`); `resolveInputRef` расширен: наш публичный `/static/{user-uploads|media-assets|service-assets|uploads}/…` URL принимается как прямой вход.
+- Бонус: `initialReference` эффект в ChatForm теперь по mediaKind — видео-референс переключает на video-модель с `acceptsVideoInput`, а не форсит nano-banana.
+
+Проверки P12: билды shared/api/web — зелёные; shared `chat-models` — 7 passed.
+
 ## Конвенции разработки
 
 - Промпты на этапы пишет ассистент (Claude в чате), исполняет Claude Code.

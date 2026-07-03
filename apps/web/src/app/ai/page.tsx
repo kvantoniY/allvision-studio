@@ -86,6 +86,11 @@ function AiContent() {
     });
   }, []);
 
+  // Переиспользовать прикреплённый ранее референс: наш публичный /static URL — прямой вход.
+  const reuseReference = useCallback((url: string, mediaKind: 'image' | 'video') => {
+    setReference({ ref: url, url, title: 'Референс из истории', mediaKind, origin: 'result' });
+  }, []);
+
   const rename = async () => {
     const current = chatQuery.data?.chat;
     if (!current || !activeChatId) return;
@@ -165,6 +170,7 @@ function AiContent() {
               messages={messages}
               isLoading={chatQuery.isLoading && !!activeChatId}
               onUseAsReference={useAsReference}
+              onReuseReference={reuseReference}
               onRetry={(message: ChatMessage) => setRetryPrompt(message.prompt)}
               onDeleted={() => {
                 void chatQuery.refetch();

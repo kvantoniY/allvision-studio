@@ -37,6 +37,8 @@ export type ChatSummary = {
   lastStatus: ProjectStatus | null;
 };
 
+export type ChatReference = { url: string; mediaKind: 'image' | 'video' | 'audio' };
+
 export type ChatMessage = {
   id: string;
   chatId: string;
@@ -47,6 +49,7 @@ export type ChatMessage = {
   duration: number | null;
   inputRef: string | null;
   projectId: string;
+  references?: ChatReference[];
   project: ChatProjectState;
 };
 

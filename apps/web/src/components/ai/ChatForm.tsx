@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Check, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
 import { CHAT_MODELS, chatReferenceSlots, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type ChatReferenceSlot, type PiAPIParamCapability } from '@allvision/shared';
@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
 import { useCreateChatMessageMutation, useGetChatModelsQuery, useUploadChatInputMutation } from '@/store/api/user-chat-api';
 import { InputSourcePicker, type SelectedInputSource } from './InputSourcePicker';
+import { ReferenceLightbox } from './ReferenceLightbox';
 
 type ChatFormProps = {
   chatId: string;
@@ -226,6 +227,11 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [extraRefs, setExtraRefs] = useState<Record<string, SelectedInputSource | null>>({});
   // Слот, для которого сейчас открыта модалка выбора референса (единая скрепка).
   const [pickerSlot, setPickerSlot] = useState<ChatReferenceSlot | null>(null);
+  // Полноэкранный просмотр прикреплённого референса (клик по иконке чипа).
+  const [lightbox, setLightbox] = useState<SelectedInputSource | null>(null);
+  // @-автоподстановка: активна, когда каретка стоит после @<текст>. query — текст после @.
+  const [anchorMenu, setAnchorMenu] = useState<{ query: string } | null>(null);
+  const promptRef = useRef<HTMLTextAreaElement>(null);
 
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
   const selectedModel = models.find((model) => model.slug === modelSlug) ?? models[0] ?? CHAT_MODELS[0];
@@ -343,8 +349,15 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
   useEffect(() => {
     if (!initialReference) return;
-    setCategory('image');
-    setModelSlug('nano-banana');
+    // Картинку — в image (nano-banana умеет image-to-image); видео — в video-модель, принимающую видео.
+    if (initialReference.mediaKind === 'video') {
+      const videoModel = CHAT_MODELS.find((m) => m.category === 'video' && m.acceptsVideoInput);
+      setCategory('video');
+      if (videoModel) setModelSlug(videoModel.slug);
+    } else {
+      setCategory('image');
+      setModelSlug('nano-banana');
+    }
     setSource(initialReference);
     onReferenceConsumed();
   }, [initialReference, onReferenceConsumed]);
@@ -387,10 +400,50 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     }
   };
 
-  // Клик по чипу omni-референса вставляет его @упоминание в промпт (модель понимает anchors).
+  // Anchor-слоты (@image_1/@video) — только у omni-моделей. Если их нет, @-референсы не поддерживаются.
+  const anchorSlots = useMemo(() => visibleSlots.filter((s) => s.anchor), [visibleSlots]);
+  const modelSupportsAnchors = anchorSlots.length > 0;
+
+  // Клик по тексту чипа: вставляет @упоминание, если модель понимает anchors; иначе — подсказка.
   const insertAnchor = (anchor: string) => {
     setPrompt((current) => (current.includes(anchor) ? current : `${current}${current && !current.endsWith(' ') ? ' ' : ''}${anchor} `));
+    promptRef.current?.focus();
   };
+
+  const onAnchorTextClick = (slot: ChatReferenceSlot) => {
+    if (slot.anchor) insertAnchor(slot.anchor);
+    else toast({ title: `Модель ${selectedModel.title} не понимает @-референсы в тексте — файл и так прикреплён как ${slot.label}.` });
+  };
+
+  // Вставка выбранного из @-меню anchor'а вместо набранного @<query> у каретки.
+  const applyAnchorFromMenu = (anchor: string) => {
+    const textarea = promptRef.current;
+    const caret = textarea?.selectionStart ?? prompt.length;
+    const before = prompt.slice(0, caret).replace(/@[\p{L}\d_]*$/u, '');
+    const after = prompt.slice(caret);
+    const next = `${before}${anchor} ${after}`;
+    setPrompt(next);
+    setAnchorMenu(null);
+    requestAnimationFrame(() => {
+      const pos = (before + anchor + ' ').length;
+      textarea?.focus();
+      textarea?.setSelectionRange(pos, pos);
+    });
+  };
+
+  const onPromptChange = (value: string, caret: number) => {
+    setPrompt(value);
+    if (submitAttempted) setSubmitAttempted(false);
+    // Детектим @<текст> прямо перед кареткой → открываем меню референсов.
+    const match = value.slice(0, caret).match(/@([\p{L}\d_]*)$/u);
+    setAnchorMenu(match ? { query: match[1].toLowerCase() } : null);
+  };
+
+  const anchorMenuItems = useMemo(() => {
+    if (!anchorMenu) return [];
+    const q = anchorMenu.query;
+    return anchorSlots.filter((s) => !q || s.anchor!.toLowerCase().replace('@', '').includes(q));
+  }, [anchorMenu, anchorSlots]);
 
   const hasDraggedFiles = (event: DragEvent<HTMLDivElement>) => Array.from(event.dataTransfer.types).includes('Files');
 
@@ -413,6 +466,25 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     setIsDraggingReference(false);
     const file = event.dataTransfer.files?.[0];
     if (file) await uploadReferenceFile(file);
+  };
+
+  // Вставка картинки из буфера обмена (Ctrl+V): например, скопированный кадр видео.
+  const handlePaste = async (event: ClipboardEvent<HTMLDivElement>) => {
+    const items = Array.from(event.clipboardData?.items ?? []);
+    const fileItem = items.find((item) => item.kind === 'file' && item.type.startsWith('image/'));
+    if (!fileItem) return; // обычная вставка текста — не мешаем
+    const file = fileItem.getAsFile();
+    if (!file) return;
+    if (!canUseInput) {
+      toast({ title: `Модель ${selectedModel.title} не принимает картинки`, variant: 'destructive' });
+      return;
+    }
+    event.preventDefault();
+    // Буфер часто без имени — задаём осмысленное.
+    const named = file.name && file.name !== 'image.png'
+      ? file
+      : new File([file], `pasted-${Date.now()}.${file.type.split('/')[1] || 'png'}`, { type: file.type });
+    await uploadReferenceFile(named);
   };
 
   const submit = async (event: FormEvent) => {
@@ -438,10 +510,13 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         },
       }).unwrap();
       toast({ title: 'Генерация запущена' });
+      // Полная очистка формы: промпт и все прикреплённые референсы (запрос уже ушёл в работу).
       setPrompt('');
       setSubmitAttempted(false);
-      if (!canUseInput) setSource(null);
-      if (dualInput) setAudioSource(null);
+      setSource(null);
+      setAudioSource(null);
+      setExtraRefs({});
+      setPickerSlot(null);
       onCreated();
     } catch (error) {
       toast({ title: apiErrorMessage(error), variant: 'destructive' });
@@ -595,27 +670,32 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               }
               return (
                 <div key={slot.key} className="flex min-w-0 items-center gap-1 rounded-md border border-slate-700 bg-slate-950 py-1 pl-1.5 pr-1">
+                  {/* Иконка → полноэкранный просмотр референса */}
                   <button
                     type="button"
-                    onClick={() => (slot.anchor ? insertAnchor(slot.anchor) : setPickerSlot(slot))}
-                    title={slot.anchor ? `Вставить ${slot.anchor} в промпт` : 'Заменить референс'}
-                    className="flex min-w-0 items-center gap-2 text-left"
+                    onClick={() => setLightbox(value)}
+                    title="Открыть на весь экран"
+                    className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900"
                   >
-                    <div className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900">
-                      {value.mediaKind === 'image' ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={value.url} alt="" className="h-full w-full object-cover" />
-                      ) : value.mediaKind === 'video' ? (
-                        <video src={value.url} className="h-full w-full object-cover" muted />
-                      ) : (
-                        <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
-                      )}
-                    </div>
-                    <span className="min-w-0">
-                      <span className="block max-w-[160px] truncate text-xs text-slate-200">{slot.label}</span>
-                      <span className="block max-w-[160px] truncate text-[10px] text-slate-500">
-                        {slot.anchor ? <span className="text-violet-300">{slot.anchor}</span> : value.title}
-                      </span>
+                    {value.mediaKind === 'image' ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={value.url} alt="" className="h-full w-full object-cover" />
+                    ) : value.mediaKind === 'video' ? (
+                      <video src={value.url} className="h-full w-full object-cover" muted />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
+                    )}
+                  </button>
+                  {/* Текст → вставить @упоминание (или подсказка, если модель не понимает anchors) */}
+                  <button
+                    type="button"
+                    onClick={() => onAnchorTextClick(slot)}
+                    title={slot.anchor ? `Вставить ${slot.anchor} в промпт` : 'Модель не понимает @-референсы'}
+                    className="min-w-0 text-left"
+                  >
+                    <span className="block max-w-[160px] truncate text-xs text-slate-200">{slot.label}</span>
+                    <span className="block max-w-[160px] truncate text-[10px] text-slate-500">
+                      {slot.anchor ? <span className="text-violet-300">{slot.anchor}</span> : value.title}
                     </span>
                   </button>
                   <Button
@@ -648,23 +728,68 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         )}
 
         {/* Поле ввода. На мобайле кнопки живут внутри инпута снизу, на ПК инпут чистый. */}
-        <div className="relative">
+        <div className="relative" onPaste={handlePaste}>
           <Textarea
+            ref={promptRef}
             value={prompt}
-            onChange={(event) => {
-              setPrompt(event.target.value);
-              if (submitAttempted) setSubmitAttempted(false);
-            }}
+            onChange={(event) => onPromptChange(event.target.value, event.target.selectionStart ?? event.target.value.length)}
+            onBlur={() => setTimeout(() => setAnchorMenu(null), 150)}
             rows={2}
             placeholder={requiresPrompt ? 'Опишите результат: сюжет, стиль, камера, настроение...' : 'Промпт не нужен — прикрепите видео и нажмите запуск'}
             className="min-h-[84px] resize-none border-0 bg-transparent px-4 py-3 text-base leading-7 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
             onKeyDown={(event) => {
+              if (anchorMenu && event.key === 'Escape') { setAnchorMenu(null); return; }
               if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
                 event.preventDefault();
                 event.currentTarget.form?.requestSubmit();
               }
             }}
           />
+
+          {/* @-меню: доступные референсы (omni) или подсказка, что модель их не поддерживает */}
+          {anchorMenu && (
+            <div className="absolute bottom-full left-3 z-20 mb-1 w-72 overflow-hidden rounded-lg border border-slate-700 bg-slate-950 shadow-xl">
+              {!modelSupportsAnchors ? (
+                <div className="px-3 py-2.5 text-xs leading-5 text-slate-400">
+                  Модель <span className="text-slate-200">{compactModelTitle(selectedModel.title)}</span> не поддерживает @-референсы в тексте. Прикрепите файлы скрепкой — они уйдут в генерацию как есть.
+                </div>
+              ) : anchorMenuItems.length === 0 ? (
+                <div className="px-3 py-2.5 text-xs text-slate-500">Нет подходящих референсов</div>
+              ) : (
+                <ul className="max-h-56 overflow-y-auto py-1">
+                  {anchorMenuItems.map((slot) => {
+                    const value = slotValue(slot);
+                    return (
+                      <li key={slot.key}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); applyAnchorFromMenu(slot.anchor!); }}
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-slate-900"
+                        >
+                          <div className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900">
+                            {value ? (
+                              value.mediaKind === 'image' ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={value.url} alt="" className="h-full w-full object-cover" />
+                              ) : (
+                                <video src={value.url} className="h-full w-full object-cover" muted />
+                              )
+                            ) : (
+                              <div className="grid h-full w-full place-items-center text-[9px] text-slate-500">?</div>
+                            )}
+                          </div>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-sm text-violet-300">{slot.anchor}</span>
+                            <span className="block truncate text-[11px] text-slate-500">{slot.label}{value ? '' : ' · не прикреплено'}</span>
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* Мобайл: панель действий внутри инпута */}
           <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1 md:hidden">
@@ -727,6 +852,13 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             setSlotValue(pickerSlot, next);
             setPickerSlot(null);
           }}
+        />
+      )}
+
+      {lightbox && (
+        <ReferenceLightbox
+          item={{ url: lightbox.url, mediaKind: lightbox.mediaKind, title: lightbox.title }}
+          onClose={() => setLightbox(null)}
         />
       )}
     </form>

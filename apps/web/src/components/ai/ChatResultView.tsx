@@ -16,13 +16,15 @@ import { DeleteGenerationButton } from '@/components/generations/DeleteGeneratio
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
+import { ReferenceLightbox, type ReferenceLightboxItem } from '@/components/ai/ReferenceLightbox';
 import { cn } from '@/lib/utils';
-import type { ChatMessage } from '@/store/api/user-chat-api';
+import type { ChatMessage, ChatReference } from '@/store/api/user-chat-api';
 
 type ChatResultViewProps = {
   messages: ChatMessage[];
   isLoading?: boolean;
   onUseAsReference: (projectId: string, url: string, mediaKind: 'image' | 'video') => void;
+  onReuseReference?: (url: string, mediaKind: 'image' | 'video') => void;
   onRetry: (message: ChatMessage) => void;
   onDeleted?: () => void;
 };
@@ -72,7 +74,7 @@ function chatFailureMessage(errorCode?: string | null, errorMessage?: string | n
   return russianErrorFromRawMessage(errorMessage) ?? getUserFriendlyError(errorCode);
 }
 
-export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry, onDeleted }: ChatResultViewProps) {
+export function ChatResultView({ messages, isLoading, onUseAsReference, onReuseReference, onRetry, onDeleted }: ChatResultViewProps) {
   if (isLoading) {
     return (
       <div className="grid min-h-[420px] place-items-center text-slate-400">
@@ -102,6 +104,7 @@ export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry,
           key={message.id}
           message={message}
           onUseAsReference={onUseAsReference}
+          onReuseReference={onReuseReference}
           onRetry={onRetry}
           onDeleted={onDeleted}
         />
@@ -113,15 +116,19 @@ export function ChatResultView({ messages, isLoading, onUseAsReference, onRetry,
 function MessageCard({
   message,
   onUseAsReference,
+  onReuseReference,
   onRetry,
   onDeleted,
 }: {
   message: ChatMessage;
   onUseAsReference: (projectId: string, url: string, mediaKind: 'image' | 'video') => void;
+  onReuseReference?: (url: string, mediaKind: 'image' | 'video') => void;
   onRetry: (message: ChatMessage) => void;
   onDeleted?: () => void;
 }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [refLightbox, setRefLightbox] = useState<ReferenceLightboxItem | null>(null);
+  const references = (message.references ?? []).filter((ref) => !ref.url.startsWith('data:'));
   const project = message.project;
   const status = project.status;
   const progress = project.progress ?? 0;
@@ -153,6 +160,45 @@ function MessageCard({
             <div className="text-xs text-slate-500">{formatDateTime(message.createdAt)}</div>
           </div>
           <p className="whitespace-pre-wrap text-sm leading-6 text-slate-200">{message.prompt}</p>
+          {references.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-[11px] text-slate-500">Референсы:</span>
+              {references.map((ref, index) => {
+                const url = mediaUrl(ref.url) ?? ref.url;
+                const canReuse = ref.mediaKind !== 'audio';
+                return (
+                  <div key={`${ref.url}-${index}`} className="group/ref relative h-12 w-12 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
+                    <button
+                      type="button"
+                      className="h-full w-full"
+                      title="Открыть референс"
+                      onClick={() => setRefLightbox({ url, mediaKind: ref.mediaKind, title: `Референс ${index + 1}` })}
+                    >
+                      {ref.mediaKind === 'image' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={url} alt="" className="h-full w-full object-cover" />
+                      ) : ref.mediaKind === 'video' ? (
+                        <video src={url} className="h-full w-full object-cover" muted />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
+                      )}
+                    </button>
+                    {canReuse && onReuseReference && (
+                      <button
+                        type="button"
+                        title="Переиспользовать этот референс"
+                        aria-label="Переиспользовать этот референс"
+                        onClick={() => onReuseReference(ref.url, ref.mediaKind as 'image' | 'video')}
+                        className="absolute bottom-0.5 right-0.5 hidden h-5 w-5 place-items-center rounded bg-black/70 text-white group-hover/ref:grid"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {processing && (
@@ -229,6 +275,16 @@ function MessageCard({
             posterUrl={resultThumbnail}
             downloadUrl={resultUrl}
             onClose={() => setLightboxOpen(false)}
+          />
+        )}
+
+        {refLightbox && (
+          <ReferenceLightbox
+            item={refLightbox}
+            onClose={() => setRefLightbox(null)}
+            onReuse={refLightbox.mediaKind !== 'audio' && onReuseReference
+              ? () => { onReuseReference(refLightbox.url, refLightbox.mediaKind as 'image' | 'video'); setRefLightbox(null); }
+              : undefined}
           />
         )}
 

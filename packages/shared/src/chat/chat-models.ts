@@ -645,16 +645,16 @@ export function chatReferenceSlots(model: ChatModelOption): ChatReferenceSlot[] 
   // omni kling: @image_1/@image_2/@video
   if (slug === 'kling-3-omni') {
     return [
-      { key: 'k1', label: 'Персонаж 1', mediaKind: 'image', required: true, anchor: '@image_1', param: 'images' },
-      { key: 'k2', label: 'Персонаж 2', mediaKind: 'image', required: false, anchor: '@image_2', param: 'images' },
+      { key: 'k1', label: 'Референс 1', mediaKind: 'image', required: true, anchor: '@image_1', param: 'images' },
+      { key: 'k2', label: 'Референс 2', mediaKind: 'image', required: false, anchor: '@image_2', param: 'images' },
       { key: 'kv', label: 'Видео-референс', mediaKind: 'video', required: false, anchor: '@video', param: 'video' },
     ];
   }
   // omni seedance: @image1/@image2/@video1
   if (slug === 'seedance-2-omni' || slug === 'seedance-2-fast-omni') {
     return [
-      { key: 's1', label: 'Персонаж 1', mediaKind: 'image', required: true, anchor: '@image1', param: 'image_urls' },
-      { key: 's2', label: 'Персонаж 2', mediaKind: 'image', required: false, anchor: '@image2', param: 'image_urls' },
+      { key: 's1', label: 'Референс 1', mediaKind: 'image', required: true, anchor: '@image1', param: 'image_urls' },
+      { key: 's2', label: 'Референс 2', mediaKind: 'image', required: false, anchor: '@image2', param: 'image_urls' },
       { key: 'sv', label: 'Видео-референс', mediaKind: 'video', required: false, anchor: '@video1', param: 'video_urls' },
     ];
   }

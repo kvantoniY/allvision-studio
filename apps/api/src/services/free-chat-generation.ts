@@ -75,6 +75,21 @@ function resultKeyFromUrl(value: string): string | null {
   return key.startsWith('results/') ? decodeURIComponent(key) : null;
 }
 
+/** Ключ файла после /static/ для любого нашего URL (без ограничения на results/). */
+function staticKeyFromUrl(value: string): string | null {
+  const rawPath = (() => {
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      try { return new URL(value).pathname; } catch { return null; }
+    }
+    return value.startsWith('/') ? value : null;
+  })();
+  if (!rawPath) return null;
+  const marker = '/static/';
+  if (!rawPath.includes(marker)) return null;
+  const key = decodeURIComponent(rawPath.slice(rawPath.indexOf(marker) + marker.length)).replace(/^\/+/, '');
+  return key.includes('..') || key.length === 0 ? null : key;
+}
+
 function assertChatKeyOwnership(key: string, userId: string) {
   const normalized = key.replace(/^\/+/, '');
   const expectedPrefix = `user-uploads/chat/${userId}/`;
@@ -141,6 +156,15 @@ export async function resolveInputRef(value: string, userId: string): Promise<In
     if (!mediaKind) throw new HttpError(400, 'UNSUPPORTED_INPUT_KIND', 'Этот результат нельзя использовать как референс');
     const publicUrl = staticUrlForKey(resultKey);
     return { ref: `result:${project.id}`, publicUrl, mediaKind };
+  }
+
+  // Переиспользование референса из результата: наш публичный /static URL (uploads/assets/service) —
+  // напрямую скачиваемый вход. Ограничено нашими served-директориями, чтобы не принимать чужие URL.
+  const staticKey = staticKeyFromUrl(value);
+  if (staticKey && /^(user-uploads|media-assets|service-assets|uploads)\//.test(staticKey)) {
+    const mediaKind = mediaKindFromKey(staticKey);
+    if (!mediaKind) throw new HttpError(400, 'UNSUPPORTED_INPUT_KIND', 'Этот файл нельзя использовать как референс');
+    return { ref: staticUrlForKey(staticKey), publicUrl: staticUrlForKey(staticKey), mediaKind };
   }
 
   throw new HttpError(400, 'INVALID_INPUT_REF', 'Выберите файл из Студии, библиотеки сайта или загрузите новый');
@@ -501,4 +525,36 @@ export function parseChatGenerationMeta(value: unknown): {
     prompt: typeof record.prompt === 'string' ? record.prompt : undefined,
     inputPreviewUrl: typeof record.inputPreviewUrl === 'string' ? record.inputPreviewUrl : undefined,
   };
+}
+
+export type ChatReference = { url: string; mediaKind: 'image' | 'video' | 'audio' };
+
+// Ключи chatGeneration.params, которые держат публичные URL прикреплённых референсов.
+const REFERENCE_PARAM_KEYS = ['images', 'image_urls', 'video', 'video_url', 'video_urls', 'tail_image_url', 'target_video', 'audio_url', 'audio_urls'];
+
+/** Собирает прикреплённые к сообщению референсы (главный вход + слоты) для показа в результате. */
+export function extractChatReferences(value: unknown): ChatReference[] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const meta = (value as Record<string, unknown>).chatGeneration;
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return [];
+  const record = meta as Record<string, unknown>;
+  const urls: string[] = [];
+  if (typeof record.inputPreviewUrl === 'string') urls.push(record.inputPreviewUrl);
+  const params = record.params;
+  if (params && typeof params === 'object' && !Array.isArray(params)) {
+    for (const key of REFERENCE_PARAM_KEYS) {
+      const v = (params as Record<string, unknown>)[key];
+      if (typeof v === 'string') urls.push(v);
+      else if (Array.isArray(v)) for (const item of v) if (typeof item === 'string') urls.push(item);
+    }
+  }
+  const seen = new Set<string>();
+  const refs: ChatReference[] = [];
+  for (const url of urls) {
+    if (!url || url.startsWith('data:') || seen.has(url)) continue;
+    seen.add(url);
+    const mediaKind = mediaKindFromKey(url) ?? 'image';
+    refs.push({ url, mediaKind });
+  }
+  return refs;
 }
