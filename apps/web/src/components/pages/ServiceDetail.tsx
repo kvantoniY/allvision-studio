@@ -2226,6 +2226,24 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     setShouldPoll(hasActiveProject || launchStartedLock);
   }, [hasActiveProject, launchStartedLock]);
 
+  // Долгие генерации (6–16 мин) — юзер уходит на другую вкладку, браузер замораживает фоновые
+  // таймеры и 2с-поллинг не срабатывает. При возврате на вкладку принудительно тянем свежий статус,
+  // чтобы результат появлялся без перезагрузки страницы.
+  const refetchProjects = projectsQuery.refetch;
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && (hasActiveProject || launchStartedLock)) {
+        void refetchProjects();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [hasActiveProject, launchStartedLock, refetchProjects]);
+
   useEffect(() => {
     const latest = projects[0];
     if (!latest) {

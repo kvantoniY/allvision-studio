@@ -801,7 +801,9 @@ function modelEnum(models: ModelOption[], slugs?: string[]) {
 const TREND_MODE_LABELS: Record<string, string> = {
   face_swap: 'Я в этом видео (замена персонажа)',
   motion_transfer: 'Повторить движение',
-  kling_omni: 'Kling 3.0 Omni (референс)',
+  // На fal у Kling нет reference-эндпоинта (kling-3-omni = text-to-video без фото/видео),
+  // поэтому этот режим для reference-переноса выполняется через Seedance 2.0 Omni.
+  kling_omni: 'Omni-референс (Seedance 2.0)',
   seedance_omni: 'Seedance 2.0 Omni (референс)',
 };
 

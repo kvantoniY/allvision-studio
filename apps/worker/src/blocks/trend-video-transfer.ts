@@ -258,6 +258,15 @@ function subjectMotionPrompt(peopleCount: ParsedParams['people_count']): string 
 async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
   const model = stringModel(parsed.kling_omni_model, 'kling-3-omni');
+  // ВАЖНО: на fal у kling-3-omni эндпоинт `.../v3/pro/text-to-video` — чистый text-to-video БЕЗ
+  // полей image_url/video_url. Он физически не принимает ни фото, ни референс-видео. Поэтому для
+  // reference-переноса (фото + видео) прозрачно уходим на Seedance 2.0 Omni
+  // (`reference-to-video`, принимает image_urls + video_urls) — единственный рабочий omni-reference
+  // на fal. Иначе фото/видео молча игнорировались бы и получался бы ролик по одному промпту.
+  if (model === 'kling-3-omni' && parsed.reference_video) {
+    ctx.logger.warn('[trend-video-transfer] kling-3-omni on fal is text-only (no image/video reference); routing to Seedance 2.0 Omni for reference transfer');
+    return runSeedanceOmni(parsed, primaryPhoto, ctx);
+  }
   const duration = await referenceDurationSec(parsed, 10, ctx);
   const images = parsed.people_count === 'two'
     ? [primaryPhoto, parsed.secondary_photo!]

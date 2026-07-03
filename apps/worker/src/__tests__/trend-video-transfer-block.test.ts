@@ -218,7 +218,7 @@ describe('trend-video-transfer block', () => {
     expect(omniSpy).not.toHaveBeenCalled();
   });
 
-  it('runs two-person Kling Omni with image and video references', async () => {
+  it('routes kling_omni reference transfer to Seedance Omni (kling-3-omni is text-only on fal)', async () => {
     const provider = new StubAIProvider();
     const spy = jest.spyOn(provider, 'textToVideo');
 
@@ -235,16 +235,13 @@ describe('trend-video-transfer block', () => {
       ctx(provider),
     );
 
+    // kling-3-omni на fal не принимает image/video reference -> прозрачно уходит на seedance-2-omni.
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.stringContaining('@image_1'),
-      durationSec: 10,
-      model: 'kling-3-omni',
+      model: 'seedance-2-omni',
       params: expect.objectContaining({
-        images: ['https://cdn.test/left.jpg', 'https://cdn.test/right.jpg'],
-        video: 'https://cdn.test/duo.mp4',
-        aspect_ratio: '9:16',
-        resolution: '720p',
-        enable_audio: false,
+        mode: 'omni_reference',
+        image_urls: ['https://cdn.test/left.jpg', 'https://cdn.test/right.jpg'],
+        video_urls: ['https://cdn.test/duo.mp4'],
       }),
     }));
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
