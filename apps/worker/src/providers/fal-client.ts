@@ -17,6 +17,10 @@ import { ProviderError } from './provider-errors';
  */
 
 const DEFAULT_QUEUE_BASE = 'https://queue.fal.run';
+// REST-хост fal для storage upload (загрузка видео-входов). Переопределяется через env,
+// если fal сменит домен, без пересборки образа.
+const REST_API_BASE = (process.env.FAL_REST_BASE_URL || 'https://rest.alpha.fal.ai').replace(/\/+$/, '');
+const UPLOAD_TIMEOUT_MS = 120_000;
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 
@@ -219,6 +223,54 @@ export class FalClient {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Загружает файл в хранилище fal (fal CDN) и возвращает публичный URL.
+   * Нужно для видео-входов: base64-инлайн крупных файлов в JSON submit-запроса fal-очередь
+   * отбивает как «payload too large» («ошибка размера»), даже если сам файл небольшой.
+   * Поток fal (как в @fal-ai/client): POST /storage/upload/initiate -> { upload_url, file_url },
+   * затем PUT байтов на upload_url; на вход моделей отдаём file_url.
+   */
+  async uploadToStorage(body: Buffer, contentType: string, fileName: string): Promise<string> {
+    const initiateUrl = `${REST_API_BASE}/storage/upload/initiate?storage_type=fal-cdn-v3`;
+    const initiateRes = await this.fetchWithRetry(initiateUrl, {
+      method: 'POST',
+      headers: this.jsonHeaders(),
+      body: JSON.stringify({ content_type: contentType, file_name: fileName }),
+    }, { connectionRetries: 3, retries: 1 });
+    const initiateJson = (await initiateRes.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!initiateRes.ok) {
+      throw new ProviderError('FAL_UPLOAD_INITIATE_FAILED', `fal storage initiate failed (${initiateRes.status}): ${truncate(JSON.stringify(initiateJson))}`, initiateRes.status);
+    }
+    const uploadUrl = readString(initiateJson, 'upload_url');
+    const fileUrl = readString(initiateJson, 'file_url');
+    if (!uploadUrl || !fileUrl) {
+      throw new ProviderError('FAL_UPLOAD_MALFORMED', `fal storage initiate returned no urls: ${truncate(JSON.stringify(initiateJson))}`);
+    }
+    // PUT байтов — отдельный таймаут (файл может грузиться дольше короткого запроса).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+    try {
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: body as unknown as BodyInit,
+        signal: controller.signal,
+      });
+      if (!putRes.ok) {
+        throw new ProviderError('FAL_UPLOAD_PUT_FAILED', `fal storage upload failed (${putRes.status})`, putRes.status);
+      }
+    } catch (err) {
+      if (err instanceof ProviderError) throw err;
+      if ((err as Error)?.name === 'AbortError') {
+        throw new ProviderError('FAL_UPLOAD_TIMEOUT', `fal storage upload timed out after ${UPLOAD_TIMEOUT_MS}ms`);
+      }
+      throw new ProviderError('FAL_UPLOAD_NETWORK', `fal storage upload failed: ${(err as Error)?.message ?? 'unknown'}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    return fileUrl;
   }
 
   private jsonHeaders() {

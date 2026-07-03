@@ -602,6 +602,19 @@ trend-video-transfer переописан:
 
 Проверки P11.2: shared — 33 passed; worker без DB-backed — 91 passed; билды shared/worker/api/web — зелёные.
 
+## Хотфикс P11.3 ✅ — Motion control «ошибка размера»: видео в fal storage, не data-uri
+
+Симптом: motion-control (и любой fal-вызов с видео-входом) падал с ошибкой размера, хотя файлы небольшие по размеру и разрешению.
+
+Причина (по коду `fal-provider.localizeInputUrls`): наши `/static`-входы инлайнились в JSON тела submit-запроса как base64 data-uri (лимит `FAL_MAX_DATAURI_BYTES`=25MB). Видео даже на 8–10 МБ в base64 раздувается на треть и улетает в теле запроса — очередь fal (`queue.fal.run`) отбивает крупный payload как «ошибка размера». Картинки проходят, потому что мелкие; видео — почти всегда падает. Затрагивало motion-transfer, trend «Повторить движение», face-swap (Wan Animate Replace, `video_url`), scene-transfer/omni (`video_urls`).
+
+Фикс:
+- `FalClient.uploadToStorage(buffer, contentType, fileName)` — загрузка в хранилище fal (fal CDN) по документированному потоку @fal-ai/client: `POST {REST}/storage/upload/initiate?storage_type=fal-cdn-v3` → `{ upload_url, file_url }`, затем `PUT` байтов на `upload_url`; на вход модели отдаём короткий `file_url`. REST-хост `https://rest.alpha.fal.ai`, переопределяется env `FAL_REST_BASE_URL`.
+- `localizeUrl`: **видео** (`content-type: video/*`) теперь заливается в fal storage вместо base64 — короткий URL в payload чинит и «ошибку размера», и старый `file_download_error` (fal CDN доступен, в отличие от RU-хоста). **Картинки не тронуты** — остаются на рабочем data-uri пути (nano-banana/gpt-image), нулевой риск регрессии. При сбое загрузки видео — безопасный фолбэк на прежнее поведение (data-uri/URL).
+- Env `FAL_REST_BASE_URL` добавлен в `apps/worker/.env.example` и `infra/prod/.env.example`.
+
+Проверки P11.3: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client` — 14 passed. Реальный fal storage smoke не гонялся (нет FAL_KEY локально); при неверном REST-хосте видео безопасно откатывается на прежнее поведение, а логи `[fal] uploaded ...` / `fal storage upload failed ...` покажут результат на проде.
+
 ## Конвенции разработки
 
 - Промпты на этапы пишет ассистент (Claude в чате), исполняет Claude Code.

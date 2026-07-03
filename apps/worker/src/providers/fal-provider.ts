@@ -440,19 +440,36 @@ export class FalProvider implements AIProvider {
     if (!url || url.startsWith('data:')) return url;
     const key = localStaticKey(url);
     if (!key) return url; // внешний URL (fal CDN, библиотека и т.п.) — оставляем
+    let filePath: string;
+    let buf: Buffer;
+    let contentType: string;
     try {
-      const filePath = path.join(UPLOADS_DIR, ...key.split('/'));
-      const stat = await fs.promises.stat(filePath);
-      if (stat.size > MAX_DATAURI_BYTES) {
-        this.logger.warn(`[fal] ${key} too large for data-uri (${stat.size}b), passing URL as-is`);
-        return url;
-      }
-      const buf = await fs.promises.readFile(filePath);
-      return `data:${contentTypeForKey(key)};base64,${buf.toString('base64')}`;
+      filePath = path.join(UPLOADS_DIR, ...key.split('/'));
+      contentType = contentTypeForKey(key);
+      buf = await fs.promises.readFile(filePath);
     } catch (err) {
-      this.logger.warn(`[fal] failed to inline ${key}, passing URL as-is`, err);
+      this.logger.warn(`[fal] failed to read ${key}, passing URL as-is`, err);
       return url;
     }
+    // Видео base64-инлайнить нельзя: раздутый payload fal-очередь отбивает как «ошибка размера».
+    // Заливаем в хранилище fal (fal CDN) и передаём короткий URL. Картинки остаются на data-uri
+    // (рабочий путь nano-banana/gpt-image), чтобы не трогать проверенную ветку.
+    const isVideo = contentType.startsWith('video/');
+    if (isVideo) {
+      try {
+        const fileName = key.split('/').pop() || 'input.mp4';
+        const falUrl = await this.client.uploadToStorage(buf, contentType, fileName);
+        this.logger.info(`[fal] uploaded ${key} (${buf.length}b) to fal storage`);
+        return falUrl;
+      } catch (err) {
+        this.logger.warn(`[fal] fal storage upload failed for ${key}, falling back to data-uri/URL`, err);
+      }
+    }
+    if (buf.length > MAX_DATAURI_BYTES) {
+      this.logger.warn(`[fal] ${key} too large for data-uri (${buf.length}b), passing URL as-is`);
+      return url;
+    }
+    return `data:${contentType};base64,${buf.toString('base64')}`;
   }
 
   private async persistOutput(providerUrl: string, context: ProviderRunContext, fallbackExt: string) {
