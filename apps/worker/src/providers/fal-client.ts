@@ -21,6 +21,7 @@ const DEFAULT_QUEUE_BASE = 'https://queue.fal.run';
 // если fal сменит домен, без пересборки образа.
 const REST_API_BASE = (process.env.FAL_REST_BASE_URL || 'https://rest.alpha.fal.ai').replace(/\/+$/, '');
 const UPLOAD_TIMEOUT_MS = 120_000;
+const UPLOAD_MAX_ATTEMPTS = 5;
 
 export type FalQueueStatus = 'IN_QUEUE' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
 
@@ -233,12 +234,38 @@ export class FalClient {
    * затем PUT байтов на upload_url; на вход моделей отдаём file_url.
    */
   async uploadToStorage(body: Buffer, contentType: string, fileName: string): Promise<string> {
+    // Egress к fal.media (CDN) с RU-ВМ флапает, причём КОНКРЕТНЫЙ upload_url-хост (v3b/v3c/…) бывает
+    // недоступен. Поэтому на обрыв повторяем ВЕСЬ цикл initiate+PUT: свежий initiate может вернуть
+    // upload_url на другом, достижимом хосте. Долбить один и тот же недоступный хост бесполезно.
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < UPLOAD_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.uploadToStorageOnce(body, contentType, fileName);
+      } catch (err) {
+        lastErr = err;
+        const message = (err as Error)?.message ?? '';
+        const retriable = err instanceof ProviderError
+          && (err.code === 'FAL_UPLOAD_NETWORK' || err.code === 'FAL_UPLOAD_INITIATE_FAILED')
+          && !/timed out/.test(message);
+        if (!retriable || attempt === UPLOAD_MAX_ATTEMPTS - 1) break;
+        await delay(backoff(attempt + 1));
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new ProviderError('FAL_UPLOAD_NETWORK', 'fal storage upload failed');
+  }
+
+  private async uploadToStorageOnce(body: Buffer, contentType: string, fileName: string): Promise<string> {
     const initiateUrl = `${REST_API_BASE}/storage/upload/initiate?storage_type=fal-cdn-v3`;
-    const initiateRes = await this.fetchWithRetry(initiateUrl, {
-      method: 'POST',
-      headers: this.jsonHeaders(),
-      body: JSON.stringify({ content_type: contentType, file_name: fileName }),
-    }, { connectionRetries: 3, retries: 1 });
+    let initiateRes: Response;
+    try {
+      initiateRes = await this.fetchWithRetry(initiateUrl, {
+        method: 'POST',
+        headers: this.jsonHeaders(),
+        body: JSON.stringify({ content_type: contentType, file_name: fileName }),
+      }, { connectionRetries: 2, retries: 1 });
+    } catch (err) {
+      throw new ProviderError('FAL_UPLOAD_INITIATE_FAILED', `fal storage initiate failed: ${(err as Error)?.message ?? 'unknown'}`);
+    }
     const initiateJson = (await initiateRes.json().catch(() => ({}))) as Record<string, unknown>;
     if (!initiateRes.ok) {
       throw new ProviderError('FAL_UPLOAD_INITIATE_FAILED', `fal storage initiate failed (${initiateRes.status}): ${truncate(JSON.stringify(initiateJson))}`, initiateRes.status);
@@ -248,38 +275,28 @@ export class FalClient {
     if (!uploadUrl || !fileUrl) {
       throw new ProviderError('FAL_UPLOAD_MALFORMED', `fal storage initiate returned no urls: ${truncate(JSON.stringify(initiateJson))}`);
     }
-    // PUT байтов. Egress к fal.media (CDN) с RU-ВМ флапает — повторяем на transport-обрыв.
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-      try {
-        const putRes = await fetch(uploadUrl, {
-          method: 'PUT',
-          headers: { 'Content-Type': contentType },
-          body: body as unknown as BodyInit,
-          signal: controller.signal,
-        });
-        if (!putRes.ok) {
-          throw new ProviderError('FAL_UPLOAD_PUT_FAILED', `fal storage upload failed (${putRes.status})`, putRes.status);
-        }
-        return fileUrl;
-      } catch (err) {
-        lastErr = err;
-        // HTTP-ошибку и наш таймаут не повторяем; повторяем только обрыв соединения.
-        const isConn = !(err instanceof ProviderError) && (err as Error)?.name !== 'AbortError'
-          && TRANSIENT_CONNECTION_RE.test((err as Error)?.message ?? '');
-        if (!isConn || attempt === 2) break;
-        await delay(backoff(attempt + 1));
-      } finally {
-        clearTimeout(timer);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+    try {
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': contentType },
+        body: body as unknown as BodyInit,
+        signal: controller.signal,
+      });
+      if (!putRes.ok) {
+        throw new ProviderError('FAL_UPLOAD_PUT_FAILED', `fal storage upload failed (${putRes.status})`, putRes.status);
       }
+      return fileUrl;
+    } catch (err) {
+      if (err instanceof ProviderError) throw err;
+      if ((err as Error)?.name === 'AbortError') {
+        throw new ProviderError('FAL_UPLOAD_TIMEOUT', `fal storage upload timed out after ${UPLOAD_TIMEOUT_MS}ms`);
+      }
+      throw new ProviderError('FAL_UPLOAD_NETWORK', `fal storage upload failed: ${(err as Error)?.message ?? 'unknown'}`);
+    } finally {
+      clearTimeout(timer);
     }
-    if (lastErr instanceof ProviderError) throw lastErr;
-    if ((lastErr as Error)?.name === 'AbortError') {
-      throw new ProviderError('FAL_UPLOAD_TIMEOUT', `fal storage upload timed out after ${UPLOAD_TIMEOUT_MS}ms`);
-    }
-    throw new ProviderError('FAL_UPLOAD_NETWORK', `fal storage upload failed: ${(lastErr as Error)?.message ?? 'unknown'}`);
   }
 
   private jsonHeaders() {

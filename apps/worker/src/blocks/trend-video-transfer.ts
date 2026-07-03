@@ -197,13 +197,34 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
     // Kling Motion Control (человекоцентричный skeleton) отбивает картинку персонажа по нескольким
     // причинам: не-человек (питомец/объект) — "may require human in image"; кадрирование — "No complete
     // upper body detected" / "Image recognition failed" (input_value_error). Во всех этих случаях
-    // прозрачно уходим на Kling 3.0 Omni reference flow: он принимает любой субъект и любое кадрирование.
+    // прозрачно уходим на Wan Motion — тот же перенос движения, но pose-retargeting толерантен к
+    // кадрированию и сохраняет анатомию животных/детей (не требует «верхней части тела»).
     // Успешные motion-control прогоны (человек по пояс) идут прежним путём; фолбэк — только на отказ.
-    if (!isKlingCharacterImageRejection(err)) throw err;
+    // (Kling Omni как фолбэк не годится: его text-to-video endpoint не принимает видео-референс →
+    //  "Invalid reference @Video. No videos provided".)
+    if (!isKlingCharacterImageRejection(err) || motionModel === 'wan-motion') throw err;
     ctx.logger.warn(
-      `[trend-video-transfer] Kling Motion Control rejected the character image (${(err as Error)?.message ?? ''}); falling back to Kling 3.0 Omni`,
+      `[trend-video-transfer] Kling Motion Control rejected the character image (${(err as Error)?.message ?? ''}); falling back to Wan Motion`,
     );
-    return runKlingOmni({ ...parsed, prompt: neutralKlingOmniPrompt(parsed.people_count) }, primaryPhoto, ctx);
+    const result = await provider.motionTransfer({
+      inputImageUrl,
+      drivingVideoUrl: parsed.reference_video,
+      prompt: motionPrompt,
+      durationSec: duration,
+      model: 'wan-motion',
+      params: {
+        ...baseParams,
+        input_image: inputImageUrl,
+        video_url: parsed.reference_video,
+        duration,
+        aspect_ratio: parsed.aspect_ratio ?? 'auto',
+        resolution: parsed.resolution ?? '720p',
+        keep_original_sound: true,
+      },
+      context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
+    });
+    await ctx.reportProgress(100);
+    return providerResultToOutput(result, 'video');
   }
 }
 

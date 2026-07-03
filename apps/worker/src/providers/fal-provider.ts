@@ -466,7 +466,10 @@ export class FalProvider implements AIProvider {
         this.logger.info(`[fal] uploaded ${key} (${buf.length}b) to fal storage`);
         return falUrl;
       } catch (err) {
-        this.logger.warn(`[fal] fal storage upload failed for ${key}, falling back to data-uri/URL`, err);
+        // Видео как data-uri fal отбивает («Video URL is invalid») — отдаём публичный URL, пусть
+        // fal скачает сам. Это лучше невалидного base64; при недоступности fal вернёт download error.
+        this.logger.warn(`[fal] fal storage upload failed for ${key}, passing public URL for fal to fetch`, err);
+        return url;
       }
     }
     // Картинки: авто-ориентация + downscale под лимит fal (image_too_large при >3850px).
