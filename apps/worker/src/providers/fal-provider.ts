@@ -750,6 +750,9 @@ function mergePassthrough(falInput: Record<string, unknown>, params: Record<stri
     if (NEVER_FORWARD.has(key)) continue;
     if (value === undefined || value === null || value === '') continue;
     if (key in falInput) continue;
+    // fal-модели принимают output_format только как 'jpeg'|'png'|'webp' — маппим наш 'jpg' -> 'jpeg'
+    // (иначе 422 literal_error, как у услуг «Фото в стиле 2к17» на gpt-image-2).
+    if (key === 'output_format' && value === 'jpg') { falInput[key] = 'jpeg'; continue; }
     falInput[key] = value;
   }
 }
