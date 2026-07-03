@@ -188,6 +188,8 @@ export type FalModelsResponse = {
     unit: string | null;
     /** Для моделей с тарифом по качеству/разрешению: строка тарифа из документации fal. */
     docPriceNote?: string;
+    /** Оценка из каталога (документация/калибровка) — fallback, когда live-цены нет. */
+    catalogCostUsd?: number | null;
   }>;
 };
 
@@ -212,8 +214,8 @@ export type FalSchemaResponse = {
 export type FalPricingResponse = {
   available: boolean;
   endpoint?: string;
-  /** docs — цена из документации fal (тариф по качеству/разрешению); live — из pricing API. */
-  source?: 'docs' | 'live';
+  /** docs — из документации fal (тариф по качеству/разрешению); live — из pricing API; estimate — оценка каталога. */
+  source?: 'docs' | 'live' | 'estimate';
   unitPrice?: number;
   unit?: string;
   units?: number;

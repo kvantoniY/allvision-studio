@@ -705,7 +705,7 @@ function FalLivePrice({ slug, endpoint, duration, numImages, quality, resolution
   if (!data.available) {
     return <div className="mt-1 text-slate-500">Себестоимость fal: нет прямой цены{data.reason ? ` (${data.reason})` : ''}</div>;
   }
-  const sourceLabel = data.source === 'docs' ? 'по документации fal' : 'live';
+  const sourceLabel = data.source === 'docs' ? 'по документации fal' : data.source === 'estimate' ? 'оценка каталога' : 'live';
   return (
     <div className="mt-1 text-emerald-300/90">
       Себестоимость fal ({sourceLabel}): {formatMoney({ usd: data.costUsd ?? 0 }, { primary: 'usd', showAll: true, usdToRub })}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
 import { CHAT_MODELS, chatReferenceSlots, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type ChatReferenceSlot, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import { TokenIcon } from '@/components/ui/token-icon';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -134,7 +135,11 @@ function controlledAdvancedKeys(model: ChatModelOption) {
 
 function visibleAdvancedParams(model: ChatModelOption) {
   const controlled = controlledAdvancedKeys(model);
-  return model.advancedParams.filter((param) => !controlled.has(param.key));
+  // Слот-параметры (последний кадр, видео движения, target video...) прикрепляются единой
+  // скрепкой прямо в чате — прячем их из расширенных настроек, чтобы у одного референса
+  // не было двух конкурирующих мест прикрепления.
+  const slotParams = new Set(chatReferenceSlots(model).map((slot) => slot.param));
+  return model.advancedParams.filter((param) => !controlled.has(param.key) && !slotParams.has(param.key));
 }
 
 function defaultAdvancedParams(model: ChatModelOption): ChatAdvancedParams {
@@ -187,12 +192,6 @@ function fileMediaKind(file: File): SelectedInputSource['mediaKind'] | null {
   return null;
 }
 
-function modelAcceptsSource(model: ChatModelOption, mediaKind: SelectedInputSource['mediaKind']) {
-  if (mediaKind === 'image') return model.acceptsImageInput;
-  if (mediaKind === 'video') return model.acceptsVideoInput;
-  return model.acceptsAudioInput;
-}
-
 function modelFamilies(models: ChatModelOption[]) {
   const map = new Map<string, { slug: string; title: string; models: ChatModelOption[] }>();
   for (const model of models) {
@@ -225,6 +224,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [advancedParams, setAdvancedParams] = useState<ChatAdvancedParams>(() => defaultAdvancedParams(defaultModel('image')));
   // Доп. референс-слоты (2-й персонаж, последний кадр, видео движения...) — по метаданным модели.
   const [extraRefs, setExtraRefs] = useState<Record<string, SelectedInputSource | null>>({});
+  // Слот, для которого сейчас открыта модалка выбора референса (единая скрепка).
+  const [pickerSlot, setPickerSlot] = useState<ChatReferenceSlot | null>(null);
 
   const models = useMemo(() => CHAT_MODELS.filter((model) => model.category === category), [category]);
   const selectedModel = models.find((model) => model.slug === modelSlug) ?? models[0] ?? CHAT_MODELS[0];
@@ -232,20 +233,11 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const selectedFamily = families.find((family) => family.slug === selectedModel.familySlug) ?? families[0];
   const familyModels = selectedFamily?.models ?? models;
   const cleanedAdvancedParams = useMemo(() => normaliseAdvancedParams(advancedParams), [advancedParams]);
-  const missingAdvanced = missingAdvancedRequirement(selectedModel, cleanedAdvancedParams);
   const modelPriceOverrides = modelPricing.data?.modelPriceOverrides;
   const balance = me.data?.user.tokenBalance ?? 0;
   const effectiveGenerateAudio = selectedModel.supportsAudio && generateAudio;
-  const estimatedCostCoins = estimateChatGenerationPriceCoins(selectedModel.slug, {
-    duration: selectedModel.category === 'video' ? duration : undefined,
-    generateAudio: effectiveGenerateAudio,
-    params: cleanedAdvancedParams,
-    priceOverrides: modelPriceOverrides,
-  });
-  const canPay = balance >= estimatedCostCoins;
   const needsInput = !selectedModel.acceptsTextOnly && (selectedModel.acceptsImageInput || selectedModel.acceptsVideoInput || selectedModel.acceptsAudioInput);
   const canUseInput = selectedModel.acceptsImageInput || selectedModel.acceptsVideoInput || selectedModel.acceptsAudioInput;
-  const inputKind = selectedModel.acceptsImageInput ? 'image' : selectedModel.acceptsVideoInput ? 'video' : 'audio';
   const referenceUnsupported = !!source && (
     (source.mediaKind === 'image' && !selectedModel.acceptsImageInput) ||
     (source.mediaKind === 'video' && !selectedModel.acceptsVideoInput) ||
@@ -254,14 +246,58 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const requiresPrompt = selectedModel.requiresPrompt !== false;
   // Talking-avatar: needs BOTH a character image (source) and a voice audio (audioSource).
   const dualInput = selectedModel.acceptsImageInput && selectedModel.acceptsAudioInput;
-  // Референс-слоты: slot[0] = основной (source), остальные (кроме аудио) — доп-пикеры на форме.
+  // Референс-слоты — единая скрепка: slot.param === 'main' -> source, аудио-слот -> audioSource,
+  // остальные -> extraRefs. Прикреплённое видно чипами над полем ввода.
   const referenceSlots = useMemo(() => chatReferenceSlots(selectedModel), [selectedModel]);
   const mainSlot = referenceSlots[0];
   const extraSlots = useMemo(() => referenceSlots.slice(1).filter((s) => s.mediaKind !== 'audio'), [referenceSlots]);
-  const filledExtra = extraSlots.filter((s) => !!extraRefs[s.key]?.ref).length;
+  const visibleSlots = useMemo(
+    () => referenceSlots.filter((s) => s.mediaKind !== 'audio' || (dualInput && s.param === 'audio_url')),
+    [referenceSlots, dualInput],
+  );
+  const slotValue = (slot: ChatReferenceSlot): SelectedInputSource | null => {
+    if (slot.param === 'main') return source;
+    if (slot.mediaKind === 'audio') return audioSource;
+    return extraRefs[slot.key] ?? null;
+  };
+  const setSlotValue = (slot: ChatReferenceSlot, next: SelectedInputSource | null) => {
+    if (slot.param === 'main') setSource(next);
+    else if (slot.mediaKind === 'audio') setAudioSource(next);
+    else setExtraRefs((prev) => ({ ...prev, [slot.key]: next }));
+  };
   const requiredExtraMissing = extraSlots.some((s) => s.required && !extraRefs[s.key]?.ref);
-  const slotTotal = referenceSlots.filter((s) => s.mediaKind !== 'audio').length;
-  const slotFilled = (source ? 1 : 0) + filledExtra;
+  const slotTotal = visibleSlots.length;
+  const slotFilled = visibleSlots.filter((s) => !!slotValue(s)?.ref).length;
+  // Слоты -> параметры запроса. Для omni порядок: @image_1 (основной), @image_2 (доп) и т.д.
+  const slotParams = useMemo(() => {
+    const params: Record<string, unknown> = {};
+    const imagesList: string[] = [];
+    const imageUrlsList: string[] = [];
+    if (source?.mediaKind === 'image' && source.ref) {
+      if (extraSlots.some((s) => s.param === 'images')) imagesList.push(source.ref);
+      if (extraSlots.some((s) => s.param === 'image_urls')) imageUrlsList.push(source.ref);
+    }
+    for (const s of extraSlots) {
+      const ref = extraRefs[s.key]?.ref;
+      if (!ref) continue;
+      if (s.param === 'images') imagesList.push(ref);
+      else if (s.param === 'image_urls') imageUrlsList.push(ref);
+      else if (s.param === 'video_urls') params.video_urls = [ref];
+      else params[s.param] = ref;
+    }
+    if (imagesList.length) params.images = imagesList;
+    if (imageUrlsList.length) params.image_urls = imageUrlsList;
+    return params;
+  }, [source, extraSlots, extraRefs]);
+  const mergedParams = useMemo(() => ({ ...cleanedAdvancedParams, ...slotParams }), [cleanedAdvancedParams, slotParams]);
+  const missingAdvanced = missingAdvancedRequirement(selectedModel, mergedParams);
+  const estimatedCostCoins = estimateChatGenerationPriceCoins(selectedModel.slug, {
+    duration: selectedModel.category === 'video' ? duration : undefined,
+    generateAudio: effectiveGenerateAudio,
+    params: mergedParams,
+    priceOverrides: modelPriceOverrides,
+  });
+  const canPay = balance >= estimatedCostCoins;
   const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !requiredExtraMissing && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
 
   useEffect(() => {
@@ -298,6 +334,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     setAdvancedParams(defaultAdvancedParams(selectedModel));
     setGenerateAudio(selectedModel.supportsAudio);
     setExtraRefs({});
+    setPickerSlot(null);
     // Drop the voice-audio attachment when the model is not a talking-avatar (dual-input) model.
     if (!(selectedModel.acceptsImageInput && selectedModel.acceptsAudioInput)) {
       setAudioSource(null);
@@ -324,7 +361,11 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       toast({ title: 'Этот тип файла нельзя прикрепить как референс', variant: 'destructive' });
       return;
     }
-    if (!canUseInput || !modelAcceptsSource(selectedModel, mediaKind)) {
+    // Дроп/выбор файла заполняет первый СВОБОДНЫЙ слот подходящего типа; если все заняты —
+    // заменяет первый подходящий.
+    const targetSlot = visibleSlots.find((s) => s.mediaKind === mediaKind && !slotValue(s))
+      ?? visibleSlots.find((s) => s.mediaKind === mediaKind);
+    if (!canUseInput || !targetSlot) {
       toast({ title: `Модель ${selectedModel.title} не принимает такой референс`, variant: 'destructive' });
       return;
     }
@@ -339,13 +380,16 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         mediaKind: result.input.mediaKind,
         origin: 'upload',
       };
-      // In talking-avatar (dual) mode an audio file fills the voice slot, everything else the image slot.
-      if (dualInput && picked.mediaKind === 'audio') setAudioSource(picked);
-      else setSource(picked);
-      toast({ title: 'Файл прикреплен' });
+      setSlotValue(targetSlot, picked);
+      toast({ title: visibleSlots.length > 1 ? `Прикреплено: ${targetSlot.label}` : 'Файл прикреплен' });
     } catch (error) {
       toast({ title: apiErrorMessage(error, 'Не удалось прикрепить файл'), variant: 'destructive' });
     }
+  };
+
+  // Клик по чипу omni-референса вставляет его @упоминание в промпт (модель понимает anchors).
+  const insertAnchor = (anchor: string) => {
+    setPrompt((current) => (current.includes(anchor) ? current : `${current}${current && !current.endsWith(' ') ? ' ' : ''}${anchor} `));
   };
 
   const hasDraggedFiles = (event: DragEvent<HTMLDivElement>) => Array.from(event.dataTransfer.types).includes('Files');
@@ -378,25 +422,6 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       return;
     }
     try {
-      // Доп-референсы -> params. Для omni порядок = @image_1 (основной), @image_2 (доп) и т.д.
-      const slotParams: Record<string, unknown> = {};
-      const imagesList: string[] = [];
-      const imageUrlsList: string[] = [];
-      if (source?.mediaKind === 'image' && source.ref) {
-        if (extraSlots.some((s) => s.param === 'images')) imagesList.push(source.ref);
-        if (extraSlots.some((s) => s.param === 'image_urls')) imageUrlsList.push(source.ref);
-      }
-      for (const s of extraSlots) {
-        const ref = extraRefs[s.key]?.ref;
-        if (!ref) continue;
-        if (s.param === 'images') imagesList.push(ref);
-        else if (s.param === 'image_urls') imageUrlsList.push(ref);
-        else if (s.param === 'video_urls') slotParams.video_urls = [ref];
-        else slotParams[s.param] = ref;
-      }
-      if (imagesList.length) slotParams.images = imagesList;
-      if (imageUrlsList.length) slotParams.image_urls = imageUrlsList;
-      const mergedParams = { ...cleanedAdvancedParams, ...slotParams };
       await createMessage({
         chatId,
         body: {
@@ -442,19 +467,67 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           ? 'Добавьте промпт для запуска'
           : null;
 
-  // Переиспользуемые элементы: на мобайле живут внутри инпута, на ПК — в нижней строке.
-  const attachControl = canUseInput ? (
-    <InputSourcePicker mediaKind={inputKind} value={source} required={needsInput} onChange={setSource} compact iconOnly />
-  ) : (
+  // Единая скрепка: один слот — сразу открывает выбор, несколько — меню слотов со счётчиком.
+  const attachControl = !canUseInput || visibleSlots.length === 0 ? (
     <Button type="button" variant="outline" size="icon" className="h-8 w-8 border-slate-700 bg-slate-950 text-slate-400" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
       <Paperclip className="h-4 w-4" />
     </Button>
+  ) : visibleSlots.length === 1 ? (
+    <InputSourcePicker
+      mediaKind={visibleSlots[0].mediaKind}
+      value={slotValue(visibleSlots[0])}
+      required={visibleSlots[0].required}
+      onChange={(next) => setSlotValue(visibleSlots[0], next)}
+      slotLabel={visibleSlots[0].label}
+      compact
+      iconOnly
+    />
+  ) : (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="relative h-8 w-8 border-slate-700 bg-slate-950"
+          title={`Референсы: ${slotFilled}/${slotTotal}`}
+          aria-label={`Прикрепить референсы (${slotFilled} из ${slotTotal})`}
+        >
+          <Paperclip className="h-4 w-4" />
+          <span
+            className={cn(
+              'absolute -right-1.5 -top-1.5 rounded-full px-1 text-[9px] font-semibold leading-4',
+              slotFilled > 0 ? 'bg-violet-600 text-white' : 'bg-slate-700 text-slate-200',
+            )}
+          >
+            {slotFilled}/{slotTotal}
+          </span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72 border-slate-800 bg-slate-950 text-slate-100">
+        <DropdownMenuLabel>Референсы {slotFilled}/{slotTotal}</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-slate-800" />
+        {visibleSlots.map((slot) => {
+          const value = slotValue(slot);
+          const Icon = slot.mediaKind === 'image' ? ImageIcon : slot.mediaKind === 'video' ? Video : Volume2;
+          return (
+            <DropdownMenuItem key={slot.key} className="gap-2.5 py-2 focus:bg-slate-900" onSelect={() => setPickerSlot(slot)}>
+              <Icon className="h-4 w-4 shrink-0 text-slate-500" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm">
+                  {slot.label}
+                  {slot.required ? <span className="text-amber-300"> *</span> : null}
+                  {slot.anchor ? <span className="ml-1 text-[11px] text-violet-300">{slot.anchor}</span> : null}
+                </span>
+                <span className="block truncate text-[11px] text-slate-500">{value ? value.title : 'не прикреплено'}</span>
+              </span>
+              {value ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-300" /> : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
-
-  // Second attach slot for talking-avatar: the voice audio (the character lip-syncs to it).
-  const audioAttachControl = dualInput ? (
-    <InputSourcePicker mediaKind="audio" value={audioSource} required onChange={setAudioSource} compact iconOnly />
-  ) : null;
 
   const settingsControl = (
     <DetailedSettingsControl
@@ -501,60 +574,64 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {(extraSlots.length > 0 || referenceSlots.some((s) => s.anchor)) && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/30 px-3 py-2">
-            <span className="text-[11px] font-medium text-slate-400">Референсы {slotFilled}/{slotTotal}</span>
-            {mainSlot && (
-              <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">
-                {mainSlot.label}{mainSlot.anchor ? ` ${mainSlot.anchor}` : ''}{source ? ' ✓' : ''}
-              </span>
-            )}
-            {extraSlots.map((s) => (
-              <div key={s.key} className="flex items-center gap-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1">
-                <span className="text-[10px] text-slate-400">{s.label}{s.required ? '*' : ''}{s.anchor ? ` ${s.anchor}` : ''}</span>
-                <InputSourcePicker
-                  mediaKind={s.mediaKind}
-                  value={extraRefs[s.key] ?? null}
-                  required={s.required}
-                  compact
-                  iconOnly
-                  onChange={(v) => setExtraRefs((prev) => ({ ...prev, [s.key]: v }))}
-                />
-              </div>
-            ))}
-            {referenceSlots.filter((s) => s.anchor).map((s) => (
-              <button
-                key={`anchor-${s.key}`}
-                type="button"
-                onClick={() => setPrompt((p) => `${p}${p && !p.endsWith(' ') ? ' ' : ''}${s.anchor} `)}
-                className="rounded bg-violet-600/20 px-1.5 py-0.5 text-[10px] text-violet-200 hover:bg-violet-600/30"
-                title="Вставить упоминание референса в промпт"
-              >
-                {s.anchor}
-              </button>
-            ))}
-          </div>
-        )}
-        {(source || referenceUnsupported || !canPay || selectedModel.experimental) && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/45 px-3 py-2">
-            {source && (
-              <div className="flex min-w-0 items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5">
-                <div className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900">
-                  {source.mediaKind === 'image' ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={source.url} alt="" className="h-full w-full object-cover" />
-                  ) : source.mediaKind === 'video' ? (
-                    <video src={source.url} className="h-full w-full object-cover" muted />
-                  ) : (
-                    <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
-                  )}
+        {(slotFilled > 0 || visibleSlots.some((s) => s.required && !slotValue(s)) || referenceUnsupported || !canPay || selectedModel.experimental) && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/40 px-3 py-2">
+            {visibleSlots.map((slot) => {
+              const value = slotValue(slot);
+              if (!value) {
+                // Пустой ОБЯЗАТЕЛЬНЫЙ слот — пунктирный чип-приглашение; опциональные живут в меню скрепки.
+                if (!slot.required) return null;
+                return (
+                  <button
+                    key={slot.key}
+                    type="button"
+                    onClick={() => setPickerSlot(slot)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-600 px-2 py-1.5 text-xs text-slate-400 transition hover:border-violet-400 hover:text-violet-200"
+                  >
+                    <Paperclip className="h-3 w-3" />
+                    {slot.label}
+                  </button>
+                );
+              }
+              return (
+                <div key={slot.key} className="flex min-w-0 items-center gap-1 rounded-md border border-slate-700 bg-slate-950 py-1 pl-1.5 pr-1">
+                  <button
+                    type="button"
+                    onClick={() => (slot.anchor ? insertAnchor(slot.anchor) : setPickerSlot(slot))}
+                    title={slot.anchor ? `Вставить ${slot.anchor} в промпт` : 'Заменить референс'}
+                    className="flex min-w-0 items-center gap-2 text-left"
+                  >
+                    <div className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900">
+                      {value.mediaKind === 'image' ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={value.url} alt="" className="h-full w-full object-cover" />
+                      ) : value.mediaKind === 'video' ? (
+                        <video src={value.url} className="h-full w-full object-cover" muted />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
+                      )}
+                    </div>
+                    <span className="min-w-0">
+                      <span className="block max-w-[160px] truncate text-xs text-slate-200">{slot.label}</span>
+                      <span className="block max-w-[160px] truncate text-[10px] text-slate-500">
+                        {slot.anchor ? <span className="text-violet-300">{slot.anchor}</span> : value.title}
+                      </span>
+                    </span>
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0"
+                    title="Убрать референс"
+                    aria-label={`Убрать референс: ${slot.label}`}
+                    onClick={() => setSlotValue(slot, null)}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
-                <span className="max-w-[220px] truncate text-xs text-slate-200">{source.title}</span>
-                <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSource(null)}>
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            )}
+              );
+            })}
             {referenceUnsupported && (
               <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-100">
                 <AlertTriangle className="h-3.5 w-3.5" />
@@ -593,7 +670,6 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           <div className="flex items-center justify-between gap-2 px-2.5 pb-2.5 pt-1 md:hidden">
             <div className="flex shrink-0 items-center gap-1.5">
               {attachControl}
-              {audioAttachControl}
               {settingsControl}
             </div>
             <div className="flex items-center gap-2.5">{actionControl}</div>
@@ -615,7 +691,6 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           <div className="flex flex-wrap items-center gap-1.5">
             <div className="hidden shrink-0 items-center gap-1.5 md:flex">
               {attachControl}
-              {audioAttachControl}
               {settingsControl}
             </div>
             <CategoryControl category={category} onChange={setCategory} />
@@ -635,6 +710,25 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           )}
         </div>
       </div>
+
+      {/* Модалка выбора референса для слота из меню скрепки / чипа (контролируемый режим). */}
+      {pickerSlot && (
+        <InputSourcePicker
+          mediaKind={pickerSlot.mediaKind}
+          value={slotValue(pickerSlot)}
+          required={pickerSlot.required}
+          slotLabel={pickerSlot.label}
+          open
+          hideTrigger
+          onOpenChange={(next) => {
+            if (!next) setPickerSlot(null);
+          }}
+          onChange={(next) => {
+            setSlotValue(pickerSlot, next);
+            setPickerSlot(null);
+          }}
+        />
+      )}
     </form>
   );
 }

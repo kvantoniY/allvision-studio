@@ -28,6 +28,12 @@ type InputSourcePickerProps = {
   compact?: boolean;
   iconOnly?: boolean;
   onChange: (value: SelectedInputSource | null) => void;
+  /** Контролируемый режим: модалка открывается снаружи (единая скрепка чата), без своей кнопки. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+  /** Подпись слота в заголовке модалки («Последний кадр», «Видео движения»...). */
+  slotLabel?: string;
 };
 
 type PickerTab = 'upload' | 'studio' | 'site';
@@ -64,8 +70,13 @@ function flattenStudioAssetChoices(items: UserMediaAsset[]): UserMediaAsset[] {
   });
 }
 
-export function InputSourcePicker({ mediaKind, value, required, compact, iconOnly, onChange }: InputSourcePickerProps) {
-  const [open, setOpen] = useState(false);
+export function InputSourcePicker({ mediaKind, value, required, compact, iconOnly, onChange, open: openProp, onOpenChange, hideTrigger, slotLabel }: InputSourcePickerProps) {
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean) => {
+    if (openProp === undefined) setOpenState(next);
+    onOpenChange?.(next);
+  };
   const [tab, setTab] = useState<PickerTab>('upload');
   const [upload, uploadState] = useUploadChatInputMutation();
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 }, { skip: mediaKind !== 'image' });
@@ -112,8 +123,9 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
   const TriggerIcon = compact || iconOnly ? Paperclip : Library;
 
   return (
-    <div className={cn('space-y-3', compact && 'space-y-0')}>
-      <div className="flex flex-wrap items-center gap-3">
+    <div className={cn('space-y-3', (compact || hideTrigger) && 'space-y-0')}>
+      <div className={cn('flex flex-wrap items-center gap-3', hideTrigger && 'hidden')}>
+        {!hideTrigger && (
         <Button
           type="button"
           variant="outline"
@@ -126,7 +138,8 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
           <TriggerIcon className="h-4 w-4" />
           <span className={cn(iconOnly && 'sr-only')}>{buttonLabel}</span>
         </Button>
-        {value && !compact && (
+        )}
+        {value && !compact && !hideTrigger && (
           <div className="flex min-w-0 items-center gap-3 rounded-md border border-slate-800 bg-slate-900 p-2">
             <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-slate-950">
               {value.mediaKind === 'image' ? (
@@ -155,8 +168,8 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
             <CardContent className="p-0">
               <div className="flex items-center justify-between border-b border-slate-800 p-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Выбор референса</h3>
-                  <p className="text-sm text-slate-500">{mediaKind === 'image' ? 'Изображение для модели' : mediaKind === 'video' ? 'Видео для модели' : 'Audio reference'}</p>
+                  <h3 className="text-lg font-semibold text-white">{slotLabel ? `Референс: ${slotLabel}` : 'Выбор референса'}</h3>
+                  <p className="text-sm text-slate-500">{mediaKind === 'image' ? 'Изображение для модели' : mediaKind === 'video' ? 'Видео для модели' : 'Аудио для модели'}</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => setOpen(false)}>
                   <X className="h-4 w-4" />

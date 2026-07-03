@@ -85,9 +85,18 @@ export default function AdminModelsPage() {
                       ? <span className="text-amber-200/90">{m.docPriceNote}</span>
                       : typeof m.unitPrice === 'number'
                         ? formatMoney({ usd: m.unitPrice }, { primary: 'usd', showAll: true, usdToRub })
-                        : <span className="text-slate-600">н/д</span>}
+                        : typeof m.catalogCostUsd === 'number'
+                          ? (
+                            <span className="text-slate-300" title="Живая цена fal недоступна — показана оценка из каталога (документация модели)">
+                              ≈ {formatMoney({ usd: m.catalogCostUsd }, { primary: 'usd', showAll: true, usdToRub })}
+                              <span className="ml-1 text-[11px] text-slate-500">(каталог)</span>
+                            </span>
+                          )
+                          : <span className="text-slate-600">н/д</span>}
                   </td>
-                  <td className="px-3 py-2 text-slate-400">{m.docPriceNote ? 'image (докум.)' : (m.unit ?? '—')}</td>
+                  <td className="px-3 py-2 text-slate-400">
+                    {m.docPriceNote ? 'image (докум.)' : m.unit ?? (typeof m.catalogCostUsd === 'number' ? 'генерация (оценка)' : '—')}
+                  </td>
                 </tr>
               ))}
             </tbody>

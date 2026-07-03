@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import IORedis from 'ioredis';
 import { Prisma, prisma } from '@allvision/database';
 import { z } from 'zod';
-import { falEndpointForModel, falBillingUnits, falDocumentedCostUsd, FAL_PRICING_ENDPOINTS, BLOCK_CATALOG } from '@allvision/shared';
+import { falEndpointForModel, falBillingUnits, falDocumentedCostUsd, estimateModelCostUsd, FAL_PRICING_ENDPOINTS, BLOCK_CATALOG } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { PiAPIAccountClient } from '../../services/piapi-client';
@@ -360,7 +360,17 @@ adminUsageRouter.get('/fal/pricing', async (req: Request, res: Response, next: N
       return;
     }
     const pricing = await getFalPricing(endpoint);
-    if (!pricing) { res.json({ available: false, endpoint, reason: 'no-price' }); return; }
+    if (!pricing) {
+      // Живая цена недоступна (нет ключа / rate limit fal) — отдаём оценку из каталога,
+      // чтобы админ всегда видел хоть какую-то себестоимость.
+      const estimate = slug ? catalogCostEstimateUsd(slug, { duration, quality, resolution, aspectRatio }) : undefined;
+      if (estimate !== undefined) {
+        res.json({ available: true, endpoint, source: 'estimate', unitPrice: estimate, unit: 'генерация', units: 1, costUsd: estimate });
+        return;
+      }
+      res.json({ available: false, endpoint, reason: 'no-price' });
+      return;
+    }
     const units = falBillingUnits(pricing.unit, { duration, numImages });
     res.json({
       available: true,
@@ -388,7 +398,9 @@ adminUsageRouter.get('/fal/models', async (_req: Request, res: Response, next: N
       }
     }
     const slugs = Object.keys(FAL_PRICING_ENDPOINTS);
-    const models = await Promise.all(slugs.map(async (slug) => {
+    // Не больше 3 одновременных запросов к fal pricing API: полный параллельный обстрел
+    // (~45 endpoint'ов) стабильно ловил HTTP 429, и страница оставалась без цен.
+    const models = await mapWithLimit(slugs, 3, async (slug) => {
       const endpoint = FAL_PRICING_ENDPOINTS[slug];
       const docPriceNote = falDocPriceNote(slug);
       // Для тарифицируемых моделей живой pricing API не отражает тариф — не дёргаем его зря.
@@ -403,8 +415,10 @@ adminUsageRouter.get('/fal/models', async (_req: Request, res: Response, next: N
         unitPrice: pricing?.unitPrice ?? null,
         unit: pricing?.unit ?? null,
         docPriceNote,
+        // Оценка из каталога (документация/калибровка) — fallback, когда live-цены нет.
+        catalogCostUsd: catalogCostEstimateUsd(slug) ?? null,
       };
-    }));
+    });
     models.sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title));
     res.json({ models, count: models.length });
   } catch (err) {
@@ -435,7 +449,12 @@ adminUsageRouter.post('/fal/reconcile-costs', async (req: Request, res: Response
         const timer = setTimeout(() => controller.abort(), 20000);
         const r = await fetch(url.toString(), { headers: { Authorization: `Key ${apiKey}` }, signal: controller.signal });
         clearTimeout(timer);
-        if (!r.ok) { lastError = `HTTP ${r.status} на странице ${page + 1}`; break; }
+        if (!r.ok) {
+          lastError = r.status === 429
+            ? `fal ограничил частоту запросов (HTTP 429) на странице ${page + 1} — подождите минуту и нажмите ещё раз`
+            : `HTTP ${r.status} на странице ${page + 1}`;
+          break;
+        }
         json = await r.json();
         pagesOk += 1;
       } catch (e) {
@@ -481,6 +500,41 @@ adminUsageRouter.get('/fal/schema', async (req: Request, res: Response, next: Ne
     next(err);
   }
 });
+
+/** Параллельный map с ограничением одновременных запросов (fal режет burst'ы по 429). */
+async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor;
+      cursor += 1;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/**
+ * Оценка себестоимости по каталогу блоков: doc-таблицы fal (gpt-image/nano-banana) +
+ * калиброванные estimatedCostUsd/формулы по секундам. Используется, когда живая цена
+ * fal недоступна (нет ключа, HTTP 429).
+ */
+function catalogCostEstimateUsd(
+  slug: string,
+  params: { duration?: number; quality?: string; resolution?: string; aspectRatio?: string } = {},
+): number | undefined {
+  const model = BLOCK_CATALOG.flatMap((block) => block.supportedModels).find((item) => item.slug === slug);
+  if (!model) return undefined;
+  const estimateParams: Record<string, unknown> = {};
+  if (params.duration) estimateParams.duration = params.duration;
+  if (params.quality) estimateParams.quality = params.quality;
+  if (params.resolution) estimateParams.resolution = params.resolution;
+  if (params.aspectRatio) estimateParams.aspect_ratio = params.aspectRatio;
+  const value = estimateModelCostUsd(model, estimateParams);
+  return Number.isFinite(value) && value > 0 ? Math.round(value * 10000) / 10000 : undefined;
+}
 
 /** Строка тарифа из документации fal для моделей, у которых цена зависит от качества/разрешения. */
 function falDocPriceNote(slug: string): string | undefined {
