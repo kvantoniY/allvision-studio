@@ -57,6 +57,46 @@ export function falEndpointForModel(slug: string): string | undefined {
   return FAL_PRICING_ENDPOINTS[slug];
 }
 
+export type FalDocPricingParams = {
+  quality?: string;
+  resolution?: string;
+  aspectRatio?: string;
+};
+
+/**
+ * Цена gpt-image-2 на fal зависит от качества и размера кадра; /v1/models/pricing
+ * такие тарифы не отражает (отдаёт одну unit_price), поэтому источник истины —
+ * таблица со страницы модели fal (fal.ai/models/openai/gpt-image-2).
+ * square = 1024x1024 (1:1/auto), rect = 1024x1536 / 1536x1024 (9:16, 16:9, 3:4...).
+ */
+const GPT_IMAGE_2_DOC_PRICES: Record<'square' | 'rect', Record<'low' | 'medium' | 'high', number>> = {
+  square: { low: 0.006, medium: 0.053, high: 0.211 },
+  rect: { low: 0.005, medium: 0.042, high: 0.165 },
+};
+
+/** Nano Banana Pro (slug nano-banana): цена по разрешению со страницы модели fal. */
+const NANO_BANANA_DOC_PRICES: Record<string, number> = { '1K': 0.12, '2K': 0.14, '4K': 0.18 };
+
+/**
+ * Себестоимость по ДОКУМЕНТАЦИИ fal для моделей с тарифом по качеству/разрешению.
+ * Возвращает undefined для моделей без такого тарифа — тогда цена берётся из
+ * живого pricing API (unit_price × units) или из estimatedCostUsd каталога.
+ */
+export function falDocumentedCostUsd(slug: string, params: FalDocPricingParams = {}): number | undefined {
+  if (slug === 'gpt-image-2') {
+    const q = (params.quality ?? '').toLowerCase();
+    const quality = q === 'low' || q === 'high' ? q : 'medium'; // auto/standard/пусто -> medium
+    const aspect = (params.aspectRatio ?? '').toLowerCase();
+    const size = !aspect || aspect === '1:1' || aspect === 'auto' ? 'square' : 'rect';
+    return GPT_IMAGE_2_DOC_PRICES[size][quality];
+  }
+  if (slug === 'nano-banana') {
+    const r = (params.resolution ?? '1K').toUpperCase();
+    return NANO_BANANA_DOC_PRICES[r] ?? NANO_BANANA_DOC_PRICES['1K'];
+  }
+  return undefined;
+}
+
 /** Сколько единиц биллинга у fal по unit'у и настройкам (для unit_price × units). */
 export function falBillingUnits(unit: string, params: { duration?: number; numImages?: number } = {}): number {
   const u = (unit ?? '').toLowerCase();

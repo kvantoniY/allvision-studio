@@ -552,6 +552,23 @@ Production-grade admin, MediaAsset, image-edit/Nano Banana, usage analytics и U
 - Builds: `@allvision/shared`, `@allvision/database`, `@allvision/api`, `@allvision/worker`, `@allvision/web` — зелёные.
 - `docker compose -f infra/prod/docker-compose.prod.yml build` — зелёный. В prod Dockerfile'ы добавлены npm fetch retries/timeouts, потому что первые два локальных build-ретрая падали на сетевых `EIDLETIMEOUT`/`ECONNRESET` от registry/prisma engines, а не на ошибках кода.
 
+## Этап P11 ✅ — Точная себестоимость fal по параметрам (quality/resolution/формат)
+
+Проблема: себестоимость услуг считалась по захардкоженным константам PiAPI-эпохи (`gpt-image-2` — всегда $0.10 независимо от качества), а живой fal pricing API не отражает тарифы моделей, где цена зависит от качества/разрешения. Плюс баг: при неизвестном `endpoint_id` fal возвращает общий список цен, и код брал `json.prices[0]` — цену ЧУЖОЙ модели (источник «$1 у GPT Image» в админке).
+
+- `packages/shared/src/blocks/fal-pricing.ts`: `falDocumentedCostUsd(slug, { quality, resolution, aspectRatio })` — цены из документации fal. `gpt-image-2`: low $0.005–0.006 / medium $0.042–0.053 / high $0.165–0.211 (square 1:1/auto vs rect 9:16/16:9; auto-quality тарифицируется как medium). `nano-banana` (Nano Banana Pro): 1K $0.12 / 2K $0.14 / 4K $0.18.
+- `estimateModelCostUsd` (shared) сначала пробует doc-таблицу → калькулятор услуг в `/admin/services`, маржа в списке услуг и цены чата теперь параметро-зависимые. Обложка `product-card` тоже считается по doc-таблице (`cover_model` + quality) вместо константы $0.10.
+- Фикс `?? json.prices[0]` в `apps/api/src/routes/admin/usage.ts` (getFalPricing) и `apps/worker/src/providers/fal-client.ts` (getEndpointPricing): только точное совпадение endpoint.
+- `GET /api/admin/fal/pricing` принимает `quality`/`resolution`/`aspectRatio` и для тарифицируемых моделей отдаёт `source: 'docs'` (цена из документации), иначе `source: 'live'` (unit_price × units). `GET /api/admin/fal/models` для таких моделей отдаёт `docPriceNote` (строку тарифа) и не дёргает pricing API.
+- Web: `FalLivePrice` в конструкторе услуг получает quality/resolution/aspect_ratio из параметров шага — переключение выпадающих списков сразу меняет показанную себестоимость, с подписью «по документации fal» / «live». `/admin/models` показывает тарифную строку вместо «н/д» для gpt-image-2/nano-banana.
+- Worker `estimateImageCost` (fal-provider) переиспользует shared doc-таблицу (fallback, когда fal не вернул фактическую цену; факт по-прежнему приоритетен: `fal-reported` → `fal-priced` → `estimated`).
+- Каталог: nano-banana переименован в «Nano Banana Pro (Gemini)» с актуальными ценами, gpt-image-2 estimatedCostUsd 0.1 → 0.053, оба docsUrl ведут на страницы моделей fal; тарифы прописаны в описаниях выпадающих списков quality/resolution блока image-edit.
+- Починены два устаревших теста, падавших ещё на HEAD: `blocks-registry` (18 блоков после добавления `fal-generic`) и `trend-video-transfer` (дефолтный движок `wan-motion` после 2e23a8d).
+
+Проверки P11: shared — 33 passed (7 suites, добавлены тесты falDocumentedCostUsd и параметро-зависимого pricing); worker без DB-backed — 91 passed (16 suites); билды shared/worker/api/web — зелёные. DB-backed suites (pipeline-runner, piapi-provider, API) локально заблокированы без Postgres `localhost:5433`, как в прошлых этапах.
+
+Нюанс: quality-тарифы gpt-image-2 сняты со страницы fal вручную (pricing API их не отдаёт) — при изменении тарифов fal обновить `GPT_IMAGE_2_DOC_PRICES`/`NANO_BANANA_DOC_PRICES` в `fal-pricing.ts`. Точная фактическая стоимость по-прежнему сверяется кнопкой «Сверить факт. стоимость с fal» (billing-events) в `/admin/models`.
+
 ## Конвенции разработки
 
 - Промпты на этапы пишет ассистент (Claude в чате), исполняет Claude Code.

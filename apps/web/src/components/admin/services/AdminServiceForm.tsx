@@ -681,25 +681,34 @@ function CriteriaInput({ field, value, onChange }: { field: FalSchemaField; valu
   );
 }
 
-// Живая себестоимость модели из fal (по текущим настройкам шага: длительность / кол-во картинок).
-function FalLivePrice({ slug, endpoint, duration, numImages, usdToRub }: {
+// Живая себестоимость модели из fal по текущим настройкам шага (длительность, кол-во картинок,
+// качество, разрешение, формат кадра). Для моделей с тарифом (GPT Image, Nano Banana) цена
+// берётся из документации fal и меняется при переключении качества/формата в форме.
+function FalLivePrice({ slug, endpoint, duration, numImages, quality, resolution, aspectRatio, usdToRub }: {
   slug?: string;
   endpoint?: string;
   duration?: number;
   numImages?: number;
+  quality?: string;
+  resolution?: string;
+  aspectRatio?: string;
   usdToRub: number;
 }) {
   const hasTarget = Boolean(slug || endpoint);
-  const { data, isFetching } = useGetFalPricingQuery({ slug, endpoint, duration, numImages }, { skip: !hasTarget });
+  const { data, isFetching } = useGetFalPricingQuery(
+    { slug, endpoint, duration, numImages, quality, resolution, aspectRatio },
+    { skip: !hasTarget },
+  );
   if (!hasTarget) return null;
   if (isFetching && !data) return <div className="mt-1 text-slate-500">Себестоимость fal: загрузка…</div>;
   if (!data) return null;
   if (!data.available) {
     return <div className="mt-1 text-slate-500">Себестоимость fal: нет прямой цены{data.reason ? ` (${data.reason})` : ''}</div>;
   }
+  const sourceLabel = data.source === 'docs' ? 'по документации fal' : 'live';
   return (
     <div className="mt-1 text-emerald-300/90">
-      Себестоимость fal (live): {formatMoney({ usd: data.costUsd ?? 0 }, { primary: 'usd', showAll: true, usdToRub })}
+      Себестоимость fal ({sourceLabel}): {formatMoney({ usd: data.costUsd ?? 0 }, { primary: 'usd', showAll: true, usdToRub })}
       <span className="text-slate-500"> · {data.units} {data.unit} × ${data.unitPrice}/{data.unit}</span>
     </div>
   );
@@ -1284,6 +1293,9 @@ function BlockParamsForm({
                 endpoint={block.slug === 'fal-generic' ? (typeof value.endpoint === 'string' ? value.endpoint : undefined) : undefined}
                 duration={duration}
                 numImages={typeof value.num_images === 'number' ? value.num_images : undefined}
+                quality={typeof value.quality === 'string' ? value.quality : undefined}
+                resolution={typeof value.resolution === 'string' ? value.resolution : undefined}
+                aspectRatio={typeof value.aspect_ratio === 'string' ? value.aspect_ratio : undefined}
                 usdToRub={usdToRub}
               />
               {model.description && <p className="mt-2 text-slate-400">{model.description}</p>}

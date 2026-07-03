@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { prisma } from '@allvision/database';
-import type { StorageProvider } from '@allvision/shared';
+import { falDocumentedCostUsd, type StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
 import { FalClient, type FalCompletedResult } from './fal-client';
 import { ProviderError } from './provider-errors';
@@ -218,7 +218,7 @@ export class FalProvider implements AIProvider {
       model: input.model,
       kind: 'image',
       ext: 'jpg',
-      estimatedCost: estimateImageCost(input.model, config, resolution),
+      estimatedCost: estimateImageCost(input.model, config, input.params),
       context: input.context,
       timeoutMs: IMAGE_TIMEOUT_MS,
       expectedDurationMs: 30 * 1000,
@@ -740,14 +740,15 @@ function normalizeAspect(value: string | undefined): string | undefined {
   return value;
 }
 
-function estimateImageCost(model: string, config: FalModelConfig, resolution?: string): number {
-  // nano-banana slug теперь маппится на Nano Banana Pro — дороже базовой версии.
-  if (model === 'nano-banana') {
-    if (resolution === '4K') return 0.18;
-    if (resolution === '2K') return 0.14;
-    return 0.12;
-  }
-  return config.estimatedCostUsd;
+function estimateImageCost(model: string, config: FalModelConfig, params?: Record<string, unknown>): number {
+  // Единый источник — shared-таблица документированных цен fal (gpt-image-2 по quality×формату,
+  // nano-banana по разрешению). Для остальных моделей — грубый estimatedCostUsd конфига.
+  const docCost = falDocumentedCostUsd(model, {
+    quality: readString(params, 'quality'),
+    resolution: readString(params, 'resolution'),
+    aspectRatio: readString(params, 'aspect_ratio'),
+  });
+  return docCost ?? config.estimatedCostUsd;
 }
 
 function readString(params: Record<string, unknown> | undefined, key: string): string | undefined {

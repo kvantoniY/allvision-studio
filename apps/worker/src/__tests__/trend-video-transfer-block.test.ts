@@ -96,7 +96,8 @@ describe('trend-video-transfer block', () => {
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({
       inputImageUrl: 'https://cdn.test/person.jpg',
       drivingVideoUrl: 'https://cdn.test/dance.mp4',
-      model: 'kling-motion-3.0-std',
+      // Дефолтный движок — Wan Motion (animal-safe pose retargeting), см. runMotionTransfer.
+      model: 'wan-motion',
     }));
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://motion-transfer.mp4' }));
   });
@@ -120,7 +121,7 @@ describe('trend-video-transfer block', () => {
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({
       inputImageUrl: 'https://cdn.test/person.jpg',
       drivingVideoUrl: 'https://cdn.test/default.mp4',
-      model: 'kling-motion-3.0-std',
+      model: 'wan-motion',
     }));
   });
 

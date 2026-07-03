@@ -180,8 +180,10 @@ export class FalClient {
       }, { connectionRetries: 2, retries: 1 });
       if (!res.ok) return undefined;
       const json = (await res.json().catch(() => ({}))) as { prices?: Array<{ endpoint_id?: string; unit_price?: number; unit?: string }> };
+      // Только точное совпадение endpoint: на неизвестный endpoint_id fal может вернуть общий
+      // список цен, и первая строка — цена чужой модели (ложная себестоимость в AIUsageLog).
       const row = Array.isArray(json.prices)
-        ? (json.prices.find((p) => p.endpoint_id === key) ?? json.prices[0])
+        ? json.prices.find((p) => p.endpoint_id === key)
         : undefined;
       if (row && typeof row.unit_price === 'number') {
         const price = { unitPrice: row.unit_price, unit: String(row.unit ?? '') };

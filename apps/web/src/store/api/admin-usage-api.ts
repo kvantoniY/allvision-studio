@@ -160,13 +160,16 @@ export const adminUsageApi = createApi({
         return { url: `/fal/schema?${params.toString()}` };
       },
     }),
-    getFalPricing: build.query<FalPricingResponse, { slug?: string; endpoint?: string; duration?: number; numImages?: number }>({
+    getFalPricing: build.query<FalPricingResponse, { slug?: string; endpoint?: string; duration?: number; numImages?: number; quality?: string; resolution?: string; aspectRatio?: string }>({
       query: (q) => {
         const params = new URLSearchParams();
         if (q.slug) params.set('slug', q.slug);
         if (q.endpoint) params.set('endpoint', q.endpoint);
         if (q.duration) params.set('duration', String(q.duration));
         if (q.numImages) params.set('numImages', String(q.numImages));
+        if (q.quality) params.set('quality', q.quality);
+        if (q.resolution) params.set('resolution', q.resolution);
+        if (q.aspectRatio) params.set('aspectRatio', q.aspectRatio);
         return { url: `/fal/pricing?${params.toString()}` };
       },
     }),
@@ -183,6 +186,8 @@ export type FalModelsResponse = {
     description?: string;
     unitPrice: number | null;
     unit: string | null;
+    /** Для моделей с тарифом по качеству/разрешению: строка тарифа из документации fal. */
+    docPriceNote?: string;
   }>;
 };
 
@@ -207,6 +212,8 @@ export type FalSchemaResponse = {
 export type FalPricingResponse = {
   available: boolean;
   endpoint?: string;
+  /** docs — цена из документации fal (тариф по качеству/разрешению); live — из pricing API. */
+  source?: 'docs' | 'live';
   unitPrice?: number;
   unit?: string;
   units?: number;

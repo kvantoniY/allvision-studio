@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import IORedis from 'ioredis';
 import { Prisma, prisma } from '@allvision/database';
 import { z } from 'zod';
-import { falEndpointForModel, falBillingUnits, FAL_PRICING_ENDPOINTS, BLOCK_CATALOG } from '@allvision/shared';
+import { falEndpointForModel, falBillingUnits, falDocumentedCostUsd, FAL_PRICING_ENDPOINTS, BLOCK_CATALOG } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { PiAPIAccountClient } from '../../services/piapi-client';
@@ -340,12 +340,32 @@ adminUsageRouter.get('/fal/pricing', async (req: Request, res: Response, next: N
     if (!endpoint) { res.json({ available: false, reason: 'no-endpoint', slug }); return; }
     const duration = req.query.duration ? Number(req.query.duration) : undefined;
     const numImages = req.query.numImages ? Number(req.query.numImages) : undefined;
+    const quality = typeof req.query.quality === 'string' ? req.query.quality : undefined;
+    const resolution = typeof req.query.resolution === 'string' ? req.query.resolution : undefined;
+    const aspectRatio = typeof req.query.aspectRatio === 'string' ? req.query.aspectRatio : undefined;
+    // Модели с тарифом по качеству/разрешению: живой pricing API отдаёт одну unit_price и
+    // не отражает тариф, поэтому цена берётся из документации fal и зависит от настроек шага.
+    const docCost = slug ? falDocumentedCostUsd(slug, { quality, resolution, aspectRatio }) : undefined;
+    if (docCost !== undefined) {
+      const units = numImages && numImages > 0 ? numImages : 1;
+      res.json({
+        available: true,
+        endpoint,
+        source: 'docs',
+        unitPrice: docCost,
+        unit: 'image',
+        units,
+        costUsd: Math.round(docCost * units * 10000) / 10000,
+      });
+      return;
+    }
     const pricing = await getFalPricing(endpoint);
     if (!pricing) { res.json({ available: false, endpoint, reason: 'no-price' }); return; }
     const units = falBillingUnits(pricing.unit, { duration, numImages });
     res.json({
       available: true,
       endpoint,
+      source: 'live',
       unitPrice: pricing.unitPrice,
       unit: pricing.unit,
       units,
@@ -370,7 +390,9 @@ adminUsageRouter.get('/fal/models', async (_req: Request, res: Response, next: N
     const slugs = Object.keys(FAL_PRICING_ENDPOINTS);
     const models = await Promise.all(slugs.map(async (slug) => {
       const endpoint = FAL_PRICING_ENDPOINTS[slug];
-      const pricing = await getFalPricing(endpoint);
+      const docPriceNote = falDocPriceNote(slug);
+      // Для тарифицируемых моделей живой pricing API не отражает тариф — не дёргаем его зря.
+      const pricing = docPriceNote ? null : await getFalPricing(endpoint);
       const meta = titleBySlug.get(slug);
       return {
         slug,
@@ -380,6 +402,7 @@ adminUsageRouter.get('/fal/models', async (_req: Request, res: Response, next: N
         description: meta?.description,
         unitPrice: pricing?.unitPrice ?? null,
         unit: pricing?.unit ?? null,
+        docPriceNote,
       };
     }));
     models.sort((a, b) => a.category.localeCompare(b.category) || a.title.localeCompare(b.title));
@@ -459,6 +482,24 @@ adminUsageRouter.get('/fal/schema', async (req: Request, res: Response, next: Ne
   }
 });
 
+/** Строка тарифа из документации fal для моделей, у которых цена зависит от качества/разрешения. */
+function falDocPriceNote(slug: string): string | undefined {
+  if (slug === 'gpt-image-2') {
+    const range = (quality: string) => {
+      const values = ['1:1', '9:16'].map((aspectRatio) => falDocumentedCostUsd(slug, { quality, aspectRatio }) ?? 0);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      return min === max ? `$${min}` : `$${min}–$${max}`;
+    };
+    return `тариф по качеству: low ${range('low')} · medium ${range('medium')} · high ${range('high')} за картинку (зависит от формата кадра)`;
+  }
+  if (slug === 'nano-banana') {
+    const price = (resolution: string) => falDocumentedCostUsd(slug, { resolution }) ?? 0;
+    return `тариф по разрешению: 1K $${price('1K')} · 2K $${price('2K')} · 4K $${price('4K')} за картинку`;
+  }
+  return undefined;
+}
+
 type FalSchemaField = { name: string; type: string; enum?: string[]; default?: unknown; title?: string; description?: string; minimum?: number; maximum?: number; required: boolean };
 const falSchemaCache = new Map<string, { fields: FalSchemaField[] | null; exp: number }>();
 
@@ -516,7 +557,9 @@ async function getFalPricing(endpoint: string): Promise<{ unitPrice: number; uni
     });
     if (!r.ok) { falPriceCache.set(endpoint, { price: null, exp: Date.now() + 5 * 60 * 1000 }); return null; }
     const json = (await r.json().catch(() => ({}))) as { prices?: Array<{ endpoint_id?: string; unit_price?: number; unit?: string }> };
-    const row = Array.isArray(json.prices) ? (json.prices.find((p) => p.endpoint_id === endpoint) ?? json.prices[0]) : undefined;
+    // Только точное совпадение endpoint: на неизвестный endpoint_id fal может вернуть общий список
+    // цен, и «первая попавшаяся» строка давала цену чужой модели (например, $1 у GPT Image).
+    const row = Array.isArray(json.prices) ? json.prices.find((p) => p.endpoint_id === endpoint) : undefined;
     const price = row && typeof row.unit_price === 'number' ? { unitPrice: row.unit_price, unit: String(row.unit ?? '') } : null;
     falPriceCache.set(endpoint, { price, exp: Date.now() + 60 * 60 * 1000 });
     return price;

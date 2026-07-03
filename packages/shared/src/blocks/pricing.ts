@@ -1,4 +1,5 @@
 import { BLOCK_CATALOG, getBlockCatalogItem } from './catalog';
+import { falDocumentedCostUsd } from './fal-pricing';
 import type { BlockCatalogItem, ModelOption } from './types';
 import {
   PRICING_RUB_PER_TOKEN_DEFAULT,
@@ -126,10 +127,14 @@ export function estimateModelCostUsd(model: ModelOption, params: Record<string, 
   const generateAudio = booleanValue(params.generate_audio) ?? booleanValue(params.generateAudio) ?? false;
   const enableAudio = booleanValue(params.enable_audio) ?? booleanValue(params.enableAudio) ?? false;
 
-  if (model.slug === 'nano-banana') {
-    const costs: Record<string, number> = { '1K': 0.06, '2K': 0.08, '4K': 0.12 };
-    return costs[resolution ?? '1K'] ?? costs['1K'];
-  }
+  // Модели с тарифом по качеству/разрешению считаются по документации fal
+  // (gpt-image-2: quality × формат кадра; nano-banana: разрешение).
+  const docCost = falDocumentedCostUsd(model.slug, {
+    quality: stringValue(params.quality),
+    resolution: stringValue(params.resolution),
+    aspectRatio: stringValue(params.aspect_ratio) ?? stringValue(params.aspectRatio),
+  });
+  if (docCost !== undefined) return docCost;
 
   if (model.slug === 'qubico-video-toolkit') {
     const frames = positiveNumber(params.estimatedFrames) ?? duration * 24;
@@ -191,7 +196,15 @@ function estimateStepModelCostUsd(blockSlug: string, model: ModelOption, params:
     const outputs = normaliseProductOutputs(params.outputs);
     const selected = outputs.length > 0 ? outputs : ['cover'];
     return selected.reduce((sum, output) => {
-      if (output === 'cover') return sum + 0.1;
+      if (output === 'cover') {
+        const coverModel = stringValue(params.cover_model) ?? 'gpt-image-2';
+        const coverCost = falDocumentedCostUsd(coverModel, {
+          quality: stringValue(params.quality),
+          resolution: stringValue(params.resolution),
+          aspectRatio: stringValue(params.aspect_ratio),
+        });
+        return sum + (coverCost ?? 0.1);
+      }
       if (output === 'animation') {
         const duration = positiveNumber(params.animation_duration) ?? 5;
         return sum + 1.3 * Math.max(1, Math.ceil(duration / 5));

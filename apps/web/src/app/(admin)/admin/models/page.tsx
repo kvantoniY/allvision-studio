@@ -81,11 +81,13 @@ export default function AdminModelsPage() {
                   <td className="px-3 py-2 text-slate-400">{m.category}</td>
                   <td className="px-3 py-2 font-mono text-[11px] text-slate-400">{m.endpoint}</td>
                   <td className="px-3 py-2">
-                    {typeof m.unitPrice === 'number'
-                      ? formatMoney({ usd: m.unitPrice }, { primary: 'usd', showAll: true, usdToRub })
-                      : <span className="text-slate-600">н/д</span>}
+                    {m.docPriceNote
+                      ? <span className="text-amber-200/90">{m.docPriceNote}</span>
+                      : typeof m.unitPrice === 'number'
+                        ? formatMoney({ usd: m.unitPrice }, { primary: 'usd', showAll: true, usdToRub })
+                        : <span className="text-slate-600">н/д</span>}
                   </td>
-                  <td className="px-3 py-2 text-slate-400">{m.unit ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-400">{m.docPriceNote ? 'image (докум.)' : (m.unit ?? '—')}</td>
                 </tr>
               ))}
             </tbody>
