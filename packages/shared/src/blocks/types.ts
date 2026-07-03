@@ -33,11 +33,32 @@ export type JsonSchemaObject = {
   properties?: Record<string, JsonSchemaObject | Record<string, unknown>>;
   required?: string[];
   enum?: unknown[];
+  /** Человекочитаемые подписи для enum-значений в admin UI: значение -> подпись. */
+  enumLabels?: Record<string, string>;
   default?: unknown;
   minimum?: number;
   maximum?: number;
   items?: JsonSchemaObject | Record<string, unknown>;
   additionalProperties?: boolean | JsonSchemaObject | Record<string, unknown>;
+  /** id группы из BlockCatalogItem.paramGroups — параметры рендерятся секциями в admin UI. */
+  group?: string;
+};
+
+/** Секция параметров блока в конструкторе услуг (например, поля конкретного режима роутера). */
+export type ParamGroupDef = {
+  id: string;
+  title: string;
+  description?: string;
+  /**
+   * Условная видимость секции: первый параметр из whenFields с КОНКРЕТНЫМ значением
+   * (не плейсхолдер {{...}} и не пусто) определяет режим; секция показывается, если
+   * значение входит в whenValues. Если конкретного значения нет (режим выбирает
+   * пользователь) — секция показывается.
+   */
+  whenFields?: string[];
+  whenValues?: string[];
+  /** Свёрнута по умолчанию (legacy/редко используемые параметры). */
+  collapsed?: boolean;
 };
 
 export interface BlockCatalogItem {
@@ -50,4 +71,6 @@ export interface BlockCatalogItem {
   useWhen?: string;
   compatibleInputs?: string[];
   examples?: string[];
+  /** Секции для группировки параметров в admin-конструкторе (роутеры с режимами). */
+  paramGroups?: ParamGroupDef[];
 }

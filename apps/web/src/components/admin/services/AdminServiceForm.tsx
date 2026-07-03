@@ -52,7 +52,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BlockCatalogItem, JsonSchemaObject, ModelOption, ModelPriceOverrides, PiAPIParamCapability, SourceMediaKind } from '@allvision/shared';
+import type { BlockCatalogItem, JsonSchemaObject, ModelOption, ModelPriceOverrides, ParamGroupDef, PiAPIParamCapability, SourceMediaKind } from '@allvision/shared';
 import {
   applyModelPriceOverride,
   formatMoney,
@@ -537,6 +537,8 @@ function capabilityParamMap(models: ModelOption[]) {
 
 function shouldShowParamForModels(block: BlockCatalogItem, key: string, schema: JsonSchemaObject, models: ModelOption[]) {
   if (key === 'model' || isTierModelSchema(schema)) return true;
+  // У блоков с явными секциями (paramGroups) видимость управляется группами, а не эвристикой моделей.
+  if (block.paramGroups?.length) return true;
   const lowerKey = key.toLowerCase();
   if (lowerKey.includes('prompt')) return true;
   if (block.slug === 'product-card' || block.slug === 'carousel-slides') return true;
@@ -1353,8 +1355,9 @@ function BlockParamsForm({
           {limitWarnings.map((warning) => <div key={warning} className="mt-2 text-amber-300">{warning}</div>)}
         </details>
       )}
-      <div className="grid gap-4 md:grid-cols-2">
-      {paramEntries.map(([key, rawSchema]) => {
+      {(() => {
+      const renderParamEntry = (entry: [string, unknown]) => {
+        const [key, rawSchema] = entry;
         const capabilityParam = capabilityParams.get(key);
         const schema = schemaWithModelOptions(key, schemaObject(rawSchema), selectedModels, capabilityParam);
         const sourceMeta = parseSourceSelectDescription(schema.description);
@@ -1430,9 +1433,12 @@ function BlockParamsForm({
                 onChange={(event) => update(key, coerceBySchema(event.target.value, schema))}
                 className="h-10 w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-700 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
               >
+                {typeof fieldValue === 'string' && fieldValue.includes('{{') && !schema.enum.map(String).includes(fieldValue) && (
+                  <option value={fieldValue}>Из формы пользователя: {fieldValue}</option>
+                )}
                 {schema.enum.map((option) => (
                   <option key={String(option)} value={String(option)}>
-                    {String(option)}
+                    {schema.enumLabels?.[String(option)] ?? String(option)}
                   </option>
                 ))}
               </select>
@@ -1483,8 +1489,53 @@ function BlockParamsForm({
             {description && <p className="text-xs text-slate-500">{description}</p>}
           </div>
         );
-      })}
-      </div>
+      };
+
+      // Секции параметров (роутеры с режимами): группа видна, если её режим выбран конкретно
+      // или режим отдан пользователю (плейсхолдер/пусто). Скрытая группа прячет свои поля.
+      const paramGroups = block.paramGroups ?? [];
+      const groupIds = new Set(paramGroups.map((groupDef) => groupDef.id));
+      const concreteParamValue = (key: string) => {
+        const raw = value[key] ?? schemaObject(block.paramsSchema.properties?.[key]).default;
+        return typeof raw === 'string' && raw.length > 0 && !raw.includes('{{') ? raw : undefined;
+      };
+      const groupVisible = (groupDef: ParamGroupDef) => {
+        if (!groupDef.whenFields?.length || !groupDef.whenValues?.length) return true;
+        const current = groupDef.whenFields.map(concreteParamValue).find((item) => item !== undefined);
+        return current === undefined || groupDef.whenValues.includes(current);
+      };
+      const entryGroupId = (entry: [string, unknown]) => {
+        const groupId = schemaObject(entry[1]).group;
+        return groupId && groupIds.has(groupId) ? groupId : undefined;
+      };
+      const ungroupedEntries = paramEntries.filter((entry) => !entryGroupId(entry));
+
+      return (
+        <>
+          <div className="grid gap-4 md:grid-cols-2">
+            {ungroupedEntries.map(renderParamEntry)}
+          </div>
+          {paramGroups.filter(groupVisible).map((groupDef) => {
+            const entries = paramEntries.filter((entry) => entryGroupId(entry) === groupDef.id);
+            if (entries.length === 0 && !groupDef.description) return null;
+            return (
+              <details
+                key={groupDef.id}
+                open={!groupDef.collapsed}
+                className="group/pgroup rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 [&_summary]:list-none"
+              >
+                <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-white transition-colors hover:text-violet-200">
+                  {groupDef.title}
+                  <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-slate-500 transition-transform group-open/pgroup:rotate-180" />
+                </summary>
+                {groupDef.description && <p className="mt-1.5 text-xs leading-5 text-slate-500">{groupDef.description}</p>}
+                {entries.length > 0 && <div className="mt-3 grid gap-4 md:grid-cols-2">{entries.map(renderParamEntry)}</div>}
+              </details>
+            );
+          })}
+        </>
+      );
+      })()}
     </div>
   );
 }
