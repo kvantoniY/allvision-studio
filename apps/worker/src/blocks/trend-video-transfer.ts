@@ -170,9 +170,11 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
     inputImageUrl = duo.outputUrl;
   }
 
-  // Промпт по умолчанию усиливает сохранение реальной анатомии субъекта (важно для животных/детей).
-  const motionPrompt = parsed.prompt
-    ?? (parsed.people_count === 'two' ? ANATOMY_RULE_TWO : ANATOMY_RULE_ONE);
+  // Промпт motion-transfer строит сам блок (анатомически-безопасный, без человекоцентризма).
+  // Человекоцентричный admin-промпт услуги («person/face») для motion-режима больше не применяется:
+  // он ломал не-человеческие субъекты (кот переворачивался/мазался). enhance_identity=true у wan
+  // лучше держит облик субъекта.
+  const motionPrompt = subjectMotionPrompt(parsed.people_count);
   try {
     const result = await provider.motionTransfer({
       inputImageUrl,
@@ -187,6 +189,7 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
         duration,
         aspect_ratio: parsed.aspect_ratio ?? 'auto',
         resolution: parsed.resolution ?? '720p',
+        enhance_identity: true,
         keep_original_sound: true,
       },
       context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
@@ -219,6 +222,7 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
         duration,
         aspect_ratio: parsed.aspect_ratio ?? 'auto',
         resolution: parsed.resolution ?? '720p',
+        enhance_identity: true,
         keep_original_sound: true,
       },
       context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
@@ -233,41 +237,15 @@ function isKlingCharacterImageRejection(err: unknown): boolean {
   return /may require human in image|failed to upload character image|no complete upper body detected|upper body|image recognition failed|input_value_error/i.test(message);
 }
 
-// Subject-neutral omni prompt used when the human-only motion model rejects the image.
-// Works for people, pets and characters alike. Critically: it must NOT humanize a non-human
-// subject — a dog must keep four legs and paws, not human hands/arms; whatever the subject is,
-// keep its OWN real anatomy from the image and only borrow the motion from the reference video.
-const ANATOMY_RULE_ONE = [
-  'Use @video ONLY as the reference for motion, rhythm, timing, camera and framing — never as an appearance, body or anatomy reference.',
-  'Use @image_1 as the appearance and anatomy reference for the single main subject. The subject may be a human, an animal or a non-human creature.',
-  'Strictly keep the subject\'s real body and anatomy from @image_1: its own head, limbs, body shape and proportions.',
-  'If the subject is an animal, it MUST stay that animal with correct animal anatomy — four legs and paws/hooves, muzzle, tail, fur/feathers/scales exactly as in the image — performing the dance on its own animal body. Never give an animal human hands, human arms, a human torso or a human face.',
-  'If the subject is a human, keep a normal human body. If it is some other creature, keep its own anatomy. Never graft human limbs onto a non-human subject, and never graft animal parts onto a human.',
-  'Adapt the reference choreography naturally to the subject\'s real body instead of forcing a human skeleton onto it.',
-].join(' ');
-const ANATOMY_RULE_TWO = [
-  'Use @video ONLY as the reference for motion, rhythm, timing, camera and framing — never as an appearance, body or anatomy reference.',
-  'Use @image_1 and @image_2 as the appearance and anatomy references for the two main subjects. Each subject may be a human, an animal or a non-human creature.',
-  'Strictly keep each subject\'s real body and anatomy from its image: its own head, limbs, body shape and proportions.',
-  'If a subject is an animal, it MUST stay that animal with correct animal anatomy — four legs and paws/hooves, muzzle, tail, fur/feathers/scales exactly as in the image. Never give an animal human hands, arms, torso or face; never graft human limbs onto a non-human or animal parts onto a human.',
-  'Adapt the reference choreography naturally to each subject\'s real body instead of forcing a human skeleton onto it.',
-].join(' ');
-
-function neutralKlingOmniPrompt(peopleCount: ParsedParams['people_count']) {
+// Промпт для motion-transfer (wan-motion / kling-motion): БЕЗ @-anchor (движки их не понимают) и
+// БЕЗ человекоцентризма («person/face») — иначе на не-человеке (кот, собака) модель гуманизирует
+// субъект, переворачивает и мажет. Держим реальную анатомию субъекта, берём только движение.
+const MOTION_QUALITY_TAIL = 'Adapt the reference choreography naturally to the subject own body instead of forcing a human skeleton onto it. Keep the subject upright and correctly oriented, no mirror flip, no upside-down, no warping, no melting, no distorted limbs. Sharp, clear, well-lit, stable identity across every frame, minimal blur, no text, no watermark.';
+function subjectMotionPrompt(peopleCount: ParsedParams['people_count']): string {
   if (peopleCount === 'two') {
-    return [
-      ANATOMY_RULE_TWO,
-      'Animate those exact two subjects performing a movement matching @video, adapted to each subject\'s own body.',
-      'Keep exactly two subjects, do not add, remove, duplicate or blend subjects, do not copy identity or anatomy from @video.',
-      'Photorealistic vertical social video, stable identities and correct anatomy across every frame, natural believable movement and lighting, no text, no watermark.',
-    ].join(' ');
+    return `Animate exactly the two subjects from the input image so they perform the movement, rhythm, timing and energy of the reference video, while keeping each subject own real identity, body shape and anatomy exactly as in the input image. If a subject is an animal it MUST stay that animal with correct animal anatomy (four legs and paws or hooves, muzzle, tail, natural fur) and never get human hands, arms, torso or a human face; if a subject is a human keep a normal human body. ${MOTION_QUALITY_TAIL}`;
   }
-  return [
-    ANATOMY_RULE_ONE,
-    'Animate that exact subject performing a movement matching @video, adapted to the subject\'s own body.',
-    'Keep exactly one subject, do not add, duplicate or blend subjects, do not copy identity or anatomy from @video.',
-    'Photorealistic vertical social video, stable identity and correct anatomy across every frame, natural believable movement and lighting, no text, no watermark.',
-  ].join(' ');
+  return `Animate exactly the single subject from the input image so it performs the movement, rhythm, timing and energy of the reference video, while keeping the subject own real identity, body shape and anatomy exactly as in the input image. If the subject is an animal it MUST stay that animal with correct animal anatomy (four legs and paws or hooves, muzzle, tail, natural fur) and never get human hands, arms, torso or a human face; if the subject is a human keep a normal human body. ${MOTION_QUALITY_TAIL}`;
 }
 
 async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
