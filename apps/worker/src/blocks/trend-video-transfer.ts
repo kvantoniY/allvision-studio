@@ -194,21 +194,22 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
     await ctx.reportProgress(100);
     return providerResultToOutput(result, 'video');
   } catch (err) {
-    // Kling Motion Control requires a human in the character image and rejects pets/objects with
-    // "Failed to upload character image (may require human in image)". That submit is not billed
-    // (consume: 0), so we transparently fall back to the Kling 3.0 Omni reference flow, which accepts
-    // any subject (person, pet, character). Humans keep using motion_control; only rejected subjects fall back.
-    if (!isNonHumanCharacterError(err)) throw err;
+    // Kling Motion Control (человекоцентричный skeleton) отбивает картинку персонажа по нескольким
+    // причинам: не-человек (питомец/объект) — "may require human in image"; кадрирование — "No complete
+    // upper body detected" / "Image recognition failed" (input_value_error). Во всех этих случаях
+    // прозрачно уходим на Kling 3.0 Omni reference flow: он принимает любой субъект и любое кадрирование.
+    // Успешные motion-control прогоны (человек по пояс) идут прежним путём; фолбэк — только на отказ.
+    if (!isKlingCharacterImageRejection(err)) throw err;
     ctx.logger.warn(
-      '[trend-video-transfer] Kling Motion Control rejected the character image (likely a non-human subject); falling back to Kling 3.0 Omni',
+      `[trend-video-transfer] Kling Motion Control rejected the character image (${(err as Error)?.message ?? ''}); falling back to Kling 3.0 Omni`,
     );
     return runKlingOmni({ ...parsed, prompt: neutralKlingOmniPrompt(parsed.people_count) }, primaryPhoto, ctx);
   }
 }
 
-function isNonHumanCharacterError(err: unknown): boolean {
+function isKlingCharacterImageRejection(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err ?? '');
-  return /may require human in image|failed to upload character image/i.test(message);
+  return /may require human in image|failed to upload character image|no complete upper body detected|upper body|image recognition failed|input_value_error/i.test(message);
 }
 
 // Subject-neutral omni prompt used when the human-only motion model rejects the image.

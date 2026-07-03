@@ -155,6 +155,29 @@ describe('trend-video-transfer block', () => {
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
   });
 
+  it('falls back to Kling 3.0 Omni when Motion Control rejects framing (no upper body)', async () => {
+    const provider = new StubAIProvider();
+    jest
+      .spyOn(provider, 'motionTransfer')
+      .mockRejectedValue(new Error('fal result fetch failed (422): {"detail":[{"msg":"Image recognition failed. Error: No complete upper body detected in the image; ensure the upper body is clearly visible.","type":"input_value_error"}]}'));
+    const omniSpy = jest.spyOn(provider, 'textToVideo');
+
+    const output = await trendVideoTransferBlock.executor(
+      {
+        mode: 'motion_transfer',
+        people_count: 'one',
+        reference_video: 'https://cdn.test/dance.mp4',
+        primary_photo: 'https://cdn.test/face.jpg',
+        duration: 8,
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    expect(omniSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'kling-3-omni' }));
+    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
+  });
+
   it('does not fall back when Motion Control fails for an unrelated reason', async () => {
     const provider = new StubAIProvider();
     jest.spyOn(provider, 'motionTransfer').mockRejectedValue(new Error('PIAPI_TIMEOUT'));

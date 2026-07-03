@@ -627,6 +627,16 @@ trend-video-transfer переописан:
 
 Проверки P11.4: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client` — 14 passed. Реальный fal storage/initiate/PUT проверен прямыми запросами с прод-ВМ (initiate 200, PUT 200). Env `FAL_MAX_IMAGE_DIM` можно поднять/опустить без пересборки.
 
+## Хотфикс P11.5 ✅ — Motion Control: фолбэк на Omni при отказе по кадрированию фото
+
+Ошибка с прода (услуга «Повторить движение», `trend-video-transfer` mode=motion_transfer, `motion_model: kling-motion-3.0-std`): `fal ... (422) input_value_error: "No complete upper body detected in the image; ensure the upper body is clearly visible"`. Kling Motion Control (человекоцентричный) требует чётко видимую верхнюю часть тела; фото юзера не подошло → генерация падала.
+
+В блоке уже был фолбэк на Kling 3.0 Omni для случая «не-человек на фото», но матчер `isNonHumanCharacterError` ловил только `may require human in image`/`failed to upload character image`. Расширил его до `isKlingCharacterImageRejection` — теперь ловит и `no complete upper body detected`, `upper body`, `image recognition failed`, `input_value_error`. Любой отказ Kling Motion Control по картинке персонажа прозрачно уходит на Kling Omni (принимает любой субъект и кадрирование), юзер получает результат вместо ошибки. Успешные motion-control прогоны (человек по пояс) идут прежним путём.
+
+Продуктовая альтернатива (по желанию, в `/admin/services`): сменить `motion_model` услуги на `wan-motion` (pose-retargeting, менее строг к кадрированию и сохраняет анатомию животных) — тогда первый прогон реже будет отбиваться. Код-фолбэк работает независимо и без правок БД.
+
+Проверки P11.5: `npm.cmd run build -w @allvision/worker` — зелёный; worker `trend-video-transfer-block` — 9 passed (добавлен тест на отказ по upper body; тест «unrelated reason» с PIAPI_TIMEOUT по-прежнему НЕ фолбэчит).
+
 ## Конвенции разработки
 
 - Промпты на этапы пишет ассистент (Claude в чате), исполняет Claude Code.
