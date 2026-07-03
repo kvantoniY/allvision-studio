@@ -1106,6 +1106,13 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
           default: 'one',
           description: 'Обычно {{user.people_count}}. При «Два человека» обязательна вторая фотография.',
         },
+        subject_type: {
+          type: 'string',
+          title: 'Кто на фото',
+          enum: ['', 'human', 'animal'],
+          enumLabels: { '': 'Не задано (по motion_model)', human: 'Человек → Kling Motion 3.0 Pro', animal: 'Животное → Wan Motion' },
+          description: 'Обычно {{user.subject_type}}. В режиме «Повторить движение» переопределяет модель: human → kling-motion-3.0-pro (точный перенос на человеке), animal → wan-motion (сохраняет анатомию животного). Пусто — используется motion_model.',
+        },
         reference_video: {
           type: 'string',
           title: 'Референс-видео',

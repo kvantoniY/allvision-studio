@@ -102,6 +102,26 @@ describe('trend-video-transfer block', () => {
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://motion-transfer.mp4' }));
   });
 
+  it('routes subject_type=human to Kling Motion 3.0 Pro and animal to Wan Motion', async () => {
+    const providerHuman = new StubAIProvider();
+    const humanSpy = jest.spyOn(providerHuman, 'motionTransfer');
+    await trendVideoTransferBlock.executor(
+      { mode: 'motion_transfer', people_count: 'one', subject_type: 'human', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/p.jpg', motion_model: 'wan-motion', duration: 6 },
+      undefined,
+      ctx(providerHuman),
+    );
+    expect(humanSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'kling-motion-3.0-pro' }));
+
+    const providerAnimal = new StubAIProvider();
+    const animalSpy = jest.spyOn(providerAnimal, 'motionTransfer');
+    await trendVideoTransferBlock.executor(
+      { mode: 'motion_transfer', people_count: 'one', subject_type: 'animal', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/p.jpg', motion_model: 'kling-motion-3.0-pro', duration: 6 },
+      undefined,
+      ctx(providerAnimal),
+    );
+    expect(animalSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'wan-motion' }));
+  });
+
   it('uses default_mode when the user does not choose a transfer mode', async () => {
     const provider = new StubAIProvider();
     const spy = jest.spyOn(provider, 'motionTransfer');

@@ -2217,6 +2217,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   }, [photoFields]);
   const selectedPreviewVideo = useMemo(() => selectedVideoPreview(fields, values, mediaByKind), [fields, values, mediaByKind]);
   const launchButtonLocked = launchState.isLoading || launchStartedLock;
+  // Кнопка запуска блокируется, пока форма не заполнена (обяз. поля, включая обязательный select
+  // «кто на фото»). blockedByForm вычисляется ниже, после hasEnoughCoins.
+  const validationErrors = useMemo(() => validateClient(fields, values, files), [fields, values, files]);
+  const formIncomplete = validationErrors.length > 0;
 
   useEffect(() => {
     setShouldPoll(hasActiveProject || launchStartedLock);
@@ -2330,6 +2334,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   );
   const balance = user?.tokenBalance ?? 0;
   const hasEnoughCoins = !!user && balance >= price;
+  // Гостю / при нехватке баланса кнопку не глушим (свои flow: логин/пополнение); залогиненному с
+  // балансом — блокируем, пока обязательные поля (в т.ч. select «кто на фото») не заполнены.
+  const blockedByForm = !!user && hasEnoughCoins && formIncomplete;
   const preview = previewImage(service);
   const previewVideo = selectedPreviewVideo ?? (service.previewMode === 'image' ? null : mediaUrl(service.previewVideo));
   const loginHref = `/login?redirect=/services/${service.slug}`;
@@ -2625,7 +2632,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   <Button
                     type="button"
                     onClick={submit}
-                    disabled={launchButtonLocked || isAuthLoading}
+                    disabled={launchButtonLocked || isAuthLoading || blockedByForm}
                     className={cn(
                       'w-full text-slate-950',
                       launchStartedLock
@@ -2643,6 +2650,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     )}
                     {launchStartedLock ? 'Генерация началась!' : `Создать за ${formatTokens(price)}`}
                   </Button>
+                  {blockedByForm && (
+                    <p className="text-center text-xs text-amber-200/90">{validationErrors[0]}</p>
+                  )}
                   {!hasEnoughCoins && user && (
                     <Button asChild variant="outline" className="w-full border-slate-700 bg-slate-950">
                       <Link href="/profile?tab=billing">Пополнить баланс</Link>

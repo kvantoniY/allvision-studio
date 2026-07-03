@@ -92,17 +92,26 @@ export async function validateAndProcessImage(buffer: Buffer): Promise<Processed
   }
 
   const maxSide = Math.max(width, height);
-  if (maxSide > MAX_DIMENSION) {
-    const scale = MAX_DIMENSION / maxSide;
-    const newW = Math.round(width * scale);
-    const newH = Math.round(height * scale);
-    const resized = await sharp(buffer)
-      .resize(newW, newH, { fit: 'inside' })
-      .toBuffer();
-    return { buffer: resized, contentType, dimensions: { width: newW, height: newH } };
+  const needsResize = maxSide > MAX_DIMENSION;
+  // Фото с телефона хранят поворот в EXIF (orientation 6/8), а не в пикселях. Раньше при ресайзе
+  // sharp резал EXIF БЕЗ применения поворота -> фото ложилось набок («повёрнуто на 90°»). Теперь
+  // всегда применяем EXIF-ориентацию (.rotate()) и запекаем её в пиксели.
+  const hasOrientation = (metadata.orientation ?? 1) > 1;
+  if (!needsResize && !hasOrientation) {
+    return { buffer, contentType, dimensions: { width, height } };
   }
 
-  return { buffer, contentType, dimensions: { width, height } };
+  let pipeline = sharp(buffer).rotate(); // авто-ориентация по EXIF + снятие тега
+  if (needsResize) {
+    const scale = MAX_DIMENSION / maxSide;
+    pipeline = pipeline.resize(Math.round(width * scale), Math.round(height * scale), { fit: 'inside' });
+  }
+  if (contentType === 'image/png') pipeline = pipeline.png();
+  else if (contentType === 'image/webp') pipeline = pipeline.webp({ quality: 92 });
+  else pipeline = pipeline.jpeg({ quality: 92 });
+  const out = await pipeline.toBuffer();
+  const outMeta = await sharp(out).metadata();
+  return { buffer: out, contentType, dimensions: { width: outMeta.width ?? width, height: outMeta.height ?? height } };
 }
 
 function ext(contentType: string): string {

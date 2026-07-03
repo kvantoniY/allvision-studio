@@ -1636,11 +1636,22 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
     sortOrder: 12,
     userInputForm: [
       {
+        id: 'subject_type',
+        type: 'select',
+        label: 'Кто на фото?',
+        required: true,
+        hint: 'Человек — точный перенос движения (Kling Motion 3.0 Pro). Животное — сохраняем анатомию (Wan Motion).',
+        options: [
+          { value: 'human', label: 'Человек' },
+          { value: 'animal', label: 'Животное' },
+        ],
+      },
+      {
         id: 'face',
         type: 'photo',
         label: 'Ваше фото',
         required: true,
-        hint: 'Лучше фото человека по пояс или в полный рост, лицо открыто и хорошо видно.',
+        hint: 'Лучше фото по пояс или в полный рост, объект открыт и хорошо виден.',
         allowStudioAvatars: true,
         allowSystemLibrary: false,
       },
@@ -1654,15 +1665,14 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
           mode: 'motion_transfer',
           default_mode: 'motion_transfer',
           people_count: 'one',
+          subject_type: '{{user.subject_type}}',
           reference_video: trendVideo(1),
           primary_photo: '{{user.face}}',
           duration_from_reference: true,
           face_swap_model: 'qubico-video-toolkit',
-          motion_model: 'kling-motion-3.0-std',
+          motion_model: 'kling-motion-3.0-pro',
           aspect_ratio: '9:16',
           resolution: '720p',
-          prompt:
-            'Repeat the dance movement from the reference video while preserving the uploaded person identity. Natural energetic dance, stable face, realistic lighting, vertical social-video framing.',
         },
       },
       {

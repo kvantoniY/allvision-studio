@@ -21,6 +21,7 @@ const paramsSchema = z.object({
   mode: modeSchema.optional(),
   default_mode: modeSchema.default('face_swap').optional(),
   people_count: z.enum(['one', 'two']).default('one'),
+  subject_type: z.enum(['', 'human', 'animal']).optional(),
   reference_video: z.string().min(1),
   primary_photo: z.string().optional(),
   secondary_photo: z.string().optional(),
@@ -147,9 +148,15 @@ async function runFaceSwap(parsed: ParsedParams, primaryPhoto: string, ctx: Bloc
 
 async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
-  // Дефолт — Wan Motion: pose-retargeting под тело персонажа, животные не получают человеческих рук.
-  // Kling Motion Control (человеко-скелетный) остаётся выбираемой альтернативой через motion_model.
-  const motionModel = stringModel(parsed.motion_model, 'wan-motion');
+  // Выбор движка: пользователь на странице услуги указывает, кто на фото.
+  //  human  -> Kling Motion 3.0 Pro (точный перенос на человеке; при отказе по кадрированию — фолбэк на Wan);
+  //  animal -> Wan Motion (pose-retargeting, сохраняет анатомию животного, не даёт человеческих рук);
+  //  не задано -> motion_model услуги (по умолчанию wan-motion как безопасный вариант).
+  const motionModel = parsed.subject_type === 'human'
+    ? 'kling-motion-3.0-pro'
+    : parsed.subject_type === 'animal'
+      ? 'wan-motion'
+      : stringModel(parsed.motion_model, 'wan-motion');
   const duration = await referenceDurationSec(parsed, 5, ctx);
   const baseParams = asObject(parsed);
   let inputImageUrl = primaryPhoto;
