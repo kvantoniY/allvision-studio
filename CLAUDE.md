@@ -615,6 +615,18 @@ trend-video-transfer переописан:
 
 Проверки P11.3: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client` — 14 passed. Реальный fal storage smoke не гонялся (нет FAL_KEY локально); при неверном REST-хосте видео безопасно откатывается на прежнее поведение, а логи `[fal] uploaded ...` / `fal storage upload failed ...` покажут результат на проде.
 
+## Хотфикс P11.4 ✅ — fal image_too_large: downscale входных картинок
+
+Диагноз по прод-логам воркера (SSH): генерации падали `fal result fetch failed (422): image_too_large — Maximum dimensions are 3850x3850 pixels`. Это и есть «ошибка размера»: мы слали фото пользователя как data-uri БЕЗ уменьшения, а фото с телефона легко >3850px по стороне. Затрагивало все fal-вызовы с картинкой-входом (image-to-video Kling, image-edit, scene-transfer/omni). НЕ путать с байтовым payload из P11.3 — тут именно пиксельные размеры.
+
+Фикс (`fal-provider.localizeUrl`):
+- Входные картинки (`image_url`/`image_urls`) перед data-uri прогоняются через `sharp` (в воркере есть, 0.34.5): авто-ориентация по EXIF (`.rotate()`) + downscale длинной стороны до `FAL_MAX_IMAGE_DIM` (по умолчанию 2560, безопасно под 3850). Мелкие картинки без EXIF-ориентации не трогаются. Формат сохраняется (png/webp из-за прозрачности), остальное → jpeg q90. При ошибке sharp — фолбэк на оригинал.
+- Бонус: авто-ориентация чинит перевёрнутые фото с телефона.
+
+Второй фикс (`FalClient.uploadToStorage`): PUT в fal storage (видео) получил 3 попытки на transport-обрыв. По логам egress к `v3b.fal.media` с RU-ВМ флапает («fal storage upload failed: fetch failed»), хотя сам поток рабочий (проверено с ВМ: initiate 200, PUT 200 за 1.5с). Ретрай уменьшает откаты видео на data-uri.
+
+Проверки P11.4: `npm.cmd run build -w @allvision/worker` — зелёный; worker `piapi-client` — 14 passed. Реальный fal storage/initiate/PUT проверен прямыми запросами с прод-ВМ (initiate 200, PUT 200). Env `FAL_MAX_IMAGE_DIM` можно поднять/опустить без пересборки.
+
 ## Конвенции разработки
 
 - Промпты на этапы пишет ассистент (Claude в чате), исполняет Claude Code.

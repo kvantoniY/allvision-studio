@@ -248,29 +248,38 @@ export class FalClient {
     if (!uploadUrl || !fileUrl) {
       throw new ProviderError('FAL_UPLOAD_MALFORMED', `fal storage initiate returned no urls: ${truncate(JSON.stringify(initiateJson))}`);
     }
-    // PUT байтов — отдельный таймаут (файл может грузиться дольше короткого запроса).
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-    try {
-      const putRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': contentType },
-        body: body as unknown as BodyInit,
-        signal: controller.signal,
-      });
-      if (!putRes.ok) {
-        throw new ProviderError('FAL_UPLOAD_PUT_FAILED', `fal storage upload failed (${putRes.status})`, putRes.status);
+    // PUT байтов. Egress к fal.media (CDN) с RU-ВМ флапает — повторяем на transport-обрыв.
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+      try {
+        const putRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': contentType },
+          body: body as unknown as BodyInit,
+          signal: controller.signal,
+        });
+        if (!putRes.ok) {
+          throw new ProviderError('FAL_UPLOAD_PUT_FAILED', `fal storage upload failed (${putRes.status})`, putRes.status);
+        }
+        return fileUrl;
+      } catch (err) {
+        lastErr = err;
+        // HTTP-ошибку и наш таймаут не повторяем; повторяем только обрыв соединения.
+        const isConn = !(err instanceof ProviderError) && (err as Error)?.name !== 'AbortError'
+          && TRANSIENT_CONNECTION_RE.test((err as Error)?.message ?? '');
+        if (!isConn || attempt === 2) break;
+        await delay(backoff(attempt + 1));
+      } finally {
+        clearTimeout(timer);
       }
-    } catch (err) {
-      if (err instanceof ProviderError) throw err;
-      if ((err as Error)?.name === 'AbortError') {
-        throw new ProviderError('FAL_UPLOAD_TIMEOUT', `fal storage upload timed out after ${UPLOAD_TIMEOUT_MS}ms`);
-      }
-      throw new ProviderError('FAL_UPLOAD_NETWORK', `fal storage upload failed: ${(err as Error)?.message ?? 'unknown'}`);
-    } finally {
-      clearTimeout(timer);
     }
-    return fileUrl;
+    if (lastErr instanceof ProviderError) throw lastErr;
+    if ((lastErr as Error)?.name === 'AbortError') {
+      throw new ProviderError('FAL_UPLOAD_TIMEOUT', `fal storage upload timed out after ${UPLOAD_TIMEOUT_MS}ms`);
+    }
+    throw new ProviderError('FAL_UPLOAD_NETWORK', `fal storage upload failed: ${(lastErr as Error)?.message ?? 'unknown'}`);
   }
 
   private jsonHeaders() {

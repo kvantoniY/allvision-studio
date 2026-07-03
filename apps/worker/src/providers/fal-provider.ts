@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import sharp from 'sharp';
 import { prisma } from '@allvision/database';
 import { falDocumentedCostUsd, type StorageProvider } from '@allvision/shared';
 import type { AIProvider, ProviderResult, ProviderRunContext } from './ai-provider';
@@ -12,6 +13,9 @@ import { resolveWorkspacePath } from '../utils/paths';
 // (fal читает байты из тела, ничего не качает). Ограничение размера, чтобы не раздувать запрос.
 const UPLOADS_DIR = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads');
 const MAX_DATAURI_BYTES = Number(process.env.FAL_MAX_DATAURI_BYTES ?? String(25 * 1024 * 1024));
+// fal-модели отбивают вход размером больше 3850×3850px (image_too_large). Уменьшаем длинную
+// сторону входных картинок до безопасного предела и авто-ориентируем по EXIF (фото с телефона).
+const MAX_IMAGE_DIM = Number(process.env.FAL_MAX_IMAGE_DIM ?? '2560');
 const URL_INPUT_KEYS = ['image_url', 'image_urls', 'video_url', 'video_urls'];
 
 type Logger = {
@@ -465,11 +469,44 @@ export class FalProvider implements AIProvider {
         this.logger.warn(`[fal] fal storage upload failed for ${key}, falling back to data-uri/URL`, err);
       }
     }
+    // Картинки: авто-ориентация + downscale под лимит fal (image_too_large при >3850px).
+    if (contentType.startsWith('image/')) {
+      const prepared = await this.prepareImageBuffer(buf, contentType, key);
+      buf = prepared.buffer;
+      contentType = prepared.contentType;
+    }
     if (buf.length > MAX_DATAURI_BYTES) {
       this.logger.warn(`[fal] ${key} too large for data-uri (${buf.length}b), passing URL as-is`);
       return url;
     }
     return `data:${contentType};base64,${buf.toString('base64')}`;
+  }
+
+  /** sharp: авто-ориентация по EXIF + downscale длинной стороны до MAX_IMAGE_DIM (fal image_too_large). */
+  private async prepareImageBuffer(buf: Buffer, contentType: string, key: string): Promise<{ buffer: Buffer; contentType: string }> {
+    try {
+      const image = sharp(buf, { failOn: 'none' });
+      const meta = await image.metadata();
+      const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
+      const needsResize = longest > MAX_IMAGE_DIM;
+      const hasOrientation = (meta.orientation ?? 1) > 1;
+      if (!needsResize && !hasOrientation) return { buffer: buf, contentType };
+      let pipeline = image.rotate(); // применяет EXIF-ориентацию и снимает тег
+      if (needsResize) {
+        pipeline = pipeline.resize({ width: MAX_IMAGE_DIM, height: MAX_IMAGE_DIM, fit: 'inside', withoutEnlargement: true });
+      }
+      // Сохраняем формат (png/webp — из-за прозрачности), остальное -> jpeg.
+      let outType = contentType;
+      if (contentType === 'image/png') pipeline = pipeline.png();
+      else if (contentType === 'image/webp') pipeline = pipeline.webp({ quality: 90 });
+      else { pipeline = pipeline.jpeg({ quality: 90 }); outType = 'image/jpeg'; }
+      const out = await pipeline.toBuffer();
+      this.logger.info(`[fal] prepared image ${key}: ${meta.width}x${meta.height} ${buf.length}b -> ${out.length}b (max ${MAX_IMAGE_DIM})`);
+      return { buffer: out, contentType: outType };
+    } catch (err) {
+      this.logger.warn(`[fal] image prepare failed for ${key}, using original`, err);
+      return { buffer: buf, contentType };
+    }
   }
 
   private async persistOutput(providerUrl: string, context: ProviderRunContext, fallbackExt: string) {
