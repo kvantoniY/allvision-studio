@@ -98,6 +98,31 @@ describe('FalProvider reference payload mapping', () => {
     expect(submitted[0].input.keep_audio).toBe(true);
     // generate_audio не относится к Kling O3 и не должен форситься.
     expect(submitted[0].input.generate_audio).toBeUndefined();
+    // Kling O3 v2v reference требует duration строковым enum '3'..'15' (422 на числе, прод-инцидент).
+    expect(submitted[0].input.duration).toBe('8');
+  });
+
+  it('maps motion transfer via Wan 2.7 reference-to-video to reference_*_urls with integer duration', async () => {
+    const { provider, submitted } = makeProvider();
+    await provider.motionTransfer({
+      inputImageUrl: 'https://cdn.test/cat.jpg',
+      drivingVideoUrl: 'https://cdn.test/dance.mp4',
+      durationSec: 12,
+      model: 'wan-2.7-reference',
+      params: { aspect_ratio: 'auto' },
+      context,
+    });
+
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0].endpoint).toBe('fal-ai/wan/v2.7/reference-to-video');
+    expect(submitted[0].input.reference_image_urls).toEqual(['https://cdn.test/cat.jpg']);
+    expect(submitted[0].input.reference_video_urls).toEqual(['https://cdn.test/dance.mp4']);
+    expect(submitted[0].input.image_urls).toBeUndefined();
+    expect(submitted[0].input.video_urls).toBeUndefined();
+    // duration integer, clamp до 10; aspect 'auto' у Wan 2.7 не существует — опускается.
+    expect(submitted[0].input.duration).toBe(10);
+    expect(submitted[0].input.aspect_ratio).toBeUndefined();
+    expect(typeof submitted[0].input.prompt).toBe('string');
   });
 
   it('sends minimal payload without prompt to DreamActor v2', async () => {

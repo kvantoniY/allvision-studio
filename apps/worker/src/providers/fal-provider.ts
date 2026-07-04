@@ -18,7 +18,7 @@ const MAX_DATAURI_BYTES = Number(process.env.FAL_MAX_DATAURI_BYTES ?? String(25 
 // fal-модели отбивают вход размером больше 3850×3850px (image_too_large). Уменьшаем длинную
 // сторону входных картинок до безопасного предела и авто-ориентируем по EXIF (фото с телефона).
 const MAX_IMAGE_DIM = Number(process.env.FAL_MAX_IMAGE_DIM ?? '2560');
-const URL_INPUT_KEYS = ['image_url', 'image_urls', 'video_url', 'video_urls'];
+const URL_INPUT_KEYS = ['image_url', 'image_urls', 'video_url', 'video_urls', 'reference_image_urls', 'reference_video_urls'];
 
 type Logger = {
   info: (message: string, meta?: unknown) => void;
@@ -95,6 +95,10 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   // (default true) сохраняет оригинальный звук референса. Цена: pro $0.168/с, std $0.126/с.
   'kling-o3-omni': { endpoint: 'fal-ai/kling-video/o3/pro/video-to-video/reference', kind: 'text-to-video', estimatedCostUsd: 1.68 },
   'kling-o3-omni-std': { endpoint: 'fal-ai/kling-video/o3/standard/video-to-video/reference', kind: 'text-to-video', estimatedCostUsd: 1.26 },
+  // Wan 2.7 Reference-to-Video — новейший Wan с видео/фото-референсами (motion + appearance).
+  // ВАЖНО: имена полей другие — reference_image_urls / reference_video_urls; duration integer 2..10;
+  // aspect_ratio БЕЗ 'auto'. Биллинг $0.10/с за (input + output) длительность.
+  'wan-2.7-reference': { endpoint: 'fal-ai/wan/v2.7/reference-to-video', kind: 'text-to-video', estimatedCostUsd: 2 },
   // hailuo text-to-video: слуги *-text (в чате hailuo-2.3/hailuo-2.3-fast — это image-to-video, см. ниже).
   'hailuo-2.3-text': { endpoint: 'fal-ai/minimax/hailuo-02/standard/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
   'hailuo-2.3-fast-text': { endpoint: 'fal-ai/minimax/hailuo-02/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.3 },
@@ -293,26 +297,39 @@ export class FalProvider implements AIProvider {
     // omni reference-сцены (last-kiss и т.п.) озвучиваются на шаге video-compose; модельный звук
     // там стабильно ловит content-policy fal, поэтому его не запрашиваем.
     const isReferenceVideo = config.endpoint.includes('reference-to-video');
-    if (isReferenceVideo) {
+    const isSeedanceReference = isReferenceVideo && config.endpoint.includes('seedance');
+    const isWanReference = isReferenceVideo && config.endpoint.includes('/wan/');
+    const isKlingO3Reference = config.endpoint.includes('video-to-video/reference');
+    if (isSeedanceReference) {
       // ВАЖНО: у Seedance reference-to-video generate_audio по умолчанию TRUE на стороне fal —
       // без явного false модель сочиняет собственную музыку («левый» звук в трендах).
       falInput.generate_audio = readBoolean(input.params, 'generate_audio') ?? false;
     } else if (readBoolean(input.params, 'generate_audio')) {
       falInput.generate_audio = true;
     }
-    // omni-референсы: Seedance reference-to-video ждёт МАССИВ video_urls (@Video1..), а Kling O3
-    // video-to-video/reference — единственный video_url (@Video1). Ошибка тут = референс молча
-    // игнорируется и модель генерит танец «из головы» (баг «танец не с референса»).
+    // omni-референсы: Seedance reference-to-video ждёт МАССИВ video_urls (@Video1..), Kling O3
+    // video-to-video/reference — единственный video_url (@Video1), Wan 2.7 reference-to-video —
+    // reference_image_urls/reference_video_urls. Ошибка в имени поля = референс молча игнорируется
+    // и модель генерит танец «из головы» (баг «танец не с референса»).
     const imageRefs = uniqueUrls([...readStringList(input.params, 'images'), ...readStringList(input.params, 'image_urls')]);
-    if (imageRefs.length > 0) falInput.image_urls = imageRefs;
+    if (imageRefs.length > 0) {
+      if (isWanReference) falInput.reference_image_urls = imageRefs;
+      else falInput.image_urls = imageRefs;
+    }
     const videoRefs = uniqueUrls([readString(input.params, 'video'), ...readStringList(input.params, 'video_urls')]);
     if (videoRefs.length > 0) {
-      if (isReferenceVideo) falInput.video_urls = videoRefs;
+      if (isWanReference) falInput.reference_video_urls = videoRefs;
+      else if (isReferenceVideo) falInput.video_urls = videoRefs;
       else falInput.video_url = videoRefs[0];
     }
-    // Seedance reference-to-video: duration — строковый enum '4'..'15'|'auto' (число даёт 422/игнор).
-    if (isReferenceVideo && config.endpoint.includes('seedance')) {
+    // duration: Seedance — строковый enum '4'..'15'; Kling O3 v2v reference — строковый enum
+    // '3'..'15' (число даёт 422 literal_error, проверено на проде); Wan 2.7 — integer 2..10.
+    if (isSeedanceReference) {
       falInput.duration = String(Math.max(4, Math.min(15, Math.round(input.durationSec || 5))));
+    } else if (isKlingO3Reference) {
+      falInput.duration = String(Math.max(3, Math.min(15, Math.round(input.durationSec || 5))));
+    } else if (isWanReference) {
+      falInput.duration = Math.max(2, Math.min(10, Math.round(input.durationSec || 5)));
     }
     mergePassthrough(falInput, input.params);
 
@@ -681,6 +698,22 @@ export class FalProvider implements AIProvider {
   }): Promise<ProviderResult> {
     if (!input.drivingVideoUrl) {
       throw new ProviderError('MOTION_REFERENCE_REQUIRED', 'Motion Control требует референс-видео движения (video_url)');
+    }
+    // Wan 2.7 Reference-to-Video — omni-модель с другим контрактом (reference_*_urls + prompt);
+    // делегируем в textToVideo, который знает её маппинг полей.
+    if (input.model === 'wan-2.7-reference') {
+      return this.textToVideo({
+        prompt: input.prompt
+          ?? 'The subject from the reference image performs the motion from the reference video naturally, keeping its own identity, body shape and anatomy.',
+        durationSec: input.durationSec,
+        model: input.model,
+        params: {
+          ...input.params,
+          image_urls: [input.inputImageUrl],
+          video_urls: [input.drivingVideoUrl],
+        },
+        context: input.context,
+      });
     }
     const engine = MOTION_ENGINES[input.model] ?? MOTION_ENGINES['kling-motion-3.0-pro'];
     const falInput: Record<string, unknown> = {
