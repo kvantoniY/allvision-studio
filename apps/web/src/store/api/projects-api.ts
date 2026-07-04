@@ -74,6 +74,10 @@ export const projectsApi = createApi({
   // статус/список генераций, не дожидаясь следующего тика поллинга (который в фоне тротлится).
   refetchOnFocus: true,
   refetchOnReconnect: true,
+  // Клиентская навигация между страницами не рефетчит по умолчанию: страница могла показать
+  // кэш без активных проектов и НЕ включить поллинг, пока генерация шла (источник «результат
+  // появляется только после F5»). Свежее 15 секунд — рефетчим при подписке.
+  refetchOnMountOrArgChange: 15,
   tagTypes: ['Project', 'ProjectStatus'],
   endpoints: (build) => ({
     createProject: build.mutation<{ project: ProjectSummary }, FormData>({

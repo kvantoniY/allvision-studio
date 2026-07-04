@@ -7,6 +7,7 @@ import { LogOut } from 'lucide-react';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { DashboardSidebarMobile } from '@/components/dashboard/DashboardSidebarMobile';
 import { Footer } from '@/components/layout/Footer';
+import { ProjectEventsBridge } from '@/components/realtime/ProjectEventsBridge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 
@@ -26,6 +27,8 @@ export function UserWorkspaceShell({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
+      {/* Realtime-обновление статусов генераций на любом экране (SSE); поллинг — фолбэк. */}
+      <ProjectEventsBridge enabled={Boolean(user)} />
       <DashboardSidebar />
       <div className="flex min-h-screen min-w-0 flex-col md:pl-64">
         {user && (

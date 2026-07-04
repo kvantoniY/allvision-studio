@@ -1383,3 +1383,41 @@ Seed уже корректен — менять не пришлось. Фрон�
 P10.2 fix: `https-proxy-agent` отсутствовал в собранном worker-образе (монорепо-резолв в Docker) → воркер падал `MODULE_NOT_FOUND` в крэш-луп. Откатил воркер на предыдущий образ для восстановления прода, затем **переписал прокси на встроенные node-модули** (`http` CONNECT-туннель + `tls.connect` через сокет, `createConnection` в `https.request`) — внешняя зависимость убрана полностью, отсутствие пакета больше не может уронить воркер. `PIAPI_PROXY_URL` работает так же (только gpt-image edits).
 
 P10.2: все услуги переведены на gpt-image-2 (по решению владельца, прокси-маршрут стабилен). Прод-БД: 13 услуг (image-edit/carousel-slides/product-card cover/me-in-cartoon stylize_model) переключены `nano-banana` -> `gpt-image-2` text-replace'ом (видео-модели kling/seedance/omni не тронуты; бэкап `shared/pipeline-backup-nano2gpt-*.tsv`). Проверено воркер-уровнем: `generateGptImage` edits через прокси -> `OK 50s` с URL. Добавлен `gptImageJsonViaHttps`: generations (text-to-image: карусель 1-й слайд, обложки с 1 фото) тоже идут через прокси-туннель при заданном `PIAPI_PROXY_URL`. Seed-источник синхронизирован (model-значения -> gpt-image-2). Риск: прокси-VPS теперь SPOF для ВСЕХ image-услуг; при его падении image-генерации встанут до восстановления или отката на nano-banana.
+
+## Этап P13 ✅ — Realtime-обновление UI (SSE) + танцующие животные (DreamActor v2 / Kling O3 / фикс Seedance omni)
+
+**Задача 1 — «UI не обновляется после завершения генерации без F5, особенно при нескольких».**
+
+Корень: страничный поллинг фрагментирован. `useListProjectsQuery` вызывается с разными аргументами (`limit: 40` на услуге, `30` в Студии, `20` в проектах) — это РАЗНЫЕ кэш-записи RTK Query; условие «поллить или нет» каждая страница выводит из СВОЕГО (возможно устаревшего) кэша, а клиентская навигация между страницами по умолчанию не рефетчит. Сценарий бага: запустил генерацию на странице A → перешёл на B → B видит кэш без активных проектов → не поллит → результат появляется только после F5/фокуса окна.
+
+Фикс — push-события поверх поллинга (поллинг оставлен как фолбэк):
+
+- `packages/shared/src/events/project-events.ts` — контракт: канал Redis `allvision:project-events`, payload `{ projectId, userId, status, progress, kind: status|progress }`, `parseProjectEvent()`.
+- Worker: `apps/worker/src/utils/project-events.ts` — fire-and-forget паблишер (lazy IORedis, ошибки глотаются — при недоступном Redis остаётся поллинг). Хуки: `pipeline-runner` публикует PROCESSING (status), каждый `persistProgress` (kind=progress, с userId), COMPLETED (status); `markProjectFailed` (processors/base) публикует FAILED после транзакции refund'а.
+- API: `GET /api/user/events` (`apps/api/src/routes/user/events.ts`, requireAuth) — SSE-стрим. ОДИН Redis-подписчик на процесс, роутинг события по `userId` в открытые соединения. `Cache-Control: no-cache, no-transform` (иначе compression() буферизует стрим!), `X-Accel-Buffering: no` (nginx не буферизует), heartbeat 25с (docker nginx `proxy_read_timeout 3600s`, но хостовый может резать 60с).
+- Web: `apps/web/src/components/realtime/ProjectEventsBridge.tsx` — монтируется в `UserWorkspaceShell` при наличии user; EventSource с withCredentials; на `kind=status` сразу инвалидирует `projectsApi` (`Project` + `ProjectStatus:id`), тэги чата (`Chats`/`Chat` — сообщения встраивают проект) и account/auth (refund меняет баланс); `kind=progress` — троттлинг 2с. На CLOSED (напр. 401 по истечении access-токена) — silent refresh + реконнект с backoff; при реконнекте полная инвалидация (добор пропущенного).
+- `projectsApi` получил `refetchOnMountOrArgChange: 15` — навигация на страницу с кэшем старше 15с рефетчит список (лечит сценарий «стухший кэш без активных проектов → нет поллинга» даже без SSE).
+
+**Задача 2 — танец животного по референсу (fal.ai).**
+
+Ресёрч fal (схемы через `fal.ai/api/openapi/queue/openapi.json?endpoint_id=...`, цены через каталог/страницы):
+
+- **DreamActor v2 (ByteDance)** `fal-ai/bytedance/dreamactor/v2` — $0.05/с, официально «Great performance for non-human and multiple characters», reference image «real people, animation, pets»; вход image_url + video_url (driving ≤30с), ПРОМПТА НЕТ, `trim_first_second` (default true). Выход `video.url`.
+- **SCAIL-2** `fal-ai/scail-2` (июнь 2026, новейшая) — $0.20/с, end-to-end анимация без скелета, `subject_type: human|animal` (SAM3), mode animation|replacement, 16fps, ≤10с, 512p/704p.
+- **Kling O3 (Omni 3) Reference V2V** `fal-ai/kling-video/o3/{pro,standard}/video-to-video/reference` — $0.168/$0.126 за сек: РЕАЛЬНЫЙ omni-референс Kling на fal (в отличие от text-only `v3/pro/text-to-video`): `video_url` (@Video1, 3–15с, 720–3840px, ≤200MB) + `image_urls` (@Image1.., ≤4) + prompt; `keep_audio` default true — сохраняет оригинальный звук референса.
+- Wan 2.7 `reference-to-video` существует ($0.10/с, биллит input+output), Wan Motion остаётся оптимизированным Wan 2.2 Animate — новее для motion-transfer у Wan ничего нет.
+
+**Найденный критический баг Seedance omni (объясняет «танец не с референса и левая музыка»):** fal `bytedance/seedance-2.0/reference-to-video` принимает референс-видео ТОЛЬКО как массив `video_urls` (@Video1..), а `fal-provider.textToVideo` отправлял `video_url` (ед. число) и блокировал `video_urls` через NEVER_FORWARD → референс-видео вообще не доходило до модели; плюс `generate_audio` у Seedance default TRUE → модель сочиняла свою музыку. Это же касалось scene-transfer с видео-сценой.
+
+Изменения:
+
+- `fal-provider.textToVideo`: для endpoint'ов `reference-to-video` — `video_urls` массивом, `generate_audio` явно false (переопределяется параметром), duration строкой ('4'..'15'); для остальных (Kling O3 v2v) — прежний одиночный `video_url`.
+- `localizeInputUrls(falInput, endpoint)`: для Seedance reference-to-video видео-референс downscale'ится ffmpeg'ом под лимит 834x1112 (`fitVideoWithin`, только downscale, чётные размеры; наши trend-ассеты транскодированы до 1280 и без этого получали бы отказ). При ошибке — исходный файл.
+- `MOTION_ENGINES` + `FAL_MODELS`: добавлены `dreamactor-v2`, `scail-2`, `kling-o3-omni`, `kling-o3-omni-std` (+ payload-ветки: dreamactor без промпта; scail с subject_type/mode/512p|704p).
+- `trend-video-transfer`: `subject_type=animal` → **DreamActor v2** (было wan-motion), при отказе (кроме таймаута) фолбэк на Wan Motion; режим `kling_omni` с референсом → **Kling O3 Reference V2V** (было: редирект на Seedance) — `keep_audio` сохраняет музыку тренда; дефолтные промпты переписаны с якорями по докам (@Video1/@Image1/@Image2, субъект-нейтрально «subject» вместо «person»); seedance aspect default '9:16' → 'auto'.
+- `apps/worker/src/blocks/reference-audio.ts` — `muxReferenceAudioIfSilent()`: если движок вернул немое видео (DreamActor/Wan/Seedance c generate_audio=false), ffmpeg муксит аудиодорожку референс-видео в результат (локальные /static читаются с диска — loopback из контейнера не работает); есть звук в результате → не трогаем; любая ошибка → немой результат, генерация не падает. Применён к motion_transfer, kling_omni, seedance_omni при `keep_original_audio !== false`. В NODE_ENV=test — no-op.
+- Каталог shared: модели DreamActor v2/SCAIL-2 в motionTransferModels, Kling O3 x2 в textToVideoModels; `kling_omni_model` default → `kling-o3-omni`; описания subject_type/motion_model/режимов обновлены.
+
+Проверки P13: shared — 33 passed + build; worker — 17 suites / 98 passed (новые: `fal-provider-reference-payload.test.ts` — video_urls/generate_audio/duration для Seedance, video_url для Kling O3, минимальный payload DreamActor, subject_type SCAIL-2; обновлён `trend-video-transfer-block` — animal→dreamactor с фолбэком и без фолбэка на таймаут, kling_omni→O3), DB-backed (pipeline-runner/piapi-provider/asset-reference) локально не гоняются без Postgres 5433; билды shared/worker/api/web — зелёные.
+
+Технический долг P13: реальный fal-смоук DreamActor v2 / Kling O3 v2v / Seedance reference (с video_urls) не гонялся — проверить на проде первой генерацией с котом; SSE не публикуется из API-шного piapi-recovery-service (восстановленные по таймауту проекты доедут поллингом/refetchOnMountOrArgChange); PiAPIProvider не знает новые слаги (prod на fal — не критично); хостовый nginx не проверен на буферизацию SSE (X-Accel-Buffering: no должен сработать, иначе события доедут пачкой по heartbeat'у).

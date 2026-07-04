@@ -10,6 +10,7 @@ import { markProjectFailed } from './processors/base';
 import { getBlock } from './blocks/registry';
 import type { BlockDefinition, BlockLogger, BlockOutput } from './blocks/types';
 import { logger as defaultLogger } from './utils/logger';
+import { publishProjectEvent } from './utils/project-events';
 import { ProviderError } from './providers/provider-errors';
 import { resolveWorkspacePath } from './utils/paths';
 
@@ -98,6 +99,13 @@ export async function runPipeline(
       stepProgress: toJson(stepProgress),
     },
   });
+  publishProjectEvent({
+    projectId: params.generationId,
+    userId: project.userId,
+    status: 'PROCESSING',
+    progress: 0,
+    kind: 'status',
+  });
 
   let previousOutput: unknown = userInputs;
 
@@ -114,7 +122,7 @@ export async function runPipeline(
           status: 'completed',
           progress: 100,
         };
-        await persistProgress(params.generationId, stepProgress, index, steps.length, 100);
+        await persistProgress(params.generationId, stepProgress, index, steps.length, 100, project.userId);
         continue;
       }
 
@@ -125,7 +133,7 @@ export async function runPipeline(
         status: 'processing',
         progress: 0,
       };
-      await persistProgress(params.generationId, stepProgress, index, steps.length, 0);
+      await persistProgress(params.generationId, stepProgress, index, steps.length, 0, project.userId);
 
       const context: PlaceholderContext = {
         userInputs,
@@ -155,6 +163,7 @@ export async function runPipeline(
               index,
               steps.length,
               safePercent,
+              project.userId,
             );
           },
           reportStage: async (stage: string) => {
@@ -165,6 +174,7 @@ export async function runPipeline(
               index,
               steps.length,
               stepProgress[index].progress ?? 0,
+              project.userId,
             );
           },
         },
@@ -184,6 +194,7 @@ export async function runPipeline(
             index,
             steps.length,
             safePercent,
+            project.userId,
           );
         },
       };
@@ -198,7 +209,7 @@ export async function runPipeline(
         progress: 100,
         output,
       };
-      await persistProgress(params.generationId, stepProgress, index, steps.length, 100);
+      await persistProgress(params.generationId, stepProgress, index, steps.length, 100, project.userId);
     }
 
     const finalOutput = normaliseFinalOutput(previousOutput);
@@ -227,6 +238,13 @@ export async function runPipeline(
         resultAssets: finalOutput.resultAssets ? toJson(finalOutput.resultAssets) : Prisma.JsonNull,
         stepProgress: toJson(stepProgress),
       },
+    });
+    publishProjectEvent({
+      projectId: params.generationId,
+      userId: project.userId,
+      status: 'COMPLETED',
+      progress: 100,
+      kind: 'status',
     });
 
     return {
@@ -736,6 +754,7 @@ async function persistProgress(
   stepIndex: number,
   totalSteps: number,
   stepPercent: number,
+  userId?: string,
 ) {
   const aggregate = Math.round(((stepIndex + clampPercent(stepPercent) / 100) / totalSteps) * 100);
   await prisma.project.update({
@@ -745,6 +764,15 @@ async function persistProgress(
       stepProgress: toJson(stepProgress),
     },
   });
+  if (userId) {
+    publishProjectEvent({
+      projectId: generationId,
+      userId,
+      status: 'PROCESSING',
+      progress: Math.min(99, aggregate),
+      kind: 'progress',
+    });
+  }
 }
 
 function clampPercent(value: number) {

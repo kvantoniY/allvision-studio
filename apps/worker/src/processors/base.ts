@@ -1,5 +1,6 @@
 import { CharacterStatus, EpisodeStatus, prisma, ProjectStatus } from '@allvision/database';
 import { CHARACTER_SLOT_PRICE_TOKENS, generationExpiresAt } from '@allvision/shared';
+import { publishProjectEvent } from '../utils/project-events';
 
 export async function updateProjectProgress(
   projectId: string,
@@ -43,6 +44,7 @@ export async function markProjectFailed(
   options: { refundTokens?: boolean; errorCode?: string } = {},
 ) {
   const refundTokens = options.refundTokens ?? true;
+  let failedUserId: string | undefined;
 
   await prisma.$transaction(async (tx) => {
     const failedAt = new Date();
@@ -52,6 +54,7 @@ export async function markProjectFailed(
     });
     if (!project) return;
     if (project.status === ProjectStatus.COMPLETED) return;
+    failedUserId = project.userId;
 
     await tx.project.update({
       where: { id: projectId },
@@ -93,6 +96,15 @@ export async function markProjectFailed(
       },
     });
   });
+
+  if (failedUserId) {
+    publishProjectEvent({
+      projectId,
+      userId: failedUserId,
+      status: 'FAILED',
+      kind: 'status',
+    });
+  }
 }
 
 export async function markCharacterReady(characterId: string) {

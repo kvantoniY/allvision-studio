@@ -1,4 +1,6 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
 import { prisma } from '@allvision/database';
@@ -88,6 +90,11 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'seedance-2-fast-omni': { endpoint: 'bytedance/seedance-2.0/fast/reference-to-video', kind: 'text-to-video', estimatedCostUsd: 0.75 },
   // kling-3-omni -> Kling v3 pro text-to-video (из реального каталога fal).
   'kling-3-omni': { endpoint: 'fal-ai/kling-video/v3/pro/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
+  // Kling O3 (Omni 3) Reference V2V: НАСТОЯЩИЙ omni-reference Kling на fal — принимает референс-видео
+  // (video_url, @Video1) + фото-референсы (image_urls, @Image1..; максимум 4) + промпт. keep_audio
+  // (default true) сохраняет оригинальный звук референса. Цена: pro $0.168/с, std $0.126/с.
+  'kling-o3-omni': { endpoint: 'fal-ai/kling-video/o3/pro/video-to-video/reference', kind: 'text-to-video', estimatedCostUsd: 1.68 },
+  'kling-o3-omni-std': { endpoint: 'fal-ai/kling-video/o3/standard/video-to-video/reference', kind: 'text-to-video', estimatedCostUsd: 1.26 },
   // hailuo text-to-video: слуги *-text (в чате hailuo-2.3/hailuo-2.3-fast — это image-to-video, см. ниже).
   'hailuo-2.3-text': { endpoint: 'fal-ai/minimax/hailuo-02/standard/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
   'hailuo-2.3-fast-text': { endpoint: 'fal-ai/minimax/hailuo-02/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.3 },
@@ -112,7 +119,7 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
 };
 
 // Движки motion transfer: slug -> fal endpoint + стиль payload + цена/сек (из fal pricing).
-const MOTION_ENGINES: Record<string, { endpoint: string; perSec: number; style: 'kling' | 'wan-motion' | 'wan-animate' }> = {
+const MOTION_ENGINES: Record<string, { endpoint: string; perSec: number; style: 'kling' | 'wan-motion' | 'wan-animate' | 'dreamactor' | 'scail' }> = {
   'kling-motion-3.0-pro': { endpoint: 'fal-ai/kling-video/v3/pro/motion-control', perSec: 0.168, style: 'kling' },
   'kling-motion-3.0-std': { endpoint: 'fal-ai/kling-video/v3/standard/motion-control', perSec: 0.126, style: 'kling' },
   'kling-motion-2.6-pro': { endpoint: 'fal-ai/kling-video/v2.6/pro/motion-control', perSec: 0.112, style: 'kling' },
@@ -120,6 +127,13 @@ const MOTION_ENGINES: Record<string, { endpoint: string; perSec: number; style: 
   'wan-motion': { endpoint: 'fal-ai/wan-motion', perSec: 0.05, style: 'wan-motion' },
   'wan-animate-move': { endpoint: 'fal-ai/wan/v2.2-14b/animate/move', perSec: 0.08, style: 'wan-animate' },
   'wan-animate-replace': { endpoint: 'fal-ai/wan/v2.2-14b/animate/replace', perSec: 0.08, style: 'wan-animate' },
+  // DreamActor v2 (ByteDance): «Great performance for non-human and multiple characters» — перенос
+  // движения/мимики из driving video на персонажа с фото (люди, ПИТОМЦЫ, мультперсонажи). Вход
+  // минимальный: image_url + video_url (driving ≤30с). Промпта у модели НЕТ. $0.05/с output.
+  'dreamactor-v2': { endpoint: 'fal-ai/bytedance/dreamactor/v2', perSec: 0.05, style: 'dreamactor' },
+  // SCAIL-2 (июнь 2026): end-to-end character animation без промежуточного скелета; subject_type
+  // human|animal (SAM3-маска под нелюдей). Выход 16fps, до 10с, 512p/704p. $0.20/с.
+  'scail-2': { endpoint: 'fal-ai/scail-2', perSec: 0.2, style: 'scail' },
 };
 
 // Наборы допустимых aspect для моделей с ограниченным словарём (иначе fal 422 по enum).
@@ -279,13 +293,27 @@ export class FalProvider implements AIProvider {
     // omni reference-сцены (last-kiss и т.п.) озвучиваются на шаге video-compose; модельный звук
     // там стабильно ловит content-policy fal, поэтому его не запрашиваем.
     const isReferenceVideo = config.endpoint.includes('reference-to-video');
-    if (!isReferenceVideo && readBoolean(input.params, 'generate_audio')) falInput.generate_audio = true;
-    // omni-референсы (картинки/видео сцены) — fal-эндпоинты ждут image_urls/video_url; точные имена
-    // полей зависят от модели и подтверждаются смоуком.
+    if (isReferenceVideo) {
+      // ВАЖНО: у Seedance reference-to-video generate_audio по умолчанию TRUE на стороне fal —
+      // без явного false модель сочиняет собственную музыку («левый» звук в трендах).
+      falInput.generate_audio = readBoolean(input.params, 'generate_audio') ?? false;
+    } else if (readBoolean(input.params, 'generate_audio')) {
+      falInput.generate_audio = true;
+    }
+    // omni-референсы: Seedance reference-to-video ждёт МАССИВ video_urls (@Video1..), а Kling O3
+    // video-to-video/reference — единственный video_url (@Video1). Ошибка тут = референс молча
+    // игнорируется и модель генерит танец «из головы» (баг «танец не с референса»).
     const imageRefs = uniqueUrls([...readStringList(input.params, 'images'), ...readStringList(input.params, 'image_urls')]);
     if (imageRefs.length > 0) falInput.image_urls = imageRefs;
     const videoRefs = uniqueUrls([readString(input.params, 'video'), ...readStringList(input.params, 'video_urls')]);
-    if (videoRefs.length > 0) falInput.video_url = videoRefs[0];
+    if (videoRefs.length > 0) {
+      if (isReferenceVideo) falInput.video_urls = videoRefs;
+      else falInput.video_url = videoRefs[0];
+    }
+    // Seedance reference-to-video: duration — строковый enum '4'..'15'|'auto' (число даёт 422/игнор).
+    if (isReferenceVideo && config.endpoint.includes('seedance')) {
+      falInput.duration = String(Math.max(4, Math.min(15, Math.round(input.durationSec || 5))));
+    }
     mergePassthrough(falInput, input.params);
 
     return this.run({
@@ -319,7 +347,7 @@ export class FalProvider implements AIProvider {
     let audioRetried = false;
     await args.context.reportStage?.('Подготовка входных файлов');
     // Наши /static-URL превращаем в data-uri (fal не тянет их с RU-хостинга).
-    await this.localizeInputUrls(args.falInput);
+    await this.localizeInputUrls(args.falInput, args.endpoint);
     try {
       // eslint-disable-next-line no-constant-condition
       while (true) {
@@ -429,18 +457,23 @@ export class FalProvider implements AIProvider {
   }
 
   /** Заменяет наши /static-URL во входных полях на data-uri (по месту, in-place). */
-  private async localizeInputUrls(falInput: Record<string, unknown>): Promise<void> {
+  private async localizeInputUrls(falInput: Record<string, unknown>, endpoint = ''): Promise<void> {
+    // Seedance reference-to-video принимает референс-видео только ~480p..~720p (640x640..834x1112):
+    // наши trend-ассеты транскодируются до 1280 по длинной стороне и БЕЗ downscale получают отказ.
+    const videoFit = endpoint.includes('seedance') && endpoint.includes('reference-to-video')
+      ? { maxWidth: 834, maxHeight: 1112 }
+      : undefined;
     for (const key of URL_INPUT_KEYS) {
       const value = falInput[key];
       if (typeof value === 'string') {
-        falInput[key] = await this.localizeUrl(value);
+        falInput[key] = await this.localizeUrl(value, videoFit);
       } else if (Array.isArray(value)) {
-        falInput[key] = await Promise.all(value.map((v) => (typeof v === 'string' ? this.localizeUrl(v) : v)));
+        falInput[key] = await Promise.all(value.map((v) => (typeof v === 'string' ? this.localizeUrl(v, videoFit) : v)));
       }
     }
   }
 
-  private async localizeUrl(url: string): Promise<string> {
+  private async localizeUrl(url: string, videoFit?: { maxWidth: number; maxHeight: number }): Promise<string> {
     if (!url || url.startsWith('data:')) return url;
     const key = localStaticKey(url);
     if (!key) return url; // внешний URL (fal CDN, библиотека и т.п.) — оставляем
@@ -461,6 +494,14 @@ export class FalProvider implements AIProvider {
     const isVideo = contentType.startsWith('video/');
     if (isVideo) {
       try {
+        if (videoFit) {
+          try {
+            buf = await fitVideoWithin(buf, videoFit.maxWidth, videoFit.maxHeight, this.logger);
+            contentType = 'video/mp4';
+          } catch (err) {
+            this.logger.warn(`[fal] video downscale failed for ${key}, uploading original`, err);
+          }
+        }
         const fileName = key.split('/').pop() || 'input.mp4';
         const falUrl = await this.client.uploadToStorage(buf, contentType, fileName);
         this.logger.info(`[fal] uploaded ${key} (${buf.length}b) to fal storage`);
@@ -645,7 +686,8 @@ export class FalProvider implements AIProvider {
     const falInput: Record<string, unknown> = {
       image_url: input.inputImageUrl,
       video_url: input.drivingVideoUrl,
-      ...(input.prompt ? { prompt: input.prompt } : {}),
+      // DreamActor v2 промпта не имеет — движение целиком берётся из driving video.
+      ...(input.prompt && engine.style !== 'dreamactor' ? { prompt: input.prompt } : {}),
     };
     if (engine.style === 'kling') {
       // required enum image|video. 'video' -> ориентация/длительность из референс-видео (до 30с).
@@ -657,6 +699,17 @@ export class FalProvider implements AIProvider {
       falInput.adapt_motion = readBoolean(input.params, 'adapt_motion') ?? true;
       const enhance = readBoolean(input.params, 'enhance_identity');
       if (enhance !== undefined) falInput.enhance_identity = enhance;
+    } else if (engine.style === 'dreamactor') {
+      // Обрезка 1-секундного перехода в начале выхода DreamActor (рекомендация fal, default true).
+      falInput.trim_first_second = readBoolean(input.params, 'trim_first_second') ?? true;
+    } else if (engine.style === 'scail') {
+      // subject_type=animal переключает SAM3-детекцию на нелюдей; выход только 512p/704p.
+      const subject = readString(input.params, 'subject_type');
+      falInput.subject_type = subject === 'animal' ? 'animal' : 'human';
+      falInput.mode = readString(input.params, 'scail_mode') ?? 'animation';
+      const resolution = readString(input.params, 'resolution');
+      falInput.resolution = resolution && /480|512/.test(resolution) ? '512p' : '704p';
+      if (!falInput.prompt) falInput.prompt = 'The character performs the motion from the driving video naturally, keeping its own identity and anatomy.';
     } else {
       const resolution = readString(input.params, 'resolution');
       if (resolution && /480|580|720/.test(resolution)) falInput.resolution = resolution.replace(/[^0-9]/g, '') + 'p';
@@ -778,6 +831,87 @@ function contentTypeForKey(key: string): string {
   if (ext === 'wav') return 'audio/wav';
   if (ext === 'ogg') return 'audio/ogg';
   return 'image/jpeg';
+}
+
+/** Размеры видео через ffprobe (первый видео-поток). */
+function probeVideoDimensions(filePath: string): Promise<{ width: number; height: number } | undefined> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const child = spawn(
+      'ffprobe',
+      ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'json', filePath],
+      { windowsHide: true },
+    );
+    const stdout: Buffer[] = [];
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGKILL');
+      resolve(undefined);
+    }, 10_000);
+    const finish = (value: { width: number; height: number } | undefined) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    child.stdout.on('data', (chunk) => stdout.push(Buffer.from(chunk)));
+    child.on('error', () => finish(undefined));
+    child.on('close', () => {
+      try {
+        const parsed = JSON.parse(Buffer.concat(stdout).toString('utf8')) as { streams?: Array<{ width?: number; height?: number }> };
+        const stream = parsed.streams?.[0];
+        if (stream && Number.isFinite(stream.width) && Number.isFinite(stream.height)) {
+          finish({ width: Number(stream.width), height: Number(stream.height) });
+          return;
+        }
+      } catch {
+        // fallthrough
+      }
+      finish(undefined);
+    });
+  });
+}
+
+/**
+ * Вписывает видео в maxWidth×maxHeight с сохранением пропорций (только downscale, чётные размеры,
+ * H.264 + AAC). Если видео уже помещается — возвращает исходный буфер без транскода.
+ */
+async function fitVideoWithin(buf: Buffer, maxWidth: number, maxHeight: number, logger: Logger): Promise<Buffer> {
+  const tmpRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'allvision-fal-video-'));
+  const inputPath = path.join(tmpRoot, 'input.mp4');
+  const outputPath = path.join(tmpRoot, 'output.mp4');
+  try {
+    await fs.promises.writeFile(inputPath, buf);
+    const dims = await probeVideoDimensions(inputPath);
+    if (dims && dims.width <= maxWidth && dims.height <= maxHeight) return buf;
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('ffmpeg', [
+        '-y',
+        '-i', inputPath,
+        '-vf', `scale=w=${maxWidth}:h=${maxHeight}:force_original_aspect_ratio=decrease:force_divisible_by=2`,
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '23',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-movflags', '+faststart',
+        outputPath,
+      ], { windowsHide: true });
+      const stderr: Buffer[] = [];
+      child.stderr.on('data', (chunk) => stderr.push(Buffer.from(chunk)));
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(`ffmpeg exited with code ${code}: ${Buffer.concat(stderr).toString('utf8').slice(-1500)}`));
+      });
+    });
+    const out = await fs.promises.readFile(outputPath);
+    logger.info(`[fal] downscaled reference video ${dims ? `${dims.width}x${dims.height}` : '?'} -> fit ${maxWidth}x${maxHeight} (${buf.length}b -> ${out.length}b)`);
+    return out;
+  } finally {
+    await fs.promises.rm(tmpRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 /** Сколько единиц биллинга у fal-запроса по типу unit'а (для unit_price × units). */

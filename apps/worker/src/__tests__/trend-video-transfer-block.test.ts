@@ -102,7 +102,7 @@ describe('trend-video-transfer block', () => {
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://motion-transfer.mp4' }));
   });
 
-  it('routes subject_type=human to Kling Motion 3.0 Pro and animal to Wan Motion', async () => {
+  it('routes subject_type=human to Kling Motion 3.0 Pro and animal to DreamActor v2', async () => {
     const providerHuman = new StubAIProvider();
     const humanSpy = jest.spyOn(providerHuman, 'motionTransfer');
     await trendVideoTransferBlock.executor(
@@ -119,7 +119,43 @@ describe('trend-video-transfer block', () => {
       undefined,
       ctx(providerAnimal),
     );
-    expect(animalSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'wan-motion' }));
+    expect(animalSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'dreamactor-v2' }));
+  });
+
+  it('falls back to Wan Motion when DreamActor v2 rejects the input (but not on timeout)', async () => {
+    const provider = new StubAIProvider();
+    const motionSpy = jest
+      .spyOn(provider, 'motionTransfer')
+      .mockRejectedValueOnce(new Error('fal result fetch failed (422): invalid reference image'))
+      .mockResolvedValueOnce({ outputUrl: 'stub://wan-motion.mp4', costUsd: 0, durationMs: 0, meta: {} });
+
+    const output = await trendVideoTransferBlock.executor(
+      {
+        mode: 'motion_transfer',
+        people_count: 'one',
+        subject_type: 'animal',
+        reference_video: 'https://cdn.test/dance.mp4',
+        primary_photo: 'https://cdn.test/cat.jpg',
+        duration: 8,
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    expect(motionSpy.mock.calls[0][0]).toEqual(expect.objectContaining({ model: 'dreamactor-v2' }));
+    expect(motionSpy).toHaveBeenLastCalledWith(expect.objectContaining({ model: 'wan-motion' }));
+    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://wan-motion.mp4' }));
+
+    // Таймаут НЕ фолбэчит: генерация могла пройти и быть забиллена.
+    const timeoutProvider = new StubAIProvider();
+    jest.spyOn(timeoutProvider, 'motionTransfer').mockRejectedValue(new Error('PIAPI_TIMEOUT: fal request timed out'));
+    await expect(
+      trendVideoTransferBlock.executor(
+        { mode: 'motion_transfer', people_count: 'one', subject_type: 'animal', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/p.jpg', duration: 6 },
+        undefined,
+        ctx(timeoutProvider),
+      ),
+    ).rejects.toThrow('PIAPI_TIMEOUT');
   });
 
   it('uses default_mode when the user does not choose a transfer mode', async () => {
@@ -218,7 +254,7 @@ describe('trend-video-transfer block', () => {
     expect(omniSpy).not.toHaveBeenCalled();
   });
 
-  it('routes kling_omni reference transfer to Seedance Omni (kling-3-omni is text-only on fal)', async () => {
+  it('routes kling_omni reference transfer to Kling O3 Reference V2V (kling-3-omni is text-only on fal)', async () => {
     const provider = new StubAIProvider();
     const spy = jest.spyOn(provider, 'textToVideo');
 
@@ -235,13 +271,14 @@ describe('trend-video-transfer block', () => {
       ctx(provider),
     );
 
-    // kling-3-omni на fal не принимает image/video reference -> прозрачно уходит на seedance-2-omni.
+    // kling-3-omni на fal не принимает image/video reference -> прозрачно уходит на Kling O3 Reference V2V.
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'seedance-2-omni',
+      model: 'kling-o3-omni',
+      prompt: expect.stringContaining('@Video1'),
       params: expect.objectContaining({
-        mode: 'omni_reference',
-        image_urls: ['https://cdn.test/left.jpg', 'https://cdn.test/right.jpg'],
-        video_urls: ['https://cdn.test/duo.mp4'],
+        images: ['https://cdn.test/left.jpg', 'https://cdn.test/right.jpg'],
+        video: 'https://cdn.test/duo.mp4',
+        keep_audio: true,
       }),
     }));
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
@@ -265,14 +302,14 @@ describe('trend-video-transfer block', () => {
     );
 
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({
-      prompt: expect.stringContaining('@image1'),
+      prompt: expect.stringContaining('@Image1'),
       durationSec: 12,
       model: 'seedance-2-omni',
       params: expect.objectContaining({
         mode: 'omni_reference',
         image_urls: ['https://cdn.test/left.jpg', 'https://cdn.test/right.jpg'],
         video_urls: ['https://cdn.test/duo.mp4'],
-        aspect_ratio: '9:16',
+        aspect_ratio: 'auto',
         resolution: '720p',
       }),
     }));

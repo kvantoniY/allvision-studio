@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { getBlockCatalogItem } from '@allvision/shared';
 import type { ProviderRunContext } from '../providers/ai-provider';
+import { muxReferenceAudioIfSilent } from './reference-audio';
 import type { BlockContext, BlockDefinition } from './types';
 import {
   anyInputSchema,
@@ -149,13 +150,14 @@ async function runFaceSwap(parsed: ParsedParams, primaryPhoto: string, ctx: Bloc
 async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
   // Выбор движка: пользователь на странице услуги указывает, кто на фото.
-  //  human  -> Kling Motion 3.0 Pro (точный перенос на человеке; при отказе по кадрированию — фолбэк на Wan);
-  //  animal -> Wan Motion (pose-retargeting, сохраняет анатомию животного, не даёт человеческих рук);
+  //  human  -> Kling Motion 3.0 Pro (точный перенос на человеке; при отказе по кадрированию — фолбэк);
+  //  animal -> DreamActor v2 (ByteDance: «great performance for non-human characters» — питомцы,
+  //            мультперсонажи; полный body+face driving; при отказе — фолбэк на Wan Motion);
   //  не задано -> motion_model услуги (по умолчанию wan-motion как безопасный вариант).
   const motionModel = parsed.subject_type === 'human'
     ? 'kling-motion-3.0-pro'
     : parsed.subject_type === 'animal'
-      ? 'wan-motion'
+      ? 'dreamactor-v2'
       : stringModel(parsed.motion_model, 'wan-motion');
   const duration = await referenceDurationSec(parsed, 5, ctx);
   const baseParams = asObject(parsed);
@@ -182,61 +184,58 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
   // он ломал не-человеческие субъекты (кот переворачивался/мазался). enhance_identity=true у wan
   // лучше держит облик субъекта.
   const motionPrompt = subjectMotionPrompt(parsed.people_count);
+  const runEngine = (model: string) => provider.motionTransfer({
+    inputImageUrl,
+    drivingVideoUrl: parsed.reference_video,
+    prompt: motionPrompt,
+    durationSec: duration,
+    model,
+    params: {
+      ...baseParams,
+      input_image: inputImageUrl,
+      video_url: parsed.reference_video,
+      duration,
+      aspect_ratio: parsed.aspect_ratio ?? 'auto',
+      resolution: parsed.resolution ?? '720p',
+      enhance_identity: true,
+      keep_original_sound: true,
+    },
+    context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
+  });
+  let result;
   try {
-    const result = await provider.motionTransfer({
-      inputImageUrl,
-      drivingVideoUrl: parsed.reference_video,
-      prompt: motionPrompt,
-      durationSec: duration,
-      model: motionModel,
-      params: {
-        ...baseParams,
-        input_image: inputImageUrl,
-        video_url: parsed.reference_video,
-        duration,
-        aspect_ratio: parsed.aspect_ratio ?? 'auto',
-        resolution: parsed.resolution ?? '720p',
-        enhance_identity: true,
-        keep_original_sound: true,
-      },
-      context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
-    });
-    await ctx.reportProgress(100);
-    return providerResultToOutput(result, 'video');
+    result = await runEngine(motionModel);
   } catch (err) {
-    // Kling Motion Control (человекоцентричный skeleton) отбивает картинку персонажа по нескольким
-    // причинам: не-человек (питомец/объект) — "may require human in image"; кадрирование — "No complete
-    // upper body detected" / "Image recognition failed" (input_value_error). Во всех этих случаях
-    // прозрачно уходим на Wan Motion — тот же перенос движения, но pose-retargeting толерантен к
-    // кадрированию и сохраняет анатомию животных/детей (не требует «верхней части тела»).
-    // Успешные motion-control прогоны (человек по пояс) идут прежним путём; фолбэк — только на отказ.
-    // (Kling Omni как фолбэк не годится: его text-to-video endpoint не принимает видео-референс →
-    //  "Invalid reference @Video. No videos provided".)
-    if (!isKlingCharacterImageRejection(err) || motionModel === 'wan-motion') throw err;
+    // Два класса отказов, где фолбэк на Wan Motion уместен:
+    //  - Kling Motion Control (человекоцентричный skeleton) отбивает картинку персонажа:
+    //    не-человек — "may require human in image"; кадрирование — "No complete upper body detected" /
+    //    "Image recognition failed" (input_value_error);
+    //  - DreamActor v2 отклонил вход (кроме таймаута — там генерация могла пройти и её нет смысла дублировать).
+    // Wan Motion — pose-retargeting: толерантен к кадрированию и сохраняет анатомию животных/детей.
+    // (Kling 3 Omni как фолбэк не годится: его text-to-video endpoint не принимает видео-референс.)
+    const dreamactorRejected = motionModel === 'dreamactor-v2' && !isTimeoutError(err);
+    if ((!isKlingCharacterImageRejection(err) && !dreamactorRejected) || motionModel === 'wan-motion') throw err;
     ctx.logger.warn(
-      `[trend-video-transfer] Kling Motion Control rejected the character image (${(err as Error)?.message ?? ''}); falling back to Wan Motion`,
+      `[trend-video-transfer] ${motionModel} rejected the input (${(err as Error)?.message ?? ''}); falling back to Wan Motion`,
     );
-    const result = await provider.motionTransfer({
-      inputImageUrl,
-      drivingVideoUrl: parsed.reference_video,
-      prompt: motionPrompt,
-      durationSec: duration,
-      model: 'wan-motion',
-      params: {
-        ...baseParams,
-        input_image: inputImageUrl,
-        video_url: parsed.reference_video,
-        duration,
-        aspect_ratio: parsed.aspect_ratio ?? 'auto',
-        resolution: parsed.resolution ?? '720p',
-        enhance_identity: true,
-        keep_original_sound: true,
-      },
-      context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
-    });
-    await ctx.reportProgress(100);
-    return providerResultToOutput(result, 'video');
+    result = await runEngine('wan-motion');
   }
+  // Если движок вернул «немое» видео — подкладываем оригинальную дорожку референса (трендовую музыку).
+  if (parsed.keep_original_audio !== false) {
+    result.outputUrl = await muxReferenceAudioIfSilent({
+      resultUrl: result.outputUrl,
+      referenceVideoUrl: parsed.reference_video,
+      ctx,
+    });
+  }
+  await ctx.reportProgress(100);
+  return providerResultToOutput(result, 'video');
+}
+
+function isTimeoutError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  const code = (err as { code?: string })?.code ?? '';
+  return /timeout|timed out/i.test(message) || /TIMEOUT/i.test(code);
 }
 
 function isKlingCharacterImageRejection(err: unknown): boolean {
@@ -257,15 +256,14 @@ function subjectMotionPrompt(peopleCount: ParsedParams['people_count']): string 
 
 async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
-  const model = stringModel(parsed.kling_omni_model, 'kling-3-omni');
-  // ВАЖНО: на fal у kling-3-omni эндпоинт `.../v3/pro/text-to-video` — чистый text-to-video БЕЗ
-  // полей image_url/video_url. Он физически не принимает ни фото, ни референс-видео. Поэтому для
-  // reference-переноса (фото + видео) прозрачно уходим на Seedance 2.0 Omni
-  // (`reference-to-video`, принимает image_urls + video_urls) — единственный рабочий omni-reference
-  // на fal. Иначе фото/видео молча игнорировались бы и получался бы ролик по одному промпту.
-  if (model === 'kling-3-omni' && parsed.reference_video) {
-    ctx.logger.warn('[trend-video-transfer] kling-3-omni on fal is text-only (no image/video reference); routing to Seedance 2.0 Omni for reference transfer');
-    return runSeedanceOmni(parsed, primaryPhoto, ctx);
+  const requested = stringModel(parsed.kling_omni_model, 'kling-3-omni');
+  // На fal у легаси-слага kling-3-omni эндпоинт `.../v3/pro/text-to-video` — чистый text-to-video БЕЗ
+  // полей image_url/video_url. Для reference-переноса (фото + референс-видео) используем Kling O3
+  // Reference V2V (`o3/{pro,standard}/video-to-video/reference`): принимает video_url (@Video1),
+  // image_urls (@Image1..) и промпт; keep_audio=true сохраняет ОРИГИНАЛЬНЫЙ звук референса.
+  const model = parsed.reference_video && requested === 'kling-3-omni' ? 'kling-o3-omni' : requested;
+  if (model !== requested) {
+    ctx.logger.info('[trend-video-transfer] kling-3-omni is text-only on fal; using Kling O3 Reference V2V for reference transfer');
   }
   const duration = await referenceDurationSec(parsed, 10, ctx);
   const images = parsed.people_count === 'two'
@@ -284,14 +282,23 @@ async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: Blo
       images,
       video: parsed.reference_video,
       duration,
-      aspect_ratio: parsed.aspect_ratio ?? '9:16',
+      aspect_ratio: parsed.aspect_ratio ?? 'auto',
       resolution: parsed.resolution ?? '720p',
+      // Kling O3 Reference V2V: keep_audio (default true) — оригинальная дорожка референса.
+      keep_audio: parsed.keep_original_audio ?? true,
       enable_audio: parsed.enable_audio ?? false,
       keep_original_audio: parsed.keep_original_audio ?? true,
       prefer_multi_shots: parsed.prefer_multi_shots ?? false,
     },
     context: scaledContext(ctx.providerContext, ctx.reportProgress, 5, 95),
   });
+  if (parsed.keep_original_audio !== false) {
+    result.outputUrl = await muxReferenceAudioIfSilent({
+      resultUrl: result.outputUrl,
+      referenceVideoUrl: parsed.reference_video,
+      ctx,
+    });
+  }
   await ctx.reportProgress(100);
   return providerResultToOutput(result, 'video');
 }
@@ -317,11 +324,19 @@ async function runSeedanceOmni(parsed: ParsedParams, primaryPhoto: string, ctx: 
       image_urls: imageUrls,
       video_urls: [parsed.reference_video],
       duration,
-      aspect_ratio: parsed.aspect_ratio ?? '9:16',
+      aspect_ratio: parsed.aspect_ratio ?? 'auto',
       resolution: parsed.resolution ?? '720p',
     },
     context: scaledContext(ctx.providerContext, ctx.reportProgress, 5, 95),
   });
+  // Seedance генерит с generate_audio=false (иначе сочиняет свою музыку) — муксим дорожку референса.
+  if (parsed.keep_original_audio !== false) {
+    result.outputUrl = await muxReferenceAudioIfSilent({
+      resultUrl: result.outputUrl,
+      referenceVideoUrl: parsed.reference_video,
+      ctx,
+    });
+  }
   await ctx.reportProgress(100);
   return providerResultToOutput(result, 'video');
 }
@@ -366,44 +381,48 @@ function defaultDuoPrompt() {
   ].join(' ');
 }
 
+// Kling O3 Reference V2V: референс-видео адресуется как @Video1, фото-референсы — @Image1, @Image2
+// (из описания полей в схеме fal). Субъект описан нейтрально («subject», не «person»), чтобы промпт
+// одинаково работал для человека и животного.
 function defaultSingleKlingOmniPrompt() {
   return [
-    'Use @video as the exact motion, timing, camera, background and scene reference.',
-    'Use @image_1 as the identity reference for the only main person.',
-    'Keep exactly one person in the result. Preserve face shape, eyes, nose, mouth, eyebrows, hair, skin tone and natural expression from @image_1.',
-    'Do not copy the identity from @video, do not add people, do not blend identities, no text, no watermark.',
-    'Photorealistic vertical social video, stable identity across every frame, natural body movement and lighting.',
+    'Use @Video1 as the exact motion, timing, camera, background, music and scene reference.',
+    'Replace the main subject of @Video1 with the subject from @Image1, keeping the identity from @Image1.',
+    'Keep exactly one main subject in the result. Preserve its real identity, face, body shape and anatomy from @Image1: an animal stays that exact animal with natural animal anatomy, a human keeps their face and body.',
+    'Do not copy the identity from @Video1, do not add subjects, do not blend identities, no text, no watermark.',
+    'Photorealistic social video, stable identity across every frame, natural movement and lighting.',
   ].join(' ');
 }
 
 function defaultDuoKlingOmniPrompt() {
   return [
-    'Use @video as the exact motion, timing, camera, background and scene reference.',
-    'Use @image_1 as the identity reference for the LEFT person and @image_2 as the identity reference for the RIGHT person.',
-    'Keep exactly two people in the result. Do not add, remove, duplicate or merge people.',
-    'Preserve each identity separately: face shape, eyes, nose, mouth, eyebrows, hair, skin tone and natural expression.',
-    'Do not swap sides, do not blend faces, do not copy identities from @video, no text, no watermark.',
-    'Photorealistic vertical social video, stable identities across every frame, natural dance movement and believable lighting.',
+    'Use @Video1 as the exact motion, timing, camera, background, music and scene reference.',
+    'Use @Image1 as the identity reference for the LEFT subject and @Image2 as the identity reference for the RIGHT subject.',
+    'Keep exactly two subjects in the result. Do not add, remove, duplicate or merge subjects.',
+    'Preserve each identity separately: face, body shape and anatomy exactly as in the reference images.',
+    'Do not swap sides, do not blend identities, do not copy identities from @Video1, no text, no watermark.',
+    'Photorealistic social video, stable identities across every frame, natural dance movement and believable lighting.',
   ].join(' ');
 }
 
+// Seedance 2.0 reference-to-video: якоря по схеме fal — @Image1..@Image9, @Video1..@Video3.
 function defaultSingleSeedanceOmniPrompt() {
   return [
-    'Use the uploaded video as the reference for motion, timing, camera rhythm, framing and scene dynamics.',
-    'Use @image1 as the identity reference for the only main person and @video1 as the video reference.',
-    'Keep exactly one person in the result and preserve the uploaded identity consistently across all frames.',
-    'Do not copy the face from the reference video, do not add people, no text, no watermark.',
-    'Photorealistic vertical social video, natural movement, stable face, believable lighting.',
+    'Use @Video1 as the reference for motion, choreography, timing, camera rhythm, framing and scene dynamics.',
+    'Use @Image1 as the identity reference for the only main subject: recreate the movement from @Video1 performed by the subject from @Image1.',
+    'Keep exactly one main subject in the result and preserve the identity from @Image1 consistently across all frames: an animal stays that exact animal with natural animal anatomy, a human keeps their face and body.',
+    'Do not copy the identity from @Video1, do not add subjects, no text, no watermark.',
+    'Photorealistic social video, natural movement, stable identity, believable lighting.',
   ].join(' ');
 }
 
 function defaultDuoSeedanceOmniPrompt() {
   return [
-    'Use the uploaded video as the reference for motion, timing, camera rhythm, framing and scene dynamics.',
-    'Use @image1 as the identity reference for the LEFT person, @image2 as the identity reference for the RIGHT person and @video1 as the video reference.',
-    'Keep exactly two people in the result, matching the two positions from the reference video.',
-    'Preserve each identity separately, do not swap sides, do not blend faces, do not copy identities from the video.',
-    'Photorealistic vertical social video, stable identities across every frame, natural motion, no text, no watermark.',
+    'Use @Video1 as the reference for motion, choreography, timing, camera rhythm, framing and scene dynamics.',
+    'Use @Image1 as the identity reference for the LEFT subject and @Image2 as the identity reference for the RIGHT subject.',
+    'Keep exactly two subjects in the result, matching the two positions from @Video1.',
+    'Preserve each identity separately, do not swap sides, do not blend identities, do not copy identities from @Video1.',
+    'Photorealistic social video, stable identities across every frame, natural motion, no text, no watermark.',
   ].join(' ');
 }
 

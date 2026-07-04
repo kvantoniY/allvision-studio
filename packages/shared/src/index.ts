@@ -2,6 +2,7 @@ export * from './types';
 export * from './schemas';
 export * from './constants';
 export * from './errors';
+export * from './events/project-events';
 export * from './utils';
 export * from './blocks';
 export * from './chat';
