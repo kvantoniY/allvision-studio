@@ -192,6 +192,7 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
   // Промежуточный шаг для животных: GPT Image ставит питомца в полный рост (вертикально, всё тело
   // в кадре) — motion-модели переносят танец на такую позу существенно лучше, чем на лежащего/
   // обрезанного кота. Управляется admin-параметрами animal_pose_enabled/animal_pose_model/prompt.
+  let poseImageUrl: string | undefined;
   if (isAnimal && parsed.animal_pose_enabled !== false) {
     const poseFrom = motionStartProgress;
     const pose = await provider.imageEdit({
@@ -206,6 +207,7 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
       context: scaledContext(ctx.providerContext, ctx.reportProgress, poseFrom, poseFrom + 20),
     });
     inputImageUrl = pose.outputUrl;
+    poseImageUrl = pose.outputUrl;
     motionStartProgress = poseFrom + 20;
   }
 
@@ -241,7 +243,13 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
     });
   }
   await ctx.reportProgress(100);
-  return providerResultToOutput(result, 'video');
+  const output = providerResultToOutput(result, 'video');
+  if (poseImageUrl) {
+    // Промежуточная поза видна в «Детали генерации»/админке — чтобы можно было проверить глазами,
+    // что в видео-модель ушла именно она, а не исходное фото.
+    output.metadata = { ...output.metadata, animalPoseImage: poseImageUrl };
+  }
+  return output;
 }
 
 // Позитивная формулировка без негаций и слов про blur: «minimal blur» в старом промпте Wan

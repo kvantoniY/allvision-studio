@@ -118,11 +118,15 @@ describe('trend-video-transfer block', () => {
     const providerAnimal = new StubAIProvider();
     const animalSpy = jest.spyOn(providerAnimal, 'motionTransfer');
     const poseSpy = jest.spyOn(providerAnimal, 'imageEdit');
-    await trendVideoTransferBlock.executor(
+    const animalOutput = await trendVideoTransferBlock.executor(
       { mode: 'motion_transfer', people_count: 'one', subject_type: 'animal', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/cat.jpg', motion_model: 'kling-motion-3.0-pro', duration: 6 },
       undefined,
       ctx(providerAnimal),
     );
+    // Промежуточная поза сохраняется в metadata результата (видна в «Детали генерации»).
+    expect(animalOutput).toEqual(expect.objectContaining({
+      metadata: expect.objectContaining({ animalPoseImage: 'stub://edited-image.jpg' }),
+    }));
     // Животное: сначала GPT Image ставит питомца в полный рост, затем движение из позы.
     expect(poseSpy).toHaveBeenCalledWith(expect.objectContaining({
       imageUrl: 'https://cdn.test/cat.jpg',
