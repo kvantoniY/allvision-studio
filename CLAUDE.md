@@ -1429,3 +1429,23 @@ P10.2: все услуги переведены на gpt-image-2 (по реше�
 Wan: проверено по каталогу fal — у Wan 2.7 НЕТ animate/motion-control эндпоинта (Animate остался на 2.2 / Wan Motion), самый новый Wan-путь переноса движения — **Wan 2.7 Reference-to-Video** (`fal-ai/wan/v2.7/reference-to-video`): reference_image_urls + reference_video_urls (motion + appearance), prompt обязателен, duration integer 2..10, aspect БЕЗ 'auto', биллинг $0.10/с за (вход + выход). Добавлен как модель `wan-2.7-reference`: FAL_MODELS + маппинг полей в textToVideo (reference_*_urls), делегация из motionTransfer (доступен в выпадающем списке «Модель переноса движения» админки), ModelOption в motionTransferModels, `reference_*_urls` добавлены в URL_INPUT_KEYS (локализация /static). Дефолт для животных остаётся DreamActor v2; wan-2.7-reference админ выбирает в услуге при желании.
 
 Проверки P13.1: worker `fal-provider-reference-payload trend-video-transfer-block blocks-registry` — 18 passed (новые ассерты: duration '8' строкой у O3, reference_*_urls + integer duration 10 + опущенный aspect 'auto' у Wan 2.7); билды shared/worker — зелёные.
+
+## Этап P13.2 ✅ — Животные: поза в полный рост + Wan 2.7, раздельные модели, БЕЗ фолбэков; фикс «подвисания» запуска
+
+Мотив (владелец): «ублюдский блюр» в результатах Wan — хвост встроенного motion-промпта «...minimal blur...» модель понимала как указание ДОБАВИТЬ размытие; плюс тихий фолбэк на Wan 2.2 маскировал отказы выбранной модели (в дашборде fal видно Wan 2.2 вместо выбранной).
+
+trend-video-transfer (режим «Повторить движение»):
+
+- **Встроенный «анатомический» промпт удалён полностью** (subjectMotionPrompt/MOTION_QUALITY_TAIL с «minimal blur»). Теперь только admin-промпты: `prompt` — для человека/unset, новый `animal_prompt` — для животных (человеческие промпты услуг «person identity, stable face» к животным НЕ применяются; пусто = без подсказки, у Wan 2.7 нейтральный дефолт задаёт провайдер).
+- **Все фолбэки убраны** (isKlingCharacterImageRejection, dreamactor→wan, kling→wan): выбранная модель либо отрабатывает, либо генерация падает с честной ошибкой и refund.
+- **Ветка животных**: промежуточный шаг — `animal_pose_model` (default gpt-image-2, quality=high) ставит питомца В ПОЛНЫЙ РОСТ на задних лапах (весь корпус в кадре, тот же окрас/морда, позитивный промпт без негаций/blur-слов; переопределение `animal_pose_prompt`, выключатель `animal_pose_enabled`), затем движение переносит `animal_motion_model` (default **wan-2.7-reference**).
+- **Ветка человека**: `human_motion_model` (default kling-motion-3.0-pro). `motion_model` остался только для случая «Кто на фото» не задан.
+- Все 5 новых параметров — в каталоге с выпадающими списками моделей (админ меняет модель для людей и животных раздельно в /admin/services).
+
+Прод-БД (`infra`-скрипт `trend-animal-update.sql`, бэкап `shared/trend-backup-p13-2-*.tsv`): в `face-in-trend-pro` («Я в трендовом видео») добавлено поле формы `subject_type` (Человек/Животное, после transferMode) + `params.subject_type={{user.subject_type}}` в шаге 1 — раньше выбор животного там был недоступен; в трёх «Трендовых танцах» обновлена подсказка поля (Wan Motion → поза + Wan 2.7). Новые block-параметры в БД не прописывались — работают code-дефолты, админ меняет через форму услуги.
+
+UI «подвисание» при нажатии «Создать»: multipart-аплоад фото занимает секунды, а визуальной реакции кроме мелкого спиннера не было. Теперь ДО сетевого запроса UI мгновенно переключается на вкладку «Генерации» и показывает карточку «Отправляем запрос… Загружаем файлы на сервер»; при ошибке запуска — возврат на форму + toast (`launchInFlight` в ServiceDetail, `LaunchingCard` в GenerationsPanel).
+
+Проверки P13.2: worker `trend-video-transfer-block fal-provider-reference-payload blocks-registry` — 18 passed (тесты фолбэков заменены на «ошибка пробрасывается, ровно один вызов»; новые: поза+wan-2.7 для животного, оверрайды human/animal моделей и pose toggle, изоляция human-промпта от животных); билды shared/worker/web — зелёные; SQL применён на проде (4 услуги has_subject_field=t/has_subject_param=t).
+
+Технический долг P13.2: реальный смоук цепочки «фото кота → gpt-image поза (проверить и identity, и что fal-обвязка imageEdit не отбрасывает quality=high у edit-эндпоинта) → wan 2.7 reference» — первой генерацией на проде; цены услуг не пересчитывались под подорожавшую цепочку животных (gpt-image high ~$0.19 + wan 2.7 ~$0.10/с × (вход+выход) — заметно дороже старого wan-motion $0.05/с, при 10с референсе ≈ $2.2 себестоимости).

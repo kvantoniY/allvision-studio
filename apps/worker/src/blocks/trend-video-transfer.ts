@@ -30,6 +30,12 @@ const paramsSchema = z.object({
   duration_from_reference: z.boolean().optional(),
   face_swap_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   motion_model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  human_motion_model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  animal_motion_model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  animal_pose_enabled: z.boolean().optional(),
+  animal_pose_model: z.union([z.string(), tierModelParamsSchema]).optional(),
+  animal_pose_prompt: z.string().optional(),
+  animal_prompt: z.string().optional(),
   kling_omni_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   seedance_model: z.union([z.string(), tierModelParamsSchema]).optional(),
   portrait_model: z.union([z.string(), tierModelParamsSchema]).optional(),
@@ -150,18 +156,21 @@ async function runFaceSwap(parsed: ParsedParams, primaryPhoto: string, ctx: Bloc
 async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {
   const provider = ctx.getAIProvider();
   // Выбор движка: пользователь на странице услуги указывает, кто на фото.
-  //  human  -> Kling Motion 3.0 Pro (точный перенос на человеке; при отказе по кадрированию — фолбэк);
-  //  animal -> DreamActor v2 (ByteDance: «great performance for non-human characters» — питомцы,
-  //            мультперсонажи; полный body+face driving; при отказе — фолбэк на Wan Motion);
-  //  не задано -> motion_model услуги (по умолчанию wan-motion как безопасный вариант).
+  //  human  -> human_motion_model (default Kling Motion 3.0 Pro);
+  //  animal -> animal_motion_model (default Wan 2.7 Reference-to-Video) с промежуточным шагом позы;
+  //  не задано -> motion_model услуги (по умолчанию wan-motion).
+  // НИКАКИХ фолбэков на другую модель: выбранная модель либо отрабатывает, либо генерация падает
+  // с честной ошибкой и refund'ом (раньше тихий фолбэк на Wan 2.2 маскировал отказ выбранной модели).
+  const isAnimal = parsed.subject_type === 'animal';
   const motionModel = parsed.subject_type === 'human'
-    ? 'kling-motion-3.0-pro'
-    : parsed.subject_type === 'animal'
-      ? 'dreamactor-v2'
+    ? stringModel(parsed.human_motion_model, 'kling-motion-3.0-pro')
+    : isAnimal
+      ? stringModel(parsed.animal_motion_model, 'wan-2.7-reference')
       : stringModel(parsed.motion_model, 'wan-motion');
   const duration = await referenceDurationSec(parsed, 5, ctx);
   const baseParams = asObject(parsed);
   let inputImageUrl = primaryPhoto;
+  let motionStartProgress = 5;
 
   if (parsed.people_count === 'two') {
     const duo = await provider.imageEdit({
@@ -174,22 +183,43 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
         aspect_ratio: parsed.aspect_ratio === '16:9' ? '16:9' : '9:16',
         resolution: '2K',
       },
-      context: scaledContext(ctx.providerContext, ctx.reportProgress, 5, 35),
+      context: scaledContext(ctx.providerContext, ctx.reportProgress, 5, 25),
     });
     inputImageUrl = duo.outputUrl;
+    motionStartProgress = 25;
   }
 
-  // Промпт motion-transfer строит сам блок (анатомически-безопасный, без человекоцентризма).
-  // Человекоцентричный admin-промпт услуги («person/face») для motion-режима больше не применяется:
-  // он ломал не-человеческие субъекты (кот переворачивался/мазался). enhance_identity=true у wan
-  // лучше держит облик субъекта.
-  const motionPrompt = subjectMotionPrompt(parsed.people_count);
-  const runEngine = (model: string) => provider.motionTransfer({
+  // Промежуточный шаг для животных: GPT Image ставит питомца в полный рост (вертикально, всё тело
+  // в кадре) — motion-модели переносят танец на такую позу существенно лучше, чем на лежащего/
+  // обрезанного кота. Управляется admin-параметрами animal_pose_enabled/animal_pose_model/prompt.
+  if (isAnimal && parsed.animal_pose_enabled !== false) {
+    const poseFrom = motionStartProgress;
+    const pose = await provider.imageEdit({
+      imageUrl: inputImageUrl,
+      prompt: parsed.animal_pose_prompt ?? defaultAnimalPosePrompt(),
+      model: stringModel(parsed.animal_pose_model, 'gpt-image-2'),
+      params: {
+        output_format: 'jpg',
+        quality: 'high',
+        aspect_ratio: parsed.aspect_ratio === '16:9' ? '16:9' : '9:16',
+      },
+      context: scaledContext(ctx.providerContext, ctx.reportProgress, poseFrom, poseFrom + 20),
+    });
+    inputImageUrl = pose.outputUrl;
+    motionStartProgress = poseFrom + 20;
+  }
+
+  const result = await provider.motionTransfer({
     inputImageUrl,
     drivingVideoUrl: parsed.reference_video,
-    prompt: motionPrompt,
+    // Только admin-промпт; встроенного «анатомического» промпта больше нет: его хвост
+    // («...minimal blur...») Wan понимал как указание ДОБАВИТЬ размытие. Ветка животных использует
+    // ОТДЕЛЬНЫЙ animal_prompt: общий prompt услуг человеко-центричен («person identity, stable
+    // face») и портит нелюдей. Пусто -> без текстовой подсказки (у Wan 2.7 нейтральный дефолт
+    // задаёт провайдер).
+    prompt: isAnimal ? parsed.animal_prompt : parsed.prompt,
     durationSec: duration,
-    model,
+    model: motionModel,
     params: {
       ...baseParams,
       input_image: inputImageUrl,
@@ -200,26 +230,8 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
       enhance_identity: true,
       keep_original_sound: true,
     },
-    context: scaledContext(ctx.providerContext, ctx.reportProgress, parsed.people_count === 'two' ? 35 : 5, 95),
+    context: scaledContext(ctx.providerContext, ctx.reportProgress, motionStartProgress, 95),
   });
-  let result;
-  try {
-    result = await runEngine(motionModel);
-  } catch (err) {
-    // Два класса отказов, где фолбэк на Wan Motion уместен:
-    //  - Kling Motion Control (человекоцентричный skeleton) отбивает картинку персонажа:
-    //    не-человек — "may require human in image"; кадрирование — "No complete upper body detected" /
-    //    "Image recognition failed" (input_value_error);
-    //  - DreamActor v2 отклонил вход (кроме таймаута — там генерация могла пройти и её нет смысла дублировать).
-    // Wan Motion — pose-retargeting: толерантен к кадрированию и сохраняет анатомию животных/детей.
-    // (Kling 3 Omni как фолбэк не годится: его text-to-video endpoint не принимает видео-референс.)
-    const dreamactorRejected = motionModel === 'dreamactor-v2' && !isTimeoutError(err);
-    if ((!isKlingCharacterImageRejection(err) && !dreamactorRejected) || motionModel === 'wan-motion') throw err;
-    ctx.logger.warn(
-      `[trend-video-transfer] ${motionModel} rejected the input (${(err as Error)?.message ?? ''}); falling back to Wan Motion`,
-    );
-    result = await runEngine('wan-motion');
-  }
   // Если движок вернул «немое» видео — подкладываем оригинальную дорожку референса (трендовую музыку).
   if (parsed.keep_original_audio !== false) {
     result.outputUrl = await muxReferenceAudioIfSilent({
@@ -232,26 +244,15 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
   return providerResultToOutput(result, 'video');
 }
 
-function isTimeoutError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err ?? '');
-  const code = (err as { code?: string })?.code ?? '';
-  return /timeout|timed out/i.test(message) || /TIMEOUT/i.test(code);
-}
-
-function isKlingCharacterImageRejection(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err ?? '');
-  return /may require human in image|failed to upload character image|no complete upper body detected|upper body|image recognition failed|input_value_error/i.test(message);
-}
-
-// Промпт для motion-transfer (wan-motion / kling-motion): БЕЗ @-anchor (движки их не понимают) и
-// БЕЗ человекоцентризма («person/face») — иначе на не-человеке (кот, собака) модель гуманизирует
-// субъект, переворачивает и мажет. Держим реальную анатомию субъекта, берём только движение.
-const MOTION_QUALITY_TAIL = 'Adapt the reference choreography naturally to the subject own body instead of forcing a human skeleton onto it. Keep the subject upright and correctly oriented, no mirror flip, no upside-down, no warping, no melting, no distorted limbs. Sharp, clear, well-lit, stable identity across every frame, minimal blur, no text, no watermark.';
-function subjectMotionPrompt(peopleCount: ParsedParams['people_count']): string {
-  if (peopleCount === 'two') {
-    return `Animate exactly the two subjects from the input image so they perform the movement, rhythm, timing and energy of the reference video, while keeping each subject own real identity, body shape and anatomy exactly as in the input image. If a subject is an animal it MUST stay that animal with correct animal anatomy (four legs and paws or hooves, muzzle, tail, natural fur) and never get human hands, arms, torso or a human face; if a subject is a human keep a normal human body. ${MOTION_QUALITY_TAIL}`;
-  }
-  return `Animate exactly the single subject from the input image so it performs the movement, rhythm, timing and energy of the reference video, while keeping the subject own real identity, body shape and anatomy exactly as in the input image. If the subject is an animal it MUST stay that animal with correct animal anatomy (four legs and paws or hooves, muzzle, tail, natural fur) and never get human hands, arms, torso or a human face; if the subject is a human keep a normal human body. ${MOTION_QUALITY_TAIL}`;
+// Позитивная формулировка без негаций и слов про blur: «minimal blur» в старом промпте Wan
+// трактовал как «добавь размытие».
+function defaultAnimalPosePrompt() {
+  return [
+    'Show the exact same animal from the photo standing upright on its hind legs, full body visible from head to feet, centered in a vertical frame.',
+    'Keep the same species, breed, fur pattern, colors, markings, face and eyes as in the original photo.',
+    'Natural relaxed stance ready to dance, paws down at its sides, looking at the camera.',
+    'Photorealistic, sharp focus, even soft lighting, clean simple studio background.',
+  ].join(' ');
 }
 
 async function runKlingOmni(parsed: ParsedParams, primaryPhoto: string, ctx: BlockContext) {

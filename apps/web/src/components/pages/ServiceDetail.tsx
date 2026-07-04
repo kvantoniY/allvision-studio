@@ -2030,9 +2030,24 @@ function GenerationCard({
   );
 }
 
+// Оптимистичная карточка на время аплоада: multipart-запуск с фото занимает секунды, и без
+// мгновенной обратной связи интерфейс выглядит «подвисшим» до ответа сервера.
+function LaunchingCard() {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-amber-500/40 bg-slate-900 p-4">
+      <Loader2 className="h-5 w-5 shrink-0 animate-spin text-amber-400" />
+      <div className="min-w-0">
+        <div className="text-sm font-semibold text-slate-100">Отправляем запрос…</div>
+        <div className="mt-0.5 text-xs text-slate-400">Загружаем файлы на сервер, это занимает несколько секунд.</div>
+      </div>
+    </div>
+  );
+}
+
 function GenerationsPanel({
   projects,
   isLoading,
+  launching = false,
   expandedId,
   onExpandedChange,
   onDeleted,
@@ -2040,6 +2055,7 @@ function GenerationsPanel({
 }: {
   projects: ProjectListItem[];
   isLoading: boolean;
+  launching?: boolean;
   expandedId: string | null;
   onExpandedChange: (id: string) => void;
   onDeleted: (id: string) => void;
@@ -2048,6 +2064,7 @@ function GenerationsPanel({
   if (isLoading) {
     return (
       <div className="space-y-3">
+        {launching && <LaunchingCard />}
         <Skeleton className="h-28 rounded-lg" />
         <Skeleton className="h-20 rounded-lg" />
         <Skeleton className="h-20 rounded-lg" />
@@ -2056,6 +2073,13 @@ function GenerationsPanel({
   }
 
   if (projects.length === 0) {
+    if (launching) {
+      return (
+        <div className="space-y-3">
+          <LaunchingCard />
+        </div>
+      );
+    }
     return (
       <div className="grid min-h-[360px] place-items-center rounded-lg border border-dashed border-slate-800 bg-slate-950/60 p-8 text-center">
         <div>
@@ -2071,6 +2095,7 @@ function GenerationsPanel({
 
   return (
     <div className="space-y-3">
+      {launching && <LaunchingCard />}
       {projects.map((project) => (
         <GenerationCard
           key={project.id}
@@ -2186,6 +2211,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [activeView, setActiveView] = useState<ServiceDetailView>('service');
   const [expandedGenerationId, setExpandedGenerationId] = useState<string | null>(null);
   const [launchStartedLock, setLaunchStartedLock] = useState(false);
+  // true, пока multipart-запуск летит на сервер: мгновенно показываем вкладку «Генерации»
+  // с карточкой «Отправляем запрос…», чтобы UI не выглядел подвисшим на время аплоада фото.
+  const [launchInFlight, setLaunchInFlight] = useState(false);
   const serviceTopRef = useRef<HTMLElement>(null);
   const [shouldPoll, setShouldPoll] = useState(false);
   const projectsQuery = useListProjectsQuery(
@@ -2433,22 +2461,28 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       if (file) formData.append(field.id, file);
     }
 
+    // Мгновенная обратная связь ДО сетевого запроса: аплоад фото занимает секунды, и без этого
+    // интерфейс выглядел подвисшим («нажал — ничего не происходит»).
+    setLaunchInFlight(true);
+    setActiveView('generations');
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      window.requestAnimationFrame(() => {
+        serviceTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+
     try {
       const result = await launchService({ slug: service.slug, formData }).unwrap();
       setLaunchStartedLock(true);
-      setActiveView('generations');
       setExpandedGenerationId(result.project.id);
       void projectsQuery.refetch();
-      if (window.matchMedia('(max-width: 1023px)').matches) {
-        window.requestAnimationFrame(() => {
-          serviceTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        });
-      }
       toast({
         title: 'Генерация запущена',
         description: 'Прогресс и результат появятся слева во вкладке «Генерации».',
       });
     } catch (error) {
+      // Запуск не состоялся — возвращаем пользователя к форме услуги.
+      setActiveView('service');
       const code = getErrorCode(error);
       if (code === 'INSUFFICIENT_TOKENS') {
         toast({
@@ -2464,6 +2498,8 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
         description: launchErrorMessage(error),
         className: warningToastClass,
       });
+    } finally {
+      setLaunchInFlight(false);
     }
   };
 
@@ -2536,6 +2572,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
             <GenerationsPanel
               projects={projects}
               isLoading={projectsQuery.isLoading}
+              launching={launchInFlight}
               expandedId={expandedGenerationId}
               onExpandedChange={setExpandedGenerationId}
               onRetry={() => {

@@ -102,60 +102,133 @@ describe('trend-video-transfer block', () => {
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://motion-transfer.mp4' }));
   });
 
-  it('routes subject_type=human to Kling Motion 3.0 Pro and animal to DreamActor v2', async () => {
+  it('routes subject_type=human to the human model and animal to pose step + animal model', async () => {
     const providerHuman = new StubAIProvider();
     const humanSpy = jest.spyOn(providerHuman, 'motionTransfer');
+    const humanEditSpy = jest.spyOn(providerHuman, 'imageEdit');
     await trendVideoTransferBlock.executor(
       { mode: 'motion_transfer', people_count: 'one', subject_type: 'human', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/p.jpg', motion_model: 'wan-motion', duration: 6 },
       undefined,
       ctx(providerHuman),
     );
     expect(humanSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'kling-motion-3.0-pro' }));
+    // Для человека промежуточного image-шага нет.
+    expect(humanEditSpy).not.toHaveBeenCalled();
 
     const providerAnimal = new StubAIProvider();
     const animalSpy = jest.spyOn(providerAnimal, 'motionTransfer');
+    const poseSpy = jest.spyOn(providerAnimal, 'imageEdit');
     await trendVideoTransferBlock.executor(
-      { mode: 'motion_transfer', people_count: 'one', subject_type: 'animal', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/p.jpg', motion_model: 'kling-motion-3.0-pro', duration: 6 },
+      { mode: 'motion_transfer', people_count: 'one', subject_type: 'animal', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/cat.jpg', motion_model: 'kling-motion-3.0-pro', duration: 6 },
       undefined,
       ctx(providerAnimal),
     );
-    expect(animalSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'dreamactor-v2' }));
+    // Животное: сначала GPT Image ставит питомца в полный рост, затем движение из позы.
+    expect(poseSpy).toHaveBeenCalledWith(expect.objectContaining({
+      imageUrl: 'https://cdn.test/cat.jpg',
+      model: 'gpt-image-2',
+      prompt: expect.stringContaining('standing upright'),
+    }));
+    expect(animalSpy).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'wan-2.7-reference',
+      inputImageUrl: 'stub://edited-image.jpg',
+    }));
   });
 
-  it('falls back to Wan Motion when DreamActor v2 rejects the input (but not on timeout)', async () => {
+  it('does not leak the human prompt into the animal branch (uses animal_prompt instead)', async () => {
     const provider = new StubAIProvider();
-    const motionSpy = jest
-      .spyOn(provider, 'motionTransfer')
-      .mockRejectedValueOnce(new Error('fal result fetch failed (422): invalid reference image'))
-      .mockResolvedValueOnce({ outputUrl: 'stub://wan-motion.mp4', costUsd: 0, durationMs: 0, meta: {} });
-
-    const output = await trendVideoTransferBlock.executor(
+    const spy = jest.spyOn(provider, 'motionTransfer');
+    await trendVideoTransferBlock.executor(
       {
         mode: 'motion_transfer',
         people_count: 'one',
         subject_type: 'animal',
-        reference_video: 'https://cdn.test/dance.mp4',
+        prompt: 'preserve the uploaded person identity, stable face',
+        animal_prompt: 'the cat dances with joy',
+        reference_video: 'https://cdn.test/d.mp4',
         primary_photo: 'https://cdn.test/cat.jpg',
-        duration: 8,
+        duration: 6,
       },
       undefined,
       ctx(provider),
     );
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'the cat dances with joy' }));
 
-    expect(motionSpy.mock.calls[0][0]).toEqual(expect.objectContaining({ model: 'dreamactor-v2' }));
-    expect(motionSpy).toHaveBeenLastCalledWith(expect.objectContaining({ model: 'wan-motion' }));
-    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://wan-motion.mp4' }));
+    const providerNoPrompt = new StubAIProvider();
+    const spyNoPrompt = jest.spyOn(providerNoPrompt, 'motionTransfer');
+    await trendVideoTransferBlock.executor(
+      {
+        mode: 'motion_transfer',
+        people_count: 'one',
+        subject_type: 'animal',
+        prompt: 'preserve the uploaded person identity, stable face',
+        reference_video: 'https://cdn.test/d.mp4',
+        primary_photo: 'https://cdn.test/cat.jpg',
+        duration: 6,
+      },
+      undefined,
+      ctx(providerNoPrompt),
+    );
+    expect(spyNoPrompt).toHaveBeenCalledWith(expect.objectContaining({ prompt: undefined }));
+  });
 
-    // Таймаут НЕ фолбэчит: генерация могла пройти и быть забиллена.
-    const timeoutProvider = new StubAIProvider();
-    jest.spyOn(timeoutProvider, 'motionTransfer').mockRejectedValue(new Error('PIAPI_TIMEOUT: fal request timed out'));
+  it('respects admin overrides for human/animal motion models and pose toggle', async () => {
+    const provider = new StubAIProvider();
+    const motionSpy = jest.spyOn(provider, 'motionTransfer');
+    const editSpy = jest.spyOn(provider, 'imageEdit');
+    await trendVideoTransferBlock.executor(
+      {
+        mode: 'motion_transfer',
+        people_count: 'one',
+        subject_type: 'animal',
+        animal_motion_model: 'scail-2',
+        animal_pose_enabled: false,
+        reference_video: 'https://cdn.test/d.mp4',
+        primary_photo: 'https://cdn.test/cat.jpg',
+        duration: 6,
+      },
+      undefined,
+      ctx(provider),
+    );
+    expect(editSpy).not.toHaveBeenCalled();
+    expect(motionSpy).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'scail-2',
+      inputImageUrl: 'https://cdn.test/cat.jpg',
+    }));
+
+    const providerHuman = new StubAIProvider();
+    const humanSpy = jest.spyOn(providerHuman, 'motionTransfer');
+    await trendVideoTransferBlock.executor(
+      { mode: 'motion_transfer', people_count: 'one', subject_type: 'human', human_motion_model: 'kling-motion-2.6-pro', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/p.jpg', duration: 6 },
+      undefined,
+      ctx(providerHuman),
+    );
+    expect(humanSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'kling-motion-2.6-pro' }));
+  });
+
+  it('does NOT fall back to another model: the selected model error propagates', async () => {
+    const provider = new StubAIProvider();
+    const motionSpy = jest
+      .spyOn(provider, 'motionTransfer')
+      .mockRejectedValue(new Error('fal result fetch failed (422): may require human in image'));
+
     await expect(
       trendVideoTransferBlock.executor(
-        { mode: 'motion_transfer', people_count: 'one', subject_type: 'animal', reference_video: 'https://cdn.test/d.mp4', primary_photo: 'https://cdn.test/p.jpg', duration: 6 },
+        {
+          mode: 'motion_transfer',
+          people_count: 'one',
+          subject_type: 'animal',
+          reference_video: 'https://cdn.test/dance.mp4',
+          primary_photo: 'https://cdn.test/cat.jpg',
+          duration: 8,
+        },
         undefined,
-        ctx(timeoutProvider),
+        ctx(provider),
       ),
-    ).rejects.toThrow('PIAPI_TIMEOUT');
+    ).rejects.toThrow('may require human in image');
+    // Ровно один вызов: тихого повтора другой моделью (Wan 2.2 и т.п.) больше нет.
+    expect(motionSpy).toHaveBeenCalledTimes(1);
+    expect(motionSpy).toHaveBeenCalledWith(expect.objectContaining({ model: 'wan-2.7-reference' }));
   });
 
   it('uses default_mode when the user does not choose a transfer mode', async () => {
@@ -181,61 +254,11 @@ describe('trend-video-transfer block', () => {
     }));
   });
 
-  it('falls back to Wan Motion when Kling Motion Control rejects a non-human image', async () => {
+  it('propagates Kling Motion Control rejection without silent retry', async () => {
     const provider = new StubAIProvider();
     const motionSpy = jest
       .spyOn(provider, 'motionTransfer')
-      .mockRejectedValueOnce(new Error('submit: Failed to upload character image (may require human in image)'))
-      .mockResolvedValueOnce({ outputUrl: 'stub://wan-motion.mp4', costUsd: 0, durationMs: 0, meta: {} });
-
-    const output = await trendVideoTransferBlock.executor(
-      {
-        mode: 'motion_transfer',
-        people_count: 'one',
-        reference_video: 'https://cdn.test/dance.mp4',
-        primary_photo: 'https://cdn.test/cat.jpg',
-        motion_model: 'kling-motion-3.0-std',
-        duration: 8,
-      },
-      undefined,
-      ctx(provider),
-    );
-
-    expect(motionSpy).toHaveBeenLastCalledWith(expect.objectContaining({
-      model: 'wan-motion',
-      inputImageUrl: 'https://cdn.test/cat.jpg',
-      drivingVideoUrl: 'https://cdn.test/dance.mp4',
-    }));
-    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://wan-motion.mp4' }));
-  });
-
-  it('falls back to Wan Motion when Kling Motion Control rejects framing (no upper body)', async () => {
-    const provider = new StubAIProvider();
-    const motionSpy = jest
-      .spyOn(provider, 'motionTransfer')
-      .mockRejectedValueOnce(new Error('fal result fetch failed (422): {"detail":[{"msg":"Image recognition failed. Error: No complete upper body detected in the image; ensure the upper body is clearly visible.","type":"input_value_error"}]}'))
-      .mockResolvedValueOnce({ outputUrl: 'stub://wan-motion.mp4', costUsd: 0, durationMs: 0, meta: {} });
-
-    const output = await trendVideoTransferBlock.executor(
-      {
-        mode: 'motion_transfer',
-        people_count: 'one',
-        reference_video: 'https://cdn.test/dance.mp4',
-        primary_photo: 'https://cdn.test/face.jpg',
-        motion_model: 'kling-motion-3.0-std',
-        duration: 8,
-      },
-      undefined,
-      ctx(provider),
-    );
-
-    expect(motionSpy).toHaveBeenLastCalledWith(expect.objectContaining({ model: 'wan-motion' }));
-    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://wan-motion.mp4' }));
-  });
-
-  it('does not fall back when Motion Control fails for an unrelated reason', async () => {
-    const provider = new StubAIProvider();
-    jest.spyOn(provider, 'motionTransfer').mockRejectedValue(new Error('PIAPI_TIMEOUT'));
+      .mockRejectedValue(new Error('fal result fetch failed (422): {"detail":[{"msg":"No complete upper body detected in the image","type":"input_value_error"}]}'));
     const omniSpy = jest.spyOn(provider, 'textToVideo');
 
     await expect(
@@ -244,13 +267,15 @@ describe('trend-video-transfer block', () => {
           mode: 'motion_transfer',
           people_count: 'one',
           reference_video: 'https://cdn.test/dance.mp4',
-          primary_photo: 'https://cdn.test/person.jpg',
+          primary_photo: 'https://cdn.test/face.jpg',
+          motion_model: 'kling-motion-3.0-std',
           duration: 8,
         },
         undefined,
         ctx(provider),
       ),
-    ).rejects.toThrow('PIAPI_TIMEOUT');
+    ).rejects.toThrow('No complete upper body detected');
+    expect(motionSpy).toHaveBeenCalledTimes(1);
     expect(omniSpy).not.toHaveBeenCalled();
   });
 
