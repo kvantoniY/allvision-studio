@@ -253,13 +253,17 @@ async function runMotionTransfer(parsed: ParsedParams, primaryPhoto: string, ctx
 }
 
 // Позитивная формулировка без негаций и слов про blur: «minimal blur» в старом промпте Wan
-// трактовал как «добавь размытие».
+// трактовал как «добавь размытие». Фон НЕ заменяется: животное встаёт в полный рост там же,
+// где было снято (диван — стоит на диване, стол — на столе); если место непонятно — реалистичная
+// подходящая поверхность.
 function defaultAnimalPosePrompt() {
   return [
-    'Show the exact same animal from the photo standing upright on its hind legs, full body visible from head to feet, centered in a vertical frame.',
+    'Edit the photo so the exact same animal is standing upright on its hind legs, full body visible from head to feet, in the same place as in the original photo.',
+    'Keep the original background, environment, surface and lighting of the photo: if the animal was on a sofa it now stands on that sofa, if on a table it stands on that table, if on the floor it stands on that floor.',
+    'If the original surface or location is unclear, place the animal on a realistic surface that naturally fits the scene.',
     'Keep the same species, breed, fur pattern, colors, markings, face and eyes as in the original photo.',
     'Natural relaxed stance ready to dance, paws down at its sides, looking at the camera.',
-    'Photorealistic, sharp focus, even soft lighting, clean simple studio background.',
+    'Photorealistic, sharp focus.',
   ].join(' ');
 }
 

@@ -1415,6 +1415,37 @@ function FieldControl({
   }
 
   if (field.type === 'select') {
+    const selectOptions = field.options ?? [];
+    // Короткие списки (например «Кто на фото?»: Человек/Животное) — крупные кнопки-переключатели
+    // вместо выпадашки: выбор заметнее, а до выбора обязательного поля кнопка запуска заблокирована.
+    const asButtons = selectOptions.length > 0
+      && selectOptions.length <= 3
+      && selectOptions.every((option) => option.label.length <= 24);
+    if (asButtons) {
+      return (
+        <div className="space-y-2">
+          <Label htmlFor={field.id}>{label} {required}</Label>
+          <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${selectOptions.length}, minmax(0, 1fr))` }}>
+            {selectOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onValueChange(field.id, option.value)}
+                className={cn(
+                  'rounded-md border px-3 py-2 text-sm font-semibold transition',
+                  option.value === value
+                    ? 'border-amber-400 bg-amber-400 text-slate-950'
+                    : 'border-slate-700 bg-slate-950 text-slate-100 hover:border-slate-500',
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {field.hint && <p className="text-xs leading-5 text-slate-500">{field.hint}</p>}
+        </div>
+      );
+    }
     return (
       <div className="space-y-2">
         <Label htmlFor={field.id}>{label} {required}</Label>
