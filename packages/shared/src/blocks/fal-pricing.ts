@@ -14,6 +14,8 @@ export const FAL_PRICING_ENDPOINTS: Record<string, string> = {
   'recraft-v3': 'fal-ai/recraft/v3/text-to-image',
   'ideogram-v3': 'fal-ai/ideogram/v3',
   'seedream-5-lite': 'fal-ai/bytedance/seedream/v5/lite/text-to-image',
+  'seedream-4': 'fal-ai/bytedance/seedream/v4/text-to-image',
+  'seedream-4.5': 'fal-ai/bytedance/seedream/v4.5/text-to-image',
   'grok-image': 'xai/grok-imagine-image',
   // text-to-video
   'veo-3.1': 'fal-ai/veo3.1',

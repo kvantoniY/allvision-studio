@@ -29,6 +29,10 @@ export interface FalClientOptions {
   apiKey: string;
   queueBaseUrl?: string;
   requestTimeoutMs?: number;
+  /** Сколько всего заходов на скачивание готового результата (default env FAL_DOWNLOAD_RETRY_ATTEMPTS | 5). */
+  downloadRetryAttempts?: number;
+  /** Бэкофф между заходами скачивания; последний элемент повторяется. */
+  downloadRetryBackoffMs?: number[];
 }
 
 export interface FalSubmitResult {
@@ -61,6 +65,8 @@ export class FalClient {
   private apiKey: string;
   private queueBaseUrl: string;
   private requestTimeoutMs: number;
+  private downloadRetryAttempts: number;
+  private downloadRetryBackoffMs: number[];
   private priceCache = new Map<string, { price: { unitPrice: number; unit: string }; exp: number }>();
 
   constructor(options: FalClientOptions) {
@@ -72,6 +78,9 @@ export class FalClient {
     // иначе queueBaseUrl='' и URL получается относительным ('/fal-ai/...') -> fetch не парсит.
     this.queueBaseUrl = (options.queueBaseUrl || DEFAULT_QUEUE_BASE).replace(/\/+$/, '');
     this.requestTimeoutMs = options.requestTimeoutMs ?? 60_000;
+    this.downloadRetryAttempts = options.downloadRetryAttempts
+      ?? Math.max(1, Number(process.env.FAL_DOWNLOAD_RETRY_ATTEMPTS ?? '5') || 5);
+    this.downloadRetryBackoffMs = options.downloadRetryBackoffMs ?? [3_000, 10_000, 25_000, 60_000];
   }
 
   /** Ставит задачу в очередь fal. modelId — например 'fal-ai/veo3.1' или 'fal-ai/nano-banana/edit'. */
@@ -201,9 +210,35 @@ export class FalClient {
     return undefined;
   }
 
-  /** Скачивает итоговый файл (картинку/видео) с fal CDN. */
+  /**
+   * Скачивает итоговый файл (картинку/видео) с fal CDN.
+   *
+   * Результат к этому моменту уже сгенерирован и ОПЛАЧЕН на fal, поэтому сдаваться из-за флапа
+   * egress РФ-ВМ -> fal.media (UND_ERR_CONNECT_TIMEOUT, прод-инцидент 05.07) слишком дорого:
+   * повторяем скачивание с крупным бэкоффом (суммарно ~2-3 минуты). Каждый заход — свежее
+   * соединение: DNS может отдать другой, достижимый CDN-хост. 4xx (результат недоступен/удалён)
+   * не ретраим — это не транспортная проблема.
+   */
   async download(url: string): Promise<{ buffer: Buffer; contentType: string }> {
-    const res = await this.fetchWithRetry(url, { method: 'GET', headers: {} }, { connectionRetries: 3, retries: 1 });
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < this.downloadRetryAttempts; attempt += 1) {
+      if (attempt > 0) {
+        const backoff = this.downloadRetryBackoffMs[Math.min(attempt - 1, this.downloadRetryBackoffMs.length - 1)];
+        await delay(backoff);
+      }
+      try {
+        return await this.downloadOnce(url);
+      } catch (err) {
+        lastErr = err;
+        if (!isRetriableDownloadError(err)) throw err;
+      }
+    }
+    throw lastErr instanceof Error ? lastErr : new ProviderError('FAL_DOWNLOAD_FAILED', 'fal download failed');
+  }
+
+  private async downloadOnce(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+    // Внутренние ретраи маленькие: политикой повторов владеет внешний цикл download().
+    const res = await this.fetchWithRetry(url, { method: 'GET', headers: {} }, { connectionRetries: 1, retries: 0 });
     if (!res.ok) {
       throw new ProviderError('FAL_DOWNLOAD_FAILED', `fal download failed (${res.status})`, res.status);
     }
@@ -356,6 +391,13 @@ export class FalClient {
 
 function backoff(attempt: number) {
   return Math.min(8_000, 500 * 2 ** (attempt - 1));
+}
+
+/** Транспортные обрывы/таймауты и 5xx ретраим; 4xx (нет файла/доступа) — нет. */
+function isRetriableDownloadError(err: unknown): boolean {
+  if (!(err instanceof ProviderError)) return false;
+  if (err.code === 'FAL_NETWORK_ERROR' || err.code === 'FAL_TIMEOUT') return true;
+  return err.code === 'FAL_DOWNLOAD_FAILED' && typeof err.status === 'number' && err.status >= 500;
 }
 
 function delay(ms: number) {

@@ -47,11 +47,13 @@ interface FalModelConfig {
   estimatedCostUsd: number;
   /**
    * Как строить aspect_ratio/resolution для этой модели:
-   * - default: наши aspect_ratio + resolution (nano/gpt/seedream/flux/kling/veo — принимают/игнорят лишнее).
+   * - default: наши aspect_ratio + resolution (nano/flux/kling/veo — принимают/игнорят лишнее).
    * - minimal: только prompt/refs/duration, без aspect/resolution (безопасно для моделей с чужим enum).
    * - grok-image / grok-video: свой словарь (resolution 1k/2k и 480p/720p, ограниченный набор aspect).
+   * - gpt-image / seedream-size: у модели НЕТ aspect_ratio — формат кадра задаётся полем image_size
+   *   (square_hd/portrait_16_9/...). Без конвертации выбор формата юзером молча игнорировался.
    */
-  paramProfile?: 'default' | 'minimal' | 'aspect-only' | 'grok-image' | 'grok-video';
+  paramProfile?: 'default' | 'minimal' | 'aspect-only' | 'grok-image' | 'grok-video' | 'gpt-image' | 'seedream-size';
 }
 
 /**
@@ -66,10 +68,14 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   // Nano Banana Pro (Gemini 3 Pro image) — флагман по консистентности лица и рендеру текста.
   'nano-banana': { endpoint: 'fal-ai/nano-banana-pro', editEndpoint: 'fal-ai/nano-banana-pro/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.14 },
   // GPT Image 2 (последняя image-модель OpenAI) живёт в неймспейсе openai/ на fal.
-  'gpt-image-2': { endpoint: 'openai/gpt-image-2', editEndpoint: 'openai/gpt-image-2/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.1 },
+  'gpt-image-2': { endpoint: 'openai/gpt-image-2', editEndpoint: 'openai/gpt-image-2/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.1, paramProfile: 'gpt-image' },
   'flux-schnell': { endpoint: 'fal-ai/flux/schnell', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { endpoint: 'fal-ai/flux/dev', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.025 },
   'seedream-5-lite': { endpoint: 'fal-ai/bytedance/seedream/v5/lite/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v5/lite/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.03 },
+  // Seedream 4.0 / 4.5 (ByteDance): формат кадра через image_size (см. paramProfile seedream-size);
+  // auto_2K/auto_4K берут формат из референса, качеством управляет param resolution 2K|4K.
+  'seedream-4': { endpoint: 'fal-ai/bytedance/seedream/v4/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v4/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.03, paramProfile: 'seedream-size' },
+  'seedream-4.5': { endpoint: 'fal-ai/bytedance/seedream/v4.5/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v4.5/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.04, paramProfile: 'seedream-size' },
   // Grok Imagine (xAI). resolution 1k/2k, ограниченный набор aspect — профиль grok-image.
   'grok-image': { endpoint: 'xai/grok-imagine-image', editEndpoint: 'xai/grok-imagine-image/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.05, paramProfile: 'grok-image' },
   'flux-pro-ultra': { endpoint: 'fal-ai/flux-pro/v1.1-ultra', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.06, paramProfile: 'aspect-only' },
@@ -144,10 +150,36 @@ const MOTION_ENGINES: Record<string, { endpoint: string; perSec: number; style: 
 const GROK_IMAGE_ASPECTS = new Set(['1:1', '16:9', '9:16', '2:3', '3:2']);
 const GROK_VIDEO_ASPECTS = new Set(['auto', '16:9', '4:3', '3:2', '1:1', '2:3', '3:4', '9:16']);
 
+// Конвертация нашего aspect_ratio в image_size-словарь gpt-image-2 / seedream v4+.
+const IMAGE_SIZE_BY_ASPECT: Record<string, string> = {
+  '1:1': 'square_hd',
+  '9:16': 'portrait_16_9',
+  '16:9': 'landscape_16_9',
+  '3:4': 'portrait_4_3',
+  '4:3': 'landscape_4_3',
+  '2:3': 'portrait_4_3',
+  '3:2': 'landscape_4_3',
+  '9:21': 'portrait_16_9',
+  '21:9': 'landscape_16_9',
+};
+
 /** Возвращает extra-поля aspect_ratio/resolution по профилю модели, безопасно (без enum-422). */
 function imageProfileFields(profile: FalModelConfig['paramProfile'], aspect: string | undefined, resolution: string | undefined): Record<string, unknown> {
   if (profile === 'minimal') return {};
   if (profile === 'aspect-only') return aspect ? { aspect_ratio: aspect } : {};
+  if (profile === 'gpt-image') {
+    // gpt-image-2 не знает aspect_ratio/resolution: формат кадра -> image_size, качеством
+    // управляет отдельный param quality (проброс через passthrough). auto -> опускаем (default auto).
+    const size = aspect ? IMAGE_SIZE_BY_ASPECT[aspect] : undefined;
+    return size ? { image_size: size } : {};
+  }
+  if (profile === 'seedream-size') {
+    const size = aspect ? IMAGE_SIZE_BY_ASPECT[aspect] : undefined;
+    if (size) return { image_size: size };
+    // Авто-формат: enum'а 'auto' у seedream v4.5 нет — auto_2K/auto_4K по параметру resolution.
+    if (resolution && /4k/i.test(resolution)) return { image_size: 'auto_4K' };
+    return { image_size: 'auto_2K' };
+  }
   if (profile === 'grok-image') {
     const out: Record<string, unknown> = {};
     if (aspect && GROK_IMAGE_ASPECTS.has(aspect)) out.aspect_ratio = aspect;
@@ -226,6 +258,9 @@ export class FalProvider implements AIProvider {
     const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
     const resolution = readString(input.params, 'resolution');
     Object.assign(falInput, imageProfileFields(config.paramProfile, aspect, resolution));
+    // Явный image_size из параметров шага (панель «Критерии модели») важнее профильной конвертации.
+    const explicitImageSize = readString(input.params, 'image_size');
+    if (explicitImageSize) falInput.image_size = explicitImageSize;
     if (useEdit) {
       // Все наши image-edit эндпоинты (nano-banana/edit, gpt-image-1/edit-image, seedream/v4/edit)
       // требуют image_urls[] — даже для одного фото. Раньше при одном реф-фото слали image_url
@@ -434,9 +469,17 @@ export class FalProvider implements AIProvider {
       }
     } catch (err) {
       const durationMs = Date.now() - startedAt;
-      await this.logUsage(args.context, args.model, requestId, 'failed', 0, durationMs, {
+      // Если fal успел завершить задачу (completed есть), генерация уже оплачена провайдером —
+      // даже когда мы не смогли скачать результат. Пишем фактическую стоимость (иначе /admin/usage
+      // занижает расходы) и recoverableOutputUrl, чтобы результат можно было забрать вручную.
+      const recoverableOutputUrl = completed ? extractOutputUrl(completed.output, args.kind) : undefined;
+      const billedCost = completed
+        ? await this.resolveActualCost(args.endpoint, args.falInput, completed.costUsd, args.estimatedCost)
+        : undefined;
+      await this.logUsage(args.context, args.model, requestId, 'failed', billedCost?.costUsd ?? 0, durationMs, {
         errorCode: err instanceof ProviderError ? err.code : 'FAL_ERROR',
         errorMessage: (err as Error).message,
+        recoverableOutputUrl,
         requestPayload: { endpoint: args.endpoint, input: args.falInput },
         responsePayload: completed ? { output: completed.output } : undefined,
       }).catch(() => undefined);
@@ -587,6 +630,7 @@ export class FalProvider implements AIProvider {
     extra: {
       errorCode?: string;
       errorMessage?: string;
+      recoverableOutputUrl?: string;
       requestPayload?: unknown;
       responsePayload?: unknown;
     },
@@ -603,6 +647,7 @@ export class FalProvider implements AIProvider {
       durationMs,
       errorCode: extra.errorCode,
       errorMessage: extra.errorMessage,
+      recoverableOutputUrl: extra.recoverableOutputUrl,
       requestPayload: extra.requestPayload,
       responsePayload: extra.responsePayload,
     }).catch((err) => this.logger.warn('[fal] failed to write AIUsageLog', err));

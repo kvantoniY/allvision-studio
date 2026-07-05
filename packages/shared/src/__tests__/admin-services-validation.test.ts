@@ -54,6 +54,27 @@ describe('admin service validation messages', () => {
     expect(formatAdminServiceValidationError('[{"code":"too_small"}]')).not.toContain('"code"');
   });
 
+  it('skips enum validation for params of other models (seedream + legacy gpt quality)', () => {
+    const step = (model: unknown) => [
+      {
+        id: 'step_1',
+        blockSlug: 'image-edit',
+        input: '{{user.photo}}',
+        // quality: 'standard' — легаси-значение PiAPI-эпохи, невалидное для gpt-enum.
+        params: { model, prompt: 'edit', quality: 'standard' },
+      },
+    ];
+    const fields = [
+      { id: 'tier', type: 'tier' as const, label: 'tier', required: true },
+      { id: 'photo', type: 'photo' as const, label: 'photo', required: true },
+    ];
+    // Seedream не объявляет quality — чужой параметр не должен валить пайплайн.
+    expect(() => validatePipelineConfig(step('seedream-5-lite'), fields)).not.toThrow();
+    expect(() => validatePipelineConfig(step({ standard: 'seedream-5-lite', pro: 'seedream-5-lite' }), fields)).not.toThrow();
+    // Для gpt-image-2 quality — свой параметр, невалидное значение по-прежнему ловится.
+    expect(() => validatePipelineConfig(step('gpt-image-2'), fields)).toThrow('INVALID_PARAMS:params.step_1.quality');
+  });
+
   it('accepts legacy motion-transfer driving_video params during validation', () => {
     expect(() =>
       validatePipelineConfig(

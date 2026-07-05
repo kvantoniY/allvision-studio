@@ -209,7 +209,11 @@ export function validatePipelineConfig(
     if (step.when && !fieldIds.has(step.when.field)) {
       throw new Error(`UNKNOWN_USER_FIELD:${step.when.field}`);
     }
-    validateValueAgainstJsonSchema(normaliseParamsForValidation(step.blockSlug, step.params), block.paramsSchema, `params.${step.id}`);
+    validateValueAgainstJsonSchema(
+      omitForeignModelParams(block, normaliseParamsForValidation(step.blockSlug, step.params)),
+      block.paramsSchema,
+      `params.${step.id}`,
+    );
 
     const allowedStepIds = new Set(steps.slice(0, index).map((item) => item.id));
     const refs = collectPlaceholderRefs([step.params, step.input]);
@@ -228,6 +232,45 @@ export function validatePipelineConfig(
   }
 
   return steps;
+}
+
+/**
+ * Исключает из валидации параметры «чужих» моделей блока: ключи, которые объявлены в
+ * requiredParams/optionalParams у ДРУГИХ моделей, но не у выбранной. Пример: у image-edit
+ * поле quality (enum gpt-image) — при выбранном Seedream оно скрыто из формы и на рантайме
+ * инертно, но легаси-значение ('standard' из PiAPI-эпохи) валило весь пайплайн ошибкой,
+ * которую нельзя исправить, не переключившись обратно на GPT.
+ */
+function omitForeignModelParams(block: NonNullable<ReturnType<typeof getBlockCatalogItem>>, params: unknown): unknown {
+  if (!params || typeof params !== 'object' || Array.isArray(params)) return params;
+  const record = params as Record<string, unknown>;
+  const slugs = selectedModelSlugs(record.model);
+  if (slugs.length === 0) return params;
+  const selected = slugs.map((slug) => block.supportedModels.find((model) => model.slug === slug));
+  // Неизвестная модель (не из каталога блока) — не ослабляем валидацию.
+  if (selected.some((model) => !model)) return params;
+  const declaredParams = (model: { requiredParams?: string[]; optionalParams?: string[] }) =>
+    [...(model.requiredParams ?? []), ...(model.optionalParams ?? [])];
+  const declaredBySelected = new Set(selected.flatMap((model) => declaredParams(model!)));
+  const declaredByAny = new Set(block.supportedModels.flatMap(declaredParams));
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (declaredByAny.has(key) && !declaredBySelected.has(key)) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
+function selectedModelSlugs(model: unknown): string[] {
+  const clean = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim().length > 0 && !value.includes('{{') ? value.trim() : undefined;
+  const direct = clean(model);
+  if (direct) return [direct];
+  if (model && typeof model === 'object' && !Array.isArray(model)) {
+    const record = model as Record<string, unknown>;
+    return [clean(record.standard), clean(record.pro)].filter((value): value is string => Boolean(value));
+  }
+  return [];
 }
 
 function normaliseParamsForValidation(blockSlug: string, params: unknown): unknown {

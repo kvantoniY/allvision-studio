@@ -56,6 +56,22 @@ async function deleteStorageKey(key: string | null) {
   }
 }
 
+/**
+ * Удаляет файл превью, ТОЛЬКО если на него больше не ссылается ни одна услуга.
+ * Дубликат услуги (POST /:id/duplicate) копирует URL превью как есть — оригинал и копия делят
+ * один файл. Раньше смена/удаление обложки у копии физически удаляла общий файл, и у оригинала
+ * «пропадала» обложка (битый URL).
+ */
+async function deletePreviewFileIfUnreferenced(url: string | null | undefined) {
+  const key = storageKeyFromUrl(url);
+  if (!key || !url) return;
+  const stillReferenced = await prisma.service.count({
+    where: { OR: [{ previewImage: url }, { coverImage: url }, { previewVideo: url }] },
+  });
+  if (stillReferenced > 0) return;
+  await deleteStorageKey(key);
+}
+
 function mapValidationError(err: unknown): HttpError {
   const message = (err as Error).message;
   if (message === 'INVALID_JSON_DATA') {
@@ -244,7 +260,9 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
     const previewVideo = firstFile(req, 'previewVideo');
     const removeImage = req.body.removePreviewImage === 'true' || req.body.removePreviewImage === true;
     const removeVideo = req.body.removePreviewVideo === 'true' || req.body.removePreviewVideo === true;
-    const oldKeys: string[] = [];
+    // URL старых превью; файлы удаляются ПОСЛЕ update и только если ни одна услуга
+    // (например, копия из duplicate) больше не ссылается на тот же файл.
+    const oldPreviewUrls: string[] = [];
     const data: Prisma.ServiceUpdateInput = {};
 
     if (body.title !== undefined) data.title = body.title;
@@ -268,24 +286,22 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
     if (body.isFeatured !== undefined) data.isFeatured = body.isFeatured;
     if (body.previewMode !== undefined) data.previewMode = body.previewMode;
 
+    const oldImageUrl = current.previewImage ?? current.coverImage;
     if (previewImage) {
       const image = await fileService.uploadServicePreview(previewImage.buffer, previewImage.mimetype, 'image');
       uploaded.push(image);
       data.previewImage = image.url;
       data.coverImage = image.url;
-      const oldKey = storageKeyFromUrl(current.previewImage ?? current.coverImage);
-      if (oldKey) oldKeys.push(oldKey);
+      if (oldImageUrl) oldPreviewUrls.push(oldImageUrl);
     } else if (removeImage) {
       data.previewImage = null;
       data.coverImage = null;
-      const oldKey = storageKeyFromUrl(current.previewImage ?? current.coverImage);
-      if (oldKey) oldKeys.push(oldKey);
+      if (oldImageUrl) oldPreviewUrls.push(oldImageUrl);
     } else if (body.previewImage !== undefined) {
       data.previewImage = body.previewImage;
       data.coverImage = body.previewImage;
-      if ((current.previewImage ?? null) !== (body.previewImage ?? null)) {
-        const oldKey = storageKeyFromUrl(current.previewImage ?? current.coverImage);
-        if (oldKey) oldKeys.push(oldKey);
+      if ((current.previewImage ?? null) !== (body.previewImage ?? null) && oldImageUrl) {
+        oldPreviewUrls.push(oldImageUrl);
       }
     }
 
@@ -293,17 +309,14 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
       const video = await fileService.uploadServicePreview(previewVideo.buffer, previewVideo.mimetype, 'video');
       uploaded.push(video);
       data.previewVideo = video.url;
-      const oldKey = storageKeyFromUrl(current.previewVideo);
-      if (oldKey) oldKeys.push(oldKey);
+      if (current.previewVideo) oldPreviewUrls.push(current.previewVideo);
     } else if (removeVideo) {
       data.previewVideo = null;
-      const oldKey = storageKeyFromUrl(current.previewVideo);
-      if (oldKey) oldKeys.push(oldKey);
+      if (current.previewVideo) oldPreviewUrls.push(current.previewVideo);
     } else if (body.previewVideo !== undefined) {
       data.previewVideo = body.previewVideo;
-      if ((current.previewVideo ?? null) !== (body.previewVideo ?? null)) {
-        const oldKey = storageKeyFromUrl(current.previewVideo);
-        if (oldKey) oldKeys.push(oldKey);
+      if ((current.previewVideo ?? null) !== (body.previewVideo ?? null) && current.previewVideo) {
+        oldPreviewUrls.push(current.previewVideo);
       }
     }
 
@@ -312,7 +325,7 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
         where: { id: current.id },
         data,
       });
-      await Promise.all(oldKeys.map((key) => deleteStorageKey(key)));
+      await Promise.all(oldPreviewUrls.map((url) => deletePreviewFileIfUnreferenced(url)));
       res.json({ service });
     } catch (err) {
       await Promise.all(uploaded.map((file) => fileService.deleteFile(file.key).catch(() => undefined)));
@@ -346,8 +359,8 @@ adminServicesRouter.delete('/:id', async (req: Request, res: Response, next: Nex
 
     await prisma.service.delete({ where: { id: service.id } });
     await Promise.all([
-      deleteStorageKey(storageKeyFromUrl(service.previewImage ?? service.coverImage)),
-      deleteStorageKey(storageKeyFromUrl(service.previewVideo)),
+      deletePreviewFileIfUnreferenced(service.previewImage ?? service.coverImage),
+      deletePreviewFileIfUnreferenced(service.previewVideo),
     ]);
     res.json({ ok: true });
   } catch (err) {
