@@ -1,3 +1,7 @@
+import http from 'node:http';
+import https from 'node:https';
+import tls from 'node:tls';
+import type { Socket } from 'node:net';
 import { ProviderError } from './provider-errors';
 
 /**
@@ -33,6 +37,8 @@ export interface FalClientOptions {
   downloadRetryAttempts?: number;
   /** Бэкофф между заходами скачивания; последний элемент повторяется. */
   downloadRetryBackoffMs?: number[];
+  /** HTTP CONNECT-прокси для фолбэка скачивания (default env FAL_PROXY_URL ?? PIAPI_PROXY_URL). */
+  downloadProxyUrl?: string;
 }
 
 export interface FalSubmitResult {
@@ -67,6 +73,7 @@ export class FalClient {
   private requestTimeoutMs: number;
   private downloadRetryAttempts: number;
   private downloadRetryBackoffMs: number[];
+  private downloadProxyUrl?: string;
   private priceCache = new Map<string, { price: { unitPrice: number; unit: string }; exp: number }>();
 
   constructor(options: FalClientOptions) {
@@ -81,6 +88,8 @@ export class FalClient {
     this.downloadRetryAttempts = options.downloadRetryAttempts
       ?? Math.max(1, Number(process.env.FAL_DOWNLOAD_RETRY_ATTEMPTS ?? '5') || 5);
     this.downloadRetryBackoffMs = options.downloadRetryBackoffMs ?? [3_000, 10_000, 25_000, 60_000];
+    this.downloadProxyUrl = options.downloadProxyUrl
+      ?? ((process.env.FAL_PROXY_URL ?? process.env.PIAPI_PROXY_URL)?.trim() || undefined);
   }
 
   /** Ставит задачу в очередь fal. modelId — например 'fal-ai/veo3.1' или 'fal-ai/nano-banana/edit'. */
@@ -214,10 +223,12 @@ export class FalClient {
    * Скачивает итоговый файл (картинку/видео) с fal CDN.
    *
    * Результат к этому моменту уже сгенерирован и ОПЛАЧЕН на fal, поэтому сдаваться из-за флапа
-   * egress РФ-ВМ -> fal.media (UND_ERR_CONNECT_TIMEOUT, прод-инцидент 05.07) слишком дорого:
-   * повторяем скачивание с крупным бэкоффом (суммарно ~2-3 минуты). Каждый заход — свежее
-   * соединение: DNS может отдать другой, достижимый CDN-хост. 4xx (результат недоступен/удалён)
-   * не ретраим — это не транспортная проблема.
+   * egress РФ-ВМ -> fal.media (UND_ERR_CONNECT_TIMEOUT, прод-инциденты 05.07) слишком дорого.
+   * Файл живёт на КОНКРЕТНОМ CDN-хосте (v3b.fal.media и т.п.) — если прямой маршрут к нему лежит,
+   * ретраи напрямую бесполезны (подтверждено: все 5 заходов упали). Поэтому при заданном
+   * FAL_PROXY_URL/PIAPI_PROXY_URL нечётные заходы идут через зарубежный CONNECT-прокси
+   * (маршрут P10.2), чередуясь с прямыми: переживаем падение любой из двух дорог.
+   * 4xx (результат недоступен/удалён) не ретраим — это не транспортная проблема.
    */
   async download(url: string): Promise<{ buffer: Buffer; contentType: string }> {
     let lastErr: unknown;
@@ -226,8 +237,9 @@ export class FalClient {
         const backoff = this.downloadRetryBackoffMs[Math.min(attempt - 1, this.downloadRetryBackoffMs.length - 1)];
         await delay(backoff);
       }
+      const viaProxy = Boolean(this.downloadProxyUrl) && attempt % 2 === 1;
       try {
-        return await this.downloadOnce(url);
+        return viaProxy ? await this.downloadViaProxy(url) : await this.downloadOnce(url);
       } catch (err) {
         lastErr = err;
         if (!isRetriableDownloadError(err)) throw err;
@@ -244,6 +256,54 @@ export class FalClient {
     }
     const contentType = res.headers.get('content-type')?.split(';')[0]?.trim() ?? 'application/octet-stream';
     return { buffer: Buffer.from(await res.arrayBuffer()), contentType };
+  }
+
+  /** GET через CONNECT-туннель зарубежного прокси (встроенные node-модули, до 3 редиректов). */
+  private async downloadViaProxy(url: string, redirectsLeft = 3): Promise<{ buffer: Buffer; contentType: string }> {
+    const proxyUrl = this.downloadProxyUrl;
+    if (!proxyUrl) throw new ProviderError('FAL_NETWORK_ERROR', 'fal download proxy is not configured');
+    const target = new URL(url);
+    const targetPort = Number(target.port) || 443;
+    const tunnel = await openProxyTunnel(proxyUrl, target.hostname, targetPort, 30_000);
+    const result = await new Promise<{ status: number; location?: string; contentType: string; buffer: Buffer }>((resolve, reject) => {
+      const req = https.request(
+        {
+          host: target.hostname,
+          port: targetPort,
+          method: 'GET',
+          path: `${target.pathname}${target.search}`,
+          headers: { Host: target.host },
+          timeout: this.requestTimeoutMs,
+          createConnection: () => tls.connect({ socket: tunnel, servername: target.hostname }),
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+          res.once('error', (err) => reject(new ProviderError('FAL_NETWORK_ERROR', `fal proxy download failed: ${err.message}`)));
+          res.on('end', () => {
+            resolve({
+              status: res.statusCode ?? 0,
+              location: typeof res.headers.location === 'string' ? res.headers.location : undefined,
+              contentType: String(res.headers['content-type'] ?? 'application/octet-stream').split(';')[0].trim(),
+              buffer: Buffer.concat(chunks),
+            });
+          });
+        },
+      );
+      req.once('timeout', () => req.destroy(new ProviderError('FAL_TIMEOUT', `fal proxy download timed out after ${this.requestTimeoutMs}ms`)));
+      req.once('error', (err) =>
+        reject(err instanceof ProviderError ? err : new ProviderError('FAL_NETWORK_ERROR', `fal proxy download failed: ${(err as Error).message}`)),
+      );
+      req.end();
+    }).finally(() => tunnel.destroy());
+    if (result.status >= 300 && result.status < 400 && result.location) {
+      if (redirectsLeft <= 0) throw new ProviderError('FAL_DOWNLOAD_FAILED', 'fal proxy download: too many redirects', result.status);
+      return this.downloadViaProxy(new URL(result.location, url).toString(), redirectsLeft - 1);
+    }
+    if (result.status < 200 || result.status >= 300) {
+      throw new ProviderError('FAL_DOWNLOAD_FAILED', `fal download via proxy failed (${result.status})`, result.status);
+    }
+    return { buffer: result.buffer, contentType: result.contentType };
   }
 
   /** Проверка доступности/баланса. fal не даёт публичного balance endpoint в queue API — */
@@ -391,6 +451,40 @@ export class FalClient {
 
 function backoff(attempt: number) {
   return Math.min(8_000, 500 * 2 ** (attempt - 1));
+}
+
+// HTTP CONNECT-туннель через прокси к target:port (копия проверенного маршрута из piapi-client
+// P10.2; намеренно не общий модуль, чтобы не трогать хрупкий gpt-image путь).
+function openProxyTunnel(proxyUrl: string, targetHost: string, targetPort: number, timeoutMs: number): Promise<Socket> {
+  const u = new URL(proxyUrl);
+  const headers: Record<string, string> = { Host: `${targetHost}:${targetPort}` };
+  if (u.username) {
+    const cred = Buffer.from(`${decodeURIComponent(u.username)}:${decodeURIComponent(u.password)}`).toString('base64');
+    headers['Proxy-Authorization'] = `Basic ${cred}`;
+  }
+  return new Promise<Socket>((resolve, reject) => {
+    const req = http.request({
+      host: u.hostname,
+      port: Number(u.port) || 80,
+      method: 'CONNECT',
+      path: `${targetHost}:${targetPort}`,
+      headers,
+      timeout: timeoutMs,
+    });
+    req.once('connect', (res, socket) => {
+      if (res.statusCode === 200) {
+        resolve(socket);
+      } else {
+        socket.destroy();
+        reject(new ProviderError('FAL_NETWORK_ERROR', `fal proxy CONNECT failed: HTTP ${res.statusCode}`));
+      }
+    });
+    req.once('timeout', () => req.destroy(new ProviderError('FAL_NETWORK_ERROR', 'fal proxy CONNECT timed out')));
+    req.once('error', (err) =>
+      reject(err instanceof ProviderError ? err : new ProviderError('FAL_NETWORK_ERROR', `fal proxy connect: ${(err as Error).message}`)),
+    );
+    req.end();
+  });
 }
 
 /** Транспортные обрывы/таймауты и 5xx ретраим; 4xx (нет файла/доступа) — нет. */

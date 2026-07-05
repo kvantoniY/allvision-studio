@@ -18,11 +18,12 @@ function okResponse(body = 'img') {
   });
 }
 
-function makeClient(attempts = 3) {
+function makeClient(attempts = 3, proxyUrl?: string) {
   return new FalClient({
     apiKey: 'test-key',
     downloadRetryAttempts: attempts,
     downloadRetryBackoffMs: [1, 1, 1],
+    downloadProxyUrl: proxyUrl,
   });
 }
 
@@ -83,5 +84,40 @@ describe('FalClient.download retries', () => {
     expect((error as ProviderError).code).toBe('FAL_NETWORK_ERROR');
     // 3 захода × (1 попытка + 1 connectionRetry) = 6 fetch-вызовов
     expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it('falls back to the proxy route when direct egress to the CDN host is down', async () => {
+    // Прод-кейс 05.07 (проект dca5b165): файл на v3b.fal.media, ВСЕ прямые заходы падают
+    // UND_ERR_CONNECT_TIMEOUT — выручает только зарубежный прокси-маршрут.
+    const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'));
+    global.fetch = fetchMock as never;
+
+    const client = makeClient(3, 'http://user:pass@proxy.test:8888');
+    const proxyMock = jest.fn(async () => ({ buffer: Buffer.from('img'), contentType: 'image/jpeg' }));
+    (client as unknown as { downloadViaProxy: typeof proxyMock }).downloadViaProxy = proxyMock;
+
+    const result = await client.download('https://v3b.fal.media/files/result.mp4');
+
+    expect(result.buffer.toString()).toBe('img');
+    // Заход 0 — прямой (2 fetch: попытка + connectionRetry), заход 1 — через прокси.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(proxyMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps working without a proxy configured (direct attempts only)', async () => {
+    const fetchMock = jest.fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(okResponse());
+    global.fetch = fetchMock as never;
+
+    const client = makeClient(3);
+    const proxySpy = jest.spyOn(
+      client as unknown as { downloadViaProxy: (url: string) => Promise<unknown> },
+      'downloadViaProxy',
+    );
+
+    await client.download('https://v3.fal.media/files/result.jpg');
+    expect(proxySpy).not.toHaveBeenCalled();
   });
 });
