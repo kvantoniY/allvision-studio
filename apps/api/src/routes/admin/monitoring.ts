@@ -17,7 +17,8 @@ const INDICATORS_KEY = 'MONITORING_INDICATORS';
 type Health = 'ok' | 'warn' | 'down' | 'unknown';
 
 const indicatorSchema = z.object({
-  id: z.string().min(1).max(64).optional(),
+  // Пустой id => новый индикатор (uuid проставит PUT-хендлер). Поэтому без min(1).
+  id: z.string().max(64).optional(),
   label: z.string().min(1).max(200),
   category: z.string().max(80).optional().default(''),
   note: z.string().max(2000).optional().default(''),
@@ -91,7 +92,8 @@ async function readIndicators(): Promise<StoredIndicator[]> {
       .map((item) => {
         const res = indicatorSchema.safeParse(item);
         if (!res.success) return null;
-        return { ...res.data, id: res.data.id ?? randomUUID() } satisfies StoredIndicator;
+        const id = res.data.id && res.data.id.trim() ? res.data.id : randomUUID();
+        return { ...res.data, id } satisfies StoredIndicator;
       })
       .filter((v): v is StoredIndicator => v !== null);
   } catch {
