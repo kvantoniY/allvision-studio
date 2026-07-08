@@ -230,6 +230,7 @@ adminServicesRouter.post('/', uploadServiceAssets, async (req: Request, res: Res
           previewImage: selectedPreviewImage,
           previewVideo: selectedPreviewVideo,
           previewMode: body.previewMode,
+          coverCrop: body.coverCrop ? (body.coverCrop as Prisma.InputJsonValue) : Prisma.JsonNull,
         },
       });
       res.status(201).json({ service });
@@ -287,6 +288,13 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
     if (body.previewMode !== undefined) data.previewMode = body.previewMode;
 
     const oldImageUrl = current.previewImage ?? current.coverImage;
+    // Кадрирование: если пришло явно — сохраняем; иначе при смене/удалении картинки сбрасываем
+    // старый кроп (он привязан к прежнему изображению и станет невалидным).
+    if (body.coverCrop !== undefined) {
+      data.coverCrop = body.coverCrop === null ? Prisma.JsonNull : (body.coverCrop as Prisma.InputJsonValue);
+    } else if (previewImage || removeImage) {
+      data.coverCrop = Prisma.JsonNull;
+    }
     if (previewImage) {
       const image = await fileService.uploadServicePreview(previewImage.buffer, previewImage.mimetype, 'image');
       uploaded.push(image);
@@ -440,6 +448,8 @@ adminServicesRouter.post('/:id/duplicate', async (req: Request, res: Response, n
         priceCoinsPro: current.priceCoinsPro,
         previewImage: current.previewImage,
         previewVideo: current.previewVideo,
+        previewMode: current.previewMode,
+        coverCrop: current.coverCrop ?? Prisma.JsonNull,
       },
     });
 

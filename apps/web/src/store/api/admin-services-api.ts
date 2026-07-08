@@ -81,6 +81,7 @@ export type AdminService = {
   previewVideo: string | null;
   previewMode: 'auto' | 'image' | 'video';
   coverImage: string | null;
+  coverCrop: { x: number; y: number; w: number; h: number } | null;
   isActive: boolean;
   isFeatured: boolean;
   sortOrder: number;

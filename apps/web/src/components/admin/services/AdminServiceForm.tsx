@@ -93,6 +93,8 @@ import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetFalPricingQuery, useGetFalSchemaQuery, type FalSchemaField } from '@/store/api/admin-usage-api';
 import { falEndpointForModel } from '@allvision/shared';
 import { SourceSelector, type AvailableSourceStep } from './SourceSelector';
+import { CoverCropper } from './CoverCropper';
+import { type CoverCrop } from '@/lib/cover-crop';
 
 // Categories are now loaded dynamically from API (ServiceCategoryDef). Form fetches the list at render time.
 
@@ -2431,6 +2433,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
   const [previewVideoUrl, setPreviewVideoUrl] = useState(service?.previewVideo ?? '');
   const [removeImage, setRemoveImage] = useState(false);
   const [removeVideo, setRemoveVideo] = useState(false);
+  const [coverCrop, setCoverCrop] = useState<CoverCrop | null>(service?.coverCrop ?? null);
   const [dirty, setDirty] = useState(false);
   const [testGenerationId, setTestGenerationId] = useState<string | null>(null);
   const { data: blocksData } = useGetAdminBlocksQuery();
@@ -2526,6 +2529,7 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         previewImage: removeImage ? null : previewImageUrl || undefined,
         previewVideo: removeVideo ? null : previewVideoUrl || undefined,
         previewMode: draft.previewMode,
+        coverCrop: removeImage ? null : coverCrop,
         isActive: draft.isActive,
         isFeatured: draft.isFeatured,
       }),
@@ -2610,6 +2614,16 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
 
   const imageShown = imagePreviewUrl || (service?.previewImage && !removeImage ? service.previewImage : '');
   const videoShown = videoPreviewUrl || (service?.previewVideo && !removeVideo ? service.previewVideo : '');
+
+  // Сменили картинку обложки — прежнее кадрирование к ней не относится, сбрасываем.
+  const lastCropImageRef = useRef(service?.previewImage ?? '');
+  useEffect(() => {
+    const key = imageShown || '';
+    if (key !== lastCropImageRef.current) {
+      lastCropImageRef.current = key;
+      setCoverCrop(null);
+    }
+  }, [imageShown]);
 
   return (
     <form onSubmit={submit} className="space-y-5 pb-4">
@@ -2832,6 +2846,11 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
             </details>
           </div>
         </div>
+        {imageShown ? (
+          <div className="mt-4">
+            <CoverCropper imageUrl={imageShown} value={coverCrop} onChange={(c) => { setCoverCrop(c); setDirty(true); }} />
+          </div>
+        ) : null}
       </Section>
 
       <Section icon={Coins} title="Цена" description="Все цены услуги — в одном месте. Если у услуги есть галочка, длительность или опции, итоговая цена для пользователя зависит от его выбора.">

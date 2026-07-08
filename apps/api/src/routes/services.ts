@@ -34,6 +34,7 @@ const publicServiceSelect = {
   previewImage: true,
   previewVideo: true,
   previewMode: true,
+  coverCrop: true,
   isFeatured: true,
   processingType: true,
   sortOrder: true,

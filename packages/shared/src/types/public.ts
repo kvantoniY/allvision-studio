@@ -17,6 +17,7 @@ export type PublicService = {
   previewImage: string | null;
   previewVideo: string | null;
   previewMode: string;
+  coverCrop?: { x: number; y: number; w: number; h: number } | null;
   isFeatured: boolean;
   userInputForm?: unknown;
   processingType: ProcessingType;

@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 
 const DEFAULT_FALLBACK = '/mock_preview.png';
 
@@ -17,12 +17,14 @@ export function FallbackImage({
   className,
   fallback = DEFAULT_FALLBACK,
   loading = 'lazy',
+  style,
 }: {
   src?: string | null;
   alt: string;
   className?: string;
   fallback?: string;
   loading?: 'lazy' | 'eager';
+  style?: CSSProperties;
 }) {
   const initial = src && src.trim() ? src : fallback;
   const [current, setCurrent] = useState(initial);
@@ -38,6 +40,7 @@ export function FallbackImage({
       alt={alt}
       loading={loading}
       className={className}
+      style={style}
       onError={() => {
         if (current !== fallback) setCurrent(fallback);
       }}

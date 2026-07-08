@@ -53,8 +53,23 @@ export function ProjectEventsBridge({ enabled }: { enabled: boolean }) {
       }
     };
 
+    const closeSource = () => {
+      if (reconnectTimer !== undefined) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
+      }
+      if (source) {
+        source.close();
+        source = null;
+      }
+    };
+
     const connect = () => {
-      if (disposed) return;
+      // Не держим постоянное SSE-соединение в фоновой/скрытой вкладке: браузер (особенно по
+      // HTTP/1.1, куда часто откатывают корпоративные прокси/антивирусы) ограничивает число
+      // соединений на домен, и «висящий» стрим второй вкладки исчерпывает пул — из-за этого
+      // запросы активной вкладки (список генераций) не грузятся, пока вторую вкладку не закроют.
+      if (disposed || source || (typeof document !== 'undefined' && document.hidden)) return;
       source = new EventSource(`${API_URL}/api/user/events`, { withCredentials: true });
 
       source.onopen = () => {
@@ -92,6 +107,7 @@ export function ProjectEventsBridge({ enabled }: { enabled: boolean }) {
         attempts += 1;
         const delay = Math.min(30_000, 1000 * 2 ** Math.min(attempts, 5));
         reconnectTimer = window.setTimeout(() => {
+          if (disposed || (typeof document !== 'undefined' && document.hidden)) return;
           void fetch(`${API_URL}/api/auth/refresh`, { method: 'POST', credentials: 'include' })
             .catch(() => undefined)
             .then(() => connect());
@@ -99,13 +115,24 @@ export function ProjectEventsBridge({ enabled }: { enabled: boolean }) {
       };
     };
 
+    const onVisibility = () => {
+      if (document.hidden) {
+        // Вкладка ушла в фон — освобождаем постоянное соединение.
+        closeSource();
+      } else {
+        // Вернулись на вкладку — переоткрываем; onopen сделает catch-up инвалидацию.
+        attempts = 0;
+        connect();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
     connect();
 
     return () => {
       disposed = true;
-      if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
-      source?.close();
-      source = null;
+      document.removeEventListener('visibilitychange', onVisibility);
+      closeSource();
     };
   }, [dispatch, enabled]);
 

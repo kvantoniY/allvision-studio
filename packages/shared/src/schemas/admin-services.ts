@@ -10,6 +10,15 @@ const booleanFromForm = z.preprocess((value) => {
 const previewModeSchema = z.enum(['auto', 'image', 'video']).default('auto');
 const previewUrlSchema = z.string().trim().min(1).max(2000).nullable().optional();
 
+// Кадрирование обложки: нормализованный прямоугольник (доли натурального изображения, 16:10).
+export const coverCropSchema = z.object({
+  x: z.coerce.number().min(0).max(1),
+  y: z.coerce.number().min(0).max(1),
+  w: z.coerce.number().min(0).max(1),
+  h: z.coerce.number().min(0).max(1),
+});
+export type CoverCrop = z.infer<typeof coverCropSchema>;
+
 // Category codes are validated against the ServiceCategoryDef table at runtime in the API layer,
 // not here. Schema just enforces shape: short ASCII identifier.
 export const adminServiceCategorySchema = z
@@ -150,6 +159,7 @@ export const createAdminServiceSchema = z.object({
   previewImage: previewUrlSchema,
   previewVideo: previewUrlSchema,
   previewMode: previewModeSchema,
+  coverCrop: coverCropSchema.nullable().optional(),
   isActive: booleanFromForm.optional().default(true),
   isFeatured: booleanFromForm.optional().default(false),
   sortOrder: z.coerce.number().int().min(0).optional(),

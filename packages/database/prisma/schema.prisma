@@ -83,6 +83,9 @@ model Service {
   previewImage       String?
   previewVideo       String?
   previewMode        String  @default("auto")
+  // Кадрирование обложки для витрины (16:10). Нормализованный прямоугольник { x, y, w, h } в
+  // долях натурального изображения; null => показываем центр (object-cover). Non-destructive.
+  coverCrop          Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

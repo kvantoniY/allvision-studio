@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useListServicesQuery } from '@/store/api/services-api';
 import { useGetServiceCategoriesQuery } from '@/store/api/public-api';
 import { categoryHref } from '@/lib/gift-factory';
+import { coverCropStyle } from '@/lib/cover-crop';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -128,6 +129,7 @@ function ServiceTile({ service }: { service: PublicService }) {
             src={previewImage}
             alt={service.title}
             className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+            style={coverCropStyle(service.coverCrop)}
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
