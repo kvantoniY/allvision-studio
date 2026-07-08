@@ -17,6 +17,7 @@ import { adminHomePageApi } from './api/admin-home-page-api';
 import { adminStylePresetsApi } from './api/admin-style-presets-api';
 import { adminUsageApi } from './api/admin-usage-api';
 import { adminDiagnosticsApi } from './api/admin-diagnostics-api';
+import { adminMonitoringApi } from './api/admin-monitoring-api';
 import { adminSettingsApi } from './api/admin-settings-api';
 import { adminUsersApi } from './api/admin-users-api';
 import { adminProjectsApi } from './api/admin-projects-api';
@@ -49,6 +50,7 @@ export const store = configureStore({
     [adminStylePresetsApi.reducerPath]: adminStylePresetsApi.reducer,
     [adminUsageApi.reducerPath]: adminUsageApi.reducer,
     [adminDiagnosticsApi.reducerPath]: adminDiagnosticsApi.reducer,
+    [adminMonitoringApi.reducerPath]: adminMonitoringApi.reducer,
     [adminSettingsApi.reducerPath]: adminSettingsApi.reducer,
     [adminUsersApi.reducerPath]: adminUsersApi.reducer,
     [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
@@ -79,6 +81,7 @@ export const store = configureStore({
       adminStylePresetsApi.middleware,
       adminUsageApi.middleware,
       adminDiagnosticsApi.middleware,
+      adminMonitoringApi.middleware,
       adminSettingsApi.middleware,
       adminUsersApi.middleware,
       adminProjectsApi.middleware,

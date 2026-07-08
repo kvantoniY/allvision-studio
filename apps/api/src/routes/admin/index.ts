@@ -7,6 +7,7 @@ import { adminServiceCategoriesRouter } from './service-categories';
 import { adminMediaAssetsRouter } from './media-assets';
 import { adminUsageRouter } from './usage';
 import { adminDiagnosticsRouter } from './diagnostics';
+import { adminMonitoringRouter } from './monitoring';
 import { adminSettingsRouter } from './settings';
 import { adminUsersRouter } from './users';
 import { adminProjectsRouter } from './projects';
@@ -20,6 +21,7 @@ export const adminRouter = Router();
 
 adminRouter.use('/blocks', adminBlocksRouter);
 adminRouter.use('/diagnostics', adminDiagnosticsRouter);
+adminRouter.use('/monitoring', adminMonitoringRouter);
 adminRouter.use('/settings', adminSettingsRouter);
 adminRouter.use('/users', adminUsersRouter);
 adminRouter.use('/projects', adminProjectsRouter);

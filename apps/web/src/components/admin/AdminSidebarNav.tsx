@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, Clapperboard, Coins, CreditCard, FolderKanban, Images, LayoutGrid, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
+import { Activity, Clapperboard, Coins, CreditCard, FolderKanban, Gauge, Images, LayoutGrid, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,7 @@ const navGroups: NavGroup[] = [
       { href: '/admin/usage', label: 'AI-консоль', icon: LineChart },
       { href: '/admin/models', label: 'Модели и цены', icon: Coins },
       { href: '/admin/diagnostics', label: 'Диагностика', icon: Activity },
+      { href: '/admin/monitoring', label: 'Мониторинг', icon: Gauge },
     ],
   },
   {
