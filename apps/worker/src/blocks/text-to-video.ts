@@ -47,6 +47,27 @@ function mergeReference(inputUrl: string, existing: string | string[] | undefine
   return [inputUrl, ...rest];
 }
 
+function refCount(value: unknown): number {
+  if (Array.isArray(value)) return value.filter((v) => typeof v === 'string' && v.trim()).length;
+  return typeof value === 'string' && value.trim() ? 1 : 0;
+}
+
+/**
+ * Omni-модели (Kling 3.0 Omni, Seedance 2.0 Omni на fal) используют прикреплённые фото ТОЛЬКО
+ * если они адресованы в промпте якорями @Image1, @Image2… Юзер в чате часто пишет «первое фото…»
+ * человеческим языком без якорей — тогда модель игнорирует референсы и рисует случайных людей.
+ * Если якорей в промпте нет — дописываем инструкцию с @Image1..@ImageN, чтобы идентичность
+ * с фото реально применялась. Если якоря уже есть (юзер вставил вручную) — не трогаем.
+ */
+function ensureImageAnchors(prompt: string, count: number): string {
+  if (count <= 0 || /@image/i.test(prompt)) return prompt;
+  const anchors = Array.from({ length: count }, (_, i) => `@Image${i + 1}`);
+  const binding = count === 1
+    ? `Use ${anchors[0]} as the exact identity reference: the main subject must keep the face, appearance and outfit from ${anchors[0]}.`
+    : `Use ${anchors.join(', ')} as exact identity references (in this order): preserve each subject's real face, appearance and outfit from the corresponding reference image, do not blend or invent faces.`;
+  return `${prompt.trim()}\n\n${binding}`;
+}
+
 export const textToVideoBlock: BlockDefinition = {
   ...catalog,
   inputSchema: anyInputSchema,
@@ -74,11 +95,17 @@ export const textToVideoBlock: BlockDefinition = {
         console.warn(`[text-to-video] model ${model} is text-only; step input is ignored`);
       }
     }
+    // Для omni-моделей гарантируем @Image-якоря в промпте, иначе фото-референсы игнорируются.
+    const isOmni = model === 'kling-3-omni'
+      || (model.startsWith('seedance') && (model.endsWith('-omni') || parsed.mode === 'omni_reference'));
+    const imageRefCount = Math.max(refCount(providerParams.images), refCount(providerParams.image_urls));
+    const finalPrompt = isOmni ? ensureImageAnchors(parsed.prompt, imageRefCount) : parsed.prompt;
+
     const result = await ctx.getAIProvider().textToVideo({
       // durationSec остаётся числовым (fallback 5); 'auto' передаётся через providerParams.duration
       // и распознаётся в fal-provider для Seedance 2.0.
       durationSec: typeof parsed.duration === 'number' ? parsed.duration : 5,
-      prompt: parsed.prompt,
+      prompt: finalPrompt,
       model,
       params: providerParams,
       context: ctx.providerContext,
