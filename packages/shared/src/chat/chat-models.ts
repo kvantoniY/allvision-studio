@@ -303,7 +303,7 @@ export const CHAT_MODELS: ChatModelOption[] = [
     blockSlug: 'image-to-video',
     modelSlug: 'kling-3-std',
     category: 'video',
-    description: 'Kling 3.0 для более выразительной image-to-video генерации из референс-фото. Хороший баланс цены и современного качества.',
+    description: 'Kling 3.0 image-to-video: оживляет фото, а также поддерживает «первый кадр + последний кадр» — прикрепите второе фото как финальный кадр, и модель сделает плавный переход. Спокойно работает с реальными лицами.',
     acceptsImageInput: true,
     acceptsTextOnly: false,
   }),
@@ -311,7 +311,7 @@ export const CHAT_MODELS: ChatModelOption[] = [
     blockSlug: 'image-to-video',
     modelSlug: 'kling-3-pro',
     category: 'video',
-    description: 'Pro-режим Kling 3.0 для самых качественных роликов из изображения. Подходит для wow-сцен, промо и финальных вариантов.',
+    description: 'Pro-режим Kling 3.0 image-to-video: топ-качество из фото. Поддерживает «первый кадр + последний кадр» — прикрепите второе фото как финальный кадр для точного перехода между двумя изображениями. Работает с реальными лицами (в отличие от Seedance).',
     acceptsImageInput: true,
     acceptsTextOnly: false,
   }),
@@ -661,8 +661,11 @@ export function chatReferenceSlots(model: ChatModelOption): ChatReferenceSlot[] 
       { key: 'sv', label: 'Видео-референс', mediaKind: 'video', required: false, anchor: '@video1', param: 'video_urls' },
     ];
   }
-  // first/last frame — позиционно, без @
-  if (slug === 'seedance-2-first-last' || slug === 'seedance-2-fast-first-last') {
+  // first/last frame — позиционно, без @. Первый кадр обязателен, последний опционален.
+  if (
+    slug === 'seedance-2-first-last' || slug === 'seedance-2-fast-first-last'
+    || slug === 'kling-3-std' || slug === 'kling-3-pro'
+  ) {
     return [
       { key: 'f', label: 'Первый кадр', mediaKind: 'image', required: true, param: 'main' },
       { key: 'l', label: 'Последний кадр', mediaKind: 'image', required: false, param: 'tail_image_url' },

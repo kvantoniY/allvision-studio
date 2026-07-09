@@ -151,6 +151,25 @@ describe('FalProvider reference payload mapping', () => {
     expect(submitted[0].input.duration).toBe('8');
   });
 
+  it('maps Kling 3.0 image-to-video to start_image_url + end_image_url with string duration', async () => {
+    // Регресс: kling v3 i2v использует start_image_url (не image_url) + end_image_url (последний кадр),
+    // duration строкой. Раньше слали image_url -> endpoint игнорировал первый кадр.
+    const { provider, submitted } = makeProvider();
+    await provider.imageToVideo({
+      imageUrl: 'https://cdn.test/first.png',
+      prompt: 'smooth transition',
+      durationSec: 8,
+      model: 'kling-3-pro',
+      params: { tail_image_url: 'https://cdn.test/last.png' },
+      context,
+    });
+    expect(submitted[0].endpoint).toBe('fal-ai/kling-video/v3/pro/image-to-video');
+    expect(submitted[0].input.start_image_url).toBe('https://cdn.test/first.png');
+    expect(submitted[0].input.end_image_url).toBe('https://cdn.test/last.png');
+    expect(submitted[0].input.image_url).toBeUndefined();
+    expect(submitted[0].input.duration).toBe('8');
+  });
+
   it('maps motion transfer via Wan 2.7 reference-to-video to reference_*_urls with integer duration', async () => {
     const { provider, submitted } = makeProvider();
     await provider.motionTransfer({

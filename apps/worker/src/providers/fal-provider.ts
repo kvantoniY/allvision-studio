@@ -18,7 +18,7 @@ const MAX_DATAURI_BYTES = Number(process.env.FAL_MAX_DATAURI_BYTES ?? String(25 
 // fal-модели отбивают вход размером больше 3850×3850px (image_too_large). Уменьшаем длинную
 // сторону входных картинок до безопасного предела и авто-ориентируем по EXIF (фото с телефона).
 const MAX_IMAGE_DIM = Number(process.env.FAL_MAX_IMAGE_DIM ?? '2560');
-const URL_INPUT_KEYS = ['image_url', 'image_urls', 'video_url', 'video_urls', 'reference_image_urls', 'reference_video_urls'];
+const URL_INPUT_KEYS = ['image_url', 'image_urls', 'video_url', 'video_urls', 'reference_image_urls', 'reference_video_urls', 'start_image_url', 'end_image_url'];
 
 type Logger = {
   info: (message: string, meta?: unknown) => void;
@@ -295,14 +295,29 @@ export class FalProvider implements AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
     const config = this.requireModel(input.model, 'image-to-video');
-    const falInput: Record<string, unknown> = {
-      image_url: input.imageUrl,
-      prompt: input.prompt ?? '',
-      duration: input.durationSec,
-    };
-    const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
-    const resolution = readString(input.params, 'resolution');
-    Object.assign(falInput, videoProfileFields(config.paramProfile, aspect, resolution));
+    // Kling v3/o3 image-to-video используют start_image_url (первый кадр) + опц. end_image_url
+    // (последний кадр), duration — строковый enum '3'..'15'. У них НЕТ image_url/aspect_ratio —
+    // раньше слали image_url (endpoint его игнорировал) и число, из-за чего фото не применялось.
+    const isKlingStartEnd = config.endpoint.includes('kling-video/v3') || config.endpoint.includes('kling-video/o3');
+    let falInput: Record<string, unknown>;
+    if (isKlingStartEnd) {
+      const tail = readString(input.params, 'tail_image_url') ?? readString(input.params, 'end_image_url');
+      falInput = {
+        start_image_url: input.imageUrl,
+        prompt: input.prompt || 'Плавный естественный реалистичный переход между кадрами, кинематографичное движение.',
+        duration: String(Math.max(3, Math.min(15, Math.round(input.durationSec || 5)))),
+        ...(tail ? { end_image_url: tail } : {}),
+      };
+    } else {
+      falInput = {
+        image_url: input.imageUrl,
+        prompt: input.prompt ?? '',
+        duration: input.durationSec,
+      };
+      const aspect = normalizeAspect(readString(input.params, 'aspect_ratio'));
+      const resolution = readString(input.params, 'resolution');
+      Object.assign(falInput, videoProfileFields(config.paramProfile, aspect, resolution));
+    }
     mergePassthrough(falInput, input.params);
 
     return this.run({
@@ -881,7 +896,7 @@ function extFor(contentType: string, url: string, fallback: string): string {
 const NEVER_FORWARD = new Set([
   'model', 'mode', 'endpoint', 'kind', 'prompt', 'negative_prompt', 'aspect_ratio', 'resolution', 'duration',
   'image_url', 'image_urls', 'video_url', 'video_urls', 'images', 'video', 'generate_audio',
-  'target_video', 'driving_video', 'input_image',
+  'target_video', 'driving_video', 'input_image', 'start_image_url', 'end_image_url',
 ]);
 
 /**
