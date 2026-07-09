@@ -94,8 +94,12 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   // omni -> отдельный reference-to-video эндпоинт Seedance (image_urls/video_urls как референсы).
   'seedance-2-omni': { endpoint: 'bytedance/seedance-2.0/reference-to-video', kind: 'text-to-video', estimatedCostUsd: 1.5 },
   'seedance-2-fast-omni': { endpoint: 'bytedance/seedance-2.0/fast/reference-to-video', kind: 'text-to-video', estimatedCostUsd: 0.75 },
-  // kling-3-omni -> Kling v3 pro text-to-video (из реального каталога fal).
-  'kling-3-omni': { endpoint: 'fal-ai/kling-video/v3/pro/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
+  // kling-3-omni -> Kling O3 pro reference-to-video (НАСТОЯЩИЙ omni: image_urls как @Image1..@Image4
+  // «reference images for style/appearance», + опц. start_image_url/video_url + промпт). Раньше был
+  // замаплен на v3/pro/text-to-video — чистый text-to-video БЕЗ поля картинок, из-за чего image_urls
+  // молча выбрасывались, и модель генерила случайных людей «как будто без референсов». duration —
+  // строковый enum '3'..'15'; aspect_ratio — 16:9/9:16/1:1.
+  'kling-3-omni': { endpoint: 'fal-ai/kling-video/o3/pro/reference-to-video', kind: 'text-to-video', estimatedCostUsd: 1.68 },
   // Kling O3 (Omni 3) Reference V2V: НАСТОЯЩИЙ omni-reference Kling на fal — принимает референс-видео
   // (video_url, @Video1) + фото-референсы (image_urls, @Image1..; максимум 4) + промпт. keep_audio
   // (default true) сохраняет оригинальный звук референса. Цена: pro $0.168/с, std $0.126/с.
@@ -334,7 +338,9 @@ export class FalProvider implements AIProvider {
     const isReferenceVideo = config.endpoint.includes('reference-to-video');
     const isSeedanceReference = isReferenceVideo && config.endpoint.includes('seedance');
     const isWanReference = isReferenceVideo && config.endpoint.includes('/wan/');
-    const isKlingO3Reference = config.endpoint.includes('video-to-video/reference');
+    // Оба Kling O3 endpoint'а: video-to-video/reference (kling-o3-omni) и reference-to-video
+    // (kling-3-omni). У обоих duration — строковый enum '3'..'15', видео-референс — singular video_url.
+    const isKlingO3 = config.endpoint.includes('kling-video/o3/');
     if (isSeedanceReference) {
       // ВАЖНО: у Seedance reference-to-video generate_audio по умолчанию TRUE на стороне fal —
       // без явного false модель сочиняет собственную музыку («левый» звук в трендах).
@@ -354,7 +360,8 @@ export class FalProvider implements AIProvider {
     const videoRefs = uniqueUrls([readString(input.params, 'video'), ...readStringList(input.params, 'video_urls')]);
     if (videoRefs.length > 0) {
       if (isWanReference) falInput.reference_video_urls = videoRefs;
-      else if (isReferenceVideo) falInput.video_urls = videoRefs;
+      else if (isKlingO3) falInput.video_url = videoRefs[0]; // Kling O3 (обе ветки) — singular video_url
+      else if (isReferenceVideo) falInput.video_urls = videoRefs; // Seedance reference-to-video — массив
       else falInput.video_url = videoRefs[0];
     }
     // duration: Seedance — строковый enum '4'..'15' ИЛИ 'auto' (модель сама выбирает длину по
@@ -366,7 +373,7 @@ export class FalProvider implements AIProvider {
     const seedanceDurationValue = autoRequested ? 'auto' : String(Math.max(4, Math.min(15, Math.round(input.durationSec || 5))));
     if (isSeedanceReference) {
       falInput.duration = seedanceDurationValue;
-    } else if (isKlingO3Reference) {
+    } else if (isKlingO3) {
       falInput.duration = String(Math.max(3, Math.min(15, Math.round(input.durationSec || 5))));
     } else if (isWanReference) {
       falInput.duration = Math.max(2, Math.min(10, Math.round(input.durationSec || 5)));

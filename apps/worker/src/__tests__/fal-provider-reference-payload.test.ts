@@ -101,6 +101,30 @@ describe('FalProvider reference payload mapping', () => {
     expect(auto.submitted[0].input.duration).toBe('auto');
   });
 
+  it('sends image_urls + string duration to Kling 3.0 Omni (o3 reference-to-video)', async () => {
+    // Регресс: kling-3-omni был замаплен на v3/pro/text-to-video (нет поля картинок) -> фото
+    // молча игнорировались, модель выдавала случайных людей. Теперь -> o3/pro/reference-to-video.
+    const { provider, submitted } = makeProvider();
+    await provider.textToVideo({
+      prompt: 'me as @Image1 and @Image2 in a movie scene',
+      durationSec: 10,
+      model: 'kling-3-omni',
+      params: {
+        images: ['https://cdn.test/face1.png', 'https://cdn.test/face2.png'],
+        aspect_ratio: 'auto',
+        resolution: '720p',
+      },
+      context,
+    });
+
+    expect(submitted).toHaveLength(1);
+    expect(submitted[0].endpoint).toBe('fal-ai/kling-video/o3/pro/reference-to-video');
+    expect(submitted[0].input.image_urls).toEqual(['https://cdn.test/face1.png', 'https://cdn.test/face2.png']);
+    // duration строкой (enum '3'..'15'); aspect 'auto' опускается (enum без auto).
+    expect(submitted[0].input.duration).toBe('10');
+    expect(submitted[0].input.aspect_ratio).toBeUndefined();
+  });
+
   it('sends single video_url to Kling O3 reference V2V and keeps keep_audio passthrough', async () => {
     const { provider, submitted } = makeProvider();
     await provider.textToVideo({
