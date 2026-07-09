@@ -216,6 +216,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState<ChatAspectRatio>('1:1');
   const [duration, setDuration] = useState(5);
+  // Длительность «auto» (модель сама выбирает длину) — доступна у моделей с durationAutoSupported.
+  const [durationAuto, setDurationAuto] = useState(false);
   const [generateAudio, setGenerateAudio] = useState(false);
   const [source, setSource] = useState<SelectedInputSource | null>(null);
   // Second input for talking-avatar (lip-sync): character image is `source`, voice audio is `audioSource`.
@@ -298,7 +300,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const mergedParams = useMemo(() => ({ ...cleanedAdvancedParams, ...slotParams }), [cleanedAdvancedParams, slotParams]);
   const missingAdvanced = missingAdvancedRequirement(selectedModel, mergedParams);
   const estimatedCostCoins = estimateChatGenerationPriceCoins(selectedModel.slug, {
-    duration: selectedModel.category === 'video' ? duration : undefined,
+    // При «auto» считаем цену по дефолтной длительности модели (передаём undefined).
+    duration: selectedModel.category === 'video' && !durationAuto ? duration : undefined,
     generateAudio: effectiveGenerateAudio,
     params: mergedParams,
     priceOverrides: modelPriceOverrides,
@@ -311,6 +314,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     setModelSlug(next.slug);
     setAspectRatio(next.supportedAspectRatios[0] ?? 'auto');
     setDuration(next.defaultDurationSec ?? next.durationOptions[0] ?? 5);
+    setDurationAuto(false);
     setGenerateAudio(next.supportsAudio);
     setSource(null);
     setAudioSource(null);
@@ -334,7 +338,10 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     if (!selectedModel.supportsAudio && generateAudio) {
       setGenerateAudio(false);
     }
-  }, [aspectRatio, duration, generateAudio, selectedModel]);
+    if (!selectedModel.durationAutoSupported && durationAuto) {
+      setDurationAuto(false);
+    }
+  }, [aspectRatio, duration, durationAuto, generateAudio, selectedModel]);
 
   useEffect(() => {
     setAdvancedParams(defaultAdvancedParams(selectedModel));
@@ -500,7 +507,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           modelSlug: selectedModel.slug,
           prompt,
           aspectRatio,
-          duration: selectedModel.category === 'video' && !selectedModel.tool ? duration : undefined,
+          duration: selectedModel.category === 'video' && !selectedModel.tool ? (durationAuto ? 'auto' : duration) : undefined,
           generateAudio: selectedModel.category === 'video' && !selectedModel.tool ? effectiveGenerateAudio : undefined,
           inputRef: source?.ref,
           imageInputRef: source?.mediaKind === 'image' ? source.ref : undefined,
@@ -610,6 +617,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       category={category}
       aspectRatio={aspectRatio}
       duration={duration}
+      durationAuto={durationAuto}
       generateAudio={effectiveGenerateAudio}
       advancedParams={advancedParams}
       familyModels={familyModels}
@@ -617,6 +625,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       onModelChange={setModelSlug}
       onAspectRatioChange={setAspectRatio}
       onDurationChange={setDuration}
+      onDurationAutoChange={setDurationAuto}
       onGenerateAudioChange={setGenerateAudio}
       onAdvancedParamsChange={setAdvancedParams}
     />
@@ -951,6 +960,7 @@ function DetailedSettingsControl({
   category,
   aspectRatio,
   duration,
+  durationAuto,
   generateAudio,
   advancedParams,
   familyModels,
@@ -958,6 +968,7 @@ function DetailedSettingsControl({
   onModelChange,
   onAspectRatioChange,
   onDurationChange,
+  onDurationAutoChange,
   onGenerateAudioChange,
   onAdvancedParamsChange,
 }: {
@@ -965,6 +976,7 @@ function DetailedSettingsControl({
   category: ChatCategory;
   aspectRatio: ChatAspectRatio;
   duration: number;
+  durationAuto: boolean;
   generateAudio: boolean;
   advancedParams: ChatAdvancedParams;
   familyModels: ChatModelOption[];
@@ -972,6 +984,7 @@ function DetailedSettingsControl({
   onModelChange: (value: string) => void;
   onAspectRatioChange: (value: ChatAspectRatio) => void;
   onDurationChange: (value: number) => void;
+  onDurationAutoChange: (value: boolean) => void;
   onGenerateAudioChange: (value: boolean) => void;
   onAdvancedParamsChange: (value: ChatAdvancedParams) => void;
 }) {
@@ -1113,7 +1126,25 @@ function DetailedSettingsControl({
                   <Clock3 className="h-4 w-4 text-slate-500" />
                   Длительность
                 </span>
-                {durationValues.length > 1 ? (
+                {model.durationAutoSupported ? (
+                  <select
+                    value={durationAuto ? 'auto' : String(duration)}
+                    onChange={(event) => {
+                      if (event.target.value === 'auto') {
+                        onDurationAutoChange(true);
+                        return;
+                      }
+                      onDurationAutoChange(false);
+                      onDurationChange(Number(event.target.value));
+                    }}
+                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                  >
+                    <option value="auto">Авто (модель решит)</option>
+                    {durationValues.map((item) => (
+                      <option key={item} value={item}>{item} сек</option>
+                    ))}
+                  </select>
+                ) : durationValues.length > 1 ? (
                   <select
                     value={String(duration)}
                     onChange={(event) => onDurationChange(Number(event.target.value))}

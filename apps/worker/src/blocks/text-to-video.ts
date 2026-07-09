@@ -17,7 +17,8 @@ if (!catalog) throw new Error('Block catalog metadata missing: text-to-video');
 const paramsSchema = z.object({
   model: z.union([z.string(), tierModelParamsSchema]).optional(),
   prompt: z.string().min(1),
-  duration: z.number().min(1).max(30).optional(),
+  // Число секунд ИЛИ 'auto' (Seedance 2.0 сама выбирает длительность по промпту).
+  duration: z.union([z.number().min(1).max(30), z.literal('auto')]).optional(),
   aspect_ratio: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4', '21:9', '9:21']).default('auto').optional(),
   mode: z.enum(['text_to_video', 'omni_reference']).optional(),
   resolution: z.string().optional(),
@@ -74,8 +75,10 @@ export const textToVideoBlock: BlockDefinition = {
       }
     }
     const result = await ctx.getAIProvider().textToVideo({
+      // durationSec остаётся числовым (fallback 5); 'auto' передаётся через providerParams.duration
+      // и распознаётся в fal-provider для Seedance 2.0.
+      durationSec: typeof parsed.duration === 'number' ? parsed.duration : 5,
       prompt: parsed.prompt,
-      durationSec: parsed.duration ?? 5,
       model,
       params: providerParams,
       context: ctx.providerContext,

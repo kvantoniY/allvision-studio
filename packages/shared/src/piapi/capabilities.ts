@@ -30,6 +30,8 @@ export interface PiAPIDurationCapability {
   default: number;
   step?: number;
   options?: number[];
+  /** Модель поддерживает значение «auto» — длительность выбирает сама модель по промпту (Seedance 2.0). */
+  supportsAuto?: boolean;
 }
 
 export interface PiAPIAudioCapability {
@@ -70,7 +72,9 @@ const ratioAutoOptions = ['auto', '16:9', '9:16', '1:1'].map((value) => ({ value
 const videoDuration5to10: PiAPIDurationCapability = { minimum: 5, maximum: 10, default: 5, step: 1, options: [5, 10] };
 const kling3Duration: PiAPIDurationCapability = { minimum: 3, maximum: 15, default: 5, step: 1 };
 const videoDuration6to10: PiAPIDurationCapability = { minimum: 6, maximum: 10, default: 6, step: 1, options: [6, 10] };
-const seedanceDuration: PiAPIDurationCapability = { minimum: 4, maximum: 15, default: 5, step: 1 };
+// Seedance 2.0 (text-to-video и reference-to-video) поддерживает duration: "auto" — модель сама
+// выбирает длительность 4..15 сек по промпту (проверено по OpenAPI-схеме fal).
+const seedanceDuration: PiAPIDurationCapability = { minimum: 4, maximum: 15, default: 5, step: 1, supportsAuto: true };
 const veoDuration: PiAPIDurationCapability = { minimum: 4, maximum: 8, default: 8, step: 1, options: [4, 6, 8] };
 const soraDuration: PiAPIDurationCapability = { minimum: 4, maximum: 20, default: 10, step: 1, options: [4, 8, 10, 15, 20] };
 const wanDuration: PiAPIDurationCapability = { minimum: 5, maximum: 10, default: 5, step: 1, options: [5, 10] };

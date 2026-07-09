@@ -36,6 +36,8 @@ export interface ChatModelOption {
   maxDurationSec?: number;
   defaultDurationSec?: number;
   durationOptions: number[];
+  /** Модель принимает «auto» — длительность выбирает сама модель (Seedance 2.0). */
+  durationAutoSupported: boolean;
   supportedResolutions: string[];
   defaultResolution?: string;
   advancedParams: PiAPIParamCapability[];
@@ -113,6 +115,7 @@ function fromCatalog(params: {
     maxDurationSec: capability?.duration?.maximum ?? model.limits?.maxDurationSec,
     defaultDurationSec: capability?.duration?.default ?? defaultDurationForModel(model),
     durationOptions: params.category === 'video' ? durationOptionsForModel(model) : [],
+    durationAutoSupported: params.category === 'video' && !!capability?.duration?.supportsAuto,
     supportedResolutions: capability?.resolutions ?? model.limits?.resolutions ?? [],
     defaultResolution: capability?.defaultResolution,
     advancedParams: capability?.params ?? [],

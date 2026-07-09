@@ -357,14 +357,21 @@ export class FalProvider implements AIProvider {
       else if (isReferenceVideo) falInput.video_urls = videoRefs;
       else falInput.video_url = videoRefs[0];
     }
-    // duration: Seedance — строковый enum '4'..'15'; Kling O3 v2v reference — строковый enum
-    // '3'..'15' (число даёт 422 literal_error, проверено на проде); Wan 2.7 — integer 2..10.
+    // duration: Seedance — строковый enum '4'..'15' ИЛИ 'auto' (модель сама выбирает длину по
+    // промпту); Kling O3 v2v reference — строковый enum '3'..'15' (число даёт 422 literal_error,
+    // проверено на проде); Wan 2.7 — integer 2..10.
+    // 'auto' приходит из чата через params.duration (durationSec — только числовой fallback).
+    const autoRequested = readString(input.params, 'duration') === 'auto';
+    const isSeedanceTextToVideo = config.endpoint.includes('seedance') && config.endpoint.includes('text-to-video');
+    const seedanceDurationValue = autoRequested ? 'auto' : String(Math.max(4, Math.min(15, Math.round(input.durationSec || 5))));
     if (isSeedanceReference) {
-      falInput.duration = String(Math.max(4, Math.min(15, Math.round(input.durationSec || 5))));
+      falInput.duration = seedanceDurationValue;
     } else if (isKlingO3Reference) {
       falInput.duration = String(Math.max(3, Math.min(15, Math.round(input.durationSec || 5))));
     } else if (isWanReference) {
       falInput.duration = Math.max(2, Math.min(10, Math.round(input.durationSec || 5)));
+    } else if (isSeedanceTextToVideo) {
+      falInput.duration = seedanceDurationValue;
     }
     mergePassthrough(falInput, input.params);
 

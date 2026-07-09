@@ -69,7 +69,7 @@ export type ChatMessageBody = {
   modelSlug: string;
   prompt: string;
   aspectRatio?: '1:1' | '9:16' | '16:9' | '4:3' | '3:4' | '21:9' | '9:21' | 'auto';
-  duration?: number;
+  duration?: number | 'auto';
   generateAudio?: boolean;
   params?: Record<string, unknown>;
   inputRef?: string;

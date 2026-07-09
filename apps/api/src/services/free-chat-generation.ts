@@ -10,7 +10,7 @@ export const chatMessageSchema = z.object({
   modelSlug: z.string().trim().min(1),
   prompt: z.string().trim().max(4000).optional(),
   aspectRatio: z.enum(['1:1', '9:16', '16:9', '4:3', '3:4', '21:9', '9:21', 'auto']).optional(),
-  duration: z.coerce.number().int().min(1).max(30).optional(),
+  duration: z.union([z.coerce.number().int().min(1).max(30), z.literal('auto')]).optional(),
   generateAudio: z.boolean().optional(),
   params: z.record(z.unknown()).optional(),
   inputRef: z.string().trim().min(1).optional(),
@@ -184,7 +184,7 @@ function buildPipeline(params: {
   modelSlug: string;
   prompt: string;
   aspectRatio: ChatAspectRatio;
-  duration?: number;
+  duration?: number | 'auto';
   generateAudio?: boolean;
   audioParam?: 'enable_audio' | 'generate_audio';
   extraParams?: Record<string, unknown>;
@@ -328,11 +328,15 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   if (body.generateAudio && !model.supportsAudio) {
     throw new HttpError(400, 'AUDIO_NOT_SUPPORTED', 'Эта модель не генерирует звук');
   }
-  const duration = model.category === 'video' ? body.duration ?? model.defaultDurationSec ?? 5 : undefined;
-  if (duration !== undefined && model.minDurationSec !== undefined && duration < model.minDurationSec) {
+  let duration: number | 'auto' | undefined = model.category === 'video' ? body.duration ?? model.defaultDurationSec ?? 5 : undefined;
+  // «auto» разрешено только для моделей, которые его поддерживают (Seedance 2.0); иначе — дефолт.
+  if (duration === 'auto' && !model.durationAutoSupported) {
+    duration = model.defaultDurationSec ?? 5;
+  }
+  if (typeof duration === 'number' && model.minDurationSec !== undefined && duration < model.minDurationSec) {
     throw new HttpError(400, 'UNSUPPORTED_DURATION', `Минимальная длительность для этой модели: ${model.minDurationSec} сек.`);
   }
-  if (duration !== undefined && model.maxDurationSec !== undefined && duration > model.maxDurationSec) {
+  if (typeof duration === 'number' && model.maxDurationSec !== undefined && duration > model.maxDurationSec) {
     throw new HttpError(400, 'UNSUPPORTED_DURATION', `Максимальная длительность для этой модели: ${model.maxDurationSec} сек.`);
   }
 
@@ -395,8 +399,10 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
   if (model.blockSlug === 'fal-generic' && !(typeof paramsWithAudio.endpoint === 'string' && paramsWithAudio.endpoint.trim())) {
     throw new HttpError(400, 'FAL_ENDPOINT_REQUIRED', 'Укажите fal endpoint (напр. fal-ai/veo3.1)');
   }
+  // Для оценки цены «auto» считаем по дефолтной длительности модели.
+  const pricingDuration = typeof duration === 'number' ? duration : (model.defaultDurationSec ?? 5);
   const tokensCost = estimateChatGenerationPriceCoins(model.slug, {
-    duration,
+    duration: pricingDuration,
     generateAudio,
     params: paramsWithAudio,
     priceOverrides: await readModelPriceOverrides(),
@@ -505,7 +511,8 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
     status: 'queued' as const,
     estimatedDurationSec: estimateDurationSec(model.category),
     aspectRatio,
-    duration,
+    // ChatMessage.duration — Int?; для «auto» пишем null (в pipeline/userInputs 'auto' сохранён).
+    duration: typeof duration === 'number' ? duration : null,
   };
 }
 

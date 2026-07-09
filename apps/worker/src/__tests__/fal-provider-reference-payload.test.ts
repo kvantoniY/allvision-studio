@@ -76,6 +76,31 @@ describe('FalProvider reference payload mapping', () => {
     expect(submitted[0].input.duration).toBe('10');
   });
 
+  it('sends string duration to Seedance text-to-video and "auto" when requested', async () => {
+    // Число -> строковый enum (schema fal: type string). params.duration:'auto' -> 'auto'.
+    const numeric = makeProvider();
+    await numeric.provider.textToVideo({
+      prompt: 'a cat surfing',
+      durationSec: 8,
+      model: 'seedance-2',
+      params: { duration: 8, aspect_ratio: '16:9' },
+      context,
+    });
+    expect(numeric.submitted[0].endpoint).toBe('bytedance/seedance-2.0/text-to-video');
+    expect(numeric.submitted[0].input.duration).toBe('8');
+
+    const auto = makeProvider();
+    await auto.provider.textToVideo({
+      prompt: 'a cat surfing',
+      durationSec: 5,
+      model: 'seedance-2-fast',
+      params: { duration: 'auto', aspect_ratio: '16:9' },
+      context,
+    });
+    expect(auto.submitted[0].endpoint).toBe('bytedance/seedance-2.0/fast/text-to-video');
+    expect(auto.submitted[0].input.duration).toBe('auto');
+  });
+
   it('sends single video_url to Kling O3 reference V2V and keeps keep_audio passthrough', async () => {
     const { provider, submitted } = makeProvider();
     await provider.textToVideo({
