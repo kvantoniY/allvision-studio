@@ -307,7 +307,7 @@ const imageToVideoModels: ModelOption[] = [
     description: 'Новая версия Kling для image-to-video с более сильным движением и лучшей генерацией кадра. Подходит для услуг, где одно фото нужно превратить в эффектный клип, но без максимальной цены Pro. Результат - видео 5-10 секунд, стоимость зависит от разрешения и аудио.',
     limits: { minDurationSec: 3, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['720p', '1080p'], aspectRatios: ['auto', '9:16', '16:9', '1:1'] },
     requiredParams: ['image_url'],
-    optionalParams: ['prompt', 'duration', 'aspect_ratio', 'resolution', 'enable_audio', 'version=3.0'],
+    optionalParams: ['prompt', 'duration', 'aspect_ratio', 'resolution', 'generate_audio', 'version=3.0'],
     docsUrl: 'https://piapi.ai/docs/kling-api/kling-3',
   },
   {
@@ -322,7 +322,7 @@ const imageToVideoModels: ModelOption[] = [
     description: 'Самый дорогой и качественный режим Kling 3.0 для image-to-video. Используйте его для Pro-услуг, где портрет, свет и движение должны выглядеть максимально убедительно. Результат дороже, зато лучше подходит для wow-роликов и рекламных сценариев.',
     limits: { minDurationSec: 3, maxDurationSec: 15, maxResolution: '1080p', resolutions: ['720p', '1080p'], aspectRatios: ['auto', '9:16', '16:9', '1:1'] },
     requiredParams: ['image_url'],
-    optionalParams: ['prompt', 'duration', 'aspect_ratio', 'resolution', 'version=3.0', 'mode=pro'],
+    optionalParams: ['prompt', 'duration', 'aspect_ratio', 'resolution', 'generate_audio', 'version=3.0', 'mode=pro'],
     docsUrl: 'https://piapi.ai/docs/kling-api/kling-3',
   },
   {

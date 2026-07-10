@@ -429,7 +429,8 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     mode: 'std',
     version: '3.0',
     resolution: ['720p', '1080p'],
-    audio: { mode: 'generate', booleanParam: 'enable_audio' },
+    // fal kling v3 image-to-video использует поле generate_audio (не enable_audio).
+    audio: { mode: 'generate', booleanParam: 'generate_audio' },
   }),
   klingCapability({
     slug: 'kling-3-pro',
@@ -437,7 +438,9 @@ export const PIAPI_MODEL_CAPABILITIES: PiAPIModelCapability[] = [
     mode: 'pro',
     version: '3.0',
     resolution: ['720p', '1080p'],
-    audio: { mode: 'none' },
+    // Kling 3.0 Pro на fal умеет генерировать звук (generate_audio) — раньше стояло 'none',
+    // из-за чего в чате тумблер звука был недоступен.
+    audio: { mode: 'generate', booleanParam: 'generate_audio' },
   }),
   {
     slug: 'hailuo-2.3-fast',

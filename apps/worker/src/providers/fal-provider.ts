@@ -318,6 +318,9 @@ export class FalProvider implements AIProvider {
       const resolution = readString(input.params, 'resolution');
       Object.assign(falInput, videoProfileFields(config.paramProfile, aspect, resolution));
     }
+    // Звук у image-to-video (kling v3 generate_audio). generate_audio в NEVER_FORWARD, поэтому
+    // выставляем явно по запросу из чата; иначе тумблер «со звуком» не доходил бы до fal.
+    if (readBoolean(input.params, 'generate_audio')) falInput.generate_audio = true;
     mergePassthrough(falInput, input.params);
 
     return this.run({

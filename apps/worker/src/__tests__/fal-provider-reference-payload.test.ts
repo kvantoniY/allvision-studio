@@ -170,6 +170,18 @@ describe('FalProvider reference payload mapping', () => {
     expect(submitted[0].input.duration).toBe('8');
   });
 
+  it('forwards generate_audio for kling image-to-video when requested', async () => {
+    const { provider, submitted } = makeProvider();
+    await provider.imageToVideo({
+      imageUrl: 'https://cdn.test/first.png',
+      durationSec: 5,
+      model: 'kling-3-pro',
+      params: { generate_audio: true },
+      context,
+    });
+    expect(submitted[0].input.generate_audio).toBe(true);
+  });
+
   it('maps motion transfer via Wan 2.7 reference-to-video to reference_*_urls with integer duration', async () => {
     const { provider, submitted } = makeProvider();
     await provider.motionTransfer({
