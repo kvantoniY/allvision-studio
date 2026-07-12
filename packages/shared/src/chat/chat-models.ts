@@ -236,11 +236,14 @@ export function estimateChatGenerationPriceCoins(
   const costCoins = estimateChatGenerationCostCoins(modelSlug, options);
   const floor = chatModelPriceFloorCoins(modelSlug, options.duration);
   const defaultPriceCoins = Math.max(floor, Math.ceil(costCoins * PRICE_MULTIPLIER));
-  return applyModelPriceOverride(
-    modelSlug,
-    defaultPriceCoins,
-    options.priceOverrides,
-  );
+  // Админ-оверрайд для чата — это МИНИМАЛЬНАЯ цена модели, а не фиксированная: длительность и
+  // ценовой пол по-прежнему поднимают цену выше. Иначе оверрайд вроде kling-3-omni=12 «замораживал»
+  // цену на 12 при любой длительности, а oldid оверрайды картинок (=1) обходили пол в 2 коина.
+  const override = options.priceOverrides?.[modelSlug];
+  if (typeof override === 'number' && Number.isFinite(override) && override >= 1) {
+    return Math.max(defaultPriceCoins, Math.ceil(override));
+  }
+  return defaultPriceCoins;
 }
 
 export const CHAT_MODELS: ChatModelOption[] = [

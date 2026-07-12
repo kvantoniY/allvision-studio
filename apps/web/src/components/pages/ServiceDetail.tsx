@@ -2568,6 +2568,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   <PreviewVideo
                     key={previewVideo}
                     src={previewVideo}
+                    withSound
                     className="max-h-[70vh] w-auto max-w-full object-contain"
                   />
                 ) : (

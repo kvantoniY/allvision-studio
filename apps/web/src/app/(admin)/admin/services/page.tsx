@@ -21,6 +21,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { coverCropStyle } from '@/lib/cover-crop';
 import { formatMoney, serviceMargin, summarizePipelinePricing, type ServiceMargin } from '@allvision/shared';
 import {
   buildMockUserInputs,
@@ -105,10 +106,11 @@ function marginBadgeClass(marginPercent: number | null) {
   return 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30';
 }
 
-// Компактная вертикальная сводка: цена / себестоимость / маржа в три строки.
-function PricingCell({ margin, usdToRub }: { margin: ServiceMargin; usdToRub: number }) {
+// Колонка одного тарифа/варианта: цена, себестоимость, маржа.
+function PricingTier({ label, margin, usdToRub }: { label: string; margin: ServiceMargin; usdToRub: number }) {
   return (
-    <div className="w-[152px] space-y-1 text-xs">
+    <div className="min-w-[150px] flex-1 space-y-1 rounded-lg border border-zinc-800/80 bg-zinc-900/40 px-2.5 py-2 text-xs">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-slate-500">Цена</span>
         <span className="font-semibold text-slate-100">
@@ -130,6 +132,33 @@ function PricingCell({ margin, usdToRub }: { margin: ServiceMargin; usdToRub: nu
           {formatMargin(margin.marginPercent)}
         </span>
       </div>
+    </div>
+  );
+}
+
+// Экономика услуги: если тарифы Стандарт/Pro отличаются ценой ИЛИ себестоимостью — показываем оба
+// столбца (весь диапазон цен/себестоимости), иначе один. Так видно «с галочкой/без, разные функции».
+function PricingCell({
+  standard,
+  pro,
+  usdToRub,
+}: {
+  standard: ServiceMargin;
+  pro: ServiceMargin;
+  usdToRub: number;
+}) {
+  const differ = standard.priceCoins !== pro.priceCoins || Math.abs(standard.costUsd - pro.costUsd) > 1e-9;
+  if (!differ) {
+    return (
+      <div className="flex w-full max-w-[220px]">
+        <PricingTier label="Цена" margin={pro} usdToRub={usdToRub} />
+      </div>
+    );
+  }
+  return (
+    <div className="flex w-full max-w-[380px] flex-wrap gap-2">
+      <PricingTier label="Стандарт" margin={standard} usdToRub={usdToRub} />
+      <PricingTier label="Pro" margin={pro} usdToRub={usdToRub} />
     </div>
   );
 }
@@ -282,13 +311,13 @@ export default function AdminServicesPage() {
       )}
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-zinc-800/80 shadow-sm">
-        <table className="min-w-[860px] w-full divide-y divide-zinc-800 text-sm">
+        <table className="min-w-[1080px] w-full divide-y divide-zinc-800 text-sm">
           <thead className="bg-zinc-900/80 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400 backdrop-blur">
             <tr>
-              <th className="w-[56px] px-3 py-2.5">Превью</th>
+              <th className="w-[148px] px-3 py-2.5">Превью</th>
               <th className="px-3 py-2.5">Название</th>
               <th className="w-[120px] px-3 py-2.5">Категория</th>
-              <th className="w-[168px] px-3 py-2.5">Экономика</th>
+              <th className="w-[400px] px-3 py-2.5">Экономика</th>
               <th className="w-[88px] px-2 py-2.5 text-center">Статус</th>
               <th className="w-[84px] px-2 py-2.5 text-center" title="Порядок в каталоге — стрелками меняйте позицию">Порядок</th>
               <th className="w-[176px] px-3 py-2.5 text-right">Действия</th>
@@ -314,26 +343,32 @@ export default function AdminServicesPage() {
             )}
             {items.map((service) => {
               const pricing = summarizePipelinePricing(service.pipelineConfig, blocks, usdToRub);
-              const effectivePrice = service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
-              const margin = serviceMargin(effectivePrice, pricing.pro.costUsd, usdToRub);
+              const stdPrice = service.priceCoinsStandard ?? service.priceCoinsPro ?? service.priceTokens;
+              const proPrice = service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens;
+              const stdMargin = serviceMargin(stdPrice, pricing.standard.costUsd, usdToRub);
+              const proMargin = serviceMargin(proPrice, pricing.pro.costUsd, usdToRub);
               const media = previewMedia(service);
               return (
-              <tr key={service.id} className={cn('align-middle transition-colors hover:bg-zinc-900/70', marginRowClass(margin.marginPercent))}>
+              <tr key={service.id} className={cn('align-middle transition-colors hover:bg-zinc-900/70', marginRowClass(proMargin.marginPercent))}>
                 <td className="px-3 py-2.5">
-                  {media?.type === 'video' ? (
-                    <video src={media.url} muted preload="metadata" className="h-11 w-11 rounded-lg bg-black object-cover ring-1 ring-inset ring-white/10" />
-                  ) : (
-                    <img
-                      src={media?.url ?? MOCK_PREVIEW}
-                      alt=""
-                      className="h-11 w-11 rounded-lg object-cover ring-1 ring-inset ring-white/10"
-                      onError={(event) => {
-                        if (event.currentTarget.src !== window.location.origin + MOCK_PREVIEW) {
-                          event.currentTarget.src = MOCK_PREVIEW;
-                        }
-                      }}
-                    />
-                  )}
+                  {/* Обложка как на витрине услуг: 16:10 с тем же кропом. */}
+                  <div className="relative aspect-[16/10] w-[124px] overflow-hidden rounded-lg bg-black ring-1 ring-inset ring-white/10">
+                    {media?.type === 'video' ? (
+                      <video src={media.url} muted preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
+                    ) : (
+                      <img
+                        src={media?.url ?? MOCK_PREVIEW}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                        style={coverCropStyle(service.coverCrop)}
+                        onError={(event) => {
+                          if (event.currentTarget.src !== window.location.origin + MOCK_PREVIEW) {
+                            event.currentTarget.src = MOCK_PREVIEW;
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-2.5">
                   <Link href={`/admin/services/${service.id}`} className="block max-w-[280px] truncate font-medium text-white transition-colors hover:text-violet-300">
@@ -345,7 +380,7 @@ export default function AdminServicesPage() {
                   <Badge className="bg-zinc-800 font-medium text-slate-300">{categoryTitleByCode.get(service.category) ?? service.category}</Badge>
                 </td>
                 <td className="px-3 py-2.5">
-                  <PricingCell margin={margin} usdToRub={usdToRub} />
+                  <PricingCell standard={stdMargin} pro={proMargin} usdToRub={usdToRub} />
                 </td>
                 <td className="px-2 py-2.5">
                   <div className="flex flex-col items-center gap-1.5">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MessageSquare, PanelLeft, Trash2 } from 'lucide-react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { ChatForm } from '@/components/ai/ChatForm';
@@ -112,6 +112,15 @@ function AiContent() {
   const activeTitle = chatQuery.data?.chat.title ?? 'Allvision AI';
   const messages = chatQuery.data?.messages ?? [];
 
+  // Как в мессенджере: при открытии чата и при появлении нового сообщения прокручиваем ленту вниз
+  // (к последним генерациям). Частый поллинг статуса не двигает скролл — длина сообщений не меняется,
+  // поэтому не мешаем пользователю листать историю вверх.
+  const threadRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [activeChatId, messages.length]);
+
   return (
     <div className="grid h-[calc(100dvh-56px)] min-h-0 overflow-hidden bg-slate-950 md:h-dvh md:grid-cols-[300px_minmax(0,1fr)]">
       <div className="hidden min-h-0 md:block">
@@ -164,7 +173,7 @@ function AiContent() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 [scrollbar-gutter:stable_both-edges] lg:px-8">
+        <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 [scrollbar-gutter:stable_both-edges] lg:px-8">
           <div className="mx-auto w-full max-w-3xl">
             <ChatResultView
               messages={messages}

@@ -84,10 +84,15 @@ describe('CHAT_MODELS', () => {
     );
   });
 
-  it('applies admin model prices down to one token', () => {
-    const base = estimateChatGenerationCostCoins('nano-banana');
+  it('treats admin model price override as a MINIMUM (floor/duration still raise it)', () => {
+    // Оверрайд выше базовой цены — поднимает цену до себя.
+    const base = estimateChatGenerationPriceCoins('nano-banana');
     expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': base + 50 } })).toBe(base + 50);
-    expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(1);
+    // Оверрайд ниже пола НЕ опускает цену: картинка всё равно минимум 2 коина.
+    expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(2);
+    // Оверрайд не «замораживает» видео: длительность поднимает цену выше оверрайда.
+    expect(estimateChatGenerationPriceCoins('kling-3-omni', { duration: 5, priceOverrides: { 'kling-3-omni': 12 } })).toBe(12);
+    expect(estimateChatGenerationPriceCoins('kling-3-omni', { duration: 15, priceOverrides: { 'kling-3-omni': 12 } })).toBe(22);
   });
 
   it('marks up chat pricing at cost x2 but never below the chat floor', () => {

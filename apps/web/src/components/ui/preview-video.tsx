@@ -77,9 +77,32 @@ type PreviewVideoProps = {
   poster?: string;
   /** Положение кнопки звука. */
   soundButtonClassName?: string;
+  /**
+   * Показывать управление звуком и играть со звуком. По умолчанию false — превью в каталоге и на
+   * главной идут БЕЗ звука (обычное muted-автовоспроизведение). Звук нужен только на странице услуги.
+   */
+  withSound?: boolean;
 };
 
-export function PreviewVideo({ src, className, style, poster, soundButtonClassName }: PreviewVideoProps) {
+export function PreviewVideo(props: PreviewVideoProps) {
+  if (!props.withSound) {
+    return (
+      <video
+        src={props.src}
+        poster={props.poster}
+        className={props.className}
+        style={props.style}
+        muted
+        loop
+        autoPlay
+        playsInline
+      />
+    );
+  }
+  return <PreviewVideoWithSound {...props} />;
+}
+
+function PreviewVideoWithSound({ src, className, style, poster, soundButtonClassName }: PreviewVideoProps) {
   usePreviewSoundStore();
   const idRef = useRef<string>('');
   if (!idRef.current) idRef.current = `preview-${nextId++}`;
