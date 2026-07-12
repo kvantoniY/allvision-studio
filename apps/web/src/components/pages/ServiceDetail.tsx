@@ -1,6 +1,7 @@
 'use client';
 
 import { FallbackImage } from '@/components/ui/fallback-image';
+import { PreviewVideo } from '@/components/ui/preview-video';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -2562,15 +2563,11 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
           <div className="space-y-8">
           {activeView === 'service' ? (
             <>
-              <div className="flex justify-center overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+              <div className="relative flex justify-center overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                 {previewVideo ? (
-                  <video
+                  <PreviewVideo
                     key={previewVideo}
                     src={previewVideo}
-                    muted
-                    loop
-                    playsInline
-                    autoPlay
                     className="max-h-[70vh] w-auto max-w-full object-contain"
                   />
                 ) : (

@@ -1,5 +1,5 @@
 import { BLOCK_CATALOG } from '../blocks/catalog';
-import { CHAT_MODELS, estimateChatGenerationCostCoins, estimateChatGenerationPriceCoins, getChatModel } from '../chat/chat-models';
+import { CHAT_MODELS, CHAT_PROMPT_MAX_LENGTH, chatModelPriceFloorCoins, estimateChatGenerationCostCoins, estimateChatGenerationPriceCoins, getChatModel } from '../chat/chat-models';
 
 describe('CHAT_MODELS', () => {
   it('points every chat model at an existing catalog block and model', () => {
@@ -10,6 +10,22 @@ describe('CHAT_MODELS', () => {
       expect(chatModel.estimatedCostCoins).toBeGreaterThanOrEqual(0);
       expect(chatModel.supportedAspectRatios.length).toBeGreaterThan(0);
     }
+  });
+
+  it('enforces chat price floors: images >= 2 coins, Kling/Seedance video 12 + 1/sec over 5s', () => {
+    // Все фото-модели чата — минимум 2 коина.
+    for (const model of CHAT_MODELS.filter((m) => m.category === 'image')) {
+      expect(estimateChatGenerationPriceCoins(model.slug)).toBeGreaterThanOrEqual(2);
+    }
+    expect(chatModelPriceFloorCoins('nano-banana')).toBe(2);
+    // Kling / Seedance видео: 5с -> 12, 6с -> 13, 7с -> 14, «auto»/короткое -> 12.
+    expect(chatModelPriceFloorCoins('kling-3-std', 5)).toBe(12);
+    expect(chatModelPriceFloorCoins('kling-3-std', 6)).toBe(13);
+    expect(chatModelPriceFloorCoins('kling-3-std', 7)).toBe(14);
+    expect(chatModelPriceFloorCoins('seedance-2-fast', 4)).toBe(12);
+    expect(estimateChatGenerationPriceCoins('kling-3-std', { duration: 5 })).toBeGreaterThanOrEqual(12);
+    expect(estimateChatGenerationPriceCoins('seedance-2', { duration: 6 })).toBeGreaterThanOrEqual(13);
+    expect(CHAT_PROMPT_MAX_LENGTH).toBe(2500);
   });
 
   it('keeps narrow service blocks out of the free chat list', () => {
@@ -74,12 +90,15 @@ describe('CHAT_MODELS', () => {
     expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(1);
   });
 
-  it('marks up chat pricing at cost x2 (both image and video) after token rounding', () => {
+  it('marks up chat pricing at cost x2 but never below the chat floor', () => {
     const gptCost = estimateChatGenerationCostCoins('gpt-image-2');
-    expect(estimateChatGenerationPriceCoins('gpt-image-2')).toBe(Math.max(1, Math.ceil(gptCost * 2)));
+    // Картинка: max(себестоимость×2, пол 2 коина).
+    expect(estimateChatGenerationPriceCoins('gpt-image-2')).toBe(Math.max(2, Math.ceil(gptCost * 2)));
 
+    // kling-3-omni 15с/720p: себестоимость×2 = 14, но пол Kling на 15с = 12 + 10 = 22 → берём 22.
     const klingCost = estimateChatGenerationCostCoins('kling-3-omni', { duration: 15, params: { resolution: '720p' } });
     expect(klingCost).toBe(7);
-    expect(estimateChatGenerationPriceCoins('kling-3-omni', { duration: 15, params: { resolution: '720p' } })).toBe(14);
+    expect(estimateChatGenerationPriceCoins('kling-3-omni', { duration: 15, params: { resolution: '720p' } }))
+      .toBe(Math.max(22, klingCost * 2));
   });
 });

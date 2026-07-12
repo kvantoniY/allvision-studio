@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Check, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
-import { CHAT_MODELS, chatReferenceSlots, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type ChatReferenceSlot, type PiAPIParamCapability } from '@allvision/shared';
+import { CHAT_MODELS, CHAT_PROMPT_MAX_LENGTH, chatReferenceSlots, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type ChatReferenceSlot, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -307,7 +307,9 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     priceOverrides: modelPriceOverrides,
   });
   const canPay = balance >= estimatedCostCoins;
-  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !requiredExtraMissing && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
+  const promptLength = prompt.length;
+  const promptTooLong = promptLength > CHAT_PROMPT_MAX_LENGTH;
+  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && !promptTooLong && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !requiredExtraMissing && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -543,6 +545,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       ? 'Прикрепите аудио-озвучку'
       : missingAdvanced
         ? missingAdvanced
+      : promptTooLong
+        ? `Слишком длинный запрос: ${promptLength} из ${CHAT_PROMPT_MAX_LENGTH} символов`
       : !canPay
         ? 'Недостаточно токенов'
         : submitAttempted && requiresPrompt && !prompt.trim()
@@ -755,6 +759,18 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             }}
           />
 
+          {/* Счётчик символов промпта — появляется у лимита; над полем, не перекрывает кнопки/мобайл. */}
+          {promptLength > CHAT_PROMPT_MAX_LENGTH - 200 && (
+            <span
+              className={cn(
+                'pointer-events-none absolute right-3 top-2 rounded bg-slate-950/80 px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+                promptTooLong ? 'text-red-300' : 'text-amber-300',
+              )}
+            >
+              {promptLength} / {CHAT_PROMPT_MAX_LENGTH}
+            </span>
+          )}
+
           {/* @-меню: доступные референсы (omni) или подсказка, что модель их не поддерживает */}
           {anchorMenu && (
             <div className="absolute bottom-full left-3 z-20 mb-1 w-72 overflow-hidden rounded-lg border border-slate-700 bg-slate-950 shadow-xl">
@@ -840,7 +856,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           </div>
 
           {submitHint && (
-            <div className={cn('mt-2 truncate text-xs', canPay ? 'text-slate-400' : 'text-red-200')}>{submitHint}</div>
+            <div className={cn('mt-2 truncate text-xs', canPay && !promptTooLong ? 'text-slate-400' : 'text-red-200')}>{submitHint}</div>
           )}
         </div>
       </div>

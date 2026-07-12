@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { FallbackImage } from '@/components/ui/fallback-image';
+import { PreviewVideo } from '@/components/ui/preview-video';
 import Link from 'next/link';
 import { AlertCircle, Baby, Cake, ChevronDown, Clapperboard, Flame, Gift, Heart, LayoutGrid, Search, Sparkles, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -116,12 +117,8 @@ function ServiceTile({ service }: { service: PublicService }) {
     <Link href={`/services/${service.slug}`} className="group block">
       <div className="relative aspect-[16/10] overflow-hidden rounded-xl border border-slate-800 bg-slate-950 transition group-hover:border-amber-400/70">
         {showVideo && previewVideo ? (
-          <video
+          <PreviewVideo
             src={previewVideo}
-            muted
-            loop
-            playsInline
-            autoPlay
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
           />
         ) : (

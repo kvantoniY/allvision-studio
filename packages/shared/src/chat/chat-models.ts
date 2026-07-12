@@ -10,6 +10,12 @@ export type ModelPriceOverrides = Record<string, number>;
 // Цена юзеру = себестоимость × 2 (единообразно для картинок и видео).
 const PRICE_MULTIPLIER = 2;
 
+/**
+ * Максимальная длина промпта в Allvision AI. Ограничено самым строгим лимитом среди моделей чата —
+ * у Kling это 2500 символов. Единый лимит на весь чат, чтобы промпт не обрезался провайдером.
+ */
+export const CHAT_PROMPT_MAX_LENGTH = 2500;
+
 export interface ChatModelOption {
   slug: string;
   blockSlug: string;
@@ -204,12 +210,32 @@ export function applyModelPriceOverride(modelSlug: string, costCoins: number, pr
   return rounded >= 1 ? rounded : costCoins;
 }
 
+/**
+ * Нижний порог цены чата (коины), не зависящий от себестоимости:
+ * - любое изображение — минимум 2 коина;
+ * - видео Kling и Seedance — минимум 12 коинов на 5 сек, +1 коин за каждую секунду сверх 5
+ *   (5 сек → 12, 6 → 13, 7 → 14 …). Для более коротких/«auto» — те же 12.
+ * Себестоимостная цена (× множитель) всё равно применяется, если она выше порога.
+ */
+export function chatModelPriceFloorCoins(modelSlug: string, duration?: number): number {
+  const model = getChatModel(modelSlug);
+  if (!model) return 1;
+  if (model.category === 'image') return 2;
+  const family = model.familySlug;
+  if (family.startsWith('kling') || family.startsWith('seedance')) {
+    const seconds = Math.round(duration ?? model.defaultDurationSec ?? 5);
+    return Math.max(12, 7 + seconds);
+  }
+  return 1;
+}
+
 export function estimateChatGenerationPriceCoins(
   modelSlug: string,
   options: { duration?: number; generateAudio?: boolean; params?: Record<string, unknown>; priceOverrides?: ModelPriceOverrides } = {},
 ) {
   const costCoins = estimateChatGenerationCostCoins(modelSlug, options);
-  const defaultPriceCoins = Math.max(1, Math.ceil(costCoins * PRICE_MULTIPLIER));
+  const floor = chatModelPriceFloorCoins(modelSlug, options.duration);
+  const defaultPriceCoins = Math.max(floor, Math.ceil(costCoins * PRICE_MULTIPLIER));
   return applyModelPriceOverride(
     modelSlug,
     defaultPriceCoins,

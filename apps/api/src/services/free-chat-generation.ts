@@ -1,5 +1,5 @@
 import { Prisma, prisma } from '@allvision/database';
-import { estimateChatGenerationPriceCoins, generationExpiresAt, getChatModel, type ChatAspectRatio } from '@allvision/shared';
+import { CHAT_PROMPT_MAX_LENGTH, estimateChatGenerationPriceCoins, generationExpiresAt, getChatModel, type ChatAspectRatio } from '@allvision/shared';
 import { z } from 'zod';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
@@ -8,7 +8,7 @@ import { readModelPriceOverrides } from './model-pricing';
 
 export const chatMessageSchema = z.object({
   modelSlug: z.string().trim().min(1),
-  prompt: z.string().trim().max(4000).optional(),
+  prompt: z.string().trim().max(CHAT_PROMPT_MAX_LENGTH, `Максимум ${CHAT_PROMPT_MAX_LENGTH} символов в запросе`).optional(),
   aspectRatio: z.enum(['1:1', '9:16', '16:9', '4:3', '3:4', '21:9', '9:21', 'auto']).optional(),
   duration: z.union([z.coerce.number().int().min(1).max(30), z.literal('auto')]).optional(),
   generateAudio: z.boolean().optional(),

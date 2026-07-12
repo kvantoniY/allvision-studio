@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
+import { PreviewVideo } from '@/components/ui/preview-video';
 import {
   EditableMedia,
   EditableText,
@@ -304,7 +305,7 @@ function HeroLanding({
             <div className="ml-auto max-w-[520px] overflow-hidden rounded-lg border border-white/15 bg-slate-950/70 shadow-2xl shadow-black/30">
               <div className="relative aspect-[5/4] max-h-[430px] bg-slate-900">
                 {featuredMedia.type === 'video' ? (
-                  <video src={mediaUrl(featuredMedia.url) ?? featuredMedia.url} className="h-full w-full object-cover" autoPlay loop muted playsInline />
+                  <PreviewVideo src={mediaUrl(featuredMedia.url) ?? featuredMedia.url} className="h-full w-full object-cover" />
                 ) : (
                   <img
                     src={mediaUrl(featuredMedia.url) ?? featuredMedia.url}
@@ -916,7 +917,11 @@ function FinalCta({ content, editor, isAuthed }: { content: HomeLandingContent; 
 function MediaBlock({ media, className }: { media: HomeMedia; className?: string }) {
   const src = mediaUrl(media.url) ?? media.url;
   if (media.type === 'video') {
-    return <video src={src} className={cn('h-full w-full object-cover', className)} autoPlay loop muted playsInline />;
+    return (
+      <div className="relative h-full w-full">
+        <PreviewVideo src={src} className={cn('h-full w-full object-cover', className)} />
+      </div>
+    );
   }
 
   return <ImageWithSkeleton wrapperClassName="h-full w-full" src={src} alt={media.alt} fallbackSrc="/mock_preview.png" className={cn('h-full w-full object-cover', className)} />;
