@@ -5,6 +5,7 @@ import { useDispatch } from 'react-redux';
 import type { AppDispatch } from '@/store';
 import { projectsApi, invalidateProjectSideEffects } from '@/store/api/projects-api';
 import { userChatApi } from '@/store/api/user-chat-api';
+import { userMediaAssetsApi } from '@/store/api/user-media-assets-api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
   ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -36,6 +37,8 @@ export function ProjectEventsBridge({ enabled }: { enabled: boolean }) {
 
     let source: EventSource | null = null;
     let reconnectTimer: number | undefined;
+    let watchdogTimer: number | undefined;
+    let lastActivityAt = 0;
     let attempts = 0;
     let disposed = false;
     let hadConnection = false;
@@ -49,6 +52,9 @@ export function ProjectEventsBridge({ enabled }: { enabled: boolean }) {
       if (statusChange) {
         // Чат встраивает состояние проекта в сообщения; баланс меняется при refund'е.
         dispatch(userChatApi.util.invalidateTags(['Chats', 'Chat']));
+        // Завершение library-generation создаёт новый ассет Студии — без инвалидации
+        // новый образ не появлялся в списке аватаров/локаций до перезахода.
+        dispatch(userMediaAssetsApi.util.invalidateTags(['UserMediaAsset']));
         invalidateProjectSideEffects(dispatch);
       }
     };
@@ -58,10 +64,29 @@ export function ProjectEventsBridge({ enabled }: { enabled: boolean }) {
         window.clearTimeout(reconnectTimer);
         reconnectTimer = undefined;
       }
+      if (watchdogTimer !== undefined) {
+        window.clearInterval(watchdogTimer);
+        watchdogTimer = undefined;
+      }
       if (source) {
         source.close();
         source = null;
       }
+    };
+
+    // Watchdog «мёртвого» стрима: сервер шлёт ping каждые 25с; если 70с не было ни события,
+    // ни ping'а — соединение открыто, но данные не доходят (например, прокси буферизует SSE).
+    // Переподключаемся и добираем пропущенное catch-up инвалидацией в onopen.
+    const startWatchdog = () => {
+      lastActivityAt = Date.now();
+      if (watchdogTimer !== undefined) window.clearInterval(watchdogTimer);
+      watchdogTimer = window.setInterval(() => {
+        if (disposed || !source) return;
+        if (Date.now() - lastActivityAt < 70_000) return;
+        closeSource();
+        invalidateAll(undefined, true);
+        connect();
+      }, 15_000);
     };
 
     const connect = () => {
@@ -74,12 +99,18 @@ export function ProjectEventsBridge({ enabled }: { enabled: boolean }) {
 
       source.onopen = () => {
         attempts = 0;
+        startWatchdog();
         // После (пере)подключения добираем всё, что могло произойти, пока соединения не было.
         if (hadConnection) invalidateAll(undefined, true);
         hadConnection = true;
       };
 
+      source.addEventListener('ping', () => {
+        lastActivityAt = Date.now();
+      });
+
       source.addEventListener('project', (message) => {
+        lastActivityAt = Date.now();
         let event: ProjectEvent | undefined;
         try {
           event = JSON.parse((message as MessageEvent).data) as ProjectEvent;

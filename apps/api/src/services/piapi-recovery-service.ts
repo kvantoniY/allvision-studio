@@ -4,6 +4,7 @@ import { generationExpiresAt, getUserFriendlyError } from '@allvision/shared';
 import { getStorageProvider } from '../providers';
 import { PiAPIAccountClient, type PiAPIHistoryTask } from './piapi-client';
 import { logger } from '../utils/logger';
+import { publishProjectEvent } from '../utils/project-events';
 
 type RecoveryRef = {
   logId?: string;
@@ -150,6 +151,16 @@ async function recoverPiAPIProject(projectId: string, userId?: string): Promise<
       }).catch((err) => logger.warn(`[piapi-recovery] failed to update usage log=${ref.logId}`, err));
     }
 
+    // Realtime-событие для открытых экранов: реконсайлер финализирует проект в API-процессе,
+    // мимо worker'а, поэтому SSE-событие публикуем отсюда — иначе UI ждёт поллинга/F5.
+    publishProjectEvent({
+      projectId: project.id,
+      userId: project.userId,
+      status: 'COMPLETED',
+      progress: 100,
+      kind: 'status',
+    });
+
     logger.info(`[piapi-recovery] project=${project.id} recovered from taskId=${ref.taskId ?? 'recoverable-url'}`);
     return true;
   }
@@ -202,6 +213,7 @@ async function markPiAPIProjectFailed(
   const errorCode = classifyPiAPIFailure(task.errorCode, task.errorMessage);
   const errorMessage = getUserFriendlyError(errorCode);
   const nextStepProgress = failStepProgress(project.stepProgress, ref, errorMessage);
+  let statusChanged = false;
 
   await prisma.$transaction(async (tx) => {
     const current = await tx.project.findUnique({
@@ -210,6 +222,7 @@ async function markPiAPIProjectFailed(
     });
     if (!current) return;
     if (current.status === ProjectStatus.COMPLETED) return;
+    statusChanged = true;
 
     await tx.project.update({
       where: { id: project.id },
@@ -263,6 +276,15 @@ async function markPiAPIProjectFailed(
       },
     });
   });
+
+  if (statusChanged) {
+    publishProjectEvent({
+      projectId: project.id,
+      userId: project.userId,
+      status: 'FAILED',
+      kind: 'status',
+    });
+  }
 
   logger.warn(`[piapi-recovery] project=${project.id} marked failed from taskId=${ref.taskId ?? 'unknown'}`, {
     errorCode,

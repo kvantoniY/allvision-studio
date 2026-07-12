@@ -80,9 +80,11 @@ userEventsRouter.get('/', requireAuth, (req: Request, res: Response) => {
   clients.add(res);
 
   // Heartbeat < 60s (proxy_read_timeout nginx), чтобы прокси не резали «тихое» соединение.
+  // Именованное событие, а не SSE-комментарий: комментарии не доходят до JS, и клиент не мог
+  // отличить живой стрим от «мёртвого» (буферизуемого прокси) — по ping фронт ведёт watchdog.
   const heartbeat = setInterval(() => {
     try {
-      res.write(': ping\n\n');
+      res.write('event: ping\ndata: {}\n\n');
     } catch {
       // закрытие обработает 'close'
     }
