@@ -36,6 +36,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -75,15 +76,6 @@ type TxFilter = 'all' | 'topup' | 'spending' | 'payments';
 type ProfileUser = NonNullable<ReturnType<typeof useAuth>['user']>;
 
 const PAGE = 20;
-
-const MESSENGERS = [
-  { value: 'TELEGRAM', label: 'Telegram' },
-  { value: 'WHATSAPP', label: 'WhatsApp' },
-  { value: 'VK', label: 'VK' },
-  { value: 'PHONE', label: 'Телефон' },
-] as const;
-
-type MType = (typeof MESSENGERS)[number]['value'];
 
 const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
   PENDING: 'Ожидает оплаты',
@@ -385,8 +377,6 @@ function AccountSection() {
   const emailVerificationError = useApiErrorState(emailVerificationState.error, 'Не удалось отправить письмо');
   const emailCaptcha = useCaptchaToken();
   const [name, setName] = useState('');
-  const [messenger, setMessenger] = useState('');
-  const [messengerType, setMessengerType] = useState<MType | ''>('');
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -395,14 +385,11 @@ function AccountSection() {
   useEffect(() => {
     if (!user) return;
     setName(user.name ?? '');
-    setMessenger(user.messenger ?? '');
-    setMessengerType((user.messengerType as MType) ?? '');
   }, [user]);
 
   if (!user) return null;
 
   const profileDirty = name.trim() !== (user.name ?? '');
-  const contactDirty = messenger !== (user.messenger ?? '') || messengerType !== (user.messengerType ?? '');
   const canSaveProfile = profileDirty && name.trim().length >= 2;
 
   const saveProfile = async (body: UpdateProfileInput) => {
@@ -489,40 +476,6 @@ function AccountSection() {
       <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
         <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
-            <MailCheck className="h-5 w-5 text-sky-300" />
-            Контакты
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-          <div className="space-y-2">
-            <Label htmlFor="messengerType">Тип связи</Label>
-            <select
-              id="messengerType"
-              value={messengerType}
-              onChange={(event) => setMessengerType(event.target.value as MType | '')}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Не выбран</option>
-              {MESSENGERS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="messenger">Контакт</Label>
-            <Input id="messenger" value={messenger} onChange={(event) => setMessenger(event.target.value)} placeholder="@username или +7..." />
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => saveProfile({ messenger: messenger.trim() || null, messengerType: messengerType || null })}
-            disabled={!contactDirty || savingProfile}
-          >
-            Сохранить контакт
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
-        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-          <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
             <KeyRound className="h-5 w-5 text-emerald-300" />
             Безопасность
           </CardTitle>
@@ -547,9 +500,9 @@ function AccountSection() {
             </div>
             {showPasswordForm ? (
               <div className="mt-4 space-y-3">
-                <Input type="password" value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} placeholder="Текущий пароль" />
-                <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="Новый пароль" />
-                <Input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите новый пароль" />
+                <PasswordInput value={oldPassword} autoComplete="current-password" onChange={(event) => setOldPassword(event.target.value)} placeholder="Текущий пароль" />
+                <PasswordInput value={newPassword} autoComplete="new-password" onChange={(event) => setNewPassword(event.target.value)} placeholder="Новый пароль" />
+                <PasswordInput value={confirmPassword} autoComplete="new-password" onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Повторите новый пароль" />
                 <div className="flex flex-wrap gap-2">
                   <Button onClick={onChangePassword} disabled={changingPwd}>{changingPwd ? 'Меняем...' : 'Сохранить пароль'}</Button>
                   <Button variant="outline" onClick={() => setShowPasswordForm(false)}>Отмена</Button>
@@ -557,10 +510,9 @@ function AccountSection() {
               </div>
             ) : null}
           </div>
+          <DangerSection />
         </CardContent>
       </Card>
-
-      <DangerSection />
     </div>
   );
 }
@@ -1191,6 +1143,7 @@ function DangerSection() {
   const dispatch = useDispatch<AppDispatch>();
   const { toast } = useToast();
   const [deleteAccount, { isLoading: deleting }] = useDeleteAccountMutation();
+  const [showForm, setShowForm] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
 
@@ -1207,34 +1160,47 @@ function DangerSection() {
   };
 
   return (
-    <Card className="min-w-0 overflow-hidden border-red-500/40 bg-slate-900">
-      <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-        <CardTitle className="flex items-center gap-2 text-xl text-red-300 sm:text-2xl">
-          <ShieldAlert className="h-5 w-5" />
-          Удаление аккаунта
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-        <Alert variant="destructive">
-          <AlertDescription>
-            Удаление аккаунта необратимо. Данные, проекты и заказы будут удалены через 30 дней.
-          </AlertDescription>
-        </Alert>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
-          <div className="space-y-2">
-            <Label htmlFor="confirmText">Введите «УДАЛИТЬ»</Label>
-            <Input id="confirmText" value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} />
+    <div className="rounded-lg border border-red-500/40 bg-slate-950/50 p-3 sm:p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 font-semibold text-red-300">
+            <ShieldAlert className="h-4 w-4" />
+            Удаление аккаунта
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="deletePassword">Текущий пароль</Label>
-            <Input id="deletePassword" type="password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} />
+          <p className="mt-1 text-sm text-slate-400">Необратимо: данные, проекты и заказы будут удалены через 30 дней.</p>
+        </div>
+        {!showForm ? (
+          <Button variant="outline" className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={() => setShowForm(true)}>
+            Удалить аккаунт
+          </Button>
+        ) : null}
+      </div>
+      {showForm ? (
+        <div className="mt-4 space-y-4">
+          <Alert variant="destructive">
+            <AlertDescription>
+              Удаление аккаунта необратимо. Данные, проекты и заказы будут удалены через 30 дней.
+            </AlertDescription>
+          </Alert>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+            <div className="space-y-2">
+              <Label htmlFor="confirmText">Введите «УДАЛИТЬ»</Label>
+              <Input id="confirmText" value={deleteConfirm} onChange={(event) => setDeleteConfirm(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deletePassword">Текущий пароль</Label>
+              <PasswordInput id="deletePassword" autoComplete="current-password" value={deletePassword} onChange={(event) => setDeletePassword(event.target.value)} />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="destructive" disabled={deleteConfirm !== 'УДАЛИТЬ' || !deletePassword || deleting} onClick={onDelete}>
+              {deleting ? 'Удаление...' : 'Подтвердить удаление'}
+            </Button>
+            <Button variant="outline" onClick={() => setShowForm(false)}>Отмена</Button>
           </div>
         </div>
-        <Button variant="destructive" disabled={deleteConfirm !== 'УДАЛИТЬ' || !deletePassword || deleting} onClick={onDelete}>
-          {deleting ? 'Удаление...' : 'Подтвердить удаление'}
-        </Button>
-      </CardContent>
-    </Card>
+      ) : null}
+    </div>
   );
 }
 

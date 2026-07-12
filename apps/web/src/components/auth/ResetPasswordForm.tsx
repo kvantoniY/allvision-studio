@@ -6,8 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { resetPasswordSchema, type ResetPasswordInput } from '@allvision/shared';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
 import { CaptchaField } from '@/components/security/CaptchaField';
@@ -58,9 +58,8 @@ export function ResetPasswordForm() {
       <input type="hidden" {...register('token')} />
       <div className="space-y-2">
         <Label htmlFor="newPassword">Новый пароль</Label>
-        <Input
+        <PasswordInput
           id="newPassword"
-          type="password"
           autoComplete="new-password"
           {...register('newPassword')}
         />

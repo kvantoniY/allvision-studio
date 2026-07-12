@@ -11,6 +11,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { PasswordInput } from '@/components/ui/password-input';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
 import { CaptchaField } from '@/components/security/CaptchaField';
 import { useApiErrorState } from '@/hooks/use-api-error-state';
@@ -19,9 +20,15 @@ import { useRegisterMutation } from '@/store/api/auth-api';
 import { setUser } from '@/store/slices/auth-slice';
 import { useToast } from '@/hooks/use-toast';
 
-const registerFormSchema = registerSchema.extend({
-  consent: z.boolean().refine((value) => value),
-});
+const registerFormSchema = registerSchema
+  .extend({
+    consent: z.boolean().refine((value) => value),
+    confirmPassword: z.string(),
+  })
+  .refine((values) => values.password === values.confirmPassword, {
+    path: ['confirmPassword'],
+    message: 'Пароли не совпадают',
+  });
 
 type FormValues = z.infer<typeof registerFormSchema>;
 
@@ -82,8 +89,14 @@ export function RegisterForm() {
 
       <div className="space-y-2">
         <Label htmlFor="password">Пароль</Label>
-        <Input id="password" type="password" autoComplete="new-password" {...register('password')} />
+        <PasswordInput id="password" autoComplete="new-password" {...register('password')} />
         {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="confirmPassword">Повторите пароль</Label>
+        <PasswordInput id="confirmPassword" autoComplete="new-password" {...register('confirmPassword')} />
+        {errors.confirmPassword && <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>}
       </div>
 
       <label className="flex items-start gap-2 text-sm text-muted-foreground">
