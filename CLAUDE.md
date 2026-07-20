@@ -1,4 +1,29 @@
-# Allvision Studio — AI-фабрика цифровых подарков
+# Allvision Academy — персонализированная онлайн-школа (реворк)
+
+## Что это
+
+С 2026-07-20 проект реворкается из Allvision Studio (gift factory) в **Allvision Academy**: персонализированную онлайн-школу, где ребёнок проходит учебную программу внутри интерактивного приключения вместе с живым преподавателем. Нейросети создают реалистичного персонажа с внешностью ребёнка, позы, сюжетные иллюстрации и кат-сцены; учитель ведёт занятие по видеосвязи и управляет сценами; браузерная игра превращает материалы в интерактивный урок. Направления: английский, нейросети/AI-контент, программирование, позже — школьные дисциплины.
+
+Точка отката к Studio: git tag `v0.2-allvision-studio-final`.
+
+## Ключевые решения реворка
+
+- **Бэкенд остаётся Express+Prisma+BullMQ** (NestJS из концепт-дока отклонён): сохраняем боевой AI-слой (fal/PiAPI, прокси, ретраи, учёт затрат), auth, платежи, деплой.
+- **Движок сцен — PixiJS** (кастомный редактор слоёв + событийная логика «событие→условие→действие»).
+- **Видеосвязь — self-hosted LiveKit** (план Б — внешний сервис).
+- **Дизайн — светлая бело-оранжевая премиальная тема** (`.academy-theme` в globals.css); старые Studio-экраны доживают в тёмной теме до катовера.
+- **Разработка аддитивно в main**: новые модели/роуты рядом с legacy, прод остаётся рабочим; промежуточные коммиты с `[skip ci]`, деплой вручную по SSH на границах этапов (push в main без [skip ci] триггерит платный Actions-деплой).
+- Роли: родитель = User с ролью `PARENT` (новые регистрации), ребёнок = `ChildProfile` под родителем (не User), `TEACHER`/`METHODIST` — роли User. Legacy `USER` действует как родитель (`requireParent`).
+
+## План этапов Academy
+
+A1 ✅ модель данных и роли · A2 AI-профиль персонажа · A3 программы и прогресс · A4 запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+
+Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
+
+---
+
+# [Legacy до катовера] Allvision Studio — AI-фабрика цифровых подарков
 
 ## Что это
 
@@ -1550,3 +1575,36 @@ UI «подвисание» при нажатии «Создать»: multipart-
 Деплой P14: ручной через SSH (без git — экономия Actions-минут), in-place в `current` релиз: tar 6 изменённых файлов → extract в `/opt/allvision-studio/current` → `docker compose build api web` → `up -d --force-recreate --no-deps api web`. Healthcheck зелёный; `/api/admin/monitoring` отдаёт 401 без auth (роут жив), TLS-cert (GlobalSign до 14.10.2026) и WHOIS (`paid-till` 2027-03-29) читаются из api-контейнера в прод-egress, `/admin/monitoring` резолвится (307→login). Билды api/web — зелёные. Изменения закоммичены локально БЕЗ push (push в main триггерит платный Actions-деплой).
 
 Долг P14: капча-тайл покажет «выключена» пока не заданы `YANDEX_SMARTCAPTCHA_SECRET_KEY`/`CAPTCHA_ENABLED`; балансы Яндекс ВМ / прокси-VPS / СМС-сервиса и даты их оплаты вводятся вручную (API этих провайдеров не подключены) — админ заводит их как ручные индикаторы; при следующем git-деплое P14 доедет автоматически (файлы в git).
+
+## Этап A1 ✅ — Academy: модель данных, роли, семья, учебная программа, дизайн-токены
+
+Первый этап реворка Allvision Academy (см. шапку файла).
+
+Prisma (миграция `20260720120000_a1_academy_core`, написана вручную — Postgres локально не поднят):
+
+- `Role` расширен: `PARENT`, `TEACHER`, `METHODIST`. Регистрация теперь создаёт `PARENT`; legacy `USER` действует как родитель через `requireParent`.
+- `ChildProfile` — ребёнок НЕ User: профиль под родителем (name/birthDate/notes + заготовки геймификации level/xp/streakCount/streakFreezes для A9), cascade delete.
+- `Consent` — согласия родителя по ребёнку, 5 типов (`ConsentType`: IMAGE_PROCESSING, AI_CHARACTER, AI_GENERATION, EXTERNAL_PROVIDERS, DATA_RETENTION), unique(childId, type), повторное принятие после отзыва — upsert (revokedAt=null).
+- `ChildPhoto` — исходные фото ребёнка в **закрытом хранилище**: НЕТ publicUrl, файлы лежат в `CHILD_PHOTOS_DIR` (`./private-uploads/child-photos`, прод `/app/private-uploads/child-photos`) ВНЕ uploads/, nginx их не раздаёт; выдача только через авторизованный эндпоинт с ownership-проверкой.
+- Учебная программа: `Subject` → `Course` (level/ageMin/ageMax) → `CourseModule` → `Topic` (durationMin 25|45, difficulty, goal, `content Json` для слов/сценария/наград/домашки, aiBudgetUsd) → `SkillDef` + join `TopicSkill`. Всё cascade.
+
+Shared (`packages/shared/src/academy/`): `CONSENT_DEFINITIONS` (русские тексты согласий), `hasAllPhotoConsents`, zod-схемы child-профиля (возраст 2–18), curriculum-схемы, DTO. Экспорт через корневой index.
+
+API:
+
+- `requireRole(...)` фабрика в `middleware/require-role.ts` (ADMIN проходит всегда), `requireParent` (PARENT|USER), `requireMethodist`. `JwtRole` расширен.
+- `/api/family/*` (requireAuth+requireParent): CRUD детей; POST/DELETE consents (принятие списком, отзыв по типу); фото — список/upload (multer `photos[]`, image-only, 15MB, максимум 10 на ребёнка)/удаление; `GET .../photos/:photoId/file` стримит файл из закрытого хранилища. **Upload фото заблокирован (403 CONSENTS_REQUIRED), пока не приняты все 5 согласий**; отзыв любого согласия снова блокирует. Удаление ребёнка каскадно чистит БД и файлы (`deleteChildPhotoDir`).
+- `/api/academy/curriculum/*` (requireAuth+requireMethodist): дерево программы одним GET + CRUD subjects/courses/modules/topics(+skillIds)/skills, slug-коллизии 409, человекочитаемые русские ошибки.
+
+Web:
+
+- **Дизайн-токены Academy**: `.academy-theme` в globals.css — светлая бело-оранжевая премиальная тема (белая база, тёплые нейтральные, primary orange 24 94% 50%, radius 0.875rem, animate-academy-in). Scoped: Studio-экраны остаются тёмными до катовера; новые Academy-экраны оборачиваются в `.academy-theme`.
+- `/family` — первый Academy-экран (кабинет родителя): список детей с уровнем/XP/бейджами, добавление профиля, чекбокс-блок согласий с полными текстами, загрузка/просмотр/удаление фото (превью через авторизованный fileUrl, не /static), удаление профиля с подтверждением. RTK slice `family-api.ts` зарегистрирован в store. В sidebar добавлен пункт «Семья» (`/family`).
+
+Инфраструктура: `.gitignore` + env-примеры получили `CHILD_PHOTOS_DIR`; в `docker-compose.prod.yml` api-контейнеру добавлен bind mount `/opt/allvision-studio/shared/private-uploads:/app/private-uploads` (на ВМ каталог нужно создать с owner 1000:1000 перед деплоем A1).
+
+Попутные фиксы: `SupportActor.role` расширен до `JwtRole` (билд падал после добавления ролей).
+
+Проверки A1: `prisma generate` — ок (dev не запущен, EPERM не было); билды shared/database/api/worker/web — зелёные; shared `academy-consents` — 9 passed. DB-backed API-тест `family.test.ts` (17 тестов: PARENT-роль при регистрации, ownership 404 для чужого ребёнка, consent-gate загрузки фото, авторизованная раздача файла, каскад удаления, доступ методиста к curriculum, дерево subject→course→module→topic+skills) написан, но локально не гоняется без Postgres `localhost:5433`/Docker — прогнать на проде/CI как в прошлых этапах.
+
+Долги A1: worker не имеет доступа к private-uploads (понадобится в A2 для генерации персонажа — добавить mount и резолв ключей); согласия фиксируются без снапшота текста версии (только version-строка); детский вход (отдельный доступ ребёнка) не реализован — по концепции появится позже; фото-эндпоинт отдаёт оригиналы без превью-даунскейла.

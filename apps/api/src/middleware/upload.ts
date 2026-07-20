@@ -207,3 +207,11 @@ export const uploadMediaAsset = mediaAssetMulter.single('file');
 export const uploadChatInput = chatInputMulter.single('file');
 export const uploadSupportAttachments = supportAttachmentMulter.array('files', 5);
 export const uploadServiceLaunchInputs = serviceLaunchMulter.any();
+
+// Academy: фотографии ребёнка (только изображения, 15 MB, до 10 за запрос)
+const childPhotoMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: imageFileFilter,
+});
+export const uploadChildPhotos = childPhotoMulter.array('photos', 10);

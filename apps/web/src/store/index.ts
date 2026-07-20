@@ -28,6 +28,7 @@ import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
 import { userChatApi } from './api/user-chat-api';
 import { supportApi } from './api/support-api';
+import { familyApi } from './api/family-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -61,6 +62,7 @@ export const store = configureStore({
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
     [userChatApi.reducerPath]: userChatApi.reducer,
     [supportApi.reducerPath]: supportApi.reducer,
+    [familyApi.reducerPath]: familyApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -92,6 +94,7 @@ export const store = configureStore({
       userMediaAssetsApi.middleware,
       userChatApi.middleware,
       supportApi.middleware,
+      familyApi.middleware,
     ),
 });
 

@@ -60,6 +60,57 @@
   h2 { @apply font-bold tracking-tight; }
 }
 
+/* ============================================================
+   Allvision Academy — светлая бело-оранжевая премиальная тема.
+   Scoped: применяется к новым Academy-экранам через .academy-theme,
+   пока старые Studio-страницы доживают в тёмной теме до катовера.
+   ============================================================ */
+@layer base {
+  .academy-theme {
+    /* База: чистый белый + тёплые нейтральные */
+    --background: 0 0% 100%;
+    --foreground: 24 12% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 24 12% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 24 12% 12%;
+    /* Премиальный оранжевый акцент */
+    --primary: 24 94% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 28 40% 96%;
+    --secondary-foreground: 24 30% 18%;
+    --muted: 30 25% 96%;
+    --muted-foreground: 25 8% 42%;
+    --accent: 28 100% 94%;
+    --accent-foreground: 22 80% 30%;
+    --destructive: 0 78% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 28 20% 90%;
+    --input: 28 20% 88%;
+    --ring: 24 94% 50%;
+    /* Мягче углы — премиальный, дружелюбный тон */
+    --radius: 0.875rem;
+
+    color: hsl(var(--foreground));
+    background-color: hsl(var(--background));
+  }
+  .academy-theme ::selection {
+    background-color: hsl(24 94% 50% / 0.2);
+  }
+}
+
+/* Мягкое появление карточек Academy */
+@keyframes academy-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-academy-in {
+  animation: academy-fade-in 0.3s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-academy-in { animation: none; }
+}
+
 /* Admin panel uses a calm violet accent (scoped so the public site keeps its own theme). */
 @layer base {
   .admin-theme {

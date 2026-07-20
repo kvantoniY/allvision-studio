@@ -16,6 +16,8 @@ import { userChatsRouter } from './user/chats';
 import { userEventsRouter } from './user/events';
 import { adminRouter } from './admin';
 import { adminReadonlyRouter } from './admin-readonly';
+import { familyRouter } from './family';
+import { academyCurriculumRouter } from './academy-curriculum';
 
 export const router = Router();
 
@@ -37,3 +39,6 @@ router.use('/user/chats', userChatsRouter);
 router.use('/user/events', userEventsRouter);
 router.use('/admin', adminRouter);
 router.use('/admin-readonly', adminReadonlyRouter);
+// Academy (реворк A1+)
+router.use('/family', familyRouter);
+router.use('/academy/curriculum', academyCurriculumRouter);

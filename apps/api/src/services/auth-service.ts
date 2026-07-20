@@ -135,6 +135,8 @@ export async function register(data: RegisterInput) {
         passwordHash,
         name: data.name,
         tokenBalance: welcomeBonus,
+        // Academy: новые регистрации — родительские аккаунты; legacy USER остаётся у старых.
+        role: 'PARENT',
       },
     });
 
