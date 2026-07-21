@@ -30,19 +30,19 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
   }, [items, search]);
 
   return (
-    <aside className="flex h-full min-h-0 flex-col border-r border-slate-800 bg-slate-950">
-      <div className="space-y-3 border-b border-slate-800 p-4">
-        <Button type="button" onClick={onNew} className="w-full bg-violet-600 hover:bg-violet-500">
+    <aside className="flex h-full min-h-0 flex-col border-r border-border bg-background">
+      <div className="space-y-3 border-b border-border p-4">
+        <Button type="button" onClick={onNew} className="w-full">
           <Plus className="h-4 w-4" />
           Новый чат
         </Button>
         <label className="relative block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder="Поиск"
-            className="h-9 bg-slate-900 pl-9"
+            className="h-9 bg-card pl-9"
           />
         </label>
       </div>
@@ -51,13 +51,13 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
         {isLoading && (
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="h-20 animate-pulse rounded-md bg-slate-900" />
+              <div key={index} className="h-20 animate-pulse rounded-md bg-card" />
             ))}
           </div>
         )}
 
         {!isLoading && filtered.length === 0 && (
-          <div className="rounded-md border border-dashed border-slate-800 p-4 text-sm text-slate-500">
+          <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
             Чатов пока нет.
           </div>
         )}
@@ -73,11 +73,11 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
                 className={cn(
                   'flex w-full gap-3 rounded-md border p-3 text-left transition',
                   selected
-                    ? 'border-violet-500 bg-violet-500/10'
-                    : 'border-slate-800 bg-slate-900 hover:border-slate-700 hover:bg-slate-800',
+                    ? 'border-primary bg-accent'
+                    : 'border-border bg-card hover:border-border hover:bg-accent',
                 )}
               >
-                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-slate-900">
+                <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-md bg-card">
                   {item.lastResultPreview && !isVideoUrl(item.lastResultPreview) ? (
                     <ImageWithSkeleton
                       wrapperClassName="h-full w-full"
@@ -89,7 +89,7 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
                       }}
                     />
                   ) : (
-                    <div className="grid h-full place-items-center text-slate-500">
+                    <div className="grid h-full place-items-center text-muted-foreground">
                       {item.lastResultPreview && isVideoUrl(item.lastResultPreview) ? (
                         <VideoIcon className="h-5 w-5" />
                       ) : (
@@ -99,9 +99,9 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="line-clamp-2 text-sm font-medium text-slate-100">{item.title}</div>
-                  <div className="mt-1 text-xs text-slate-500">{formatDateTime(item.updatedAt)}</div>
-                  <div className="mt-2 text-xs text-slate-500">{item.messageCount} сообщений</div>
+                  <div className="line-clamp-2 text-sm font-medium text-foreground">{item.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{formatDateTime(item.updatedAt)}</div>
+                  <div className="mt-2 text-xs text-muted-foreground">{item.messageCount} сообщений</div>
                 </div>
               </button>
             );

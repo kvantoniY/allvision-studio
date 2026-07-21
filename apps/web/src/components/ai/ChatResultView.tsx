@@ -30,7 +30,7 @@ type ChatResultViewProps = {
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
-const warningAlertClass = 'border-amber-500 bg-amber-950 text-amber-50 [&>svg]:text-amber-300';
+const warningAlertClass = 'border-primary bg-accent text-primary [&>svg]:text-primary';
 
 function mediaUrl(value?: string | null) {
   if (!value) return null;
@@ -77,7 +77,7 @@ function chatFailureMessage(errorCode?: string | null, errorMessage?: string | n
 export function ChatResultView({ messages, isLoading, onUseAsReference, onReuseReference, onRetry, onDeleted }: ChatResultViewProps) {
   if (isLoading) {
     return (
-      <div className="grid min-h-[420px] place-items-center text-slate-400">
+      <div className="grid min-h-[420px] place-items-center text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
@@ -87,11 +87,11 @@ export function ChatResultView({ messages, isLoading, onUseAsReference, onReuseR
     return (
       <div className="flex h-full min-h-[320px] items-center justify-center">
         <div className="max-w-md text-center">
-          <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg border border-violet-500/30 bg-violet-500/10">
-            <Sparkles className="h-7 w-7 text-violet-300" />
+          <div className="mx-auto grid h-14 w-14 place-items-center rounded-lg border border-primary/30 bg-accent">
+            <Sparkles className="h-7 w-7 text-primary" />
           </div>
-          <h2 className="mt-5 text-2xl font-bold text-white">Allvision AI</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-400">Новый чат готов.</p>
+          <h2 className="mt-5 text-2xl font-bold text-foreground">Allvision AI</h2>
+          <p className="mt-3 text-sm leading-6 text-muted-foreground">Новый чат готов.</p>
         </div>
       </div>
     );
@@ -144,30 +144,30 @@ function MessageCard({
   const withAudio = hasGeneratedAudio(project.userInputs);
 
   return (
-    <Card className="border-slate-800 bg-slate-900/80">
+    <Card className="border-border bg-card">
       <CardContent className="space-y-4 p-4 md:p-5">
-        <div className="space-y-3 border-b border-slate-800 pb-4">
+        <div className="space-y-3 border-b border-border pb-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={cn('rounded-md', PROJECT_STATUS_COLOR[status])}>
                 {PROJECT_STATUS_LABEL[status]}
               </Badge>
-              <Badge variant="outline" className="border-slate-700 text-slate-300">{message.modelSlug}</Badge>
-              {message.aspectRatio && <Badge variant="outline" className="border-slate-700 text-slate-300">{message.aspectRatio}</Badge>}
-              {withAudio && <Badge variant="outline" className="border-emerald-500/50 text-emerald-200">со звуком</Badge>}
-              {message.inputRef && <Badge variant="outline" className="border-violet-500/50 text-violet-200">референс</Badge>}
+              <Badge variant="outline" className="border-border text-muted-foreground">{message.modelSlug}</Badge>
+              {message.aspectRatio && <Badge variant="outline" className="border-border text-muted-foreground">{message.aspectRatio}</Badge>}
+              {withAudio && <Badge variant="outline" className="border-emerald-300 text-emerald-700">со звуком</Badge>}
+              {message.inputRef && <Badge variant="outline" className="border-primary/40 text-primary">референс</Badge>}
             </div>
-            <div className="text-xs text-slate-500">{formatDateTime(message.createdAt)}</div>
+            <div className="text-xs text-muted-foreground">{formatDateTime(message.createdAt)}</div>
           </div>
-          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-200">{message.prompt}</p>
+          <p className="whitespace-pre-wrap text-sm leading-6 text-foreground">{message.prompt}</p>
           {references.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="text-[11px] text-slate-500">Референсы:</span>
+              <span className="text-[11px] text-muted-foreground">Референсы:</span>
               {references.map((ref, index) => {
                 const url = mediaUrl(ref.url) ?? ref.url;
                 const canReuse = ref.mediaKind !== 'audio';
                 return (
-                  <div key={`${ref.url}-${index}`} className="group/ref relative h-12 w-12 overflow-hidden rounded-md border border-slate-700 bg-slate-950">
+                  <div key={`${ref.url}-${index}`} className="group/ref relative h-12 w-12 overflow-hidden rounded-md border border-border bg-background">
                     <button
                       type="button"
                       className="h-full w-full"
@@ -180,7 +180,7 @@ function MessageCard({
                       ) : ref.mediaKind === 'video' ? (
                         <video src={url} className="h-full w-full object-cover" muted />
                       ) : (
-                        <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
+                        <div className="grid h-full w-full place-items-center text-[9px] text-muted-foreground">AUDIO</div>
                       )}
                     </button>
                     {canReuse && onReuseReference && (
@@ -189,7 +189,7 @@ function MessageCard({
                         title="Переиспользовать этот референс"
                         aria-label="Переиспользовать этот референс"
                         onClick={() => onReuseReference(ref.url, ref.mediaKind as 'image' | 'video')}
-                        className="absolute bottom-0.5 right-0.5 hidden h-5 w-5 place-items-center rounded bg-black/70 text-white group-hover/ref:grid"
+                        className="absolute bottom-0.5 right-0.5 hidden h-5 w-5 place-items-center rounded bg-black/70 text-foreground group-hover/ref:grid"
                       >
                         <RotateCcw className="h-3 w-3" />
                       </button>
@@ -203,16 +203,16 @@ function MessageCard({
 
         {processing && (
           <div>
-            <div className="mb-3 flex items-center justify-between gap-3 text-sm text-slate-300">
-              <span className="flex min-w-0 items-center gap-2 font-medium text-slate-100">
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
+            <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground">
+              <span className="flex min-w-0 items-center gap-2 font-medium text-foreground">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
                 <span className="truncate">{creativeProgressMessage(safeProgress)}</span>
               </span>
-              <span className="shrink-0 text-slate-400">{safeProgress}%</span>
+              <span className="shrink-0 text-muted-foreground">{safeProgress}%</span>
             </div>
             <Progress value={safeProgress} />
             {stuckHint && (
-              <p className="mt-2 text-xs leading-5 text-amber-300/90">
+              <p className="mt-2 text-xs leading-5 text-primary">
                 Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного.
               </p>
             )}
@@ -230,7 +230,7 @@ function MessageCard({
         )}
 
         {!processing && !failed && (
-          <div className="group relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+          <div className="group relative overflow-hidden rounded-lg border border-border bg-background">
             {resultVideo ? (
               <ResultMedia
                 key={resultVideo}
@@ -250,7 +250,7 @@ function MessageCard({
                 onImageClick={() => setLightboxOpen(true)}
               />
             ) : (
-              <div className="grid min-h-[240px] place-items-center text-slate-600">
+              <div className="grid min-h-[240px] place-items-center text-muted-foreground">
                 {project.category === 'video' ? <Video className="h-10 w-10" /> : <ImageIcon className="h-10 w-10" />}
               </div>
             )}
@@ -258,7 +258,7 @@ function MessageCard({
               <button
                 type="button"
                 onClick={() => setLightboxOpen(true)}
-                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-black/55 text-white opacity-0 backdrop-blur transition hover:bg-black/75 focus:opacity-100 group-hover:opacity-100"
+                className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/15 bg-black/55 text-foreground opacity-0 backdrop-blur transition hover:bg-black/75 focus:opacity-100 group-hover:opacity-100"
                 title="Открыть на весь экран"
                 aria-label="Открыть на весь экран"
               >
@@ -294,7 +294,7 @@ function MessageCard({
 
         <div className="flex flex-wrap gap-3">
           {resultUrl && (
-            <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+            <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
               <a href={resultUrl} download target="_blank" rel="noopener">
                 <Download className="h-4 w-4" />
                 Скачать
@@ -305,7 +305,7 @@ function MessageCard({
             <Button
               type="button"
               variant="outline"
-              className="border-slate-700 bg-slate-900"
+              className="border-border bg-card"
               onClick={() => onUseAsReference(project.id, resultImage ?? resultThumbnail!, 'image')}
             >
               <RotateCcw className="h-4 w-4" />
@@ -316,7 +316,7 @@ function MessageCard({
             <Button
               type="button"
               variant="outline"
-              className="border-slate-700 bg-slate-900"
+              className="border-border bg-card"
               onClick={() => onUseAsReference(project.id, resultVideo, 'video')}
             >
               <RotateCcw className="h-4 w-4" />
@@ -330,7 +330,7 @@ function MessageCard({
             <ReportGenerationButton projectId={project.id} />
           )}
           {failed && (
-            <Button type="button" variant="outline" className="border-slate-700 bg-slate-900" onClick={() => onRetry(message)}>
+            <Button type="button" variant="outline" className="border-border bg-card" onClick={() => onRetry(message)}>
               Попробовать снова
             </Button>
           )}
@@ -378,14 +378,14 @@ function MediaLightbox({
     >
       <div className="flex shrink-0 items-center justify-end gap-2 p-3" onClick={(event) => event.stopPropagation()}>
         {downloadUrl && (
-          <Button asChild size="sm" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+          <Button asChild size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
             <a href={downloadUrl} download target="_blank" rel="noopener">
               <Download className="h-4 w-4" />
               Скачать
             </a>
           </Button>
         )}
-        <Button type="button" variant="outline" size="icon" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={onClose} aria-label="Закрыть">
+        <Button type="button" variant="outline" size="icon" className="border-white/20 bg-white/10 text-foreground hover:bg-white/20" onClick={onClose} aria-label="Закрыть">
           <X className="h-5 w-5" />
         </Button>
       </div>

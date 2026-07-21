@@ -88,7 +88,7 @@ const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
   PENDING: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
   SUCCEEDED: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
   FAILED: 'bg-red-500/20 text-red-300 border-red-500/30',
-  CANCELLED: 'bg-slate-700 text-slate-300 border-slate-600',
+  CANCELLED: 'bg-secondary text-muted-foreground border-border',
 };
 
 const PROJECT_REASONS = new Set(['project_created', 'service_launch', 'free_chat', 'library_generation']);
@@ -329,18 +329,18 @@ function ProfileContent() {
     <div className="w-full max-w-full space-y-5 sm:space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 text-sm text-violet-300">
+          <div className="flex items-center gap-2 text-sm text-primary">
             <UserIcon className="h-4 w-4" />
             Профиль
           </div>
-          <h1 className="mt-2 text-2xl font-bold text-white sm:text-3xl">Профиль и баланс</h1>
-          <p className="mt-2 text-sm text-slate-400">Данные аккаунта, пополнение и история операций.</p>
+          <h1 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">Профиль и баланс</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Данные аккаунта, пополнение и история операций.</p>
         </div>
         <Button
           type="button"
           variant="outline"
           onClick={() => { void logout(); }}
-          className="border-slate-700 bg-slate-900 text-slate-200 hover:border-rose-400 hover:text-rose-300"
+          className="border-border bg-card text-foreground hover:border-rose-400 hover:text-rose-300"
         >
           <LogOut className="mr-2 h-4 w-4" />
           Выйти
@@ -348,10 +348,10 @@ function ProfileContent() {
       </div>
 
       <Tabs value={tab} onValueChange={(value) => setTab(value as ProfileTab)} className="min-w-0">
-        <TabsList className="h-auto w-full max-w-full justify-start overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/80 p-1 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto">
-          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="account">Аккаунт</TabsTrigger>
-          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="billing">Баланс</TabsTrigger>
-          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="transactions">История</TabsTrigger>
+        <TabsList className="h-auto w-full max-w-full justify-start overflow-x-auto rounded-lg border border-border bg-card p-1 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto">
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm" value="account">Аккаунт</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm" value="billing">Баланс</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground sm:text-sm" value="transactions">История</TabsTrigger>
         </TabsList>
         <TabsContent value="account" className="mt-5">
           <AccountSection />
@@ -441,10 +441,10 @@ function AccountSection() {
 
   return (
     <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+      <Card className="min-w-0 overflow-hidden border-border bg-card">
         <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
-            <UserIcon className="h-5 w-5 text-violet-300" />
+            <UserIcon className="h-5 w-5 text-primary" />
             Профиль
           </CardTitle>
         </CardHeader>
@@ -455,7 +455,7 @@ function AccountSection() {
               <Label htmlFor="name">Имя</Label>
               <Input id="name" value={name} onChange={(event) => setName(event.target.value)} />
               {profileDirty && name.trim().length > 0 && name.trim().length < 2 ? (
-                <p className="text-xs text-amber-300">Минимум 2 символа.</p>
+                <p className="text-xs text-primary">Минимум 2 символа.</p>
               ) : null}
             </div>
             <div className="space-y-2">
@@ -463,9 +463,9 @@ function AccountSection() {
               <Input id="email" value={user.email} readOnly disabled />
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-400">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
             <span>Дата регистрации</span>
-            <span className="font-medium text-slate-200">{formatDate(user.createdAt as string | Date)}</span>
+            <span className="font-medium text-foreground">{formatDate(user.createdAt as string | Date)}</span>
           </div>
           <Button onClick={() => saveProfile({ name: name.trim() })} disabled={!canSaveProfile || savingProfile}>
             {savingProfile ? 'Сохранение...' : 'Сохранить профиль'}
@@ -473,7 +473,7 @@ function AccountSection() {
         </CardContent>
       </Card>
 
-      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+      <Card className="min-w-0 overflow-hidden border-border bg-card">
         <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
             <KeyRound className="h-5 w-5 text-emerald-300" />
@@ -488,11 +488,11 @@ function AccountSection() {
             captcha={emailCaptcha}
             onRequest={onRequestEmailVerification}
           />
-          <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 sm:p-4">
+          <div className="rounded-lg border border-border bg-muted p-3 sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="font-semibold text-white">Пароль</div>
-                <p className="mt-1 text-sm text-slate-400">Смена пароля для входа в аккаунт.</p>
+                <div className="font-semibold text-foreground">Пароль</div>
+                <p className="mt-1 text-sm text-muted-foreground">Смена пароля для входа в аккаунт.</p>
               </div>
               {!showPasswordForm ? (
                 <Button variant="outline" onClick={() => setShowPasswordForm(true)}>Сменить пароль</Button>
@@ -570,20 +570,20 @@ function AvatarManager({ user }: { user: ProfileUser }) {
   const studioAvatars = avatars.data?.items ?? [];
 
   return (
-    <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950/50 p-3 sm:p-4">
+    <div className="space-y-4 rounded-lg border border-border bg-muted p-3 sm:p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="relative h-20 w-20 shrink-0">
           <Avatar className="h-20 w-20">
             {previewAvatar && <AvatarImage src={previewAvatar} alt={user.name ?? user.email} />}
             <AvatarFallback className="text-xl">{initialsOf(user.name, user.email)}</AvatarFallback>
           </Avatar>
-          <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-violet-300">
+          <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border border-border bg-card text-primary">
             <Camera className="h-4 w-4" />
           </span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="font-semibold text-white">Аватар</div>
-          <p className="mt-1 text-sm leading-5 text-slate-400">
+          <div className="font-semibold text-foreground">Аватар</div>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
             Загрузите новое фото или выберите готовый образ из Студии.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -604,7 +604,7 @@ function AvatarManager({ user }: { user: ProfileUser }) {
       </div>
 
       <div>
-        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
+        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
           <ImageIcon className="h-3.5 w-3.5" />
           Из Студии
         </div>
@@ -613,7 +613,7 @@ function AvatarManager({ user }: { user: ProfileUser }) {
             {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="aspect-square rounded-md" />)}
           </div>
         ) : studioAvatars.length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-800 p-3 text-sm text-slate-500">
+          <div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
             В Студии пока нет аватаров. Загруженное фото появится здесь автоматически.
           </div>
         ) : (
@@ -627,15 +627,15 @@ function AvatarManager({ user }: { user: ProfileUser }) {
                   disabled={busy}
                   onClick={() => setAvatar(asset.publicUrl, 'Аватар выбран из Студии')}
                   className={cn(
-                    'group relative aspect-square overflow-hidden rounded-md border bg-slate-900 transition hover:border-violet-400',
-                    selected ? 'border-violet-400 ring-2 ring-violet-500/40' : 'border-slate-800',
+                    'group relative aspect-square overflow-hidden rounded-md border bg-card transition hover:border-primary',
+                    selected ? 'border-primary ring-2 ring-primary/40' : 'border-border',
                   )}
                   title={asset.title}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
                   {selected ? (
-                    <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white">
+                    <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                     </span>
                   ) : null}
@@ -666,14 +666,14 @@ function EmailVerificationPanel({
   return (
     <div className={cn(
       'min-w-0 rounded-lg border p-3 sm:p-4',
-      verified ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/30 bg-amber-500/10',
+      verified ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-primary/30 bg-accent',
     )}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
-          <MailCheck className={cn('mt-0.5 h-5 w-5 shrink-0', verified ? 'text-emerald-300' : 'text-amber-300')} />
+          <MailCheck className={cn('mt-0.5 h-5 w-5 shrink-0', verified ? 'text-emerald-300' : 'text-primary')} />
           <div className="min-w-0">
-            <div className="font-semibold text-white">{verified ? 'Email подтверждён' : 'Email не подтверждён'}</div>
-            <p className="mt-1 max-w-xl text-sm leading-5 text-slate-300 sm:leading-6">
+            <div className="font-semibold text-foreground">{verified ? 'Email подтверждён' : 'Email не подтверждён'}</div>
+            <p className="mt-1 max-w-xl text-sm leading-5 text-muted-foreground sm:leading-6">
               {verified
                 ? 'Почта готова для восстановления доступа и важных уведомлений.'
                 : 'Подтвердите электронную почту, чтобы восстановить пароль при потере доступа.'}
@@ -708,25 +708,25 @@ function BillingSection() {
 
   return (
     <div className="min-w-0 space-y-5">
-      <Card className="min-w-0 overflow-hidden border-amber-500/30 bg-amber-500/10">
+      <Card className="min-w-0 overflow-hidden border-primary/30 bg-accent">
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6">
           <div className="flex items-center gap-4">
-            <span className="grid h-12 w-12 place-items-center rounded-md bg-amber-500/20 text-amber-300">
+            <span className="grid h-12 w-12 place-items-center rounded-md bg-accent text-primary">
               <TokenIcon className="h-6 w-6" />
             </span>
             <div>
-              <div className="text-sm text-slate-300">Ваш баланс</div>
-              <div className="text-2xl font-bold text-amber-300 sm:text-3xl">{user.tokenBalance} <span className="text-base font-normal text-slate-300">{pluralizeTokens(user.tokenBalance)}</span></div>
+              <div className="text-sm text-muted-foreground">Ваш баланс</div>
+              <div className="text-2xl font-bold text-primary sm:text-3xl">{user.tokenBalance} <span className="text-base font-normal text-muted-foreground">{pluralizeTokens(user.tokenBalance)}</span></div>
             </div>
           </div>
-          <Button asChild className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Link href="#packages">Пополнить</Link>
           </Button>
         </CardContent>
       </Card>
 
       <div id="packages" className="space-y-3">
-        <h2 className="text-xl font-semibold text-white">Пакеты токенов</h2>
+        <h2 className="text-xl font-semibold text-foreground">Пакеты токенов</h2>
         <PricingCards packages={packages.data?.packages} isLoading={packages.isLoading} fallbackHref="/login?redirect=/profile" />
       </div>
     </div>
@@ -860,17 +860,17 @@ function TransactionsSection() {
   };
 
   return (
-    <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+    <Card className="min-w-0 overflow-hidden border-border bg-card">
       <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
-              <History className="h-5 w-5 text-violet-300" />
+              <History className="h-5 w-5 text-primary" />
               История
             </CardTitle>
-            <p className="mt-1 text-sm text-slate-400">Операции с токенами и платежи в одном списке.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Операции с токенами и платежи в одном списке.</p>
           </div>
-          <div className="flex max-w-full gap-1 overflow-x-auto rounded-md border border-slate-800 bg-slate-950/60 p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex max-w-full gap-1 overflow-x-auto rounded-md border border-border bg-muted p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {([
               { id: 'all', label: 'Все' },
               { id: 'topup', label: 'Пополнения' },
@@ -884,8 +884,8 @@ function TransactionsSection() {
                 className={cn(
                   'shrink-0 border-0 px-3',
                   filter === item.id
-                    ? 'bg-violet-600 hover:bg-violet-500'
-                    : 'bg-transparent text-slate-300 hover:bg-slate-800',
+                    ? 'bg-primary hover:bg-primary'
+                    : 'bg-transparent text-muted-foreground hover:bg-accent',
                 )}
                 onClick={() => selectFilter(item.id)}
               >
@@ -952,10 +952,10 @@ function HistoryGroup({
   return (
     <section className="min-w-0">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold uppercase text-slate-400">{title}</h2>
-        {typeof count === 'number' ? <span className="text-xs text-slate-500">{count}</span> : null}
+        <h2 className="text-sm font-semibold uppercase text-muted-foreground">{title}</h2>
+        {typeof count === 'number' ? <span className="text-xs text-muted-foreground">{count}</span> : null}
       </div>
-      <div className="divide-y divide-slate-800 overflow-hidden rounded-lg border border-slate-800 bg-slate-950/40">
+      <div className="divide-y divide-slate-800 overflow-hidden rounded-lg border border-border bg-muted">
         {children}
       </div>
     </section>
@@ -976,11 +976,11 @@ function TransactionListItem({ tx }: { tx: TokenTransaction }) {
           {isTopup ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
         </span>
         <div className="min-w-0">
-          <div className="font-medium text-white">{transactionDescription(tx.reason)}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+          <div className="font-medium text-foreground">{transactionDescription(tx.reason)}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             <span>{formatDateTime(tx.createdAt)}</span>
             {tx.refId && PROJECT_REASONS.has(tx.reason) ? (
-              <Link href={`/dashboard/projects/${tx.refId}`} className="text-violet-300 hover:underline">
+              <Link href={`/dashboard/projects/${tx.refId}`} className="text-primary hover:underline">
                 см. проект
               </Link>
             ) : null}
@@ -997,7 +997,7 @@ function TransactionListItem({ tx }: { tx: TokenTransaction }) {
           {isTopup ? '+' : ''}
           {tx.amount} токен.
         </div>
-        <div className="whitespace-nowrap text-xs text-slate-500">баланс {tx.balanceAfter}</div>
+        <div className="whitespace-nowrap text-xs text-muted-foreground">баланс {tx.balanceAfter}</div>
       </div>
     </div>
   );
@@ -1050,23 +1050,23 @@ function PaymentListItem({
     <div className="flex flex-col gap-3 p-3 sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex min-w-0 gap-3">
-          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-300">
+          <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
             <CreditCard className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <div className="font-medium text-white">{purpose}</div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+            <div className="font-medium text-foreground">{purpose}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span>{formatDateTime(payment.createdAt)}</span>
               <Badge
                 className={cn(
                   'rounded-md border px-2 py-0.5 text-[11px]',
-                  paymentExpired ? 'border-slate-600 bg-slate-700 text-slate-300' : PAYMENT_STATUS_COLOR[payment.status],
+                  paymentExpired ? 'border-border bg-secondary text-muted-foreground' : PAYMENT_STATUS_COLOR[payment.status],
                 )}
               >
                 {paymentExpired ? 'Время истекло' : PAYMENT_STATUS_LABEL[payment.status]}
               </Badge>
               {payment.status === 'PENDING' && expiresAt ? (
-                <span className={cn(paymentExpired ? 'text-slate-500' : 'text-amber-200')}>
+                <span className={cn(paymentExpired ? 'text-muted-foreground' : 'text-primary')}>
                   {paymentExpired ? 'срок оплаты истёк' : `осталось ${formatRemaining(remainingMs ?? 0)}`}
                 </span>
               ) : null}
@@ -1074,11 +1074,11 @@ function PaymentListItem({
           </div>
         </div>
         <div className="flex items-center justify-between gap-3 sm:block sm:text-right">
-          <div className="whitespace-nowrap text-sm font-semibold text-amber-300">
+          <div className="whitespace-nowrap text-sm font-semibold text-primary">
             {(payment.amountRub / 100).toLocaleString('ru-RU')} ₽
           </div>
           {payment.tokensAdded ? (
-            <div className="whitespace-nowrap text-xs text-slate-500">+{payment.tokensAdded} токенов</div>
+            <div className="whitespace-nowrap text-xs text-muted-foreground">+{payment.tokensAdded} токенов</div>
           ) : null}
         </div>
       </div>
@@ -1160,14 +1160,14 @@ function DangerSection() {
   };
 
   return (
-    <div className="rounded-lg border border-red-500/40 bg-slate-950/50 p-3 sm:p-4">
+    <div className="rounded-lg border border-red-500/40 bg-muted p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 font-semibold text-red-300">
             <ShieldAlert className="h-4 w-4" />
             Удаление аккаунта
           </div>
-          <p className="mt-1 text-sm text-slate-400">Необратимо: данные, проекты и заказы будут удалены через 30 дней.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Необратимо: данные, проекты и заказы будут удалены через 30 дней.</p>
         </div>
         {!showForm ? (
           <Button variant="outline" className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={() => setShowForm(true)}>
@@ -1219,7 +1219,7 @@ function Pagination({
       <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onChange(page - 1)}>
         Назад
       </Button>
-      <span className="text-sm text-slate-400">{page} / {totalPages}</span>
+      <span className="text-sm text-muted-foreground">{page} / {totalPages}</span>
       <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>
         Вперёд
       </Button>

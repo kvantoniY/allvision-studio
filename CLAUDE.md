@@ -1654,4 +1654,14 @@ Web (`/family`): в карточку ребёнка добавлен блок «
 
 Проверки A2.5: `npm.cmd run build -w @allvision/web` — зелёный, все роуты генерируются (Studio-страницы существуют, но недостижимы через UI из-за middleware).
 
-Долги A2.5 (в бэклог перекраски / к A11): полностью перекрасить в светлую тему `/ai` (чат) и `/profile` — сейчас это тёмные острова на светлом сайдбаре; обновить `sitemap.ts` (ещё перечисляет services/trends/scenarios) и Studio `Header`/`Footer`/легальные страницы (`/about`,`/contacts`,`/offer`…) под Academy; физическое удаление legacy Studio-кода — отдельным решением на A11, когда ничего живое от него не зависит.
+Долги A2.5 (в бэклог перекраски / к A11): обновить `sitemap.ts` (ещё перечисляет services/trends/scenarios) и Studio `Header`/`Footer`/легальные страницы (`/about`,`/contacts`,`/offer`…) под Academy; физическое удаление legacy Studio-кода — отдельным решением на A11, когда ничего живое от него не зависит.
+
+### A2.5.1 ✅ — Полная светлая перекраска: чат, профиль, auth + фикс кнопки
+
+Добито то, что A2.5 оставил тёмным.
+
+- **Кнопка (`ui/button.tsx`)**: вариант `outline` был захардкожен в тёмный slate (`bg-slate-800`) — на светлом лендинге «Войти» выглядела тёмной кнопкой с тёмным текстом (жалоба владельца). Переведён на токены: `border-input bg-background text-foreground hover:bg-accent`. Тема-корректно и в Academy (светло), и в админке (там outline-кнопки станут светлыми на тёмном zinc — читаемо, косметика внутреннего инструмента).
+- **Auth (`(auth)/*`)**: новый премиум Academy-лейаут (светлый фон + тёплое оранжевое radial-сияние, бренд «Allvision Academy» с Sparkles), карточки с заголовком+подзаголовком (`CardDescription`) на login/register/forgot/reset/verify. Формы используют токен-компоненты → primary-кнопка автоматически оранжевая. Редиректы `login`/`register` `/dashboard` → `/`; убран gift-factory welcome-тост про коины → Academy-текст «добавьте профиль ребёнка».
+- **Профиль (`/profile`) и чат (`/ai` + `ChatForm`/`ChatHistoryList`/`ChatResultView`/`InputSourcePicker`/`ReferenceLightbox`)**: системная конверсия тёмных utility-классов в токены темы (slate→background/card/muted/secondary/border/foreground/muted-foreground; violet-акцент→primary; amber→primary/accent; emerald-успех→читаемые emerald-700/50). Чёрные/белые оверлеи лайтбокса оставлены (стандартный тёмный просмотрщик медиа). Портал-Sheet чата обёрнут в `academy-theme`. После конверсии выловлены и починены 5 мест «оранжевый фон + тёмный текст» (активные табы профиля, бейджи, кнопка нового чата) → `text-primary-foreground`.
+
+Проверки A2.5.1: `npm.cmd run build -w @allvision/web` — зелёный. Осталось тёмным только: админка (внутренняя, `admin-theme` намеренно тёмная) и Studio-витрина (скрыта редиректами).

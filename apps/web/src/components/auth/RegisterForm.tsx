@@ -61,12 +61,10 @@ export function RegisterForm() {
       }).unwrap();
       dispatch(setUser(user));
       toast({
-        title: 'Добро пожаловать!',
-        description: user.tokenBalance > 0
-          ? `Вам начислено ${user.tokenBalance} коинов бонусом`
-          : 'Аккаунт создан — выбирайте подарок и начинайте.',
+        title: 'Добро пожаловать в Allvision Academy!',
+        description: 'Аккаунт создан. Добавьте профиль ребёнка, чтобы начать.',
       });
-      router.push('/dashboard');
+      router.push('/');
     } catch {
       captcha.reset();
       // ошибка покажется через error ниже

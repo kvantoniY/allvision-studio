@@ -555,7 +555,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
   // Единая скрепка: один слот — сразу открывает выбор, несколько — меню слотов со счётчиком.
   const attachControl = !canUseInput || visibleSlots.length === 0 ? (
-    <Button type="button" variant="outline" size="icon" className="h-8 w-8 border-slate-700 bg-slate-950 text-slate-400" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
+    <Button type="button" variant="outline" size="icon" className="h-8 w-8 border-border bg-background text-muted-foreground" disabled title="Эта модель не принимает референсы" aria-label="Эта модель не принимает референсы">
       <Paperclip className="h-4 w-4" />
     </Button>
   ) : visibleSlots.length === 1 ? (
@@ -575,7 +575,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           type="button"
           variant="outline"
           size="icon"
-          className="relative h-8 w-8 border-slate-700 bg-slate-950"
+          className="relative h-8 w-8 border-border bg-background"
           title={`Референсы: ${slotFilled}/${slotTotal}`}
           aria-label={`Прикрепить референсы (${slotFilled} из ${slotTotal})`}
         >
@@ -583,31 +583,31 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           <span
             className={cn(
               'absolute -right-1.5 -top-1.5 rounded-full px-1 text-[9px] font-semibold leading-4',
-              slotFilled > 0 ? 'bg-violet-600 text-white' : 'bg-slate-700 text-slate-200',
+              slotFilled > 0 ? 'bg-primary text-foreground' : 'bg-secondary text-foreground',
             )}
           >
             {slotFilled}/{slotTotal}
           </span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-72 border-slate-800 bg-slate-950 text-slate-100">
+      <DropdownMenuContent align="start" className="w-72 border-border bg-background text-foreground">
         <DropdownMenuLabel>Референсы {slotFilled}/{slotTotal}</DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-slate-800" />
+        <DropdownMenuSeparator className="bg-secondary" />
         {visibleSlots.map((slot) => {
           const value = slotValue(slot);
           const Icon = slot.mediaKind === 'image' ? ImageIcon : slot.mediaKind === 'video' ? Video : Volume2;
           return (
-            <DropdownMenuItem key={slot.key} className="gap-2.5 py-2 focus:bg-slate-900" onSelect={() => setPickerSlot(slot)}>
-              <Icon className="h-4 w-4 shrink-0 text-slate-500" />
+            <DropdownMenuItem key={slot.key} className="gap-2.5 py-2 focus:bg-card" onSelect={() => setPickerSlot(slot)}>
+              <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm">
                   {slot.label}
-                  {slot.required ? <span className="text-amber-300"> *</span> : null}
-                  {slot.anchor ? <span className="ml-1 text-[11px] text-violet-300">{slot.anchor}</span> : null}
+                  {slot.required ? <span className="text-primary"> *</span> : null}
+                  {slot.anchor ? <span className="ml-1 text-[11px] text-primary">{slot.anchor}</span> : null}
                 </span>
-                <span className="block truncate text-[11px] text-slate-500">{value ? value.title : 'не прикреплено'}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">{value ? value.title : 'не прикреплено'}</span>
               </span>
-              {value ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-300" /> : null}
+              {value ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-700" /> : null}
             </DropdownMenuItem>
           );
         })}
@@ -639,12 +639,12 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     <>
       <div className="text-right leading-tight">
         <div className="flex items-center justify-end gap-1">
-          <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-amber-300' : 'text-red-300')} />
-          <span className={cn('text-xs font-semibold', canPay ? 'text-amber-200' : 'text-red-200')}>{costText}</span>
+          <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-primary' : 'text-red-300')} />
+          <span className={cn('text-xs font-semibold', canPay ? 'text-primary' : 'text-red-200')}>{costText}</span>
         </div>
-        <div className="text-[11px] text-slate-500">Баланс {balance}</div>
+        <div className="text-[11px] text-muted-foreground">Баланс {balance}</div>
       </div>
-      <Button type="submit" disabled={!canSubmit} className="h-8 shrink-0 bg-amber-500 px-3 text-slate-950 hover:bg-amber-400">
+      <Button type="submit" disabled={!canSubmit} className="h-8 shrink-0 bg-primary px-3 text-primary-foreground hover:bg-primary/90">
         {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         Создать
       </Button>
@@ -655,15 +655,15 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
       <div
         className={cn(
-          'relative overflow-hidden rounded-lg border bg-slate-900 shadow-2xl shadow-black/20 transition',
-          isDraggingReference ? 'border-violet-400 ring-2 ring-violet-500/35' : 'border-slate-800',
+          'relative overflow-hidden rounded-lg border bg-card shadow-2xl shadow-black/20 transition',
+          isDraggingReference ? 'border-primary ring-2 ring-primary/35' : 'border-border',
         )}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
         {(slotFilled > 0 || visibleSlots.some((s) => s.required && !slotValue(s)) || referenceUnsupported || !canPay || selectedModel.experimental) && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-slate-950/40 px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted px-3 py-2">
             {visibleSlots.map((slot) => {
               const value = slotValue(slot);
               if (!value) {
@@ -674,7 +674,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                     key={slot.key}
                     type="button"
                     onClick={() => setPickerSlot(slot)}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-slate-600 px-2 py-1.5 text-xs text-slate-400 transition hover:border-violet-400 hover:text-violet-200"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-primary"
                   >
                     <Paperclip className="h-3 w-3" />
                     {slot.label}
@@ -682,13 +682,13 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                 );
               }
               return (
-                <div key={slot.key} className="flex min-w-0 items-center gap-1 rounded-md border border-slate-700 bg-slate-950 py-1 pl-1.5 pr-1">
+                <div key={slot.key} className="flex min-w-0 items-center gap-1 rounded-md border border-border bg-background py-1 pl-1.5 pr-1">
                   {/* Иконка → полноэкранный просмотр референса */}
                   <button
                     type="button"
                     onClick={() => setLightbox(value)}
                     title="Открыть на весь экран"
-                    className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900"
+                    className="h-8 w-8 shrink-0 overflow-hidden rounded bg-card"
                   >
                     {value.mediaKind === 'image' ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -696,7 +696,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                     ) : value.mediaKind === 'video' ? (
                       <video src={value.url} className="h-full w-full object-cover" muted />
                     ) : (
-                      <div className="grid h-full w-full place-items-center text-[9px] text-slate-400">AUDIO</div>
+                      <div className="grid h-full w-full place-items-center text-[9px] text-muted-foreground">AUDIO</div>
                     )}
                   </button>
                   {/* Текст → вставить @упоминание (или подсказка, если модель не понимает anchors) */}
@@ -706,9 +706,9 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                     title={slot.anchor ? `Вставить ${slot.anchor} в промпт` : 'Модель не понимает @-референсы'}
                     className="min-w-0 text-left"
                   >
-                    <span className="block max-w-[160px] truncate text-xs text-slate-200">{slot.label}</span>
-                    <span className="block max-w-[160px] truncate text-[10px] text-slate-500">
-                      {slot.anchor ? <span className="text-violet-300">{slot.anchor}</span> : value.title}
+                    <span className="block max-w-[160px] truncate text-xs text-foreground">{slot.label}</span>
+                    <span className="block max-w-[160px] truncate text-[10px] text-muted-foreground">
+                      {slot.anchor ? <span className="text-primary">{slot.anchor}</span> : value.title}
                     </span>
                   </button>
                   <Button
@@ -726,7 +726,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               );
             })}
             {referenceUnsupported && (
-              <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-100">
+              <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-accent px-2.5 py-1.5 text-xs text-primary">
                 <AlertTriangle className="h-3.5 w-3.5" />
                 <span>Модель {selectedModel.title} не принимает этот референс</span>
               </div>
@@ -736,7 +736,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                 На балансе {balance}, нужно {estimatedCostCoins}
               </div>
             )}
-            {selectedModel.experimental && <Badge className="bg-amber-500/15 text-amber-200">Бета</Badge>}
+            {selectedModel.experimental && <Badge className="bg-accent text-primary">Бета</Badge>}
           </div>
         )}
 
@@ -763,8 +763,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           {promptLength > CHAT_PROMPT_MAX_LENGTH - 200 && (
             <span
               className={cn(
-                'pointer-events-none absolute right-3 top-2 rounded bg-slate-950/80 px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
-                promptTooLong ? 'text-red-300' : 'text-amber-300',
+                'pointer-events-none absolute right-3 top-2 rounded bg-card px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+                promptTooLong ? 'text-red-300' : 'text-primary',
               )}
             >
               {promptLength} / {CHAT_PROMPT_MAX_LENGTH}
@@ -773,13 +773,13 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
           {/* @-меню: доступные референсы (omni) или подсказка, что модель их не поддерживает */}
           {anchorMenu && (
-            <div className="absolute bottom-full left-3 z-20 mb-1 w-72 overflow-hidden rounded-lg border border-slate-700 bg-slate-950 shadow-xl">
+            <div className="absolute bottom-full left-3 z-20 mb-1 w-72 overflow-hidden rounded-lg border border-border bg-background shadow-xl">
               {!modelSupportsAnchors ? (
-                <div className="px-3 py-2.5 text-xs leading-5 text-slate-400">
-                  Модель <span className="text-slate-200">{compactModelTitle(selectedModel.title)}</span> не поддерживает @-референсы в тексте. Прикрепите файлы скрепкой — они уйдут в генерацию как есть.
+                <div className="px-3 py-2.5 text-xs leading-5 text-muted-foreground">
+                  Модель <span className="text-foreground">{compactModelTitle(selectedModel.title)}</span> не поддерживает @-референсы в тексте. Прикрепите файлы скрепкой — они уйдут в генерацию как есть.
                 </div>
               ) : anchorMenuItems.length === 0 ? (
-                <div className="px-3 py-2.5 text-xs text-slate-500">Нет подходящих референсов</div>
+                <div className="px-3 py-2.5 text-xs text-muted-foreground">Нет подходящих референсов</div>
               ) : (
                 <ul className="max-h-56 overflow-y-auto py-1">
                   {anchorMenuItems.map((slot) => {
@@ -789,9 +789,9 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                         <button
                           type="button"
                           onMouseDown={(e) => { e.preventDefault(); applyAnchorFromMenu(slot.anchor!); }}
-                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-slate-900"
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-muted"
                         >
-                          <div className="h-8 w-8 shrink-0 overflow-hidden rounded bg-slate-900">
+                          <div className="h-8 w-8 shrink-0 overflow-hidden rounded bg-card">
                             {value ? (
                               value.mediaKind === 'image' ? (
                                 // eslint-disable-next-line @next/next/no-img-element
@@ -800,12 +800,12 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
                                 <video src={value.url} className="h-full w-full object-cover" muted />
                               )
                             ) : (
-                              <div className="grid h-full w-full place-items-center text-[9px] text-slate-500">?</div>
+                              <div className="grid h-full w-full place-items-center text-[9px] text-muted-foreground">?</div>
                             )}
                           </div>
                           <span className="min-w-0 flex-1">
-                            <span className="block text-sm text-violet-300">{slot.anchor}</span>
-                            <span className="block truncate text-[11px] text-slate-500">{slot.label}{value ? '' : ' · не прикреплено'}</span>
+                            <span className="block text-sm text-primary">{slot.anchor}</span>
+                            <span className="block truncate text-[11px] text-muted-foreground">{slot.label}{value ? '' : ' · не прикреплено'}</span>
                           </span>
                         </button>
                       </li>
@@ -826,8 +826,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           </div>
 
           {(isDraggingReference || uploadInputState.isLoading) && (
-            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-slate-950/80 px-4 backdrop-blur-sm">
-              <div className="inline-flex items-center gap-2 rounded-md border border-violet-400/50 bg-violet-500/15 px-3 py-2 text-sm font-semibold text-violet-100">
+            <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-card px-4 backdrop-blur-sm">
+              <div className="inline-flex items-center gap-2 rounded-md border border-primary/40 bg-accent px-3 py-2 text-sm font-semibold text-primary">
                 {uploadInputState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                 {uploadInputState.isLoading ? 'Загружаем файл' : 'Отпустите файл, чтобы прикрепить'}
               </div>
@@ -837,7 +837,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
         {/* Нижняя панель.
             ПК — всё в одну строку; мобайл — только выбор формата и модели. */}
-        <div className="border-t border-slate-800 bg-slate-950/40 px-3 py-2.5">
+        <div className="border-t border-border bg-muted px-3 py-2.5">
           <div className="flex flex-wrap items-center gap-1.5">
             <div className="hidden shrink-0 items-center gap-1.5 md:flex">
               {attachControl}
@@ -856,7 +856,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           </div>
 
           {submitHint && (
-            <div className={cn('mt-2 truncate text-xs', canPay && !promptTooLong ? 'text-slate-400' : 'text-red-200')}>{submitHint}</div>
+            <div className={cn('mt-2 truncate text-xs', canPay && !promptTooLong ? 'text-muted-foreground' : 'text-red-200')}>{submitHint}</div>
           )}
         </div>
       </div>
@@ -892,7 +892,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
 function CategoryControl({ category, onChange }: { category: ChatCategory; onChange: (value: ChatCategory) => void }) {
   return (
-    <div className="inline-grid h-8 grid-cols-2 rounded-md border border-slate-700 bg-slate-950 p-0.5">
+    <div className="inline-grid h-8 grid-cols-2 rounded-md border border-border bg-background p-0.5">
       {(['image', 'video'] as const).map((item) => {
         const active = category === item;
         const Icon = item === 'image' ? ImageIcon : Video;
@@ -903,7 +903,7 @@ function CategoryControl({ category, onChange }: { category: ChatCategory; onCha
             onClick={() => onChange(item)}
             className={cn(
               'inline-flex items-center gap-1.5 rounded px-2.5 text-[13px] font-medium transition',
-              active ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white',
+              active ? 'bg-primary text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <Icon className="h-3.5 w-3.5" />
@@ -927,22 +927,22 @@ function ModelFamilyControl({
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="h-8 max-w-[160px] border-slate-700 bg-slate-950 px-2.5 text-[13px]">
-          <Sparkles className="h-3.5 w-3.5 text-violet-300" />
+        <Button type="button" variant="outline" size="sm" className="h-8 max-w-[160px] border-border bg-background px-2.5 text-[13px]">
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
           <span className="truncate">{selectedFamily?.title ?? 'Модель'}</span>
-          <ChevronDown className="h-3.5 w-3.5 text-slate-500" />
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[min(92vw,320px)] border-slate-800 bg-slate-950 text-slate-100">
+      <DropdownMenuContent align="start" className="w-[min(92vw,320px)] border-border bg-background text-foreground">
         <DropdownMenuLabel>Модель</DropdownMenuLabel>
-        <DropdownMenuSeparator className="bg-slate-800" />
+        <DropdownMenuSeparator className="bg-secondary" />
         <DropdownMenuRadioGroup value={selectedFamily?.slug} onValueChange={onChange}>
           {families.map((family) => (
-            <DropdownMenuRadioItem key={family.slug} value={family.slug} className="items-start gap-3 py-2 focus:bg-slate-900">
+            <DropdownMenuRadioItem key={family.slug} value={family.slug} className="items-start gap-3 py-2 focus:bg-card">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{family.title}</span>
-                  <span className="text-xs text-slate-500">{family.models.length} функций</span>
+                  <span className="text-xs text-muted-foreground">{family.models.length} функций</span>
                 </div>
               </div>
             </DropdownMenuRadioItem>
@@ -1041,12 +1041,12 @@ function DetailedSettingsControl({
         type="button"
         variant="outline"
         size="icon"
-        className="h-8 w-8 border-slate-700 bg-slate-950 text-slate-100 hover:border-violet-500 hover:bg-slate-950"
+        className="h-8 w-8 border-border bg-background text-foreground hover:border-primary hover:bg-muted"
         title="Детальные настройки"
         aria-label="Детальные настройки"
         onClick={() => setOpen(true)}
       >
-        <Settings2 className="h-4 w-4 text-slate-400" />
+        <Settings2 className="h-4 w-4 text-muted-foreground" />
       </Button>
 
       {open && typeof document !== 'undefined' && createPortal((
@@ -1058,27 +1058,27 @@ function DetailedSettingsControl({
           onClick={() => setOpen(false)}
         >
           <div
-            className="max-h-[85dvh] w-full space-y-2.5 overflow-y-auto rounded-t-2xl border border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40 md:max-w-md md:rounded-2xl"
+            className="max-h-[85dvh] w-full space-y-2.5 overflow-y-auto rounded-t-2xl border border-border bg-background p-4 text-foreground shadow-2xl shadow-black/40 md:max-w-md md:rounded-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center gap-2">
-              <Settings2 className="h-4 w-4 shrink-0 text-violet-300" />
+              <Settings2 className="h-4 w-4 shrink-0 text-primary" />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-white">Настройки</div>
-                <div className="truncate text-[11px] text-slate-500">{model.functionTitle || compactModelTitle(model.title)}</div>
+                <div className="truncate text-sm font-semibold text-foreground">Настройки</div>
+                <div className="truncate text-[11px] text-muted-foreground">{model.functionTitle || compactModelTitle(model.title)}</div>
               </div>
-              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-slate-400 hover:text-white" onClick={() => setOpen(false)} aria-label="Закрыть">
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground" onClick={() => setOpen(false)} aria-label="Закрыть">
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             {/* Функция модели */}
-            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Функция</div>
+            <div className="rounded-lg border border-border bg-muted p-2.5">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Функция</div>
               <select
                 value={model.slug}
                 onChange={(event) => onModelChange(event.target.value)}
-                className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
               >
                 {familyModels.map((item) => (
                   <option key={item.slug} value={item.slug}>
@@ -1089,46 +1089,46 @@ function DetailedSettingsControl({
             </div>
 
             {model.blockSlug === 'fal-generic' && (
-              <div className="rounded-lg border border-violet-800/60 bg-slate-900/60 p-2.5 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-violet-300">Своя модель fal</div>
-                <label className="block space-y-1 text-sm text-slate-100">
-                  <span className="text-[11px] text-slate-400">Endpoint (обязательно)</span>
+              <div className="rounded-lg border border-primary/30 bg-muted p-2.5 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-primary">Своя модель fal</div>
+                <label className="block space-y-1 text-sm text-foreground">
+                  <span className="text-[11px] text-muted-foreground">Endpoint (обязательно)</span>
                   <input
                     type="text"
                     value={typeof advancedParams.endpoint === 'string' ? advancedParams.endpoint : ''}
                     onChange={(event) => update('endpoint', event.target.value)}
                     placeholder="fal-ai/veo3.1"
-                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                    className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
                   />
                 </label>
-                <label className="block space-y-1 text-sm text-slate-100">
-                  <span className="text-[11px] text-slate-400">Доп. параметры (JSON, опц.)</span>
+                <label className="block space-y-1 text-sm text-foreground">
+                  <span className="text-[11px] text-muted-foreground">Доп. параметры (JSON, опц.)</span>
                   <textarea
                     value={typeof advancedParams.extra_params === 'string' ? advancedParams.extra_params : ''}
                     onChange={(event) => update('extra_params', event.target.value)}
                     placeholder='{"num_images":2}'
                     rows={2}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono"
+                    className="w-full rounded-md border border-border bg-card px-3 py-2 text-sm font-mono"
                   />
                 </label>
-                <p className="text-[11px] text-slate-500">Список моделей и полей — на fal.ai/models.</p>
+                <p className="text-[11px] text-muted-foreground">Список моделей и полей — на fal.ai/models.</p>
               </div>
             )}
 
             {!model.tool && (
-            <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Основное</div>
+            <div className="rounded-lg border border-border bg-muted p-2.5">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Основное</div>
           <div className="grid grid-cols-2 gap-2.5">
             {model.supportedAspectRatios.length > 0 && (
-              <label className="space-y-1 text-sm text-slate-100">
+              <label className="space-y-1 text-sm text-foreground">
                 <span className="inline-flex items-center gap-2">
-                  <Frame className="h-4 w-4 text-slate-500" />
+                  <Frame className="h-4 w-4 text-muted-foreground" />
                   Формат
                 </span>
                 <select
                   value={aspectRatio}
                   onChange={(event) => onAspectRatioChange(event.target.value as ChatAspectRatio)}
-                  className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                  className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
                 >
                   {model.supportedAspectRatios.map((ratio) => (
                     <option key={ratio} value={ratio}>{ratio}</option>
@@ -1137,9 +1137,9 @@ function DetailedSettingsControl({
               </label>
             )}
             {category === 'video' && (
-              <label className="space-y-1 text-sm text-slate-100">
+              <label className="space-y-1 text-sm text-foreground">
                 <span className="inline-flex items-center gap-2">
-                  <Clock3 className="h-4 w-4 text-slate-500" />
+                  <Clock3 className="h-4 w-4 text-muted-foreground" />
                   Длительность
                 </span>
                 {model.durationAutoSupported ? (
@@ -1153,7 +1153,7 @@ function DetailedSettingsControl({
                       onDurationAutoChange(false);
                       onDurationChange(Number(event.target.value));
                     }}
-                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                    className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
                   >
                     <option value="auto">Авто (модель решит)</option>
                     {durationValues.map((item) => (
@@ -1164,7 +1164,7 @@ function DetailedSettingsControl({
                   <select
                     value={String(duration)}
                     onChange={(event) => onDurationChange(Number(event.target.value))}
-                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                    className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
                   >
                     {durationValues.map((item) => (
                       <option key={item} value={item}>{item} сек</option>
@@ -1181,21 +1181,21 @@ function DetailedSettingsControl({
                       const next = Number(event.target.value);
                       if (Number.isFinite(next)) onDurationChange(Math.min(durationMax, Math.max(durationMin, Math.round(next))));
                     }}
-                    className="h-9 border-slate-700 bg-slate-900"
+                    className="h-9 border-border bg-card"
                   />
                 )}
               </label>
             )}
             {model.supportedResolutions.length > 0 && (
-              <label className="space-y-1 text-sm text-slate-100">
+              <label className="space-y-1 text-sm text-foreground">
                 <span className="inline-flex items-center gap-2">
-                  <Video className="h-4 w-4 text-slate-500" />
+                  <Video className="h-4 w-4 text-muted-foreground" />
                   Качество
                 </span>
                 <select
                   value={resolutionValue}
                   onChange={(event) => update('resolution', event.target.value)}
-                  className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+                  className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
                 >
                   {model.supportedResolutions.map((resolution) => (
                     <option key={resolution} value={resolution}>{resolution}</option>
@@ -1204,15 +1204,15 @@ function DetailedSettingsControl({
               </label>
             )}
             {category === 'video' && (
-              <div className="space-y-1 text-sm text-slate-100">
+              <div className="space-y-1 text-sm text-foreground">
                 <span>Аудио</span>
                 <Button
                   type="button"
                   variant="outline"
                   className={cn(
-                    'h-9 w-full justify-start border-slate-700 bg-slate-900',
-                    audioOn && 'border-emerald-500/60 bg-emerald-500/10 text-emerald-100',
-                    !model.supportsAudio && !model.audioAlwaysOn && 'text-slate-500',
+                    'h-9 w-full justify-start border-border bg-card',
+                    audioOn && 'border-emerald-300 bg-emerald-50 text-emerald-700',
+                    !model.supportsAudio && !model.audioAlwaysOn && 'text-muted-foreground',
                   )}
                   disabled={!model.supportsAudio}
                   onClick={() => onGenerateAudioChange(!generateAudio)}
@@ -1233,8 +1233,8 @@ function DetailedSettingsControl({
         {sections.map((section) => {
           const meta = advancedSectionsMeta[section.key];
           return (
-            <div key={section.key} className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{meta.title}</div>
+            <div key={section.key} className="rounded-lg border border-border bg-muted p-2.5">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{meta.title}</div>
               <div className="grid gap-2.5">
                 {section.params.map((param) => (
                   <AdvancedParamField
@@ -1269,7 +1269,7 @@ function AdvancedParamField({
 
   if (param.kind === 'boolean') {
     return (
-      <label className="flex items-center gap-2.5 rounded-md border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-100">
+      <label className="flex items-center gap-2.5 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
         <input
           type="checkbox"
           checked={Boolean(value)}
@@ -1278,7 +1278,7 @@ function AdvancedParamField({
         />
         <span className="min-w-0 flex-1">
           <span className="block">{label}</span>
-          {hint && <span className="mt-0.5 block text-[11px] leading-4 text-slate-500">{hint}</span>}
+          {hint && <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">{hint}</span>}
         </span>
       </label>
     );
@@ -1287,25 +1287,25 @@ function AdvancedParamField({
   if (param.kind === 'select') {
     const selected = typeof value === 'string' || typeof value === 'number' ? String(value) : String(param.default ?? '');
     return (
-      <label className="space-y-1 text-sm text-slate-100">
+      <label className="space-y-1 text-sm text-foreground">
         <span>{label}</span>
         <select
           value={selected}
           onChange={(event) => onChange(event.target.value)}
-          className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
+          className="h-9 w-full rounded-md border border-border bg-card px-3 text-sm"
         >
           {(param.options ?? []).map((option) => (
             <option key={option.value} value={option.value}>{ruOptionLabel(option)}</option>
           ))}
         </select>
-        {hint && <span className="block text-[11px] leading-4 text-slate-500">{hint}</span>}
+        {hint && <span className="block text-[11px] leading-4 text-muted-foreground">{hint}</span>}
       </label>
     );
   }
 
   if (param.kind === 'number') {
     return (
-      <label className="space-y-1 text-sm text-slate-100">
+      <label className="space-y-1 text-sm text-foreground">
         <span>{label}</span>
         <Input
           type="number"
@@ -1313,9 +1313,9 @@ function AdvancedParamField({
           max={param.maximum}
           value={typeof value === 'number' || typeof value === 'string' ? value : ''}
           onChange={(event) => onChange(event.target.value === '' ? undefined : Number(event.target.value))}
-          className="h-9 border-slate-700 bg-slate-900"
+          className="h-9 border-border bg-card"
         />
-        {hint && <span className="block text-[11px] leading-4 text-slate-500">{hint}</span>}
+        {hint && <span className="block text-[11px] leading-4 text-muted-foreground">{hint}</span>}
       </label>
     );
   }
@@ -1325,7 +1325,7 @@ function AdvancedParamField({
     const mediaKind = param.mediaKind ?? 'image';
     const mediaLabel = mediaKind === 'image' ? 'изображение' : mediaKind === 'video' ? 'видео' : 'аудио';
     return (
-      <div className="space-y-1.5 text-sm text-slate-100">
+      <div className="space-y-1.5 text-sm text-foreground">
         <div className="flex items-center justify-between gap-2">
           <span>{label}</span>
           <InputSourcePicker
@@ -1338,7 +1338,7 @@ function AdvancedParamField({
             }}
           />
         </div>
-        {hint && <p className="text-[11px] leading-4 text-slate-500">{hint}</p>}
+        {hint && <p className="text-[11px] leading-4 text-muted-foreground">{hint}</p>}
         {items.length > 0 ? (
           <div className="flex flex-wrap gap-1.5">
             {items.map((item) => (
@@ -1346,7 +1346,7 @@ function AdvancedParamField({
                 key={item}
                 type="button"
                 title="Убрать"
-                className="inline-flex max-w-full items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-slate-300 hover:border-rose-400 hover:text-rose-200"
+                className="inline-flex max-w-full items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground hover:border-destructive hover:text-destructive"
                 onClick={() => onChange(param.multiple ? items.filter((current) => current !== item) : undefined)}
               >
                 <span className="max-w-[180px] truncate">{item}</span>
@@ -1355,7 +1355,7 @@ function AdvancedParamField({
             ))}
           </div>
         ) : (
-          <p className="text-[11px] text-slate-600">Не выбрано — нажмите «Прикрепить», чтобы добавить {mediaLabel}.</p>
+          <p className="text-[11px] text-muted-foreground">Не выбрано — нажмите «Прикрепить», чтобы добавить {mediaLabel}.</p>
         )}
       </div>
     );
@@ -1363,23 +1363,23 @@ function AdvancedParamField({
 
   const isLong = param.kind === 'textarea';
   return (
-    <label className="space-y-1 text-sm text-slate-100">
+    <label className="space-y-1 text-sm text-foreground">
       <span>{label}</span>
       {isLong ? (
         <Textarea
           value={typeof value === 'string' ? value : ''}
           rows={3}
           onChange={(event) => onChange(event.target.value)}
-          className="border-slate-700 bg-slate-900"
+          className="border-border bg-card"
         />
       ) : (
         <Input
           value={typeof value === 'string' || typeof value === 'number' ? value : ''}
           onChange={(event) => onChange(event.target.value)}
-          className="h-9 border-slate-700 bg-slate-900"
+          className="h-9 border-border bg-card"
         />
       )}
-      {hint && <span className="block text-[11px] leading-4 text-slate-500">{hint}</span>}
+      {hint && <span className="block text-[11px] leading-4 text-muted-foreground">{hint}</span>}
     </label>
   );
 }

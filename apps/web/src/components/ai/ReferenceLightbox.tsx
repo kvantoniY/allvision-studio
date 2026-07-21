@@ -44,21 +44,21 @@ export function ReferenceLightbox({
       onClick={onClose}
     >
       <div className="flex shrink-0 items-center justify-between gap-2 p-3" onClick={(event) => event.stopPropagation()}>
-        <span className="min-w-0 truncate text-sm text-slate-300">{item.title ?? 'Референс'}</span>
+        <span className="min-w-0 truncate text-sm text-muted-foreground">{item.title ?? 'Референс'}</span>
         <div className="flex shrink-0 items-center gap-2">
           {onReuse && (
-            <Button type="button" size="sm" variant="outline" className="border-slate-600 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={onReuse}>
+            <Button type="button" size="sm" variant="outline" className="border-border bg-card text-foreground hover:bg-accent" onClick={onReuse}>
               <RotateCcw className="h-4 w-4" />
               Переиспользовать
             </Button>
           )}
-          <Button asChild size="sm" className="bg-amber-500 text-slate-950 hover:bg-amber-400">
+          <Button asChild size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
             <a href={item.url} download target="_blank" rel="noopener">
               <Download className="h-4 w-4" />
               Скачать
             </a>
           </Button>
-          <Button type="button" variant="outline" size="icon" className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={onClose} aria-label="Закрыть">
+          <Button type="button" variant="outline" size="icon" className="border-white/20 bg-white/10 text-foreground hover:bg-white/20" onClick={onClose} aria-label="Закрыть">
             <X className="h-5 w-5" />
           </Button>
         </div>

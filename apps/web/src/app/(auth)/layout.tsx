@@ -1,17 +1,25 @@
 import Link from 'next/link';
-import { BrandLogo } from '@/components/ui/brand-logo';
+import { Sparkles } from 'lucide-react';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-900 dark:via-slate-950 dark:to-slate-900 p-4">
-      <Link
-        href="/"
-        className="relative mb-8 inline-flex items-center text-lg font-semibold"
-      >
-        <BrandLogo className="absolute right-[calc(100%+0.5rem)] top-1/2 h-7 w-auto -translate-y-1/2" />
-        Allvision Studio
+    <div className="academy-theme relative flex min-h-screen flex-col items-center justify-center bg-background p-4 text-foreground">
+      {/* Тёплое сияние Academy на фоне */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 overflow-hidden"
+        style={{
+          background:
+            'radial-gradient(60% 50% at 50% 0%, hsl(24 94% 50% / 0.10), transparent 70%)',
+        }}
+      />
+      <Link href="/" className="relative z-10 mb-8 inline-flex items-center gap-2 text-lg font-semibold">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <Sparkles className="h-5 w-5" />
+        </span>
+        Allvision Academy
       </Link>
-      <div className="w-full max-w-md">{children}</div>
+      <div className="relative z-10 w-full max-w-md">{children}</div>
     </div>
   );
 }

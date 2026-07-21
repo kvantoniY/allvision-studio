@@ -122,7 +122,7 @@ function AiContent() {
   }, [activeChatId, messages.length]);
 
   return (
-    <div className="grid h-[calc(100dvh-56px)] min-h-0 overflow-hidden bg-slate-950 md:h-dvh md:grid-cols-[300px_minmax(0,1fr)]">
+    <div className="grid h-[calc(100dvh-56px)] min-h-0 overflow-hidden bg-background md:h-dvh md:grid-cols-[300px_minmax(0,1fr)]">
       <div className="hidden min-h-0 md:block">
         <ChatHistoryList
           items={chats.data?.items ?? []}
@@ -134,7 +134,7 @@ function AiContent() {
       </div>
 
       <section className="flex min-h-0 min-w-0 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-4 py-3">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
             <Sheet open={chatListOpen} onOpenChange={setChatListOpen}>
               <SheetTrigger asChild>
@@ -142,8 +142,8 @@ function AiContent() {
                   <PanelLeft className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-80 p-0">
-                <SheetHeader className="border-b border-slate-800 p-4">
+              <SheetContent side="left" className="academy-theme w-80 bg-card p-0 text-foreground">
+                <SheetHeader className="border-b border-border p-4">
                   <SheetTitle>Чаты</SheetTitle>
                 </SheetHeader>
                 <ChatHistoryList
@@ -158,16 +158,16 @@ function AiContent() {
                 />
               </SheetContent>
             </Sheet>
-            <MessageSquare className="hidden h-5 w-5 shrink-0 text-violet-300 sm:block" />
-            <button type="button" onClick={rename} className="min-w-0 truncate text-left text-lg font-semibold text-white">
+            <MessageSquare className="hidden h-5 w-5 shrink-0 text-primary sm:block" />
+            <button type="button" onClick={rename} className="min-w-0 truncate text-left text-lg font-semibold text-foreground">
               {activeTitle}
             </button>
           </div>
           <div className="flex shrink-0 gap-2">
-            <Button type="button" variant="outline" size="sm" className="hidden border-slate-700 bg-slate-900 sm:inline-flex" onClick={rename}>
+            <Button type="button" variant="outline" size="sm" className="hidden border-border bg-card sm:inline-flex" onClick={rename}>
               Переименовать
             </Button>
-            <Button type="button" variant="outline" size="icon" className="border-slate-700 bg-slate-900" onClick={remove} aria-label="Удалить чат">
+            <Button type="button" variant="outline" size="icon" className="border-border bg-card" onClick={remove} aria-label="Удалить чат">
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
@@ -190,7 +190,7 @@ function AiContent() {
         </div>
 
         {activeChatId && (
-          <div className="sticky bottom-0 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur lg:px-8">
+          <div className="sticky bottom-0 border-t border-border bg-card px-4 py-3 backdrop-blur lg:px-8">
             <ChatForm
               chatId={activeChatId}
               initialReference={reference}
