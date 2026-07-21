@@ -510,6 +510,22 @@ enum EarningStatus {
   REJECTED
 }
 
+// === Конструктор сцен (A6.2): шаблон урока с черновиком сцены ===
+// Immutable-версии и LessonInstance — этап A6.3.
+model LessonTemplate {
+  id          String   @id @default(cuid())
+  topicId     String?
+  title       String
+  status      String   @default("draft") // draft | published
+  scene       Json // AcademyScene (рабочий черновик)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([topicId])
+  @@index([createdById])
+}
+
 enum MessengerType {
   TELEGRAM
   WHATSAPP

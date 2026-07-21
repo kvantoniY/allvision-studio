@@ -17,7 +17,7 @@
 
 ## План этапов Academy
 
-A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 ✅ панель генерации · A6.1 ✅ формат сцены и runtime · A6.2 ⏳ редактор · A6.3–A6.4 конструктор сцен · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 ✅ панель генерации · A6.1 ✅ формат сцены и runtime · A6.2 ✅ редактор · A6.3–A6.4 конструктор сцен · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
 
 Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
 
@@ -1786,3 +1786,35 @@ Web:
 Проверки A6.1: shared build — зелёный; полный shared Jest — 13 suites / 79 tests (новые scene-format/runtime — 7 passed); API build — зелёный; worker build — зелёный; web production build — зелёный, обе новые страницы вошли в route manifest; отдельный `next start :3100` + headless Chrome/SwiftShader визуально отрисовал Pixi canvas (найденная debug-рамка вне debug mode исправлена и перепроверена). В web остались только 4 прежних react-hooks warning в monitoring/services/AdminServiceForm/ServicesCatalog, A6-файлы предупреждений не дают.
 
 Долги/границы A6.1: это player foundation, не редактор. Responsive-поля пока исполняются через единый логический viewport и CSS aspect scaling; сложные anchor/stretch/layout-resize потребуют canvas редактора A6.2. Drag/drop, DOM-input, настоящий timer, video controls, timeline/enter-exit animation presets и игровые механики поиска пары/сортировки/кодового замка реализуются в A6.2/A6.4. Persistence, immutable publication versions и LessonInstance намеренно не добавлены до A6.3.
+
+## Этап A6.2 ✅ — Конструктор сцен: редактор /constructor
+
+Второй подэтап A6. Методист/админ собирает интерактивную сцену урока: слои, элементы, drag на холсте, инспектор свойств, правила «событие→условие→действие», привязка материалов A5, автосохранение, предпросмотр через PixiJS-плеер A6.1. Следующий подэтап — A6.3 (immutable-версии шаблонов, LessonTemplateVersion, LessonInstance с подстановкой персонажа ребёнка).
+
+Shared (`packages/shared/src/academy/scene-editing.ts` — уже лежал заделом, подключён к index + покрыт тестами):
+
+- Чистые иммутабельные хелперы редактора: `createEmptyScene`, `makeElement`, `addElement`, `updateElement`, `patchElementTransform` (drag), `attachAsset` (dragData A5 → `sceneAssetReferenceSchema` 1:1), `removeElement` (+ чистит связанные правила), `addLayer`/`removeLayer`, `reorderElement`, `addRule`/`updateRule`/`removeRule`, `uniqueSceneId`, `collectSceneIds`, `validateScene` (строгая схема → человекочитаемые ошибки).
+- **Фикс:** `makeElement` больше НЕ гонит строгий `academySceneElementSchema.parse` — source-типы (image/character/npc/…) валидны только после прикрепления ассета, поэтому редактор допускает промежуточное невалидное состояние; строгая проверка — по кнопке «Проверить»/при публикации.
+- Тест `academy-scene-editing` — 9 passed (пустая сцена валидна, add/move/attach/remove+rules/reorder, validateScene).
+
+Prisma (миграция `20260722120000_a6_2_lesson_template`, вручную):
+
+- `LessonTemplate` (topicId?, title, status `draft|published` строкой, `scene Json` — рабочий черновик AcademyScene, createdById). Immutable-версии и LessonInstance — A6.3.
+
+API (`/api/academy/lesson-templates`, requireRole METHODIST; ADMIN всегда):
+
+- CRUD: list (методист — свои, админ — все), create (пустая валидная сцена через `createEmptyScene`), get, patch (title/topicId/status/scene), delete.
+- Черновик сохраняется КАК ЕСТЬ (промежуточные невалидные состояния допустимы), с гардами: размер ≤ 2 MB, `scene.layers` обязан быть массивом. **Публикация** (`status: 'published'`) требует строго валидной сцены (`validateScene`) — иначе 400 `SCENE_INVALID`.
+
+Web (`/constructor`, `.academy-theme`, AuthGuard):
+
+- Список шаблонов (создать/открыть/удалить) + редактор `SceneEditor`.
+- Пять зон: топбар (название, статус автосохранения, undo/redo, «Проверить», «Предпросмотр», «Опубликовать») · слева слои+элементы (добавить слой/элемент по типу, выбрать, удалить, reorder) · центр — **DOM edit-canvas** со scale под viewport и **drag-to-move** элементов мышью (pointer capture, коммит трансформа через `patchElementTransform`) · справа инспектор (трансформ x/y/w/h/поворот/прозрачность, текст, материал A5, флаги visible/studentInteractive/teacherVisible, reorder) или свойства сцены (название/фон/цель) · снизу редактор правил (`RulesEditor`) с дропдаунами событий/действий по элементам и состояниям.
+- Предпросмотр переключает центр на PixiJS-плеер A6.1 (`AcademyScenePlayer`) с ролью ученик/учитель.
+- `AssetPickerDialog` — модалка выбора материала из общей/личной библиотеки A5 (`useGetAcademyLibraryQuery`), клик → `attachAsset` на выбранный элемент.
+- Автосохранение debounce 1.5с; undo/redo — стеки снимков сцены (до 50).
+- RTK slice `academy-lesson-templates-api` (reducer+middleware в store). Навигация: пункт «Конструктор» в сайдбаре METHODIST (новый `METHODIST_SIDEBAR_SECTIONS`) и в админ-сайдбаре (группа «Академия»).
+
+Проверки A6.2: `prisma generate` — ок; билды shared/api/worker/web — зелёные; `/constructor` в route-манифесте. Shared academy — 53 passed (7 suites, включая новый scene-editing 9). DB-backed `academy-lesson-templates.test.ts` (доступ методиста/запрет родителю, create с валидной сценой, loose-сохранение черновика, отказ невалидной структуры и публикации невалидной сцены) — на CI/проде без Postgres.
+
+Долги/границы A6.2: canvas двигает элементы (drag-move), но resize/rotate — только числами в инспекторе (гизмо-ручки, снаппинг, мультиселект — позже); редактор состояний сцены (states) и условий правил упрощён (условия в UI не редактируются детально — только событие+действия; полный condition-builder позже); drag-and-drop материала прямо на холст не сделан (выбор через инспектор/модалку); персонаж ребёнка в шаблоне — это generic-элемент `character`, подстановка конкретного ребёнка и версии/LessonInstance — A6.3. Публикация пока просто помечает `status=published` (без снапшота версии — A6.3).

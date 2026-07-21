@@ -21,6 +21,7 @@ import { academyCurriculumRouter } from './academy-curriculum';
 import { academyProgressRouter } from './academy-progress';
 import { academyBookingRouter } from './academy-booking';
 import { academyMaterialsRouter } from './academy-materials';
+import { academyLessonTemplatesRouter } from './academy-lesson-templates';
 
 export const router = Router();
 
@@ -48,3 +49,4 @@ router.use('/academy/curriculum', academyCurriculumRouter);
 router.use('/academy/progress', academyProgressRouter);
 router.use('/academy', academyBookingRouter);
 router.use('/academy/materials', academyMaterialsRouter);
+router.use('/academy/lesson-templates', academyLessonTemplatesRouter);

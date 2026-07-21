@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
-import { SIDEBAR_SECTIONS, TEACHER_SIDEBAR_SECTIONS, isActive } from './sidebar-nav';
+import { METHODIST_SIDEBAR_SECTIONS, SIDEBAR_SECTIONS, TEACHER_SIDEBAR_SECTIONS, isActive } from './sidebar-nav';
 
 function initialsOf(name: string | null | undefined, email: string) {
   if (name) {
@@ -23,7 +23,11 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
 
   if (!user) return null;
 
-  const baseSections = user.role === 'TEACHER' ? TEACHER_SIDEBAR_SECTIONS : SIDEBAR_SECTIONS;
+  const baseSections = user.role === 'TEACHER'
+    ? TEACHER_SIDEBAR_SECTIONS
+    : user.role === 'METHODIST'
+      ? METHODIST_SIDEBAR_SECTIONS
+      : SIDEBAR_SECTIONS;
   const sidebarSections = user.role === 'ADMIN'
     ? [
         ...SIDEBAR_SECTIONS,

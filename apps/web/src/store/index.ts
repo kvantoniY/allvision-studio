@@ -32,6 +32,7 @@ import { familyApi } from './api/family-api';
 import { adminCurriculumApi } from './api/admin-curriculum-api';
 import { academyBookingApi } from './api/academy-booking-api';
 import { academyMaterialsApi } from './api/academy-materials-api';
+import { academyLessonTemplatesApi } from './api/academy-lesson-templates-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -69,6 +70,7 @@ export const store = configureStore({
     [adminCurriculumApi.reducerPath]: adminCurriculumApi.reducer,
     [academyBookingApi.reducerPath]: academyBookingApi.reducer,
     [academyMaterialsApi.reducerPath]: academyMaterialsApi.reducer,
+    [academyLessonTemplatesApi.reducerPath]: academyLessonTemplatesApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -104,6 +106,7 @@ export const store = configureStore({
       adminCurriculumApi.middleware,
       academyBookingApi.middleware,
       academyMaterialsApi.middleware,
+      academyLessonTemplatesApi.middleware,
     ),
 });
 
