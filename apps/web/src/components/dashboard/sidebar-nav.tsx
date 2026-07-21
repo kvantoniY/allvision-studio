@@ -1,4 +1,4 @@
-import { CalendarClock, GraduationCap, Home, Library, Sparkles, User, Users } from 'lucide-react';
+import { CalendarClock, Clapperboard, GraduationCap, Home, Library, Sparkles, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -32,6 +32,7 @@ export const TEACHER_SIDEBAR_SECTIONS: SidebarSection[] = [
     items: [
       { href: '/teacher', label: 'Кабинет', icon: GraduationCap },
       { href: '/teacher/library', label: 'Материалы', icon: Library },
+      { href: '/teacher/scene-player', label: 'Плеер сцен', icon: Clapperboard },
       { href: '/ai', label: 'Нейролаборатория', icon: Sparkles },
       { href: '/profile', label: 'Профиль', icon: User },
     ],

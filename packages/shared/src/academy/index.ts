@@ -5,3 +5,5 @@ export * from './character';
 export * from './progress';
 export * from './booking';
 export * from './materials';
+export * from './scene-format';
+export * from './scene-runtime';

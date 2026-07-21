@@ -15,6 +15,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: '/admin/curriculum', label: 'Программа', icon: GraduationCap },
       { href: '/admin/library', label: 'Материалы', icon: Library },
+      { href: '/admin/scene-player', label: 'Плеер сцен', icon: Clapperboard },
     ],
   },
   {

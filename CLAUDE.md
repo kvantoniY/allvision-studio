@@ -17,7 +17,7 @@
 
 ## План этапов Academy
 
-A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 ✅ панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 ✅ панель генерации · A6.1 ✅ формат сцены и runtime · A6.2 ⏳ редактор · A6.3–A6.4 конструктор сцен · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
 
 Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
 
@@ -1764,3 +1764,25 @@ Web:
 Проверки A5: `prisma validate` — ok; первый `prisma generate` — ok. Билды shared/api/worker/web — зелёные; database `tsc` — зелёный. Shared `academy-materials` — 9 passed; worker без DB-backed `pipeline-runner|piapi-provider` — 20 suites / 118 tests passed. DB-backed `academy-materials.test.ts` покрывает три библиотеки, назначение преподавателя, mock-first launch фона/позы, запрет детского промоушена и admin-copy — локально не запускался без Postgres, прогнать на CI/проде. Повторный full database build получил ожидаемый Windows EPERM на занятой dev-процессом engine DLL; процесс не останавливался, Prisma types и отдельный tsc актуальны.
 
 Долги A5: реальный fal smoke (включая качество identity и BiRefNet alpha/фактическую цену) — на проде; детский file endpoint пока отдаёт оригинал без отдельного thumbnail/downscale; audio-kind доступен библиотеке, но AI-аудиогенератор в A5 не подключён; inpaint/upscale сейчас выполняются универсальным image-edit prompt поверх обязательного референса (маска-редактор и специализированный super-resolution — будущий UX); UI статуса использует polling 2с, SSE можно подключить позже. Персональная генерация через PROVIDER_MODE=piapi заблокирована до появления private-safe PiAPI transport.
+
+## Этап A6.1 ✅ — Формат сцены и PixiJS runtime-ядро
+
+Первый подэтап самого большого A6 завершён отдельно. Следующий подэтап — A6.2: редактор `/constructor` с canvas-инструментами, слоями, inspector, rule-builder, A5 drag/drop, undo и автосохранением. Prisma-шаблоны/версии остаются A6.3, готовые игровые механики — A6.4.
+
+Shared:
+
+- `academy/scene-format.ts`: строгий версионированный `formatVersion=1` zod-формат сцены. В нём viewport, 6 типов слоёв, полный каталог 22 элементов первого формата, transform/opacity/anchor/responsive, style/content/asset ref, состояния и overrides элемента, анимации, studentInteractive/teacherVisible/accessibility, 5 режимов проверки.
+- Правила описаны как `event → conditions[] → actions[]`: события click/key/drag/answer/timer/teacher/video/AI/code/custom; условия по state/variables/score/visibility/role/correctness; действия show/hide/toggle/sound/pose/animation/score/hint/state/variable/transition/next/emit.
+- Cross-reference validation отклоняет дубли id, отсутствующие initial state, битые element/state refs в глобальных состояниях и правилах. `parseAcademyScene` — единая точка входа для будущего JSON из БД/редактора.
+- `academy/scene-runtime.ts`: чистая детерминированная машина без Pixi/DOM. Приоритет правил стабилен, есть `stopPropagation`, последовательное применение действий, role-safe условия, закрытый по умолчанию переход, эффекты для renderer/host и резолв element-state overrides.
+
+Web:
+
+- Подключён `pixi.js@8.19.0`. `lib/scene-engine/PixiScenePlayer` использует v8 async `Application.init`, scene graph Container → layer → element, zIndex, Graphics/Text/Assets/Sprite, pointer и keyboard events, state redraw, простые runtime-анимации/звук, accessibility overlay и явный destroy WebGL/children/textures.
+- Персональный A5 asset (`scope=child`) не проходит через публичный Pixi Assets loader: плеер делает авторизованный `fetch(credentials=include, cache=no-store)` закрытого API-файла, создаёт локальную Texture и уничтожает её вместе с player. URL ребёнка не переносится в public storage.
+- React-обёртка динамически грузит Pixi только на клиенте, поддерживает reset/focus/send, student/teacher role и русские loading/error states.
+- Витрина «Замок чисел: тайна свитка» доступна на `/teacher/scene-player` и `/admin/scene-player` (пункты в навигации, светлая `.academy-theme`). Поток: открыть свиток → выбрать цифру → получить score/награду → разрешить переход. Есть смена роли, teacher-only hint, debug boundaries и журнал runtime-эффектов.
+
+Проверки A6.1: shared build — зелёный; полный shared Jest — 13 suites / 79 tests (новые scene-format/runtime — 7 passed); API build — зелёный; worker build — зелёный; web production build — зелёный, обе новые страницы вошли в route manifest; отдельный `next start :3100` + headless Chrome/SwiftShader визуально отрисовал Pixi canvas (найденная debug-рамка вне debug mode исправлена и перепроверена). В web остались только 4 прежних react-hooks warning в monitoring/services/AdminServiceForm/ServicesCatalog, A6-файлы предупреждений не дают.
+
+Долги/границы A6.1: это player foundation, не редактор. Responsive-поля пока исполняются через единый логический viewport и CSS aspect scaling; сложные anchor/stretch/layout-resize потребуют canvas редактора A6.2. Drag/drop, DOM-input, настоящий timer, video controls, timeline/enter-exit animation presets и игровые механики поиска пары/сортировки/кодового замка реализуются в A6.2/A6.4. Persistence, immutable publication versions и LessonInstance намеренно не добавлены до A6.3.
