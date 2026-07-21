@@ -1,17 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { DashboardSidebarMobile } from '@/components/dashboard/DashboardSidebarMobile';
-import { Footer } from '@/components/layout/Footer';
 import { ProjectEventsBridge } from '@/components/realtime/ProjectEventsBridge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/use-auth';
 
-import { TokenIcon } from '@/components/ui/token-icon';
 function initialsOf(name: string | null | undefined, email: string) {
   if (name) {
     const parts = name.trim().split(/\s+/);
@@ -22,26 +19,17 @@ function initialsOf(name: string | null | undefined, email: string) {
 
 export function UserWorkspaceShell({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const pathname = usePathname();
-  const showPublicFooter = pathname === '/' || pathname?.startsWith('/services');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="academy-theme min-h-screen bg-background text-foreground">
       {/* Realtime-обновление статусов генераций на любом экране (SSE); поллинг — фолбэк. */}
       <ProjectEventsBridge enabled={Boolean(user)} />
       <DashboardSidebar />
       <div className="flex min-h-screen min-w-0 flex-col md:pl-64">
         {user && (
-          <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 backdrop-blur md:hidden">
+          <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-background/95 px-3 backdrop-blur md:hidden">
             <DashboardSidebarMobile />
             <div className="flex items-center gap-2">
-              <Link
-                href="/profile?tab=billing"
-                className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-1 text-sm font-semibold text-amber-300"
-              >
-                <TokenIcon className="h-4 w-4" />
-                {user.tokenBalance}
-              </Link>
               <Link href="/profile" className="rounded-full">
                 <Avatar className="h-8 w-8">
                   {user.avatar && <AvatarImage src={user.avatar} alt={user.name ?? user.email} />}
@@ -52,7 +40,7 @@ export function UserWorkspaceShell({ children }: { children: React.ReactNode }) 
                 type="button"
                 onClick={() => { void logout(); }}
                 aria-label="Выйти"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-300 transition hover:border-rose-400 hover:text-rose-300"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition hover:border-destructive hover:text-destructive"
               >
                 <LogOut className="h-4 w-4" />
               </button>
@@ -60,7 +48,6 @@ export function UserWorkspaceShell({ children }: { children: React.ReactNode }) 
           </div>
         )}
         <main className="min-w-0 flex-1">{children}</main>
-        {showPublicFooter && <Footer />}
       </div>
     </div>
   );

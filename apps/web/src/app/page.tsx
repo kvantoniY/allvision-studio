@@ -1,30 +1,29 @@
 import type { Metadata } from 'next';
-import { HomePageContent } from '@/components/pages/HomePageContent';
+import { AcademyHome } from '@/components/academy/AcademyHome';
 import { JsonLd } from '@/components/seo/JsonLd';
-import { landingFaqs } from '@/lib/public-content';
 import { pageMetadata } from '@/lib/seo';
-import { faqSchema, organizationSchema, websiteSchema } from '@/lib/structured-data';
+import { organizationSchema, websiteSchema } from '@/lib/structured-data';
 
 export const metadata: Metadata = pageMetadata({
-  title: 'Allvision Studio — AI-подарки: оживить фото, видео, мультфильмы',
+  title: 'Allvision Academy — персональная онлайн-школа для детей',
   description:
-    'AI-фабрика цифровых подарков: оживление и реставрация старых фото, перенос себя в фильм или мультфильм, трендовые видео, карусели для соцсетей, аватары и сказки. Результат за минуты, без промптов и подписки.',
+    'Персонализированная онлайн-школа: живой преподаватель ведёт занятие, нейросети создают персонажа с внешностью ребёнка, а браузерная игра превращает урок в интерактивное приключение. Английский, нейросети, программирование.',
   path: '/',
   absoluteTitle: true,
   keywords: [
-    'нейросеть подарок',
-    'оживить старое фото',
-    'я в фильме нейросеть',
-    'ребёнок в мультфильме',
-    'AI генерация фото и видео',
+    'онлайн школа для детей',
+    'английский для детей онлайн',
+    'нейросети для детей',
+    'программирование для детей',
+    'персональные уроки с преподавателем',
   ],
 });
 
 export default function HomePage() {
   return (
     <>
-      <JsonLd data={[organizationSchema(), websiteSchema(), faqSchema(landingFaqs)]} />
-      <HomePageContent />
+      <JsonLd data={[organizationSchema(), websiteSchema()]} />
+      <AcademyHome />
     </>
   );
 }

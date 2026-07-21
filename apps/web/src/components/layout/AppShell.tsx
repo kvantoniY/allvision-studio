@@ -20,6 +20,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <UserWorkspaceShell>{children}</UserWorkspaceShell>;
   }
 
+  // Гостевой Academy-лендинг на «/» — самодостаточный, без Studio-хедера/футера.
+  if (!user && pathname === '/') {
+    return <main className="flex-1">{children}</main>;
+  }
+
   return (
     <>
       {!isAuthRoute && !isMockPaymentRoute && !isAdminRoute && <Header />}

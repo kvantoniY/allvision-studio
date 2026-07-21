@@ -1,7 +1,19 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
+// Витрина Studio скрыта на время реворка в Academy (cutover A2.5). Бэкенд и админка
+// остаются; публичные Studio-страницы редиректим на Academy-главную.
+const STUDIO_SURFACE_PREFIXES = ['/services', '/trends', '/scenarios', '/studio', '/pricing', '/dashboard'];
+
+function isStudioSurface(pathname: string): boolean {
+  return STUDIO_SURFACE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/'),
+  );
+}
+
 export function middleware(req: NextRequest) {
-  if (req.nextUrl.pathname === '/dashboard') {
+  const { pathname } = req.nextUrl;
+
+  if (isStudioSurface(pathname)) {
     const url = req.nextUrl.clone();
     url.pathname = '/';
     url.search = '';
@@ -21,5 +33,16 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/admin/:path*', '/ai/:path*', '/studio/:path*', '/profile/:path*', '/support/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/admin/:path*',
+    '/ai/:path*',
+    '/studio/:path*',
+    '/profile/:path*',
+    '/support/:path*',
+    '/services/:path*',
+    '/trends/:path*',
+    '/scenarios/:path*',
+    '/pricing',
+  ],
 };

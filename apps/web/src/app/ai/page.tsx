@@ -109,7 +109,7 @@ function AiContent() {
     void chats.refetch();
   };
 
-  const activeTitle = chatQuery.data?.chat.title ?? 'Allvision AI';
+  const activeTitle = chatQuery.data?.chat.title ?? 'Нейролаборатория';
   const messages = chatQuery.data?.messages ?? [];
 
   // Как в мессенджере: при открытии чата и при появлении нового сообщения прокручиваем ленту вниз

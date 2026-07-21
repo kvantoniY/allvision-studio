@@ -1,4 +1,4 @@
-import { Grid3X3, Home, LifeBuoy, Palette, Sparkles, User, Users } from 'lucide-react';
+import { Home, Sparkles, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -12,15 +12,14 @@ export type SidebarSection = {
   items: SidebarItem[];
 };
 
+// Academy-навигация (реворк A2.5). Витрина Studio скрыта; «Нейролаборатория» — это
+// AI-чат, будущий инструмент уроков по нейросетям.
 export const SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     items: [
       { href: '/', label: 'Главная', icon: Home },
       { href: '/family', label: 'Семья', icon: Users },
-      { href: '/ai', label: 'Allvision AI', icon: Sparkles },
-      { href: '/services', label: 'Услуги', icon: Grid3X3 },
-      { href: '/studio', label: 'Студия', icon: Palette },
-      { href: '/support', label: 'Поддержка', icon: LifeBuoy },
+      { href: '/ai', label: 'Нейролаборатория', icon: Sparkles },
       { href: '/profile', label: 'Профиль', icon: User },
     ],
   },
