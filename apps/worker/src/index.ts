@@ -9,6 +9,7 @@ import { processFairyTaleScript } from './processors/fairy-tale-script';
 import { processCharacterNsfw } from './processors/character-nsfw';
 import { processEpisode } from './processors/episode';
 import { processServicePipeline } from './processors/service-pipeline';
+import { processCharacterProfile } from './processors/character-profile';
 import { initialiseWorkerProviders } from './providers';
 import { startGenerationRetentionCleanup } from './services/generation-retention';
 import { startGenerationTimeoutWatchdog } from './services/generation-timeout';
@@ -34,12 +35,15 @@ const queues: Array<[QueueName, Processor]> = [
   [QUEUE_NAMES.CHARACTER_NSFW, processCharacterNsfw as Processor],
   [QUEUE_NAMES.EPISODE, processEpisode as Processor],
   [QUEUE_NAMES.SERVICE_PIPELINE, processServicePipeline as Processor],
+  [QUEUE_NAMES.CHARACTER_PROFILE, processCharacterProfile as Processor],
 ];
 
 export function queueConcurrencyFor(name: QueueName) {
   if (name === QUEUE_NAMES.CHARACTER_NSFW) return CHARACTER_NSFW_CONCURRENCY;
   if (name === QUEUE_NAMES.EPISODE) return EPISODE_CONCURRENCY;
   if (name === QUEUE_NAMES.SERVICE_PIPELINE) return SERVICE_PIPELINE_CONCURRENCY;
+  // Дорогая мультишаговая генерация — строго по одному профилю за раз.
+  if (name === QUEUE_NAMES.CHARACTER_PROFILE) return 1;
   return CONCURRENCY;
 }
 

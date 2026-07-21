@@ -1,11 +1,16 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
-import type { ChildPhotoDto, ChildProfileDto, ConsentTypeValue } from '@allvision/shared';
+import type {
+  CharacterProfileDto,
+  ChildPhotoDto,
+  ChildProfileDto,
+  ConsentTypeValue,
+} from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 
 export const familyApi = createApi({
   reducerPath: 'familyApi',
   baseQuery: createBaseQueryWithReauth('/api/family'),
-  tagTypes: ['Child', 'ChildPhotos'],
+  tagTypes: ['Child', 'ChildPhotos', 'Character'],
   refetchOnFocus: true,
   refetchOnReconnect: true,
   endpoints: (build) => ({
@@ -73,6 +78,32 @@ export const familyApi = createApi({
         { type: 'ChildPhotos', id: childId },
       ],
     }),
+    getCharacter: build.query<{ profile: CharacterProfileDto | null }, string>({
+      query: (childId) => ({ url: `/children/${childId}/character` }),
+      providesTags: (_r, _e, childId) => [{ type: 'Character', id: childId }],
+    }),
+    generateCharacter: build.mutation<{ profile: CharacterProfileDto }, string>({
+      query: (childId) => ({ url: `/children/${childId}/character/generate`, method: 'POST' }),
+      invalidatesTags: (_r, _e, childId) => [{ type: 'Character', id: childId }],
+    }),
+    approveCharacter: build.mutation<{ profile: CharacterProfileDto }, string>({
+      query: (childId) => ({ url: `/children/${childId}/character/approve`, method: 'POST' }),
+      invalidatesTags: (_r, _e, childId) => [{ type: 'Character', id: childId }],
+    }),
+    deleteCharacterRef: build.mutation<{ ok: true }, { childId: string; refId: string }>({
+      query: ({ childId, refId }) => ({
+        url: `/children/${childId}/character/references/${refId}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (_r, _e, { childId }) => [{ type: 'Character', id: childId }],
+    }),
+    regenerateCharacterRef: build.mutation<{ profile: CharacterProfileDto }, { childId: string; refId: string }>({
+      query: ({ childId, refId }) => ({
+        url: `/children/${childId}/character/references/${refId}/regenerate`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, { childId }) => [{ type: 'Character', id: childId }],
+    }),
   }),
 });
 
@@ -86,4 +117,9 @@ export const {
   useListChildPhotosQuery,
   useUploadChildPhotosMutation,
   useDeleteChildPhotoMutation,
+  useGetCharacterQuery,
+  useGenerateCharacterMutation,
+  useApproveCharacterMutation,
+  useDeleteCharacterRefMutation,
+  useRegenerateCharacterRefMutation,
 } = familyApi;

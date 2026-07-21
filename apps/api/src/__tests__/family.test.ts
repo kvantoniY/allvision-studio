@@ -168,6 +168,97 @@ describe('family: consents gate photo uploads', () => {
   });
 });
 
+describe('family: AI character profile', () => {
+  let charChildId = '';
+
+  it('sets up a child with consents and a photo', async () => {
+    const created = await request(app)
+      .post('/api/family/children')
+      .set('Cookie', parentCookies)
+      .send({ name: 'Персонаж-тест', birthDate: '2017-03-03' });
+    expect(created.status).toBe(201);
+    charChildId = created.body.id;
+
+    await request(app)
+      .post(`/api/family/children/${charChildId}/consents`)
+      .set('Cookie', parentCookies)
+      .send({ types: [...CONSENT_TYPES] });
+    const upload = await request(app)
+      .post(`/api/family/children/${charChildId}/photos`)
+      .set('Cookie', parentCookies)
+      .attach('photos', PNG_BUFFER, { filename: 'face.png', contentType: 'image/png' });
+    expect(upload.status).toBe(201);
+  });
+
+  it('character is null before generation', async () => {
+    const res = await request(app)
+      .get(`/api/family/children/${charChildId}/character`)
+      .set('Cookie', parentCookies);
+    expect(res.status).toBe(200);
+    expect(res.body.profile).toBeNull();
+  });
+
+  it('starts generation and marks profile GENERATING', async () => {
+    const res = await request(app)
+      .post(`/api/family/children/${charChildId}/character/generate`)
+      .set('Cookie', parentCookies);
+    expect(res.status).toBe(202);
+    expect(res.body.profile.status).toBe('GENERATING');
+
+    // Контейнер-проект для AIUsageLog/SSE создан.
+    const project = await prisma.project.findFirst({
+      where: { mode: 'character-profile', inputText: res.body.profile.id },
+    });
+    expect(project).not.toBeNull();
+  });
+
+  it('rejects a second generation while one is in progress', async () => {
+    const res = await request(app)
+      .post(`/api/family/children/${charChildId}/character/generate`)
+      .set('Cookie', parentCookies);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('GENERATION_IN_PROGRESS');
+  });
+
+  it('foreign parent cannot see or generate the character', async () => {
+    const get = await request(app)
+      .get(`/api/family/children/${charChildId}/character`)
+      .set('Cookie', otherCookies);
+    expect(get.status).toBe(404);
+  });
+
+  it('approve is rejected until the profile is READY', async () => {
+    const res = await request(app)
+      .post(`/api/family/children/${charChildId}/character/approve`)
+      .set('Cookie', parentCookies);
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('CHARACTER_NOT_READY');
+  });
+
+  it('generation requires photos', async () => {
+    const bare = await request(app)
+      .post('/api/family/children')
+      .set('Cookie', parentCookies)
+      .send({ name: 'Без фото' });
+    await request(app)
+      .post(`/api/family/children/${bare.body.id}/consents`)
+      .set('Cookie', parentCookies)
+      .send({ types: [...CONSENT_TYPES] });
+    const res = await request(app)
+      .post(`/api/family/children/${bare.body.id}/character/generate`)
+      .set('Cookie', parentCookies);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PHOTOS_REQUIRED');
+    await request(app).delete(`/api/family/children/${bare.body.id}`).set('Cookie', parentCookies);
+  });
+
+  afterAll(async () => {
+    if (charChildId) {
+      await request(app).delete(`/api/family/children/${charChildId}`).set('Cookie', parentCookies);
+    }
+  });
+});
+
 describe('academy curriculum access', () => {
   it('parent cannot manage curriculum', async () => {
     const res = await request(app).get('/api/academy/curriculum').set('Cookie', parentCookies);

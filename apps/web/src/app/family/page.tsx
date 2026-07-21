@@ -7,10 +7,12 @@ import {
   ChevronDown,
   Loader2,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Sparkles,
   Trash2,
   Users,
+  Wand2,
 } from 'lucide-react';
 import {
   CHILD_PHOTO_MAX_SIZE_MB,
@@ -30,11 +32,16 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import {
   useAcceptConsentsMutation,
+  useApproveCharacterMutation,
   useCreateChildMutation,
+  useDeleteCharacterRefMutation,
   useDeleteChildMutation,
   useDeleteChildPhotoMutation,
+  useGenerateCharacterMutation,
+  useGetCharacterQuery,
   useListChildPhotosQuery,
   useListChildrenQuery,
+  useRegenerateCharacterRefMutation,
   useUploadChildPhotosMutation,
 } from '@/store/api/family-api';
 
@@ -306,6 +313,177 @@ function PhotosBlock({ child }: { child: ChildProfileDto }) {
   );
 }
 
+const CHARACTER_STATUS_LABEL: Record<string, string> = {
+  DRAFT: 'Черновик',
+  GENERATING: 'Генерируется…',
+  READY: 'Готов к утверждению',
+  APPROVED: 'Утверждён',
+  FAILED: 'Ошибка',
+};
+
+function CharacterBlock({ child }: { child: ChildProfileDto }) {
+  const { data, isLoading } = useGetCharacterQuery(child.id, {
+    pollingInterval: 3000,
+    skipPollingIfUnfocused: true,
+  });
+  const [generate, { isLoading: generating }] = useGenerateCharacterMutation();
+  const [approve, { isLoading: approving }] = useApproveCharacterMutation();
+  const [deleteRef] = useDeleteCharacterRefMutation();
+  const [regenerateRef] = useRegenerateCharacterRefMutation();
+
+  const profile = data?.profile ?? null;
+  const canStart = child.photoConsentsComplete && child.photosCount > 0;
+
+  const onGenerate = async () => {
+    try {
+      await generate(child.id).unwrap();
+      toast({ title: 'Генерация персонажа запущена', description: 'Обычно занимает несколько минут.' });
+    } catch (err) {
+      toast({ title: 'Не удалось запустить', description: apiErrorMessage(err), variant: 'destructive' });
+    }
+  };
+
+  if (isLoading) {
+    return <div className="h-16 animate-pulse rounded-xl bg-muted" />;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">
+          AI-персонаж
+          {profile && (
+            <Badge
+              variant="outline"
+              className={cn(
+                'ml-2 align-middle',
+                profile.status === 'APPROVED' && 'border-primary/50 bg-accent text-accent-foreground',
+                profile.status === 'FAILED' && 'border-destructive/50 text-destructive',
+              )}
+            >
+              {CHARACTER_STATUS_LABEL[profile.status] ?? profile.status}
+            </Badge>
+          )}
+        </p>
+        <div className="flex gap-2">
+          {profile?.status === 'READY' && (
+            <Button
+              type="button"
+              size="sm"
+              disabled={approving}
+              onClick={async () => {
+                try {
+                  await approve(child.id).unwrap();
+                  toast({ title: 'Персонаж утверждён' });
+                } catch (err) {
+                  toast({ title: 'Не удалось утвердить', description: apiErrorMessage(err), variant: 'destructive' });
+                }
+              }}
+            >
+              {approving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Утвердить
+            </Button>
+          )}
+          {(!profile || ['DRAFT', 'READY', 'APPROVED', 'FAILED'].includes(profile.status)) && (
+            <Button
+              type="button"
+              size="sm"
+              variant={profile?.references.length ? 'outline' : 'default'}
+              disabled={generating || !canStart}
+              onClick={onGenerate}
+            >
+              {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+              {profile?.references.length ? 'Создать заново' : 'Создать персонажа'}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {!canStart && (
+        <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+          Для создания персонажа подтвердите все согласия и загрузите хотя бы одну фотографию.
+        </p>
+      )}
+
+      {profile?.status === 'GENERATING' && (
+        <div className="space-y-2 rounded-xl bg-accent/60 px-4 py-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="inline-flex items-center gap-2 font-medium text-accent-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Создаём эталонный набор…
+            </span>
+            <span className="text-muted-foreground">{profile.progress}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-background">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${profile.progress}%` }} />
+          </div>
+        </div>
+      )}
+
+      {profile?.status === 'FAILED' && profile.errorMessage && (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {profile.errorMessage}
+        </p>
+      )}
+
+      {profile && profile.references.length > 0 && (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+          {profile.references.map((ref) => (
+            <figure key={ref.id} className="group relative overflow-hidden rounded-xl border border-border bg-muted">
+              <div className="aspect-square">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={ref.fileUrl} alt={ref.label} className="h-full w-full object-cover" />
+              </div>
+              <figcaption className="truncate px-2 py-1.5 text-center text-xs text-muted-foreground">
+                {ref.label}
+              </figcaption>
+              {profile.status !== 'GENERATING' && (
+                <div className="absolute right-1.5 top-1.5 hidden gap-1 group-hover:flex">
+                  <button
+                    type="button"
+                    aria-label="Перегенерировать"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-foreground shadow-sm transition hover:bg-white"
+                    onClick={async () => {
+                      try {
+                        await regenerateRef({ childId: child.id, refId: ref.id }).unwrap();
+                        toast({ title: `Перегенерация: ${ref.label}` });
+                      } catch (err) {
+                        toast({ title: 'Не удалось запустить', description: apiErrorMessage(err), variant: 'destructive' });
+                      }
+                    }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Удалить референс"
+                    className="flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-destructive shadow-sm transition hover:bg-white"
+                    onClick={async () => {
+                      try {
+                        await deleteRef({ childId: child.id, refId: ref.id }).unwrap();
+                      } catch (err) {
+                        toast({ title: 'Не удалось удалить', description: apiErrorMessage(err), variant: 'destructive' });
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </figure>
+          ))}
+        </div>
+      )}
+
+      {canStart && !profile && (
+        <p className="text-xs text-muted-foreground">
+          Из фотографий мы создадим эталонный набор: портрет, профиль, полный рост, эмоции.
+          Он станет основой всех иллюстраций и кат-сцен с ребёнком.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ChildCard({ child }: { child: ChildProfileDto }) {
   const [open, setOpen] = useState(false);
   const [deleteChild, { isLoading: deleting }] = useDeleteChildMutation();
@@ -361,6 +539,7 @@ function ChildCard({ child }: { child: ChildProfileDto }) {
           <div className="space-y-6 border-t border-border px-5 py-5">
             <ConsentsBlock child={child} />
             <PhotosBlock child={child} />
+            <CharacterBlock child={child} />
             <div className="flex justify-end border-t border-border pt-4">
               <Button type="button" variant="ghost" size="sm" onClick={onDelete} disabled={deleting} className="text-destructive hover:text-destructive">
                 {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}

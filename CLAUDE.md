@@ -17,7 +17,7 @@
 
 ## План этапов Academy
 
-A1 ✅ модель данных и роли · A2 AI-профиль персонажа · A3 программы и прогресс · A4 запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A3 программы и прогресс · A4 запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
 
 Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
 
@@ -1608,3 +1608,35 @@ Web:
 Проверки A1: `prisma generate` — ок (dev не запущен, EPERM не было); билды shared/database/api/worker/web — зелёные; shared `academy-consents` — 9 passed. DB-backed API-тест `family.test.ts` (17 тестов: PARENT-роль при регистрации, ownership 404 для чужого ребёнка, consent-gate загрузки фото, авторизованная раздача файла, каскад удаления, доступ методиста к curriculum, дерево subject→course→module→topic+skills) написан, но локально не гоняется без Postgres `localhost:5433`/Docker — прогнать на проде/CI как в прошлых этапах.
 
 Долги A1: worker не имеет доступа к private-uploads (понадобится в A2 для генерации персонажа — добавить mount и резолв ключей); согласия фиксируются без снапшота текста версии (только version-строка); детский вход (отдельный доступ ребёнка) не реализован — по концепции появится позже; фото-эндпоинт отдаёт оригиналы без превью-даунскейла.
+
+## Этап A2 ✅ — Academy: AI-профиль персонажа ребёнка
+
+Второй этап реворка. Из загруженных фото ребёнка (A1) создаётся утверждаемый «профиль внешности» — эталонный набор референсов, который дальше используют все генерации Academy (позы, сцены, кат-сцены).
+
+Prisma (миграция `20260720150000_a2_character_profile`, вручную — Postgres локально не поднят):
+
+- `CharacterProfile` (childId unique, status DRAFT|GENERATING|READY|APPROVED|FAILED, progress, errorMessage, approvedAt) — один профиль на ребёнка, cascade delete.
+- `CharacterReference` — референс в **закрытом хранилище** (`CHARACTER_REFS_DIR`, без publicUrl): kind, storageKey, width/height, promptUsed, model, costUsd. Раздача только через авторизованный эндпоинт.
+- 7 kind'ов: portrait, profile_side, three_quarter, full_body, neutral_pose, expression_joy, expression_surprise (раздел 7 концепции).
+
+Shared (`packages/shared/src/academy/character.ts`): `CHARACTER_REF_KINDS`, русские подписи `CHARACTER_REF_LABELS`, identity-промпты `CHARACTER_REF_PROMPTS` (сохранение внешности + кинематографический стиль, НЕ плоская мультяшка), дефолтная модель `nano-banana`, бюджет-потолок $3, DTO. Новая очередь `CHARACTER_PROFILE` + `CharacterProfileJobData` в `types/queue.ts`.
+
+Worker (`processors/character-profile.ts`, очередь `character-profile`, concurrency 1):
+
+- Читает до 3 фото ребёнка из закрытого хранилища (`utils/private-storage.ts`, тот же bind mount что у api), EXIF-поворот + downscale ≤1600 → data-uri.
+- Для каждого kind вызывает `AIProvider.imageEdit` (fal nano-banana; `image-edit` блок) с identity-промптом и остальными фото как доп. референсами; результат пишет в закрытое хранилище, создаёт `CharacterReference`, двигает progress, публикует SSE.
+- Контейнер генерации — `Project` (mode `character-profile`, `inputText`=profileId) для FK `AIUsageLog`/SSE/админ-обзора; worker находит свой pending-проект по этим полям.
+- Бюджет-гейт (`CHARACTER_PROFILE_MAX_USD`, дефолт $3) поверх дневного капа; при превышении — FAILED с дружелюбным сообщением. Ошибка любого шага → FAILED, частичные референсы сохраняются. Перегенерация одного kind заменяет старые референсы этого вида (и файлы).
+- `readOutputBytes` тянет результат из data-uri/stub/локального /static/внешнего URL; для /static-копии детского контента делает cleanup (не оставляем в публичном uploads).
+
+API (`/api/family/children/:childId/character/*`, requireParent + ownership):
+
+- `GET` — профиль + референсы с авторизованными fileUrl; `POST /generate` — гейт всех 5 согласий + ≥1 фото, создаёт/перезапускает профиль и ставит job (409 при GENERATING); `POST /approve` (READY→APPROVED); `GET .../references/:refId/file` (стрим из закрытого хранилища); `DELETE .../references/:refId`; `POST .../references/:refId/regenerate` (перегенерация одного kind). Удаление ребёнка чистит и каталог референсов.
+
+Web (`/family`): в карточку ребёнка добавлен блок «AI-персонаж» — статус-бейдж, прогресс-бар (поллинг 3с), сетка референсов с русскими подписями, кнопки «Создать персонажа»/«Создать заново»/«Утвердить», per-ref «Перегенерировать»/«Удалить». Тема `.academy-theme`. RTK slice расширен эндпоинтами персонажа.
+
+Инфра: worker-контейнеру добавлен bind mount `private-uploads` (compose); env `CHILD_PHOTOS_DIR`/`CHARACTER_REFS_DIR`/`CHARACTER_PROFILE_MODEL`/`CHARACTER_PROFILE_MAX_USD` в worker/.env.example, infra и корневом .env.example.
+
+Проверки A2: `prisma generate` — ок; билды shared/database/api/worker/web — зелёные; shared `academy-character` — 3 passed (промпты/kind'ы/модель в каталоге), worker `character-profile-utils` — 6 passed (readOutputBytes: data-uri/stub/local-static+cleanup/path-traversal, toDataUri). DB-backed `family.test.ts` дополнен 7 тестами персонажа (null до генерации, GENERATING + создание Project, 409 при повторе, ownership 404, approve до READY = 409, PHOTOS_REQUIRED) — локально не гоняется без Postgres, прогнать на проде/CI.
+
+Долги A2: identity-похожесть на mock не проверить — реальный fal-смоук на проде первой генерацией (nano-banana, ~$0.8–1.5 за набор из 7); превью-даунскейл выдачи файла не делается (отдаём оригинал); нет отдельного admin-обзора персонажей (только через Project). Закрыт долг A1 «worker без доступа к private-uploads».

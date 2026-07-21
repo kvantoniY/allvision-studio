@@ -59,3 +59,32 @@ export async function deleteChildPhotoDir(parentId: string, childId: string): Pr
   const dir = resolveSafe(path.posix.join(parentId, childId));
   await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
 }
+
+// === Референсы AI-персонажа (A2) — то же закрытое хранилище, свой корень ===
+
+function characterRefsRoot(): string {
+  const dir = process.env.CHARACTER_REFS_DIR ?? './private-uploads/character-refs';
+  return path.resolve(process.cwd(), dir);
+}
+
+function resolveCharacterRefSafe(storageKey: string): string {
+  const root = characterRefsRoot();
+  const target = path.resolve(root, storageKey.replace(/^[/\\]+/, ''));
+  if (!target.startsWith(root + path.sep) && target !== root) {
+    throw new Error(`INVALID_CHARACTER_REF_KEY: ${storageKey}`);
+  }
+  return target;
+}
+
+export async function readCharacterRef(storageKey: string): Promise<Buffer> {
+  return fs.readFile(resolveCharacterRefSafe(storageKey));
+}
+
+export async function deleteCharacterRefFile(storageKey: string): Promise<void> {
+  await fs.unlink(resolveCharacterRefSafe(storageKey)).catch(() => undefined);
+}
+
+export async function deleteCharacterRefDir(parentId: string, childId: string): Promise<void> {
+  const dir = resolveCharacterRefSafe(path.posix.join(parentId, childId));
+  await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+}

@@ -3,12 +3,16 @@ import sharp from 'sharp';
 import { prisma } from '@allvision/database';
 import {
   acceptConsentsSchema,
+  CHARACTER_REF_KINDS,
+  CHARACTER_REF_LABELS,
   CHILD_PHOTOS_MAX,
   CONSENT_CURRENT_VERSION,
   CONSENT_TYPES,
   createChildProfileSchema,
   hasAllPhotoConsents,
   updateChildProfileSchema,
+  type CharacterProfileDto,
+  type CharacterRefKind,
   type ChildPhotoDto,
   type ChildProfileDto,
 } from '@allvision/shared';
@@ -19,9 +23,13 @@ import { HttpError } from '../utils/http-error';
 import {
   deleteChildPhoto,
   deleteChildPhotoDir,
+  deleteCharacterRefDir,
+  deleteCharacterRefFile,
+  readCharacterRef,
   readChildPhoto,
   saveChildPhoto,
 } from '../services/child-photo-storage';
+import { addCharacterProfileJob } from '../queues';
 
 export const familyRouter = Router();
 
@@ -149,9 +157,10 @@ familyRouter.patch('/children/:childId', async (req: Request, res: Response, nex
 familyRouter.delete('/children/:childId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     await findOwnedChild(req.user!.id, req.params.childId);
-    // Каскадная очистка: БД (onDelete: Cascade) + файлы закрытого хранилища.
+    // Каскадная очистка: БД (onDelete: Cascade) + файлы закрытого хранилища (фото + персонаж).
     await prisma.childProfile.delete({ where: { id: req.params.childId } });
     await deleteChildPhotoDir(req.user!.id, req.params.childId);
+    await deleteCharacterRefDir(req.user!.id, req.params.childId);
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -300,6 +309,205 @@ familyRouter.delete('/children/:childId/photos/:photoId', async (req: Request, r
     await prisma.childPhoto.delete({ where: { id: photo.id } });
     await deleteChildPhoto(photo.storageKey);
     res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === AI-персонаж (A2) ===
+
+function characterRefFileUrl(childId: string, refId: string) {
+  return `/api/family/children/${childId}/character/references/${refId}/file`;
+}
+
+function toCharacterDto(profile: {
+  id: string;
+  childId: string;
+  status: string;
+  progress: number;
+  errorMessage: string | null;
+  approvedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  references: Array<{
+    id: string;
+    kind: string;
+    width: number | null;
+    height: number | null;
+    costUsd: number;
+    createdAt: Date;
+  }>;
+}): CharacterProfileDto {
+  return {
+    id: profile.id,
+    childId: profile.childId,
+    status: profile.status as CharacterProfileDto['status'],
+    progress: profile.progress,
+    errorMessage: profile.errorMessage,
+    approvedAt: profile.approvedAt ? profile.approvedAt.toISOString() : null,
+    createdAt: profile.createdAt.toISOString(),
+    updatedAt: profile.updatedAt.toISOString(),
+    references: profile.references.map((ref) => ({
+      id: ref.id,
+      kind: ref.kind as CharacterRefKind,
+      label: CHARACTER_REF_LABELS[ref.kind as CharacterRefKind] ?? ref.kind,
+      width: ref.width,
+      height: ref.height,
+      costUsd: ref.costUsd,
+      createdAt: ref.createdAt.toISOString(),
+      fileUrl: characterRefFileUrl(profile.childId, ref.id),
+    })),
+  };
+}
+
+const characterInclude = { references: { orderBy: { createdAt: 'asc' as const } } };
+
+async function findOwnedCharacterProfile(parentId: string, childId: string) {
+  await findOwnedChild(parentId, childId);
+  return prisma.characterProfile.findUnique({
+    where: { childId },
+    include: characterInclude,
+  });
+}
+
+async function launchCharacterGeneration(parentId: string, childId: string, kinds?: string[]) {
+  const child = await findOwnedChild(parentId, childId);
+  if (!toChildDto(child).photoConsentsComplete) {
+    throw new HttpError(403, 'CONSENTS_REQUIRED', 'Перед созданием персонажа подтвердите все согласия');
+  }
+  const photosCount = await prisma.childPhoto.count({ where: { childId } });
+  if (photosCount === 0) {
+    throw new HttpError(400, 'PHOTOS_REQUIRED', 'Сначала загрузите хотя бы одну фотографию ребёнка');
+  }
+
+  const existing = await prisma.characterProfile.findUnique({ where: { childId } });
+  if (existing?.status === 'GENERATING') {
+    throw new HttpError(409, 'GENERATION_IN_PROGRESS', 'Персонаж уже генерируется — дождитесь завершения');
+  }
+
+  const profile = existing
+    ? await prisma.characterProfile.update({
+        where: { id: existing.id },
+        data: { status: 'GENERATING', progress: 0, errorMessage: null, approvedAt: null },
+      })
+    : await prisma.characterProfile.create({
+        data: { childId, status: 'GENERATING', progress: 0 },
+      });
+
+  // Контейнер генерации: Project держит FK для AIUsageLog, SSE-события и админ-обзор.
+  // inputText хранит id профиля — по нему worker находит свой pending-проект.
+  const project = await prisma.project.create({
+    data: {
+      userId: parentId,
+      mode: 'character-profile',
+      title: `AI-персонаж: ${child.name}`,
+      status: 'PENDING',
+      tokensCost: 0,
+      inputText: profile.id,
+      inputImages: [],
+    },
+  });
+
+  try {
+    await addCharacterProfileJob({ characterProfileId: profile.id, kinds });
+  } catch (err) {
+    await prisma.characterProfile.update({
+      where: { id: profile.id },
+      data: { status: 'FAILED', errorMessage: 'Не удалось поставить генерацию в очередь' },
+    });
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { status: 'FAILED', errorCode: 'QUEUE_UNAVAILABLE' },
+    });
+    throw new HttpError(503, 'QUEUE_UNAVAILABLE', 'Сервис генерации временно недоступен, попробуйте позже');
+  }
+
+  return prisma.characterProfile.findUniqueOrThrow({
+    where: { id: profile.id },
+    include: characterInclude,
+  });
+}
+
+familyRouter.get('/children/:childId/character', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await findOwnedCharacterProfile(req.user!.id, req.params.childId);
+    res.json({ profile: profile ? toCharacterDto(profile) : null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.post('/children/:childId/character/generate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await launchCharacterGeneration(req.user!.id, req.params.childId);
+    res.status(202).json({ profile: toCharacterDto(profile) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.post('/children/:childId/character/approve', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await findOwnedCharacterProfile(req.user!.id, req.params.childId);
+    if (!profile) throw new HttpError(404, 'CHARACTER_NOT_FOUND', 'Персонаж ещё не создан');
+    if (profile.status !== 'READY') {
+      throw new HttpError(409, 'CHARACTER_NOT_READY', 'Утвердить можно только готового персонажа');
+    }
+    const updated = await prisma.characterProfile.update({
+      where: { id: profile.id },
+      data: { status: 'APPROVED', approvedAt: new Date() },
+      include: characterInclude,
+    });
+    res.json({ profile: toCharacterDto(updated) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.get('/children/:childId/character/references/:refId/file', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await findOwnedCharacterProfile(req.user!.id, req.params.childId);
+    const ref = profile?.references.find((item) => item.id === req.params.refId);
+    if (!profile || !ref) throw new HttpError(404, 'REFERENCE_NOT_FOUND', 'Референс не найден');
+    const stored = await prisma.characterReference.findUniqueOrThrow({ where: { id: ref.id } });
+    const buffer = await readCharacterRef(stored.storageKey).catch(() => {
+      throw new HttpError(404, 'REFERENCE_FILE_MISSING', 'Файл референса недоступен');
+    });
+    res.setHeader('Content-Type', stored.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.delete('/children/:childId/character/references/:refId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await findOwnedCharacterProfile(req.user!.id, req.params.childId);
+    const ref = profile?.references.find((item) => item.id === req.params.refId);
+    if (!profile || !ref) throw new HttpError(404, 'REFERENCE_NOT_FOUND', 'Референс не найден');
+    if (profile.status === 'GENERATING') {
+      throw new HttpError(409, 'GENERATION_IN_PROGRESS', 'Дождитесь завершения генерации');
+    }
+    const stored = await prisma.characterReference.findUniqueOrThrow({ where: { id: ref.id } });
+    await prisma.characterReference.delete({ where: { id: ref.id } });
+    await deleteCharacterRefFile(stored.storageKey);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.post('/children/:childId/character/references/:refId/regenerate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await findOwnedCharacterProfile(req.user!.id, req.params.childId);
+    const ref = profile?.references.find((item) => item.id === req.params.refId);
+    if (!profile || !ref) throw new HttpError(404, 'REFERENCE_NOT_FOUND', 'Референс не найден');
+    if (!(CHARACTER_REF_KINDS as readonly string[]).includes(ref.kind)) {
+      throw new HttpError(400, 'INVALID_REF_KIND', 'Неизвестный тип референса');
+    }
+    const updated = await launchCharacterGeneration(req.user!.id, req.params.childId, [ref.kind]);
+    res.status(202).json({ profile: toCharacterDto(updated) });
   } catch (err) {
     next(err);
   }

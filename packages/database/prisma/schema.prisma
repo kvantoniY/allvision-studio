@@ -76,11 +76,55 @@ model ChildProfile {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  parent   User         @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  consents Consent[]
-  photos   ChildPhoto[]
+  parent           User              @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  consents         Consent[]
+  photos           ChildPhoto[]
+  characterProfile CharacterProfile?
 
   @@index([parentId])
+}
+
+// === AI-профиль внешности ребёнка (A2): эталонный набор референсов ===
+model CharacterProfile {
+  id           String                 @id @default(cuid())
+  childId      String                 @unique
+  status       CharacterProfileStatus @default(DRAFT)
+  progress     Int                    @default(0)
+  errorMessage String?                @db.Text
+  approvedAt   DateTime?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  child      ChildProfile         @relation(fields: [childId], references: [id], onDelete: Cascade)
+  references CharacterReference[]
+}
+
+enum CharacterProfileStatus {
+  DRAFT
+  GENERATING
+  READY
+  APPROVED
+  FAILED
+}
+
+// Референс в ЗАКРЫТОМ хранилище (CHARACTER_REFS_DIR), без publicUrl —
+// раздача только через авторизованный эндпоинт.
+model CharacterReference {
+  id         String   @id @default(cuid())
+  profileId  String
+  kind       String // portrait | profile_side | three_quarter | full_body | neutral_pose | expression_*
+  storageKey String
+  mimeType   String   @default("image/jpeg")
+  width      Int?
+  height     Int?
+  promptUsed String?  @db.Text
+  model      String?
+  costUsd    Float    @default(0)
+  createdAt  DateTime @default(now())
+
+  profile CharacterProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, kind])
 }
 
 // === Согласия родителя на обработку данных ребёнка ===

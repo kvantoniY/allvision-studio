@@ -69,6 +69,8 @@ services:
       GIT_SHA: ${GIT_SHA:-local}
     volumes:
       - /opt/allvision-studio/shared/uploads:/app/uploads
+      # Academy: worker читает фото детей и пишет референсы персонажа (закрытое хранилище)
+      - /opt/allvision-studio/shared/private-uploads:/app/private-uploads
 
   web:
     image: allvision-studio-web:${IMAGE_TAG:-local}
