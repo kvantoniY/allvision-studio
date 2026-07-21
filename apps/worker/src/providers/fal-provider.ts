@@ -464,7 +464,9 @@ export class FalProvider implements AIProvider {
       if (!outputUrl) {
         throw new ProviderError('FAL_EMPTY_OUTPUT', `fal ${args.model} completed without an output URL`);
       }
-      const local = await this.persistOutput(outputUrl, args.context, args.ext);
+      const local = args.context.privateOutput
+        ? { url: outputUrl }
+        : await this.persistOutput(outputUrl, args.context, args.ext);
       const cost = await this.resolveActualCost(args.endpoint, args.falInput, completed.costUsd, args.estimatedCost);
       const costUsd = cost.costUsd;
       const durationMs = Date.now() - startedAt;

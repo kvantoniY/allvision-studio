@@ -1,4 +1,4 @@
-import { CalendarClock, GraduationCap, Home, Sparkles, User, Users } from 'lucide-react';
+import { CalendarClock, GraduationCap, Home, Library, Sparkles, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -31,6 +31,7 @@ export const TEACHER_SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     items: [
       { href: '/teacher', label: 'Кабинет', icon: GraduationCap },
+      { href: '/teacher/library', label: 'Материалы', icon: Library },
       { href: '/ai', label: 'Нейролаборатория', icon: Sparkles },
       { href: '/profile', label: 'Профиль', icon: User },
     ],
@@ -39,5 +40,6 @@ export const TEACHER_SIDEBAR_SECTIONS: SidebarSection[] = [
 
 export function isActive(itemHref: string, pathname: string): boolean {
   if (itemHref === '/') return pathname === '/';
+  if (itemHref === '/teacher') return pathname === '/teacher';
   return pathname === itemHref || pathname.startsWith(itemHref + '/');
 }

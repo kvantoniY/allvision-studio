@@ -88,3 +88,32 @@ export async function deleteCharacterRefDir(parentId: string, childId: string): 
   const dir = resolveCharacterRefSafe(path.posix.join(parentId, childId));
   await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
 }
+
+// === Персональная библиотека ребёнка (A5), отдельный закрытый корень ===
+
+function childAssetsRoot(): string {
+  const dir = process.env.CHILD_ASSETS_DIR ?? './private-uploads/child-assets';
+  return path.resolve(process.cwd(), dir);
+}
+
+function resolveChildAssetSafe(storageKey: string): string {
+  const root = childAssetsRoot();
+  const target = path.resolve(root, storageKey.replace(/^[/\\]+/, ''));
+  if (!target.startsWith(root + path.sep) && target !== root) {
+    throw new Error(`INVALID_CHILD_ASSET_KEY: ${storageKey}`);
+  }
+  return target;
+}
+
+export async function readChildAsset(storageKey: string): Promise<Buffer> {
+  return fs.readFile(resolveChildAssetSafe(storageKey));
+}
+
+export async function deleteChildAssetFile(storageKey: string): Promise<void> {
+  await fs.unlink(resolveChildAssetSafe(storageKey)).catch(() => undefined);
+}
+
+export async function deleteChildAssetDir(parentId: string, childId: string): Promise<void> {
+  const dir = resolveChildAssetSafe(path.posix.join(parentId, childId));
+  await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined);
+}

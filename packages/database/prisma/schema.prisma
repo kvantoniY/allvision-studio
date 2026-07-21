@@ -44,6 +44,7 @@ model User {
   givenConsents Consent[]
   teacherProfile TeacherProfile?
   lessonCredits  LessonCredit[]
+  createdChildAssets ChildAsset[] @relation("ChildAssetCreatedBy")
 }
 
 enum Role {
@@ -85,6 +86,7 @@ model ChildProfile {
   enrollments      Enrollment[]
   skillProgress    SkillProgress[]
   lessons          Lesson[]
+  assets           ChildAsset[]
 
   @@index([parentId])
 }
@@ -130,6 +132,38 @@ model CharacterReference {
   profile CharacterProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, kind])
+}
+
+// Персональный учебный материал ребёнка (A5). Файл хранится только в
+// private-uploads/child-assets и не имеет публичного URL.
+model ChildAsset {
+  id                  String   @id @default(uuid())
+  childId             String
+  createdById         String?
+  kind                String // pose | scene | cutscene | project
+  title               String
+  description         String?  @db.Text
+  tags                String[]
+  storageKey          String
+  mimeType            String
+  fileSize            Int
+  width               Int?
+  height              Int?
+  durationSec         Float?
+  generationModel     String?
+  generationPrompt    String?  @db.Text
+  generationCostUsd   Float    @default(0)
+  generationParams    Json?
+  sourceRefIds        String[]
+  generationProjectId String?  @unique
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  child     ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("ChildAssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([childId, kind, createdAt])
+  @@index([createdById])
 }
 
 // === Согласия родителя на обработку данных ребёнка ===
@@ -1116,6 +1150,12 @@ model MediaAsset {
 
   isActive  Boolean @default(true)
   sortOrder Int     @default(0)
+
+  // Метаданные генерации Academy A5 (null у legacy/ручных ассетов).
+  generationModel   String?
+  generationPrompt  String? @db.Text
+  generationCostUsd Float   @default(0)
+  generationParams  Json?
 
   owner User? @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
   parentAsset MediaAsset? @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)

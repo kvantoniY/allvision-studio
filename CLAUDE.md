@@ -17,7 +17,7 @@
 
 ## План этапов Academy
 
-A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 ✅ панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
 
 Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
 
@@ -1726,3 +1726,41 @@ Web:
 Проверки A4: билды shared/api/worker/web — зелёные; shared `academy-booking` — 7 passed (сетка цен совпала с таблицей, 30% препу, правила отмены 8ч/преп/поздно/уже-прошёл). DB-backed `academy-booking.test.ts` (каталог, слоты teacher-only, 402 без кредитов + откат слота, бронь+потребление кредита+earning 300₽, дубль-бронь 409, отмена+возврат кредита+освобождение слота, COMPLETED→earning AVAILABLE) — локально не гоняется без Postgres, на CI/проде. Windows EPERM на `prisma generate` (dev держит DLL) — tsc-типы актуальны.
 
 Долги A4: слоты только конкретные datetime (recurring-шаблоны недели — позже); TZ хранится/сравнивается в UTC, UI показывает локально (без явного выбора TZ, дефолт браузера); after-payment редирект ведёт на `/profile?tab=billing` (generic), не на `/lessons`; выплаты преподавателю (перевод денег, отметка PAID пятого числа) — это A10 `/admin/payouts`, сейчас только начисления; привязки урока к рекомендованной теме энролмента (A3) в бронировании нет (topicId опционален, преп проставит вручную); онлайн-проведение урока (сцены/видео/WebSocket) — A6–A8.
+
+## Этап A5 ✅ — Academy: панель генерации и три библиотеки
+
+Преподаватель/методист/админ заранее генерирует учебные изображения с оценкой стоимости; generic-материал автоматически попадает в личную библиотеку автора, а материал с внешностью ребёнка — в закрытую персональную библиотеку ученика. Следующий этап — A6 (PixiJS-конструктор сцен, подэтапы A6.1–A6.4).
+
+Prisma (миграция `20260721200000_a5_academy_assets`, вручную):
+
+- `ChildAsset` (`pose|scene|cutscene|project`) с child/createdBy, закрытым `storageKey`, model/prompt/cost/params, `sourceRefIds`, project-id и медиа-метаданными. Связи каскадны по ребёнку; удаление пользователя-создателя не удаляет детский результат.
+- `MediaAsset` расширен nullable-метаданными генерации `generationModel/generationPrompt/generationCostUsd/generationParams`; Academy-kind'ы остаются строками (`academy-background|academy-prop|academy-npc|academy-effect|academy-audio`).
+- Новый закрытый корень `CHILD_ASSETS_DIR=private-uploads/child-assets`; удаление профиля ребёнка теперь чистит фото, CharacterReference и ChildAsset-файлы.
+
+Shared (`packages/shared/src/academy/materials.ts`): kind'ы/русские подписи, три scope (`shared|teacher|child`), чистые правила read/mutate/promote, параметры и zod-схема генерации, DTO/drag payload для A6, prompt builder и предварительная стоимость через `estimateModelCostUsd`. Поддержаны типы фон/предмет/NPC/эффект/поза/сцена/ключевой кадр и операции generate/transparent/keyframe/variation/inpaint/upscale; variation/inpaint/upscale требуют библиотечный референс. Детский childId/CharacterReference API-инвариантом запрещён для MediaAsset.
+
+Worker:
+
+- Отдельная BullMQ-очередь `academy-generation` (concurrency 1), не legacy `service-pipeline`, чтобы не смешивать Studio-статистику. Один job создаёт 1–4 результата и обновляет контейнер-`Project(mode=academy-generation)`.
+- Генерация переиспользует `AIProvider.imageEdit`; для ребёнка берёт только `APPROVED` CharacterReference из A2, читает их из закрытого хранилища и передаёт data URI. Реальный fal, mock и stub поддержаны; PiAPI для персональных генераций намеренно отклоняется, потому что его текущий адаптер публикует refs во временный R2/outputs.
+- Для детского вызова `ProviderRunContext.privateOutput` заставляет FalProvider не писать промежуточный файл в public `uploads`: внешний output скачивается процессором и сразу сохраняется в `private-uploads/child-assets`. Mock при privateOutput возвращает data URI без публичной записи.
+- Прозрачный фон — отдельный post-process `fal-ai/birefnet/v2` в PNG (alpha), mock-first ветка без сети. Каждый fal/PiAPI вызов логирует провайдер; mock/stub-вызовы дописывает процессор — всё есть в `AIUsageLog`.
+- Generic-output нормализуется и сохраняется в `MediaAsset` автора; детский — только `ChildAsset`. У `Project` детского результата нет `resultImage/publicUrl`, только private asset id в `resultAssets`.
+
+API (`/api/academy/materials`, роли TEACHER|METHODIST|ADMIN):
+
+- `GET /models`, `GET /children`, `POST /estimate`, `POST /generate`, `GET /generations/:id`.
+- `GET/PATCH/DELETE /library/:scope`; закрытый `GET /library/child/:id/file`; generic refs проверяются по ownership.
+- Shared видна всем ролям панели; личная — только владельцу (ADMIN видит все); детская — ADMIN или преподавателю, у которого есть Lesson с ребёнком. METHODIST персональные детские материалы не видит. Изменять детский asset может создавший назначенный преподаватель либо ADMIN.
+- `POST /promote`: только ADMIN физически копирует teacher MediaAsset в shared (не общая ссылка на удаляемый файл). `sourceScope=child` всегда возвращает `CHILD_ASSET_PROMOTION_FORBIDDEN`, включая ADMIN.
+- Гейты генерации: действующие 5 согласий, APPROVED-персонаж, назначение преподавателя, ownership референсов, пользовательский maxCost и `Topic.aiBudgetUsd` при переданном topicId.
+
+Web:
+
+- Единый светлый `.academy-theme` workspace на `/teacher/library` и `/admin/library`, пункты в обоих sidebar. Панель содержит тип/операцию/модель/стиль/промпты/ученика/одежду/эмоцию/ракурс/свет/формат/качество/count/alpha/maxCost; стоимость показана до запуска.
+- Три вкладки библиотек, поиск, редактирование/удаление, admin-промоушен, выбор карточки как референса, polling прогресса. Каждая карточка draggable и кладёт `application/x-allvision-academy-asset` с нормализованным dragData для A6.
+- Новый RTK slice `academy-materials-api` зарегистрирован reducer+middleware.
+
+Проверки A5: `prisma validate` — ok; первый `prisma generate` — ok. Билды shared/api/worker/web — зелёные; database `tsc` — зелёный. Shared `academy-materials` — 9 passed; worker без DB-backed `pipeline-runner|piapi-provider` — 20 suites / 118 tests passed. DB-backed `academy-materials.test.ts` покрывает три библиотеки, назначение преподавателя, mock-first launch фона/позы, запрет детского промоушена и admin-copy — локально не запускался без Postgres, прогнать на CI/проде. Повторный full database build получил ожидаемый Windows EPERM на занятой dev-процессом engine DLL; процесс не останавливался, Prisma types и отдельный tsc актуальны.
+
+Долги A5: реальный fal smoke (включая качество identity и BiRefNet alpha/фактическую цену) — на проде; детский file endpoint пока отдаёт оригинал без отдельного thumbnail/downscale; audio-kind доступен библиотеке, но AI-аудиогенератор в A5 не подключён; inpaint/upscale сейчас выполняются универсальным image-edit prompt поверх обязательного референса (маска-редактор и специализированный super-resolution — будущий UX); UI статуса использует polling 2с, SSE можно подключить позже. Персональная генерация через PROVIDER_MODE=piapi заблокирована до появления private-safe PiAPI transport.

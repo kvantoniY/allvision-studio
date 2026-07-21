@@ -1,3 +1,5 @@
+import type { AcademyGenerationInput } from '../academy/materials';
+
 export const QUEUE_NAMES = {
   PHOTO_RESTORE: 'photo-restore',
   PHOTO_ANIMATE: 'photo-animate',
@@ -7,6 +9,7 @@ export const QUEUE_NAMES = {
   EPISODE: 'episode',
   SERVICE_PIPELINE: 'service-pipeline',
   CHARACTER_PROFILE: 'character-profile',
+  ACADEMY_GENERATION: 'academy-generation',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -52,4 +55,12 @@ export interface CharacterProfileJobData {
   characterProfileId: string;
   /** Пусто = полный набор; иначе перегенерация только этих kind'ов. */
   kinds?: string[];
+}
+
+// Academy A5: одна заявка панели генерации (может создать 1–4 ассета).
+export interface AcademyGenerationJobData {
+  projectId: string;
+  requestedById: string;
+  input: AcademyGenerationInput;
+  estimatedCostUsd: number;
 }

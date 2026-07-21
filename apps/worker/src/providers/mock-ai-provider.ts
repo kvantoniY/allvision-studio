@@ -192,10 +192,18 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     const { filePath, resultType } = this.pickAsset(service);
     const ext = path.extname(filePath) || (resultType === 'image' ? '.jpg' : '.mp4');
     const buffer = await fs.promises.readFile(filePath);
+    const contentType = inferContentType(ext, resultType);
+    if (context?.privateOutput) {
+      return {
+        outputUrl: `data:${contentType};base64,${buffer.toString('base64')}`,
+        costUsd: 0,
+        durationMs: Date.now() - startedAt,
+        meta: { provider: 'mock', resultType, service, privateOutput: true },
+      };
+    }
     const key = context
       ? `outputs/${context.userId ?? 'mock'}/${context.projectId}/${context.stepId}/result${ext}`
       : `results/mock/${crypto.randomUUID()}${ext}`;
-    const contentType = inferContentType(ext, resultType);
     const { url } = await this.storage.upload({ key, body: buffer, contentType });
     return {
       outputUrl: url,

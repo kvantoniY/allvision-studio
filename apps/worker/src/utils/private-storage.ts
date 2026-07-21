@@ -16,6 +16,10 @@ export function characterRefsRoot(): string {
   return resolveWorkspacePath(process.env.CHARACTER_REFS_DIR ?? './private-uploads/character-refs');
 }
 
+export function childAssetsRoot(): string {
+  return resolveWorkspacePath(process.env.CHILD_ASSETS_DIR ?? './private-uploads/child-assets');
+}
+
 function resolveSafe(root: string, storageKey: string): string {
   const target = path.resolve(root, storageKey.replace(/^[/\\]+/, ''));
   if (!target.startsWith(root + path.sep) && target !== root) {
@@ -34,6 +38,20 @@ export async function writeCharacterRef(storageKey: string, buffer: Buffer): Pro
   await fs.writeFile(target, buffer);
 }
 
+export async function readCharacterRef(storageKey: string): Promise<Buffer> {
+  return fs.readFile(resolveSafe(characterRefsRoot(), storageKey));
+}
+
 export async function deleteCharacterRef(storageKey: string): Promise<void> {
   await fs.unlink(resolveSafe(characterRefsRoot(), storageKey)).catch(() => undefined);
+}
+
+export async function writeChildAsset(storageKey: string, buffer: Buffer): Promise<void> {
+  const target = resolveSafe(childAssetsRoot(), storageKey);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, buffer);
+}
+
+export async function deleteChildAsset(storageKey: string): Promise<void> {
+  await fs.unlink(resolveSafe(childAssetsRoot(), storageKey)).catch(() => undefined);
 }

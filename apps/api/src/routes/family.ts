@@ -26,6 +26,7 @@ import {
   deleteChildPhotoDir,
   deleteCharacterRefDir,
   deleteCharacterRefFile,
+  deleteChildAssetDir,
   readCharacterRef,
   readChildPhoto,
   saveChildPhoto,
@@ -183,10 +184,11 @@ familyRouter.patch('/children/:childId', async (req: Request, res: Response, nex
 familyRouter.delete('/children/:childId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     await findOwnedChild(req.user!.id, req.params.childId);
-    // Каскадная очистка: БД (onDelete: Cascade) + файлы закрытого хранилища (фото + персонаж).
+    // Каскадная очистка: БД + все каталоги закрытого хранилища ребёнка.
     await prisma.childProfile.delete({ where: { id: req.params.childId } });
     await deleteChildPhotoDir(req.user!.id, req.params.childId);
     await deleteCharacterRefDir(req.user!.id, req.params.childId);
+    await deleteChildAssetDir(req.user!.id, req.params.childId);
     res.json({ ok: true });
   } catch (err) {
     next(err);
