@@ -17,7 +17,7 @@
 
 ## План этапов Academy
 
-A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 ✅ панель генерации · A6.1 ✅ формат сцены и runtime · A6.2 ✅ редактор · A6.3–A6.4 конструктор сцен · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 ✅ панель генерации · A6.1 ✅ формат сцены и runtime · A6.2 ✅ редактор · A6.3 ✅ версии и экземпляры · A6.4 конструктор сцен · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
 
 Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
 
@@ -1818,3 +1818,31 @@ Web (`/constructor`, `.academy-theme`, AuthGuard):
 Проверки A6.2: `prisma generate` — ок; билды shared/api/worker/web — зелёные; `/constructor` в route-манифесте. Shared academy — 53 passed (7 suites, включая новый scene-editing 9). DB-backed `academy-lesson-templates.test.ts` (доступ методиста/запрет родителю, create с валидной сценой, loose-сохранение черновика, отказ невалидной структуры и публикации невалидной сцены) — на CI/проде без Postgres.
 
 Долги/границы A6.2: canvas двигает элементы (drag-move), но resize/rotate — только числами в инспекторе (гизмо-ручки, снаппинг, мультиселект — позже); редактор состояний сцены (states) и условий правил упрощён (условия в UI не редактируются детально — только событие+действия; полный condition-builder позже); drag-and-drop материала прямо на холст не сделан (выбор через инспектор/модалку); персонаж ребёнка в шаблоне — это generic-элемент `character`, подстановка конкретного ребёнка и версии/LessonInstance — A6.3. Публикация пока просто помечает `status=published` (без снапшота версии — A6.3).
+
+## Этап A6.3 ✅ — Версии шаблонов и экземпляры урока
+
+Третий подэтап A6. Публикация шаблона создаёт immutable-снапшот версии; экземпляр урока привязывает версию к конкретному занятию (A4) и ребёнку, подставляя персонажа и применяя оверрайды преподавателя. Следующий подэтап — A6.4 (готовые типы сцен первого релиза: карточки, поиск пары, сортировка, кодовый замок и т.д.).
+
+Prisma (миграция `20260722140000_a6_3_versions_instances`, вручную):
+
+- `LessonTemplate` получил `latestVersion Int` + связь `versions`.
+- `LessonTemplateVersion` (templateId+version unique, `scene Json` — immutable-снапшот, publishedById) — версия на момент публикации.
+- `LessonInstance` (lessonId unique → A4 Lesson, templateVersionId, childId, `overrides Json`, createdById) — экземпляр урока. Cascade по уроку и версии.
+- `Lesson` получил связь `instance LessonInstance?`.
+
+Shared (`packages/shared/src/academy/scene-instance.ts`): чистый `resolveInstanceScene(scene, { character, overrides })` — глубокая копия, подстановка `character`-элементам ассета ребёнка (`scope: child`), скрытие `overrides.hiddenElementIds`; `pickCharacterReferenceKind` (приоритет full_body → neutral_pose → three_quarter → portrait). Тест `academy-scene-instance` — 5 passed (инъекция, скрытие, без мутации оригинала, приоритет вида).
+
+API:
+
+- `POST /api/academy/lesson-templates/:id/publish` (методист-владелец/админ): строгая `validateScene` → создаёт `LessonTemplateVersion` (latestVersion+1), ставит `status=published`. `GET /:id/versions` — список версий. Конструктор теперь «Опубликовать» = новая версия (тост «Опубликована версия N»), а не просто статус.
+- `/api/academy/lesson-instances` (`academy-lesson-instances.ts`): `GET /published-templates` (teacher/methodist — опубликованные шаблоны с последней версией для пикера); `POST /` (преподаватель СВОЕГО урока/админ — upsert экземпляра, урок → READY); `GET /by-lesson/:lessonId` (участник); `GET /:id/scene` (участник — resolved-сцена: версия + персонаж ребёнка из APPROVED-профиля + оверрайды); `GET /:id/character/:refId/file` (участник — файл референса персонажа из ЗАКРЫТОГО хранилища).
+- Проверка участника: преподаватель урока (`lesson.teacher.userId`), родитель ребёнка (`child.parentId`) или ADMIN. Файл персонажа отдаётся только участнику урока и только если референс принадлежит ребёнку экземпляра.
+
+Web:
+
+- Конструктор: «Опубликовать» сохраняет черновик и вызывает publish → immutable-версия.
+- Кабинет преподавателя (`/teacher`): у урока (BOOKED/AWAITING_PREP/GENERATING/READY) блок `LessonPrepare` — «Подготовить урок» (модалка с опубликованными шаблонами → создаёт экземпляр, урок → READY), «Предпросмотр» (resolved-сцена в PixiJS-плеере, роль ученик/учитель; подпись, если персонаж ребёнка ещё не создан), «Сменить шаблон». RTK slice `academy-lesson-instances-api`.
+
+Проверки A6.3: билды shared/api/worker/web — зелёные; shared academy — 58 passed (8 suites, включая scene-instance 5). DB-backed `academy-lesson-instances.test.ts` (publish→версия, bump версии, published-templates, гейт родителя, 404 на чужой урок) — на CI/проде без Postgres. Windows EPERM на `prisma generate` (dev держит DLL) — tsc-типы актуальны.
+
+Долги/границы A6.3: полноценный смоук цепочки «экземпляр → resolved-сцена с персонажем ребёнка → плеер» требует APPROVED-персонажа и реального урока — проверить на проде; переопределения преподавателя пока ограничены `hiddenElementIds` (интересы/сложность/доп-генерации — позже); привязка экземпляра к проведению урока (WebSocket-синхронизация) — этап A7.

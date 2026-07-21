@@ -27,7 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { useGetTemplateQuery, useUpdateTemplateMutation } from '@/store/api/academy-lesson-templates-api';
+import { useGetTemplateQuery, usePublishTemplateMutation, useUpdateTemplateMutation } from '@/store/api/academy-lesson-templates-api';
 import { AssetPickerDialog } from './AssetPickerDialog';
 import { RulesEditor } from './RulesEditor';
 
@@ -59,6 +59,7 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
 export function SceneEditor({ templateId, onBack }: { templateId: string; onBack: () => void }) {
   const { data, isLoading } = useGetTemplateQuery(templateId);
   const [updateTemplate] = useUpdateTemplateMutation();
+  const [publishTemplate] = usePublishTemplateMutation();
 
   const [scene, setScene] = useState<AcademyScene | null>(null);
   const [title, setTitle] = useState('');
@@ -146,11 +147,14 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
     const result = validateScene(scene);
     if (!result.ok) { toast({ title: 'Нельзя опубликовать', description: result.issues[0], variant: 'destructive' }); return; }
     try {
-      await updateTemplate({ id: templateId, body: { title, scene, status: 'published' } }).unwrap();
-      toast({ title: 'Шаблон опубликован' });
+      // Сохраняем текущий черновик, затем публикуем его новой immutable-версией.
+      await updateTemplate({ id: templateId, body: { title, scene } }).unwrap();
       setDirty(false);
-    } catch {
-      toast({ title: 'Не удалось опубликовать', variant: 'destructive' });
+      const res = await publishTemplate(templateId).unwrap();
+      toast({ title: `Опубликована версия ${res.version.version}`, description: 'Экземпляры на прошлых версиях не изменятся.' });
+    } catch (err) {
+      const msg = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
+      toast({ title: 'Не удалось опубликовать', description: msg, variant: 'destructive' });
     }
   };
 

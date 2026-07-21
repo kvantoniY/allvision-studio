@@ -40,6 +40,14 @@ export const academyLessonTemplatesApi = createApi({
       query: (id) => ({ url: `/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Template'],
     }),
+    publishTemplate: build.mutation<{ version: { id: string; version: number } }, string>({
+      query: (id) => ({ url: `/${id}/publish`, method: 'POST' }),
+      invalidatesTags: (_r, _e, id) => [{ type: 'Template', id }, 'Template'],
+    }),
+    listVersions: build.query<{ items: { id: string; version: number; createdAt: string }[] }, string>({
+      query: (id) => ({ url: `/${id}/versions` }),
+      providesTags: (_r, _e, id) => [{ type: 'Template', id }],
+    }),
   }),
 });
 
@@ -49,4 +57,6 @@ export const {
   useCreateTemplateMutation,
   useUpdateTemplateMutation,
   useDeleteTemplateMutation,
+  usePublishTemplateMutation,
+  useListVersionsQuery,
 } = academyLessonTemplatesApi;

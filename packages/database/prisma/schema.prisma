@@ -466,10 +466,11 @@ model Lesson {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  child   ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
-  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  slot    TeacherSlot    @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  earning TeacherEarning?
+  child    ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  teacher  TeacherProfile  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  slot     TeacherSlot     @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  earning  TeacherEarning?
+  instance LessonInstance?
 
   @@index([childId, startsAt])
   @@index([teacherId, startsAt])
@@ -513,17 +514,54 @@ enum EarningStatus {
 // === Конструктор сцен (A6.2): шаблон урока с черновиком сцены ===
 // Immutable-версии и LessonInstance — этап A6.3.
 model LessonTemplate {
-  id          String   @id @default(cuid())
-  topicId     String?
-  title       String
-  status      String   @default("draft") // draft | published
-  scene       Json // AcademyScene (рабочий черновик)
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  topicId       String?
+  title         String
+  status        String   @default("draft") // draft | published
+  scene         Json // AcademyScene (рабочий черновик)
+  latestVersion Int      @default(0)
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  versions LessonTemplateVersion[]
 
   @@index([topicId])
   @@index([createdById])
+}
+
+// Immutable-снапшот сцены на момент публикации (A6.3).
+model LessonTemplateVersion {
+  id            String   @id @default(cuid())
+  templateId    String
+  version       Int
+  scene         Json
+  publishedById String
+  createdAt     DateTime @default(now())
+
+  template  LessonTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  instances LessonInstance[]
+
+  @@unique([templateId, version])
+  @@index([templateId])
+}
+
+// Экземпляр урока: версия шаблона, привязанная к конкретному занятию и ребёнку,
+// с персонализированными оверрайдами и подставленным персонажем ребёнка.
+model LessonInstance {
+  id                String   @id @default(cuid())
+  lessonId          String   @unique
+  templateVersionId String
+  childId           String
+  overrides         Json? // { hiddenElementIds: string[], ... }
+  createdById       String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  lesson  Lesson                @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  version LessonTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
+
+  @@index([templateVersionId])
 }
 
 enum MessengerType {

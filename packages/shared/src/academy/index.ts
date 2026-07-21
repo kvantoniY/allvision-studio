@@ -8,3 +8,4 @@ export * from './materials';
 export * from './scene-format';
 export * from './scene-runtime';
 export * from './scene-editing';
+export * from './scene-instance';

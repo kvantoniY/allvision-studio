@@ -9,6 +9,7 @@ import {
   type LessonStatusValue,
 } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { LessonPrepare } from '@/components/academy/LessonPrepare';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -136,6 +137,7 @@ function LessonsPanel() {
                   </div>
                   <Badge variant="outline">{LESSON_STATUS_LABELS[l.status]}</Badge>
                 </div>
+                {['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY'].includes(l.status) && <LessonPrepare lessonId={l.id} />}
                 {['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY', 'IN_PROGRESS'].includes(l.status) && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {NEXT_STATUS.map((s) => (

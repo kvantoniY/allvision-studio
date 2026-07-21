@@ -118,6 +118,45 @@ academyLessonTemplatesRouter.patch('/:id', async (req: Request, res: Response, n
   }
 });
 
+// Публикация = immutable-снапшот текущей сцены новой версией.
+academyLessonTemplatesRouter.post('/:id/publish', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const template = await findTemplate(req);
+    const check = validateScene(template.scene);
+    if (!check.ok) throw new HttpError(400, 'SCENE_INVALID', `Нельзя опубликовать: ${check.issues[0] ?? 'сцена невалидна'}`);
+    const version = template.latestVersion + 1;
+    const created = await prisma.$transaction(async (tx) => {
+      const v = await tx.lessonTemplateVersion.create({
+        data: {
+          templateId: template.id,
+          version,
+          scene: template.scene as Prisma.InputJsonValue,
+          publishedById: req.user!.id,
+        },
+      });
+      await tx.lessonTemplate.update({ where: { id: template.id }, data: { status: 'published', latestVersion: version } });
+      return v;
+    });
+    res.status(201).json({ version: { id: created.id, version: created.version } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+academyLessonTemplatesRouter.get('/:id/versions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await findTemplate(req);
+    const versions = await prisma.lessonTemplateVersion.findMany({
+      where: { templateId: req.params.id },
+      orderBy: { version: 'desc' },
+      select: { id: true, version: true, createdAt: true },
+    });
+    res.json({ items: versions.map((v) => ({ id: v.id, version: v.version, createdAt: v.createdAt.toISOString() })) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 academyLessonTemplatesRouter.delete('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     await findTemplate(req);
