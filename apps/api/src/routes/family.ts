@@ -9,6 +9,7 @@ import {
   CONSENT_CURRENT_VERSION,
   CONSENT_TYPES,
   createChildProfileSchema,
+  enrollChildSchema,
   hasAllPhotoConsents,
   updateChildProfileSchema,
   type CharacterProfileDto,
@@ -30,6 +31,7 @@ import {
   saveChildPhoto,
 } from '../services/child-photo-storage';
 import { addCharacterProfileJob } from '../queues';
+import { buildChildProgress } from '../services/academy-progress-service';
 
 export const familyRouter = Router();
 
@@ -99,6 +101,30 @@ function toPhotoDto(photo: {
     fileUrl: photoFileUrl(photo.childId, photo.id),
   };
 }
+
+// === Каталог курсов для записи (родитель) ===
+
+familyRouter.get('/courses', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const subjects = await prisma.subject.findMany({
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      select: {
+        id: true,
+        title: true,
+        iconName: true,
+        courses: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          select: { id: true, title: true, level: true, ageMin: true, ageMax: true, description: true },
+        },
+      },
+    });
+    res.json({ subjects: subjects.filter((s) => s.courses.length > 0) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // === Дети ===
 
@@ -508,6 +534,60 @@ familyRouter.post('/children/:childId/character/references/:refId/regenerate', a
     }
     const updated = await launchCharacterGeneration(req.user!.id, req.params.childId, [ref.kind]);
     res.status(202).json({ profile: toCharacterDto(updated) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Прогресс обучения (A3, чтение + запись на курс родителем) ===
+
+familyRouter.get('/children/:childId/progress', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await findOwnedChild(req.user!.id, req.params.childId);
+    res.json({ progress: await buildChildProgress(req.params.childId) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.get('/children/:childId/enrollments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await findOwnedChild(req.user!.id, req.params.childId);
+    const progress = await buildChildProgress(req.params.childId);
+    res.json({ items: progress.enrollments });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.post('/children/:childId/enrollments', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { courseId } = enrollChildSchema.parse(req.body);
+    await findOwnedChild(req.user!.id, req.params.childId);
+    const course = await prisma.course.findFirst({ where: { id: courseId, isActive: true } });
+    if (!course) throw new HttpError(404, 'COURSE_NOT_FOUND', 'Курс не найден или недоступен');
+    const existing = await prisma.enrollment.findUnique({
+      where: { childId_courseId: { childId: req.params.childId, courseId } },
+    });
+    if (existing) throw new HttpError(409, 'ALREADY_ENROLLED', 'Ребёнок уже записан на этот курс');
+    const enrollment = await prisma.enrollment.create({
+      data: { childId: req.params.childId, courseId },
+    });
+    res.status(201).json({ enrollmentId: enrollment.id });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.delete('/children/:childId/enrollments/:enrollmentId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await findOwnedChild(req.user!.id, req.params.childId);
+    const enrollment = await prisma.enrollment.findFirst({
+      where: { id: req.params.enrollmentId, childId: req.params.childId },
+    });
+    if (!enrollment) throw new HttpError(404, 'ENROLLMENT_NOT_FOUND', 'Запись на курс не найдена');
+    await prisma.enrollment.delete({ where: { id: enrollment.id } });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

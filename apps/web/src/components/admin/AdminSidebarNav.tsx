@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, Clapperboard, Coins, CreditCard, FolderKanban, Gauge, Images, LayoutGrid, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
+import { Activity, Clapperboard, Coins, CreditCard, FolderKanban, Gauge, GraduationCap, Images, LayoutGrid, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +10,12 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 type NavGroup = { label: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
+  {
+    label: 'Академия',
+    items: [
+      { href: '/admin/curriculum', label: 'Программа', icon: GraduationCap },
+    ],
+  },
   {
     label: 'Каталог',
     items: [

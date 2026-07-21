@@ -17,7 +17,7 @@
 
 ## План этапов Academy
 
-A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 программы и прогресс · A4 запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
 
 Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
 
@@ -1665,3 +1665,33 @@ Web (`/family`): в карточку ребёнка добавлен блок «
 - **Профиль (`/profile`) и чат (`/ai` + `ChatForm`/`ChatHistoryList`/`ChatResultView`/`InputSourcePicker`/`ReferenceLightbox`)**: системная конверсия тёмных utility-классов в токены темы (slate→background/card/muted/secondary/border/foreground/muted-foreground; violet-акцент→primary; amber→primary/accent; emerald-успех→читаемые emerald-700/50). Чёрные/белые оверлеи лайтбокса оставлены (стандартный тёмный просмотрщик медиа). Портал-Sheet чата обёрнут в `academy-theme`. После конверсии выловлены и починены 5 мест «оранжевый фон + тёмный текст» (активные табы профиля, бейджи, кнопка нового чата) → `text-primary-foreground`.
 
 Проверки A2.5.1: `npm.cmd run build -w @allvision/web` — зелёный. Осталось тёмным только: админка (внутренняя, `admin-theme` намеренно тёмная) и Studio-витрина (скрыта редиректами).
+
+## Этап A3 ✅ — Academy: программы и прогресс
+
+Методист ведёт учебную программу в админке; система хранит прогресс ребёнка по темам и навыкам и рекомендует следующую тему.
+
+Prisma (миграция `20260721120000_a3_progress`, вручную):
+
+- `Enrollment` (childId+courseId unique, status ACTIVE|PAUSED|COMPLETED) — запись ребёнка на курс.
+- `TopicProgress` (enrollmentId+topicId unique, status LOCKED|RECOMMENDED|IN_PROGRESS|COMPLETED, completedAt, teacherNote).
+- `SkillProgress` (childId+skillId unique, level 0..3) — «знает числа 1–10» и т.п.
+- `TopicChangeLog` (fromTopicId/toTopicId, reason REPEAT|GAP|PARENT_WISH|SPECIAL_PROJECT, note, changedById) — журнал ручной смены рекомендованной темы. Всё cascade.
+
+Shared (`packages/shared/src/academy/progress.ts`): статусы/причины + русские подписи, уровни навыков; **чистая функция `computeNextTopic(orderedTopics, completed)`** — первая незакрытая тема по порядку (модуль→тема) с учётом prerequisites; `readTopicPrerequisites(content)` мягко читает `Topic.content.prerequisites: string[]`; zod-схемы (enroll/topic/skill/override) и DTO.
+
+API-сервис `academy-progress-service.ts`: `buildChildProgress`/`buildEnrollmentProgress` собирают DTO; резолвинг рекомендованной темы — приоритет IN_PROGRESS → явный RECOMMENDED (override преподавателя) → алгоритм.
+
+API:
+
+- `/api/family/*` (родитель, ownership): `GET /courses` (активные направления→курсы для записи), `GET/POST/DELETE /children/:id/enrollments`, `GET /children/:id/progress`.
+- `/api/academy/progress/*` (requireRole TEACHER|METHODIST, ADMIN всегда): `POST /topic` (статус темы; авто-COMPLETED энролмента когда все темы пройдены), `POST /skill` (уровень навыка), `POST /enrollments/:id/override` (смена темы с обязательной причиной → TopicChangeLog), `GET /enrollments/:id/next-topic`.
+- Валидация: тема должна принадлежать курсу энролмента; курс активен; дубль-enrollment → 409.
+
+Web:
+
+- **Admin `/admin/curriculum`** (пункт «Программа» в группе «Академия», тёмная admin-тема): master-detail Направления → Курсы(+навыки направления) → Модули+Темы. Редактор темы: название, цель, длительность 25/45, сложность, AI-бюджет, навыки (мультивыбор), prerequisites (мультивыбор тем курса). RTK slice `admin-curriculum-api.ts` поверх готового с A1 CRUD `/api/academy/curriculum/*`.
+- **`/family`**: блок «Программы и прогресс» в карточке ребёнка — запись на курс (каталог по направлениям), прогресс-бары курсов, список тем со статусами и бейджем «Следующая», освоенные навыки с уровнями. `family-api` расширен (courses/progress/enroll/unenroll).
+
+Проверки A3: билды shared/api/worker/web — зелёные; shared `academy-progress` — 9 passed (алгоритм next-topic: порядок, prerequisites, blocked, allCompleted; readTopicPrerequisites). DB-backed `academy-progress.test.ts` (enrollment, рекомендация, methodist-only мутации, override+журнал, авто-завершение курса) — локально не гоняется без Postgres, на CI/проде. Windows EPERM на `prisma generate` (запущен dev держит engine DLL) — TS-типы Prisma пишутся до замены DLL, поэтому tsc-сборки зелёные; на проде generate идёт в Docker.
+
+Долги A3: enrollment сейчас self-service родителем (в A4 привяжется к записи на урок/оплате); нет drag-and-drop переупорядочивания тем/модулей (только через sortOrder в API); teacher-кабинет для отметки прогресса появится в A4 (пока мутации доступны методисту/админу).

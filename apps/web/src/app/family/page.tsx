@@ -2,9 +2,11 @@
 
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
+  BookOpen,
   Camera,
   CheckCircle2,
   ChevronDown,
+  GraduationCap,
   Loader2,
   Plus,
   RotateCcw,
@@ -18,8 +20,10 @@ import {
   CHILD_PHOTO_MAX_SIZE_MB,
   CHILD_PHOTOS_MAX,
   CONSENT_DEFINITIONS,
+  TOPIC_PROGRESS_LABELS,
   type ChildProfileDto,
   type ConsentTypeValue,
+  type EnrollmentProgressDto,
 } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -37,11 +41,15 @@ import {
   useDeleteCharacterRefMutation,
   useDeleteChildMutation,
   useDeleteChildPhotoMutation,
+  useEnrollChildMutation,
   useGenerateCharacterMutation,
   useGetCharacterQuery,
+  useGetChildProgressQuery,
   useListChildPhotosQuery,
   useListChildrenQuery,
+  useListCoursesQuery,
   useRegenerateCharacterRefMutation,
+  useUnenrollChildMutation,
   useUploadChildPhotosMutation,
 } from '@/store/api/family-api';
 
@@ -484,6 +492,167 @@ function CharacterBlock({ child }: { child: ChildProfileDto }) {
   );
 }
 
+const TOPIC_STATUS_DOT: Record<string, string> = {
+  COMPLETED: 'bg-primary',
+  IN_PROGRESS: 'bg-primary/60',
+  RECOMMENDED: 'bg-primary/60 ring-2 ring-primary/30',
+  LOCKED: 'bg-muted-foreground/30',
+};
+
+function EnrollmentCard({ childId, enrollment }: { childId: string; enrollment: EnrollmentProgressDto }) {
+  const [unenroll] = useUnenrollChildMutation();
+  const pct = enrollment.totalTopics > 0 ? Math.round((enrollment.completedTopics / enrollment.totalTopics) * 100) : 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <p className="font-medium">{enrollment.courseTitle}</p>
+          <p className="text-xs text-muted-foreground">{enrollment.subjectTitle}</p>
+        </div>
+        <button
+          type="button"
+          aria-label="Отписать от курса"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={async () => {
+            if (!window.confirm(`Отписать от курса «${enrollment.courseTitle}»?`)) return;
+            await unenroll({ childId, enrollmentId: enrollment.enrollmentId }).unwrap().catch(() => undefined);
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+        <span>Пройдено {enrollment.completedTopics} из {enrollment.totalTopics}</span>
+        <span>{pct}%</span>
+      </div>
+      <div className="mb-3 h-2 overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="space-y-1">
+        {enrollment.topics.map((t) => (
+          <div key={t.topicId} className="flex items-center gap-2 text-sm">
+            <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', TOPIC_STATUS_DOT[t.status] ?? 'bg-muted')} />
+            <span className={cn('min-w-0 flex-1 truncate', t.status === 'COMPLETED' ? 'text-muted-foreground line-through' : '')}>
+              {t.title}
+            </span>
+            {t.isNextRecommended && (
+              <span className="shrink-0 rounded-full bg-accent px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
+                Следующая
+              </span>
+            )}
+            {!t.isNextRecommended && t.status !== 'LOCKED' && (
+              <span className="shrink-0 text-xs text-muted-foreground">{TOPIC_PROGRESS_LABELS[t.status]}</span>
+            )}
+          </div>
+        ))}
+        {enrollment.topics.length === 0 && (
+          <p className="text-sm text-muted-foreground">В курсе пока нет тем.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProgressBlock({ child }: { child: ChildProfileDto }) {
+  const { data, isLoading } = useGetChildProgressQuery(child.id);
+  const courses = useListCoursesQuery();
+  const [enroll, { isLoading: enrolling }] = useEnrollChildMutation();
+  const [enrollOpen, setEnrollOpen] = useState(false);
+
+  const progress = data?.progress;
+  const enrolledCourseIds = new Set(progress?.enrollments.map((e) => e.courseId) ?? []);
+
+  const doEnroll = async (courseId: string) => {
+    try {
+      await enroll({ childId: child.id, courseId }).unwrap();
+      setEnrollOpen(false);
+      toast({ title: 'Ребёнок записан на курс' });
+    } catch (err) {
+      toast({ title: 'Не удалось записать', description: apiErrorMessage(err), variant: 'destructive' });
+    }
+  };
+
+  if (isLoading) return <div className="h-16 animate-pulse rounded-xl bg-muted" />;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-medium">Программы и прогресс</p>
+        <Button type="button" size="sm" variant="outline" onClick={() => setEnrollOpen((v) => !v)}>
+          <Plus className="mr-1.5 h-4 w-4" /> Записать на курс
+        </Button>
+      </div>
+
+      {enrollOpen && (
+        <div className="rounded-xl border border-border bg-card p-3">
+          {courses.isLoading ? (
+            <p className="text-sm text-muted-foreground">Загрузка курсов…</p>
+          ) : (courses.data?.subjects.length ?? 0) === 0 ? (
+            <p className="text-sm text-muted-foreground">Курсы ещё не заведены методистом.</p>
+          ) : (
+            <div className="space-y-3">
+              {courses.data!.subjects.map((s) => (
+                <div key={s.id}>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{s.title}</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {s.courses.map((c) => {
+                      const already = enrolledCourseIds.has(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={already || enrolling}
+                          onClick={() => doEnroll(c.id)}
+                          className={cn(
+                            'rounded-full border px-3 py-1.5 text-sm transition',
+                            already
+                              ? 'cursor-default border-border bg-muted text-muted-foreground'
+                              : 'border-primary/40 text-primary hover:bg-accent',
+                          )}
+                        >
+                          {c.title}{c.level ? ` · ${c.level}` : ''}{already ? ' ✓' : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {progress && progress.enrollments.length > 0 ? (
+        <div className="space-y-3">
+          {progress.enrollments.map((e) => (
+            <EnrollmentCard key={e.enrollmentId} childId={child.id} enrollment={e} />
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+          <BookOpen className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+          Ребёнок пока не записан на курсы.
+        </p>
+      )}
+
+      {progress && progress.skills.length > 0 && (
+        <div>
+          <p className="mb-2 text-sm font-medium">Освоенные навыки</p>
+          <div className="flex flex-wrap gap-1.5">
+            {progress.skills.map((sk) => (
+              <span key={sk.skillId} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-xs">
+                {sk.title}
+                <span className="text-muted-foreground">· {sk.levelLabel}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ChildCard({ child }: { child: ChildProfileDto }) {
   const [open, setOpen] = useState(false);
   const [deleteChild, { isLoading: deleting }] = useDeleteChildMutation();
@@ -540,6 +709,7 @@ function ChildCard({ child }: { child: ChildProfileDto }) {
             <ConsentsBlock child={child} />
             <PhotosBlock child={child} />
             <CharacterBlock child={child} />
+            <ProgressBlock child={child} />
             <div className="flex justify-end border-t border-border pt-4">
               <Button type="button" variant="ghost" size="sm" onClick={onDelete} disabled={deleting} className="text-destructive hover:text-destructive">
                 {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}

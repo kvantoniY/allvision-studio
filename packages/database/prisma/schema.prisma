@@ -80,6 +80,8 @@ model ChildProfile {
   consents         Consent[]
   photos           ChildPhoto[]
   characterProfile CharacterProfile?
+  enrollments      Enrollment[]
+  skillProgress    SkillProgress[]
 
   @@index([parentId])
 }
@@ -200,8 +202,9 @@ model Course {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  subject Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  modules CourseModule[]
+  subject     Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  modules     CourseModule[]
+  enrollments Enrollment[]
 
   @@index([subjectId, sortOrder])
 }
@@ -239,8 +242,9 @@ model Topic {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  module CourseModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  skills TopicSkill[]
+  module   CourseModule    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  skills   TopicSkill[]
+  progress TopicProgress[]
 
   @@index([moduleId, sortOrder])
 }
@@ -254,8 +258,9 @@ model SkillDef {
   description String?  @db.Text
   createdAt   DateTime @default(now())
 
-  subject Subject      @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  topics  TopicSkill[]
+  subject  Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  topics   TopicSkill[]
+  progress SkillProgress[]
 
   @@index([subjectId])
 }
@@ -268,6 +273,95 @@ model TopicSkill {
   skill SkillDef @relation(fields: [skillId], references: [id], onDelete: Cascade)
 
   @@id([topicId, skillId])
+}
+
+// === Прогресс обучения (A3): запись на курс, прогресс по темам и навыкам ===
+
+model Enrollment {
+  id        String           @id @default(cuid())
+  childId   String
+  courseId  String
+  status    EnrollmentStatus @default(ACTIVE)
+  startedAt DateTime         @default(now())
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  child         ChildProfile     @relation(fields: [childId], references: [id], onDelete: Cascade)
+  course        Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topicProgress TopicProgress[]
+  changeLog     TopicChangeLog[]
+
+  @@unique([childId, courseId])
+  @@index([childId])
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+model TopicProgress {
+  id           String              @id @default(cuid())
+  enrollmentId String
+  topicId      String
+  status       TopicProgressStatus @default(LOCKED)
+  completedAt  DateTime?
+  teacherNote  String?             @db.Text
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([enrollmentId, topicId])
+  @@index([enrollmentId])
+}
+
+enum TopicProgressStatus {
+  LOCKED
+  RECOMMENDED
+  IN_PROGRESS
+  COMPLETED
+}
+
+// Прогресс по отдельному навыку (level 0..3): «знает числа 1–10» и т.п.
+model SkillProgress {
+  id        String   @id @default(cuid())
+  childId   String
+  skillId   String
+  level     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  skill SkillDef     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([childId, skillId])
+  @@index([childId])
+}
+
+// Журнал смены рекомендованной темы преподавателем (с обязательной причиной)
+model TopicChangeLog {
+  id           String            @id @default(cuid())
+  enrollmentId String
+  fromTopicId  String?
+  toTopicId    String
+  reason       TopicChangeReason
+  note         String?           @db.Text
+  changedById  String
+  createdAt    DateTime          @default(now())
+
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@index([enrollmentId])
+}
+
+enum TopicChangeReason {
+  REPEAT // повторение
+  GAP // пробел в знаниях
+  PARENT_WISH // пожелание родителя
+  SPECIAL_PROJECT // специальный проект
 }
 
 enum MessengerType {

@@ -1,16 +1,26 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import type {
   CharacterProfileDto,
+  ChildProgressDto,
   ChildPhotoDto,
   ChildProfileDto,
   ConsentTypeValue,
 } from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 
+export type FamilyCourseCatalog = {
+  subjects: Array<{
+    id: string;
+    title: string;
+    iconName: string | null;
+    courses: Array<{ id: string; title: string; level: string | null; ageMin: number | null; ageMax: number | null; description: string | null }>;
+  }>;
+};
+
 export const familyApi = createApi({
   reducerPath: 'familyApi',
   baseQuery: createBaseQueryWithReauth('/api/family'),
-  tagTypes: ['Child', 'ChildPhotos', 'Character'],
+  tagTypes: ['Child', 'ChildPhotos', 'Character', 'Progress'],
   refetchOnFocus: true,
   refetchOnReconnect: true,
   endpoints: (build) => ({
@@ -104,6 +114,21 @@ export const familyApi = createApi({
       }),
       invalidatesTags: (_r, _e, { childId }) => [{ type: 'Character', id: childId }],
     }),
+    listCourses: build.query<FamilyCourseCatalog, void>({
+      query: () => ({ url: '/courses' }),
+    }),
+    getChildProgress: build.query<{ progress: ChildProgressDto }, string>({
+      query: (childId) => ({ url: `/children/${childId}/progress` }),
+      providesTags: (_r, _e, childId) => [{ type: 'Progress', id: childId }],
+    }),
+    enrollChild: build.mutation<{ enrollmentId: string }, { childId: string; courseId: string }>({
+      query: ({ childId, courseId }) => ({ url: `/children/${childId}/enrollments`, method: 'POST', body: { courseId } }),
+      invalidatesTags: (_r, _e, { childId }) => [{ type: 'Progress', id: childId }],
+    }),
+    unenrollChild: build.mutation<{ ok: true }, { childId: string; enrollmentId: string }>({
+      query: ({ childId, enrollmentId }) => ({ url: `/children/${childId}/enrollments/${enrollmentId}`, method: 'DELETE' }),
+      invalidatesTags: (_r, _e, { childId }) => [{ type: 'Progress', id: childId }],
+    }),
   }),
 });
 
@@ -122,4 +147,8 @@ export const {
   useApproveCharacterMutation,
   useDeleteCharacterRefMutation,
   useRegenerateCharacterRefMutation,
+  useListCoursesQuery,
+  useGetChildProgressQuery,
+  useEnrollChildMutation,
+  useUnenrollChildMutation,
 } = familyApi;
