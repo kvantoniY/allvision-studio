@@ -315,6 +315,74 @@ export async function createTopupPayment(
   }
 }
 
+export async function createLessonPackagePayment(
+  userId: string,
+  durationMin: 25 | 45,
+  count: number,
+): Promise<PaymentCreateResult> {
+  const { lessonPackagePriceRub, LESSON_PACKAGE_SIZES } = await import('@allvision/shared');
+  if (!LESSON_PACKAGE_SIZES.some((s) => s.count === count)) {
+    throw new HttpError(400, 'INVALID_PACKAGE', 'Недопустимый размер абонемента');
+  }
+  const priceRub = lessonPackagePriceRub(durationMin, count);
+  const customerEmail = await getUserEmail(userId);
+  const provider = paymentProviderName();
+  const expiresAt = paymentExpiresAt();
+  const metadata = { lessonPackage: true, durationMin, count, packageTitle: `${count} × ${durationMin} мин` };
+
+  const payment = await prisma.payment.create({
+    data: {
+      userId,
+      amountRub: priceRub * 100,
+      tokensAdded: null,
+      status: 'PENDING',
+      provider,
+      purpose: 'LESSON_PACKAGE',
+      metadata,
+      expiresAt,
+    },
+  });
+
+  logger.info(`[payments] created lesson-package payment id=${payment.id} userId=${userId} amountRub=${payment.amountRub} count=${count} durationMin=${durationMin}`);
+
+  try {
+    const providerPaymentId = await createProviderPaymentId(provider);
+    const providerPayment = await getPaymentProvider().createPayment({
+      amountRub: payment.amountRub,
+      userId,
+      purpose: 'topup',
+      providerPaymentId,
+      expiresAt,
+      metadata: {
+        paymentId: payment.id,
+        lessonPackage: 'true',
+        durationMin: String(durationMin),
+        count: String(count),
+        ...(customerEmail ? { customerEmail } : {}),
+      },
+    });
+
+    const updated = await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        providerPaymentId: providerPayment.paymentId,
+        metadata: buildConfirmationMetadata(metadata, providerPayment),
+      },
+    });
+
+    return {
+      payment: { id: updated.id, amountRub: updated.amountRub, tokensAdded: updated.tokensAdded, expiresAt: updated.expiresAt },
+      confirmationUrl: providerPayment.confirmationUrl,
+      confirmationMethod: providerPayment.confirmationMethod,
+      confirmationParams: providerPayment.confirmationParams,
+    };
+  } catch (error) {
+    logger.error(`[payments] failed to register lesson-package payment id=${payment.id}: ${(error as Error).message}`);
+    await prisma.payment.updateMany({ where: { id: payment.id, status: 'PENDING' }, data: { status: 'FAILED' } }).catch(() => undefined);
+    throw error;
+  }
+}
+
 export async function createOrderPayment(
   userId: string,
   orderId: string,
@@ -736,6 +804,23 @@ async function applyPaymentEvent(event: WebhookEvent): Promise<WebhookHandleResu
         });
 
         creditedTokens = tokensAdded;
+        return;
+      }
+
+      if (payment.purpose === 'LESSON_PACKAGE') {
+        const meta = (payment.metadata ?? {}) as { durationMin?: number; count?: number };
+        const count = Number(meta.count ?? 0);
+        const durationMin = Number(meta.durationMin ?? 0);
+        if (count > 0 && durationMin > 0) {
+          await tx.lessonCredit.createMany({
+            data: Array.from({ length: count }, () => ({
+              parentId: payment.userId,
+              durationMin,
+              source: 'purchase',
+              paymentId: payment.id,
+            })),
+          });
+        }
         return;
       }
 

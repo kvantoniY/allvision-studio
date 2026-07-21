@@ -42,6 +42,8 @@ model User {
   resolvedSupportTickets SupportTicket[] @relation("SupportTicketResolvedBy")
   childProfiles ChildProfile[]
   givenConsents Consent[]
+  teacherProfile TeacherProfile?
+  lessonCredits  LessonCredit[]
 }
 
 enum Role {
@@ -82,6 +84,7 @@ model ChildProfile {
   characterProfile CharacterProfile?
   enrollments      Enrollment[]
   skillProgress    SkillProgress[]
+  lessons          Lesson[]
 
   @@index([parentId])
 }
@@ -362,6 +365,115 @@ enum TopicChangeReason {
   GAP // пробел в знаниях
   PARENT_WISH // пожелание родителя
   SPECIAL_PROJECT // специальный проект
+}
+
+// === Запись и деньги (A4): преподаватели, слоты, уроки, кредиты занятий, выплаты ===
+
+model TeacherProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  bio       String?  @db.Text
+  subjects  String[] // slug'и направлений, которые ведёт преподаватель
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots    TeacherSlot[]
+  lessons  Lesson[]
+  earnings TeacherEarning[]
+}
+
+// Конкретный доступный слот преподавателя (UTC). Recurring-генерация — позже.
+model TeacherSlot {
+  id          String   @id @default(cuid())
+  teacherId   String
+  startsAt    DateTime
+  durationMin Int      @default(25)
+  isBooked    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  lesson  Lesson?
+
+  @@index([teacherId, startsAt])
+  @@index([startsAt, isBooked])
+}
+
+// Кредит занятия (предоплаченный баланс): непереводим и невыводим.
+model LessonCredit {
+  id          String    @id @default(cuid())
+  parentId    String
+  durationMin Int // 25 | 45 — кредит на урок конкретной длины
+  source      String // purchase | refund | manual
+  paymentId   String?
+  lessonId    String?
+  consumedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  parent User @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@index([parentId, durationMin, consumedAt])
+}
+
+model Lesson {
+  id           String       @id @default(cuid())
+  childId      String
+  teacherId    String
+  slotId       String       @unique
+  topicId      String?
+  durationMin  Int
+  startsAt     DateTime
+  status       LessonStatus @default(BOOKED)
+  priceRub     Int
+  creditId     String?
+  cancelledBy  String? // parent | teacher | system
+  cancelReason String?      @db.Text
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  child   ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  slot    TeacherSlot    @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  earning TeacherEarning?
+
+  @@index([childId, startsAt])
+  @@index([teacherId, startsAt])
+}
+
+enum LessonStatus {
+  BOOKED
+  AWAITING_PREP
+  GENERATING
+  READY
+  IN_PROGRESS
+  COMPLETED
+  REPORT_SENT
+  CANCELLED_PARENT
+  CANCELLED_TEACHER
+  NO_SHOW
+}
+
+model TeacherEarning {
+  id        String        @id @default(cuid())
+  lessonId  String        @unique
+  teacherId String
+  amountRub Int
+  status    EarningStatus @default(PENDING)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  lesson  Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, status])
+}
+
+enum EarningStatus {
+  PENDING
+  AVAILABLE
+  PAID
+  REJECTED
 }
 
 enum MessengerType {
@@ -716,6 +828,7 @@ enum PaymentStatus {
 enum PaymentPurpose {
   TOPUP
   ORDER
+  LESSON_PACKAGE
 }
 
 // === AI-персонажи ===

@@ -17,7 +17,7 @@
 
 ## План этапов Academy
 
-A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
+A1 ✅ модель данных и роли · A2 ✅ AI-профиль персонажа · A2.5 ✅ cutover-lite (Academy — лицо фронта) · A3 ✅ программы и прогресс · A4 ✅ запись и деньги · A5 панель генерации · A6 конструктор сцен (PixiJS) · A7 проведение урока (WebSocket) · A8 видеосвязь (LiveKit) · A9 геймификация · A10 отчёты/мессенджер/выплаты/удаление данных · A11 кабинеты, лендинг, катовер.
 
 Полная концепция (типы пользователей, структура урока, конструктор, библиотеки, защита данных) — в переписке владельца; секции этапов ниже дополняются по мере реализации.
 
@@ -1695,3 +1695,34 @@ Web:
 Проверки A3: билды shared/api/worker/web — зелёные; shared `academy-progress` — 9 passed (алгоритм next-topic: порядок, prerequisites, blocked, allCompleted; readTopicPrerequisites). DB-backed `academy-progress.test.ts` (enrollment, рекомендация, methodist-only мутации, override+журнал, авто-завершение курса) — локально не гоняется без Postgres, на CI/проде. Windows EPERM на `prisma generate` (запущен dev держит engine DLL) — TS-типы Prisma пишутся до замены DLL, поэтому tsc-сборки зелёные; на проде generate идёт в Docker.
 
 Долги A3: enrollment сейчас self-service родителем (в A4 привяжется к записи на урок/оплате); нет drag-and-drop переупорядочивания тем/модулей (только через sortOrder в API); teacher-кабинет для отметки прогресса появится в A4 (пока мутации доступны методисту/админу).
+
+## Этап A4 ✅ — Academy: запись и деньги
+
+Родитель покупает абонементы (предоплаченный баланс занятий), записывает ребёнка к преподавателю на свободный слот; преподаватель ведёт расписание и получает 30% от стоимости урока.
+
+Prisma (миграция `20260721160000_a4_booking`, вручную):
+
+- `TeacherProfile` (userId unique, subjects[], isActive), `TeacherSlot` (конкретный datetime UTC, durationMin, isBooked).
+- `LessonCredit` (parentId, durationMin, source purchase|refund|manual, consumedAt, lessonId) — баланс занятий = непотреблённые кредиты; **непереводим/невыводим**.
+- `Lesson` (childId, teacherId, slotId unique, topicId?, durationMin, startsAt, status, priceRub, creditId, cancelledBy/Reason) + `LessonStatus` (BOOKED→…→REPORT_SENT, CANCELLED_*, NO_SHOW).
+- `TeacherEarning` (lessonId unique, amountRub, status PENDING|AVAILABLE|PAID|REJECTED).
+- `PaymentPurpose` расширен `LESSON_PACKAGE`.
+
+Shared (`packages/shared/src/academy/booking.ts`): сетка цен (25мин=1000₽/45мин=1500₽), пакеты 1/4/8/16 со скидками 0/3/7/12% (`buildLessonPackages`, `lessonPackagePriceRub` — совпадает с опубликованной таблицей), `TEACHER_SHARE=0.3` + `teacherEarningRub`, статусы урока/выплат с подписями, **правила отмены `resolveCancellation`** (преподаватель/система — всегда возврат; родитель — возврат при ≥8ч до урока, иначе кредит сгорает), zod-схемы, DTO.
+
+Платежи: `createLessonPackagePayment` (зеркало topup, purpose `LESSON_PACKAGE`, детали пакета в metadata) переиспользует существующий mock/Robokassa-флоу; провайдеру передаётся label `topup`, грант завязан на `Payment.purpose`. В `applyPaymentEvent` добавлена ветка: при успехе создаётся N `LessonCredit(source=purchase)`.
+
+API (`/api/academy/*`, `academy-booking-service.ts` + `academy-booking.ts`):
+
+- Родитель (requireParent): `GET /packages` (каталог), `POST /packages/purchase` (→ confirmationUrl), `GET /balance` (кредиты по длительности), `GET /teachers` (активные препы со свободными будущими слотами, фильтр по subject), `POST /booking` (атомарно занимает слот + потребляет кредит + создаёт урок и начисление PENDING; 402 при нехватке кредитов, 409 при гонке за слот), `GET /lessons`, `POST /lessons/:id/cancel` (правила отмены → возврат/сгорание кредита, освобождение слота, earning REJECTED).
+- Преподаватель (requireRole TEACHER, профиль создаётся лениво): `GET /teacher/me`, `GET/POST/DELETE /teacher/slots`, `GET /teacher/lessons`, `POST /teacher/lessons/:id/status` (COMPLETED → earning AVAILABLE, NO_SHOW → REJECTED), `GET /teacher/earnings` (сводка по статусам).
+
+Web:
+
+- **Навигация по ролям** (`sidebar-nav.tsx`): у родителя добавлен пункт «Занятия» (`/lessons`); у роли TEACHER отдельный сайдбар (Кабинет `/teacher` / Нейролаборатория / Профиль). `DashboardSidebar` выбирает набор по роли.
+- **`/lessons`** (родитель, academy-theme): карточка баланса, модалка абонементов (покупка → редирект на оплату), запись (выбор ребёнка → преподаватели со слотами → бронь по клику), «Мои уроки» со статусами и отменой.
+- **`/teacher`** (преподаватель, academy-theme): управление слотами (datetime-local → ISO, добавить/удалить свободный), уроки со сменой статуса, сводка дохода по статусам выплат.
+
+Проверки A4: билды shared/api/worker/web — зелёные; shared `academy-booking` — 7 passed (сетка цен совпала с таблицей, 30% препу, правила отмены 8ч/преп/поздно/уже-прошёл). DB-backed `academy-booking.test.ts` (каталог, слоты teacher-only, 402 без кредитов + откат слота, бронь+потребление кредита+earning 300₽, дубль-бронь 409, отмена+возврат кредита+освобождение слота, COMPLETED→earning AVAILABLE) — локально не гоняется без Postgres, на CI/проде. Windows EPERM на `prisma generate` (dev держит DLL) — tsc-типы актуальны.
+
+Долги A4: слоты только конкретные datetime (recurring-шаблоны недели — позже); TZ хранится/сравнивается в UTC, UI показывает локально (без явного выбора TZ, дефолт браузера); after-payment редирект ведёт на `/profile?tab=billing` (generic), не на `/lessons`; выплаты преподавателю (перевод денег, отметка PAID пятого числа) — это A10 `/admin/payouts`, сейчас только начисления; привязки урока к рекомендованной теме энролмента (A3) в бронировании нет (topicId опционален, преп проставит вручную); онлайн-проведение урока (сцены/видео/WebSocket) — A6–A8.

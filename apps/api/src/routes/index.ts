@@ -19,6 +19,7 @@ import { adminReadonlyRouter } from './admin-readonly';
 import { familyRouter } from './family';
 import { academyCurriculumRouter } from './academy-curriculum';
 import { academyProgressRouter } from './academy-progress';
+import { academyBookingRouter } from './academy-booking';
 
 export const router = Router();
 
@@ -44,3 +45,4 @@ router.use('/admin-readonly', adminReadonlyRouter);
 router.use('/family', familyRouter);
 router.use('/academy/curriculum', academyCurriculumRouter);
 router.use('/academy/progress', academyProgressRouter);
+router.use('/academy', academyBookingRouter);

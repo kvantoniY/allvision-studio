@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
-import { SIDEBAR_SECTIONS, isActive } from './sidebar-nav';
+import { SIDEBAR_SECTIONS, TEACHER_SIDEBAR_SECTIONS, isActive } from './sidebar-nav';
 
 function initialsOf(name: string | null | undefined, email: string) {
   if (name) {
@@ -23,6 +23,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
 
   if (!user) return null;
 
+  const baseSections = user.role === 'TEACHER' ? TEACHER_SIDEBAR_SECTIONS : SIDEBAR_SECTIONS;
   const sidebarSections = user.role === 'ADMIN'
     ? [
         ...SIDEBAR_SECTIONS,
@@ -31,7 +32,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
           items: [{ href: '/admin', label: 'Админ панель', icon: ShieldCheck }],
         },
       ]
-    : SIDEBAR_SECTIONS;
+    : baseSections;
 
   return (
     <div className="academy-theme flex h-full min-h-0 flex-col gap-6 bg-card p-4 text-foreground">
