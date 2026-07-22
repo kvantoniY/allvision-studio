@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarClock, Check, Clock, Loader2, Wallet, X } from 'lucide-react';
+import Link from 'next/link';
+import { CalendarClock, Check, Clock, Loader2, Video, Wallet, X } from 'lucide-react';
 import { LESSON_STATUS_LABELS, type LessonPackageOption } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -210,6 +211,9 @@ function MyLessons() {
               <Badge variant="outline" className={cn(l.status === 'COMPLETED' && 'border-primary/40 text-primary')}>
                 {LESSON_STATUS_LABELS[l.status]}
               </Badge>
+              {['READY', 'IN_PROGRESS'].includes(l.status) && (
+                <Link href={`/lesson/${l.id}`}><Button size="sm"><Video className="mr-1 h-3.5 w-3.5" /> Войти</Button></Link>
+              )}
               {active && (
                 <button
                   type="button"

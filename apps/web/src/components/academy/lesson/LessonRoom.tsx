@@ -1,0 +1,259 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import {
+  ChevronLeft, ChevronRight, Eraser, Gift, Loader2, LogOut, Maximize2, Mic, MicOff,
+  Minimize2, Monitor, Pencil, Send, Unlock, Video, VideoOff,
+} from 'lucide-react';
+import {
+  LESSON_DRAW_COLORS,
+  type LessonChatEntry,
+  type LessonPoint,
+  type LessonRole,
+  type LessonServerMessage,
+  type LessonStroke,
+} from '@allvision/shared';
+import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
+import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
+import { useGetInstanceByLessonQuery, useGetInstanceScenesQuery } from '@/store/api/academy-lesson-instances-api';
+
+export function LessonRoom({ lessonId }: { lessonId: string }) {
+  const instanceQuery = useGetInstanceByLessonQuery(lessonId);
+  const instanceId = instanceQuery.data?.instance?.id;
+  const scenesQuery = useGetInstanceScenesQuery(instanceId ?? '', { skip: !instanceId });
+
+  const [role, setRole] = useState<LessonRole | null>(null);
+  const [status, setStatus] = useState<'connecting' | 'open' | 'closed'>('connecting');
+  const [sceneIndex, setSceneIndex] = useState(0);
+  const [sceneCount, setSceneCount] = useState(0);
+  const [unlocked, setUnlocked] = useState(false);
+  const [presence, setPresence] = useState({ teacher: false, student: false });
+  const [strokes, setStrokes] = useState<LessonStroke[]>([]);
+  const [chat, setChat] = useState<LessonChatEntry[]>([]);
+  const [reward, setReward] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  const [penOn, setPenOn] = useState(false);
+  const [penColor, setPenColor] = useState<string>(LESSON_DRAW_COLORS[0]);
+
+  const socketRef = useRef<LessonSocket | null>(null);
+  const playerRef = useRef<AcademyScenePlayerHandle | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [chatInput, setChatInput] = useState('');
+
+  const scenes = useMemo(() => scenesQuery.data?.scenes ?? [], [scenesQuery.data]);
+
+  const applyStart = useCallback((s: LessonStroke) => setStrokes((p) => [...p, s]), []);
+  const applyAppend = useCallback((id: string, points: LessonPoint[]) => {
+    setStrokes((p) => p.map((s) => (s.id === id ? { ...s, points: [...s.points, ...points] } : s)));
+  }, []);
+
+  // Подключение к комнате.
+  useEffect(() => {
+    const socket = connectLessonSocket(lessonId, {
+      onStatus: setStatus,
+      onMessage: (msg: LessonServerMessage) => {
+        switch (msg.t) {
+          case 'state':
+            setRole(msg.role);
+            setSceneIndex(msg.state.sceneIndex);
+            setSceneCount(msg.state.sceneCount);
+            setUnlocked(msg.state.unlocked);
+            setPresence(msg.state.presence);
+            setStrokes(msg.state.strokes);
+            setChat(msg.chat);
+            break;
+          case 'nav': setSceneIndex(msg.sceneIndex); setStrokes(msg.strokes); break;
+          case 'unlock': setUnlocked(msg.value); break;
+          case 'draw-start': applyStart({ id: msg.id, color: msg.color, size: msg.size, points: [msg.point] }); break;
+          case 'draw-append': applyAppend(msg.id, msg.points); break;
+          case 'draw-clear': setStrokes([]); break;
+          case 'reward': setReward(true); setTimeout(() => setReward(false), 2600); break;
+          case 'chat': setChat((p) => [...p, msg.entry]); break;
+          case 'presence': setPresence(msg.presence); break;
+          case 'scene-event': playerRef.current?.send(msg.event as never); break;
+          default: break;
+        }
+      },
+    });
+    socketRef.current = socket;
+    return () => socket.close();
+  }, [lessonId, applyStart, applyAppend]);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ block: 'end' }); }, [chat]);
+  useEffect(() => {
+    const onFs = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFs);
+    return () => document.removeEventListener('fullscreenchange', onFs);
+  }, []);
+
+  const isTeacher = role === 'teacher';
+  const send = (m: Parameters<LessonSocket['send']>[0]) => socketRef.current?.send(m);
+
+  const nav = (idx: number) => { if (isTeacher) send({ t: 'nav', sceneIndex: idx }); };
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void rootRef.current?.requestFullscreen().catch(() => undefined);
+  };
+  const sendChat = () => {
+    const body = chatInput.trim();
+    if (!body) return;
+    send({ t: 'chat', body });
+    setChatInput('');
+  };
+
+  // Рисование (учитель).
+  const onDrawStart = (s: LessonStroke) => { applyStart(s); send({ t: 'draw-start', id: s.id, color: s.color, size: s.size, point: s.points[0] }); };
+  const onDrawAppend = (id: string, points: LessonPoint[]) => { applyAppend(id, points); send({ t: 'draw-append', id, points }); };
+  const onDrawEnd = (id: string) => send({ t: 'draw-end', id });
+  const clearDraw = () => { setStrokes([]); send({ t: 'draw-clear' }); };
+
+  if (instanceQuery.isLoading) {
+    return <div className="flex h-dvh items-center justify-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  }
+  if (!instanceQuery.data?.instance) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-background px-6 text-center">
+        <p className="text-lg font-semibold">Урок ещё не подготовлен</p>
+        <p className="max-w-sm text-sm text-muted-foreground">Преподаватель должен выбрать шаблон урока в своём кабинете, прежде чем начинать занятие.</p>
+        <Link href="/"><Button variant="outline">На главную</Button></Link>
+      </div>
+    );
+  }
+
+  const scene = scenes[sceneIndex] ?? null;
+
+  return (
+    <div ref={rootRef} className="academy-theme flex h-dvh flex-col bg-background text-foreground">
+      {/* Шапка */}
+      <div className="flex items-center gap-3 border-b border-border px-4 py-2">
+        <span className="font-semibold">{instanceQuery.data.instance.title}</span>
+        <span className="text-xs text-muted-foreground">Сцена {sceneCount ? sceneIndex + 1 : 0} из {sceneCount}</span>
+        <span className={cn('ml-2 inline-flex items-center gap-1 text-xs', status === 'open' ? 'text-emerald-700' : 'text-muted-foreground')}>
+          <span className={cn('h-2 w-2 rounded-full', status === 'open' ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
+          {status === 'open' ? 'на связи' : status === 'connecting' ? 'подключение…' : 'нет связи'}
+        </span>
+        <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1"><span className={cn('h-2 w-2 rounded-full', presence.teacher ? 'bg-emerald-500' : 'bg-muted-foreground/30')} /> Учитель</span>
+          <span className="inline-flex items-center gap-1"><span className={cn('h-2 w-2 rounded-full', presence.student ? 'bg-emerald-500' : 'bg-muted-foreground/30')} /> Ученик</span>
+          <Button variant="ghost" size="icon" onClick={toggleFullscreen} aria-label="Полный экран">
+            {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </Button>
+          <Link href={isTeacher ? '/teacher' : '/lessons'}><Button variant="ghost" size="icon" aria-label="Выйти"><LogOut className="h-4 w-4" /></Button></Link>
+        </div>
+      </div>
+
+      {/* Тело */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        {/* Сцена */}
+        <div className="flex min-h-0 flex-1 flex-col p-3">
+          <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-muted/40">
+            {scene ? (
+              <div className="absolute inset-0">
+                <AcademyScenePlayer ref={playerRef} scene={scene} role={role ?? 'student'} className="h-full" />
+                <DrawingCanvas
+                  strokes={strokes}
+                  active={isTeacher && penOn}
+                  color={penColor}
+                  size={4}
+                  onStart={onDrawStart}
+                  onAppend={onDrawAppend}
+                  onEnd={onDrawEnd}
+                />
+                {reward && (
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-primary/10">
+                    <div className="animate-academy-in rounded-2xl bg-card px-6 py-4 text-center shadow-lg">
+                      <div className="text-4xl">🎉</div>
+                      <p className="mt-1 font-semibold text-primary">Молодец!</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                {scenesQuery.isLoading ? 'Загружаем сцены…' : 'В уроке нет сцен'}
+              </div>
+            )}
+          </div>
+
+          {/* Панель управления учителя */}
+          {isTeacher && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+              <Button variant="outline" size="sm" onClick={() => nav(sceneIndex - 1)} disabled={sceneIndex <= 0}><ChevronLeft className="h-4 w-4" /></Button>
+              <span className="text-xs text-muted-foreground">{sceneCount ? sceneIndex + 1 : 0}/{sceneCount}</span>
+              <Button variant="outline" size="sm" onClick={() => nav(sceneIndex + 1)} disabled={sceneIndex >= sceneCount - 1}><ChevronRight className="h-4 w-4" /></Button>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <Button variant={unlocked ? 'default' : 'outline'} size="sm" onClick={() => send({ t: 'unlock', value: !unlocked })}>
+                <Unlock className="mr-1 h-4 w-4" /> {unlocked ? 'Разблокировано' : 'Разблокировать'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => send({ t: 'reward' })}><Gift className="mr-1 h-4 w-4" /> Награда</Button>
+              <div className="mx-1 h-5 w-px bg-border" />
+              <Button variant={penOn ? 'default' : 'outline'} size="sm" onClick={() => setPenOn((v) => !v)}><Pencil className="mr-1 h-4 w-4" /> Рисовать</Button>
+              {penOn && LESSON_DRAW_COLORS.map((c) => (
+                <button key={c} type="button" onClick={() => setPenColor(c)} aria-label={`Цвет ${c}`}
+                  className={cn('h-6 w-6 rounded-full border', penColor === c ? 'ring-2 ring-primary ring-offset-1' : 'border-border')}
+                  style={{ backgroundColor: c }} />
+              ))}
+              <Button variant="ghost" size="sm" onClick={clearDraw}><Eraser className="mr-1 h-4 w-4" /> Стереть</Button>
+            </div>
+          )}
+        </div>
+
+        {/* Правая колонка: видео + чат */}
+        <div className="flex min-h-0 w-full flex-col gap-3 border-t border-border p-3 lg:w-[340px] lg:border-l lg:border-t-0">
+          <VideoPanel />
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border bg-card">
+            <div className="border-b border-border px-3 py-2 text-sm font-semibold">Чат урока</div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {chat.length === 0 && <p className="text-xs text-muted-foreground">Сообщений пока нет.</p>}
+              {chat.map((m) => (
+                <div key={m.id} className={cn('max-w-[85%] rounded-xl px-3 py-1.5 text-sm', m.role === role ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted')}>
+                  {m.authorName && m.role !== role && <span className="mb-0.5 block text-[10px] opacity-70">{m.authorName}</span>}
+                  {m.body}
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            <div className="flex gap-2 border-t border-border p-2">
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && sendChat()}
+                placeholder="Сообщение…"
+                className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+              <Button size="icon" onClick={sendChat} aria-label="Отправить"><Send className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Видео-панель — визуальный каркас; подключение LiveKit (камера/микрофон/демонстрация экрана) — этап A8.
+function VideoPanel() {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <div className="grid grid-cols-2 gap-2">
+        {['Вы', 'Собеседник'].map((label) => (
+          <div key={label} className="relative flex aspect-video items-center justify-center rounded-xl bg-muted text-xs text-muted-foreground">
+            <VideoOff className="h-5 w-5 opacity-40" />
+            <span className="absolute bottom-1 left-1.5">{label}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-center gap-2">
+        <Button variant="outline" size="icon" disabled aria-label="Микрофон"><Mic className="h-4 w-4" /></Button>
+        <Button variant="outline" size="icon" disabled aria-label="Камера"><Video className="h-4 w-4" /></Button>
+        <Button variant="outline" size="icon" disabled aria-label="Демонстрация экрана"><Monitor className="h-4 w-4" /></Button>
+      </div>
+      <p className="mt-1 text-center text-[10px] text-muted-foreground">Видеосвязь и демонстрация экрана — на подключении (A8)</p>
+    </div>
+  );
+}

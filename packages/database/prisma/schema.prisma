@@ -466,11 +466,12 @@ model Lesson {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  child    ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
-  teacher  TeacherProfile  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  slot     TeacherSlot     @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  earning  TeacherEarning?
-  instance LessonInstance?
+  child        ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  teacher      TeacherProfile      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  slot         TeacherSlot         @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  earning      TeacherEarning?
+  instance     LessonInstance?
+  chatMessages LessonChatMessage[]
 
   @@index([childId, startsAt])
   @@index([teacherId, startsAt])
@@ -562,6 +563,20 @@ model LessonInstance {
   version LessonTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
 
   @@index([templateVersionId])
+}
+
+// Чат живого урока (A7) — история переписки участников, переживает реконнект.
+model LessonChatMessage {
+  id        String   @id @default(cuid())
+  lessonId  String
+  authorId  String
+  role      String // teacher | student
+  body      String   @db.Text
+  createdAt DateTime @default(now())
+
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId, createdAt])
 }
 
 enum MessengerType {

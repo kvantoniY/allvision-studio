@@ -9,3 +9,4 @@ export * from './scene-format';
 export * from './scene-runtime';
 export * from './scene-editing';
 export * from './scene-instance';
+export * from './lesson-realtime';

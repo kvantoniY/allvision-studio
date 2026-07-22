@@ -36,6 +36,19 @@ export function pickCharacterReferenceKind(availableKinds: string[]): string | n
  * во все элементы типа `character` и применяет оверрайды преподавателя.
  * Чистая функция (глубокая копия), без БД — тестируется отдельно.
  */
+/**
+ * Читает «документ урока» из Json шаблона: поддерживает и будущий многосценовый
+ * формат `{ scenes: [...] }`, и текущий одиночный `AcademyScene`.
+ */
+export function readSceneDocument(json: unknown): AcademyScene[] {
+  if (json && typeof json === 'object') {
+    const maybe = json as { scenes?: unknown; layers?: unknown };
+    if (Array.isArray(maybe.scenes)) return maybe.scenes as AcademyScene[];
+    if (Array.isArray(maybe.layers)) return [json as AcademyScene];
+  }
+  return [];
+}
+
 export function resolveInstanceScene(
   scene: AcademyScene,
   opts: { character?: CharacterInjection | null; overrides?: InstanceOverrides | null } = {},

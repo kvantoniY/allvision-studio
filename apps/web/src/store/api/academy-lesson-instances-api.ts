@@ -35,6 +35,9 @@ export const academyLessonInstancesApi = createApi({
     getInstanceScene: build.query<{ scene: AcademyScene; hasCharacter: boolean }, string>({
       query: (id) => ({ url: `/${id}/scene` }),
     }),
+    getInstanceScenes: build.query<{ scenes: AcademyScene[]; hasCharacter: boolean }, string>({
+      query: (id) => ({ url: `/${id}/scenes` }),
+    }),
   }),
 });
 
@@ -43,4 +46,5 @@ export const {
   useGetInstanceByLessonQuery,
   useCreateInstanceMutation,
   useLazyGetInstanceSceneQuery,
+  useGetInstanceScenesQuery,
 } = academyLessonInstancesApi;

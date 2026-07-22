@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Prisma, prisma } from '@allvision/database';
 import {
   pickCharacterReferenceKind,
+  readSceneDocument,
   resolveInstanceScene,
   type AcademyScene,
   type CharacterInjection,
@@ -156,6 +157,35 @@ academyLessonInstancesRouter.get('/:id/scene', async (req: Request, res: Respons
 
     const resolved = resolveInstanceScene(scene, { character, overrides: (instance.overrides ?? {}) as InstanceOverrides });
     res.json({ scene: resolved, hasCharacter: Boolean(character) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Резолвит референс персонажа ребёнка для инъекции в сцены экземпляра.
+async function characterForInstance(instanceId: string, childId: string): Promise<CharacterInjection | null> {
+  const profile = await prisma.characterProfile.findFirst({
+    where: { childId, status: 'APPROVED' },
+    include: { references: true },
+  });
+  if (!profile || profile.references.length === 0) return null;
+  const kind = pickCharacterReferenceKind(profile.references.map((r) => r.kind));
+  const ref = profile.references.find((r) => r.kind === kind) ?? profile.references[0];
+  return {
+    assetId: ref.id,
+    fileUrl: `/api/academy/lesson-instances/${instanceId}/character/${ref.id}/file`,
+    mimeType: ref.mimeType,
+  };
+}
+
+// === Все сцены урока (маршрут) для живой комнаты (участник) ===
+academyLessonInstancesRouter.get('/:id/scenes', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instance = await loadInstanceForParticipant(req);
+    const character = await characterForInstance(instance.id, instance.childId);
+    const overrides = (instance.overrides ?? {}) as InstanceOverrides;
+    const scenes = readSceneDocument(instance.version.scene).map((s) => resolveInstanceScene(s, { character, overrides }));
+    res.json({ scenes, hasCharacter: Boolean(character) });
   } catch (err) {
     next(err);
   }

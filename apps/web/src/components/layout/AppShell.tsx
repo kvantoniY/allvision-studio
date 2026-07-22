@@ -14,7 +14,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isAuthRoute = authRoutes.some((route) => pathname === route);
   const isMockPaymentRoute = pathname?.startsWith('/mock-payment') ?? false;
   const isAdminRoute = pathname?.startsWith('/admin') ?? false;
-  const isUserWorkspaceRoute = !!user && !isAuthRoute && !isMockPaymentRoute && !isAdminRoute;
+  // Живой урок (A7) — самодостаточная полноэкранная комната, без сайдбара/хедера.
+  const isLessonRoute = pathname?.startsWith('/lesson/') ?? false;
+  const isUserWorkspaceRoute = !!user && !isAuthRoute && !isMockPaymentRoute && !isAdminRoute && !isLessonRoute;
+
+  if (isLessonRoute) {
+    return <main className="flex-1">{children}</main>;
+  }
 
   if (isUserWorkspaceRoute) {
     return <UserWorkspaceShell>{children}</UserWorkspaceShell>;

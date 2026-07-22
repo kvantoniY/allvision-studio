@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Eye, Loader2, Wand2, X } from 'lucide-react';
+import Link from 'next/link';
+import { CheckCircle2, Eye, Loader2, Video, Wand2, X } from 'lucide-react';
 import type { AcademyScene } from '@allvision/shared';
 import { AcademyScenePlayer } from '@/components/academy/scene-player';
 import { Button } from '@/components/ui/button';
@@ -118,6 +119,7 @@ export function LessonPrepare({ lessonId }: { lessonId: string }) {
           <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
             <CheckCircle2 className="h-3.5 w-3.5" /> Подготовлен: {instance.title} v{instance.version}
           </span>
+          <Link href={`/lesson/${lessonId}`}><Button size="sm"><Video className="mr-1 h-3.5 w-3.5" /> Войти в урок</Button></Link>
           <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}><Eye className="mr-1 h-3.5 w-3.5" /> Предпросмотр</Button>
           <Button size="sm" variant="ghost" onClick={() => setPrepareOpen(true)}>Сменить шаблон</Button>
         </>
