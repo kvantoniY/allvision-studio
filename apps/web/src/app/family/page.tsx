@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   BookOpen,
@@ -7,6 +8,7 @@ import {
   CheckCircle2,
   ChevronDown,
   GraduationCap,
+  Gamepad2,
   Loader2,
   Plus,
   RotateCcw,
@@ -706,6 +708,10 @@ function ChildCard({ child }: { child: ChildProfileDto }) {
         </button>
         {open && (
           <div className="space-y-6 border-t border-border px-5 py-5">
+            <Link href={`/kid/${child.id}`} className="flex items-center justify-between rounded-2xl bg-gradient-to-r from-orange-500 to-amber-400 px-5 py-4 font-bold text-white shadow-sm transition hover:shadow-md">
+              <span><Gamepad2 className="mr-2 inline h-5 w-5" /> Открыть игровой профиль {child.name}</span>
+              <span aria-hidden>→</span>
+            </Link>
             <ConsentsBlock child={child} />
             <PhotosBlock child={child} />
             <CharacterBlock child={child} />

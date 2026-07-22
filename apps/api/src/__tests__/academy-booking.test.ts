@@ -130,5 +130,23 @@ describe('teacher lesson status → earning', () => {
     expect(res.status).toBe(200);
     const earning = await prisma.teacherEarning.findUnique({ where: { lessonId: id } });
     expect(earning?.status).toBe('AVAILABLE');
+
+    const profile = await prisma.childProfile.findUniqueOrThrow({ where: { id: childId } });
+    expect(profile.xp).toBe(50);
+    expect(profile.streakCount).toBe(1);
+    expect(await prisma.xpEvent.count({ where: { lessonId: id, reason: 'LESSON_COMPLETED' } })).toBe(1);
+    expect(await prisma.childAchievement.count({
+      where: { childId, achievement: { slug: 'first-lesson' } },
+    })).toBe(1);
+    expect(await prisma.childRewardItem.count({
+      where: { childId, rewardItem: { slug: 'first-adventure-frame' } },
+    })).toBe(1);
+
+    // Повторная отправка того же статуса не должна повторно начислять XP или награды.
+    const again = await request(app).post(`/api/academy/teacher/lessons/${id}/status`).set('Cookie', teacherCookies).send({ status: 'COMPLETED' });
+    expect(again.status).toBe(200);
+    expect((await prisma.childProfile.findUniqueOrThrow({ where: { id: childId } })).xp).toBe(50);
+    expect(await prisma.xpEvent.count({ where: { lessonId: id, reason: 'LESSON_COMPLETED' } })).toBe(1);
+    expect(await prisma.childRewardItem.count({ where: { childId } })).toBe(1);
   });
 });

@@ -27,24 +27,24 @@ model User {
   deletedAt              DateTime?
   createdAt              DateTime       @default(now())
 
-  projects   Project[]
-  payments   Payment[]
-  orders     Order[]
-  tokenTxns  TokenTransaction[]
-  fairyTales FairyTaleScriptRecord[]
-  characters Character[]
-  scenes     Scene[]
-  episodes   Episode[]
-  mediaAssets MediaAsset[]
-  chats     Chat[]
-  supportTickets SupportTicket[] @relation("SupportTicketOwner")
-  supportMessages SupportMessage[] @relation("SupportMessageAuthor")
-  resolvedSupportTickets SupportTicket[] @relation("SupportTicketResolvedBy")
-  childProfiles ChildProfile[]
-  givenConsents Consent[]
-  teacherProfile TeacherProfile?
-  lessonCredits  LessonCredit[]
-  createdChildAssets ChildAsset[] @relation("ChildAssetCreatedBy")
+  projects               Project[]
+  payments               Payment[]
+  orders                 Order[]
+  tokenTxns              TokenTransaction[]
+  fairyTales             FairyTaleScriptRecord[]
+  characters             Character[]
+  scenes                 Scene[]
+  episodes               Episode[]
+  mediaAssets            MediaAsset[]
+  chats                  Chat[]
+  supportTickets         SupportTicket[]         @relation("SupportTicketOwner")
+  supportMessages        SupportMessage[]        @relation("SupportMessageAuthor")
+  resolvedSupportTickets SupportTicket[]         @relation("SupportTicketResolvedBy")
+  childProfiles          ChildProfile[]
+  givenConsents          Consent[]
+  teacherProfile         TeacherProfile?
+  lessonCredits          LessonCredit[]
+  createdChildAssets     ChildAsset[]            @relation("ChildAssetCreatedBy")
 }
 
 enum Role {
@@ -79,7 +79,7 @@ model ChildProfile {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  parent           User              @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  parent           User               @relation(fields: [parentId], references: [id], onDelete: Cascade)
   consents         Consent[]
   photos           ChildPhoto[]
   characterProfile CharacterProfile?
@@ -87,6 +87,9 @@ model ChildProfile {
   skillProgress    SkillProgress[]
   lessons          Lesson[]
   assets           ChildAsset[]
+  xpEvents         XpEvent[]
+  achievements     ChildAchievement[]
+  rewardItems      ChildRewardItem[]
 
   @@index([parentId])
 }
@@ -159,8 +162,9 @@ model ChildAsset {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  child     ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
-  createdBy User?        @relation("ChildAssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  child       ChildProfile      @relation(fields: [childId], references: [id], onDelete: Cascade)
+  createdBy   User?             @relation("ChildAssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  rewardItems ChildRewardItem[]
 
   @@index([childId, kind, createdAt])
   @@index([createdById])
@@ -466,12 +470,14 @@ model Lesson {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  child        ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
-  teacher      TeacherProfile      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  slot         TeacherSlot         @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  earning      TeacherEarning?
-  instance     LessonInstance?
-  chatMessages LessonChatMessage[]
+  child                ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  teacher              TeacherProfile      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  slot                 TeacherSlot         @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  earning              TeacherEarning?
+  instance             LessonInstance?
+  chatMessages         LessonChatMessage[]
+  xpEvents             XpEvent[]
+  unlockedAchievements ChildAchievement[]  @relation("AchievementSourceLesson")
 
   @@index([childId, startsAt])
   @@index([teacherId, startsAt])
@@ -595,6 +601,126 @@ model LessonChatMessage {
   @@index([lessonId, createdAt])
 }
 
+// === Геймификация (A9): XP, уровни, серии, достижения и коллекция наград ===
+
+model XpEvent {
+  id             String        @id @default(cuid())
+  childId        String
+  lessonId       String?
+  amount         Int
+  reason         XpEventReason
+  idempotencyKey String        @unique
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+
+  child  ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  lesson Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+
+  @@index([childId, createdAt])
+  @@index([lessonId])
+}
+
+enum XpEventReason {
+  LESSON_COMPLETED
+  MISSION
+  INDEPENDENT_ANSWER
+  EFFORT
+  PROJECT
+  STREAK
+  HOMEWORK
+  ACHIEVEMENT
+  MANUAL
+}
+
+model AchievementDef {
+  id           String            @id @default(cuid())
+  slug         String            @unique
+  title        String
+  description  String            @db.Text
+  icon         String
+  metric       AchievementMetric
+  threshold    Int
+  rewardItemId String?
+  isActive     Boolean           @default(true)
+  sortOrder    Int               @default(0)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  rewardItem        RewardItem?        @relation("AchievementReward", fields: [rewardItemId], references: [id], onDelete: SetNull)
+  childAchievements ChildAchievement[]
+
+  @@index([isActive, sortOrder])
+}
+
+enum AchievementMetric {
+  LESSONS_COMPLETED
+  TOTAL_XP
+  STREAK
+}
+
+model ChildAchievement {
+  id             String   @id @default(cuid())
+  childId        String
+  achievementId  String
+  sourceLessonId String?
+  unlockedAt     DateTime @default(now())
+
+  child        ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
+  achievement  AchievementDef @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  sourceLesson Lesson?        @relation("AchievementSourceLesson", fields: [sourceLessonId], references: [id], onDelete: SetNull)
+
+  @@unique([childId, achievementId])
+  @@index([childId, unlockedAt])
+}
+
+model RewardItem {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  title       String
+  description String?    @db.Text
+  icon        String
+  kind        RewardKind
+  metadata    Json?
+  isActive    Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  achievementDefs AchievementDef[]  @relation("AchievementReward")
+  childRewards    ChildRewardItem[]
+
+  @@index([kind, isActive, sortOrder])
+}
+
+enum RewardKind {
+  BACKGROUND
+  FRAME
+  COSTUME
+  EFFECT
+  ROOM_ITEM
+  LOCATION
+  EMOTION
+  ARTIFACT
+}
+
+model ChildRewardItem {
+  id           String    @id @default(cuid())
+  childId      String
+  rewardItemId String
+  childAssetId String?
+  source       String    @default("achievement")
+  acquiredAt   DateTime  @default(now())
+  equippedAt   DateTime?
+
+  child      ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
+  rewardItem RewardItem   @relation(fields: [rewardItemId], references: [id], onDelete: Cascade)
+  childAsset ChildAsset?  @relation(fields: [childAssetId], references: [id], onDelete: SetNull)
+
+  @@unique([childId, rewardItemId])
+  @@index([childId, acquiredAt])
+  @@index([childAssetId])
+}
+
 enum MessengerType {
   TELEGRAM
   WHATSAPP
@@ -604,19 +730,19 @@ enum MessengerType {
 
 // === Каталог услуг ===
 model Service {
-  id             String  @id @default(cuid())
-  slug           String  @unique
+  id             String         @id @default(cuid())
+  slug           String         @unique
   title          String
-  description    String  @db.Text
+  description    String         @db.Text
   shortDesc      String
   category       String
   priceTokens    Int
   costUsd        Float
   coverImage     String?
   galleryImages  String[]
-  isActive       Boolean         @default(true)
-  isFeatured     Boolean         @default(false)
-  sortOrder      Int             @default(0)
+  isActive       Boolean        @default(true)
+  isFeatured     Boolean        @default(false)
+  sortOrder      Int            @default(0)
   aiProvider     String?
   aiModel        String?
   aiConfig       Json?
@@ -724,10 +850,10 @@ model Project {
   completedAt DateTime?
   expiresAt   DateTime?
 
-  user        User         @relation(fields: [userId], references: [id])
-  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  trend       Trend?       @relation(fields: [trendId], references: [id], onDelete: SetNull)
-  aiUsageLogs AIUsageLog[]
+  user         User          @relation(fields: [userId], references: [id])
+  service      Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  trend        Trend?        @relation(fields: [trendId], references: [id], onDelete: SetNull)
+  aiUsageLogs  AIUsageLog[]
   chatMessages ChatMessage[]
 
   @@index([userId, mode])
@@ -735,11 +861,11 @@ model Project {
 }
 
 model Chat {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   title     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -754,7 +880,7 @@ model ChatMessage {
   chatId    String
   createdAt DateTime @default(now())
 
-  prompt      String @db.Text
+  prompt      String  @db.Text
   modelSlug   String
   aspectRatio String?
   duration    Int?
@@ -777,8 +903,8 @@ model SupportTicket {
   resolvedAt   DateTime?
   resolvedById String?
 
-  user       User                 @relation("SupportTicketOwner", fields: [userId], references: [id], onDelete: Cascade)
-  resolvedBy User?                @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  user       User             @relation("SupportTicketOwner", fields: [userId], references: [id], onDelete: Cascade)
+  resolvedBy User?            @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
   messages   SupportMessage[]
 
   @@index([userId, updatedAt])
@@ -1214,12 +1340,12 @@ model MediaAsset {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  kind        String
-  groupCode   String?
-  title       String
-  description String?
-  tags        String[]
-  ownerUserId String?
+  kind          String
+  groupCode     String?
+  title         String
+  description   String?
+  tags          String[]
+  ownerUserId   String?
   parentAssetId String?
 
   storageKey   String
@@ -1242,9 +1368,9 @@ model MediaAsset {
   generationCostUsd Float   @default(0)
   generationParams  Json?
 
-  owner User? @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  parentAsset MediaAsset? @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)
-  variations MediaAsset[] @relation("MediaAssetVariations")
+  owner       User?        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  parentAsset MediaAsset?  @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  variations  MediaAsset[] @relation("MediaAssetVariations")
 
   @@index([kind])
   @@index([kind, groupCode])

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CalendarPlus, GraduationCap, Loader2, Trash2, Wallet } from 'lucide-react';
+import { CalendarPlus, Gift, GraduationCap, Loader2, Sparkles, Trash2, Wallet } from 'lucide-react';
 import {
   EARNING_STATUS_LABELS,
   LESSON_STATUS_LABELS,
@@ -24,6 +24,11 @@ import {
   useGetTeacherSlotsQuery,
   useSetLessonStatusMutation,
 } from '@/store/api/academy-booking-api';
+import {
+  useGetTeacherRewardCatalogQuery,
+  useGrantTeacherRewardMutation,
+  useGrantTeacherXpMutation,
+} from '@/store/api/academy-gamification-api';
 
 function apiErr(err: unknown): string {
   const d = (err as { data?: { error?: { message?: string } } })?.data;
@@ -32,6 +37,75 @@ function apiErr(err: unknown): string {
 
 function fmt(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function TeacherRewardPanel({ childId, childName }: { childId: string; childName: string }) {
+  const [open, setOpen] = useState(false);
+  const { data, isFetching } = useGetTeacherRewardCatalogQuery(childId, { skip: !open });
+  const [grantXp, { isLoading: grantingXp }] = useGrantTeacherXpMutation();
+  const [grantReward, { isLoading: grantingReward }] = useGrantTeacherRewardMutation();
+  const [rewardItemId, setRewardItemId] = useState('');
+  const [childAssetId, setChildAssetId] = useState('');
+
+  const addXp = async (amount: number, reason: 'EFFORT' | 'MISSION') => {
+    try {
+      await grantXp({ childId, body: { amount, reason, requestId: crypto.randomUUID() } }).unwrap();
+      toast({ title: `+${amount} XP для ${childName}`, description: reason === 'EFFORT' ? 'Награда за старание начислена.' : 'Миссия отмечена выполненной.' });
+    } catch (error) {
+      toast({ title: 'Не удалось начислить XP', description: apiErr(error), variant: 'destructive' });
+    }
+  };
+
+  const addReward = async () => {
+    if (!rewardItemId) return;
+    try {
+      await grantReward({ childId, body: { rewardItemId, ...(childAssetId ? { childAssetId } : {}) } }).unwrap();
+      toast({ title: `Награда для ${childName} выдана` });
+      setRewardItemId('');
+      setChildAssetId('');
+    } catch (error) {
+      toast({ title: 'Не удалось выдать награду', description: apiErr(error), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/40 p-3">
+      <button type="button" className="flex w-full items-center justify-between text-left text-sm font-semibold" onClick={() => setOpen((value) => !value)}>
+        <span className="flex items-center gap-2"><Gift className="h-4 w-4 text-primary" /> {childName}</span>
+        <span className="text-xs text-muted-foreground">{open ? 'Скрыть' : 'XP и награды'}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3 border-t border-border pt-3">
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="outline" disabled={grantingXp} onClick={() => void addXp(10, 'EFFORT')}>
+              <Sparkles className="mr-1.5 h-3.5 w-3.5" /> +10 за старание
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={grantingXp} onClick={() => void addXp(20, 'MISSION')}>
+              +20 за миссию
+            </Button>
+          </div>
+          {isFetching ? (
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <select value={rewardItemId} onChange={(event) => setRewardItemId(event.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+                <option value="">Выберите награду</option>
+                {data?.rewards.map((reward) => <option key={reward.id} value={reward.id}>{reward.icon} {reward.title}</option>)}
+              </select>
+              <select value={childAssetId} onChange={(event) => setChildAssetId(event.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
+                <option value="">Без персонального материала</option>
+                {data?.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.title} · {asset.kind}</option>)}
+              </select>
+              <Button type="button" size="sm" disabled={!rewardItemId || grantingReward} onClick={() => void addReward()}>
+                Выдать
+              </Button>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">Для персонального костюма выберите готовую генерацию из закрытой библиотеки ребёнка.</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const NEXT_STATUS: { value: LessonStatusValue; label: string }[] = [
@@ -117,6 +191,7 @@ function LessonsPanel() {
   const { data, isLoading } = useGetTeacherLessonsQuery();
   const [setStatus] = useSetLessonStatusMutation();
   const lessons = data?.lessons ?? [];
+  const children = [...new Map(lessons.map((lesson) => [lesson.childId, lesson.childName])).entries()];
 
   if (isLoading) return <div className="h-20 animate-pulse rounded-xl bg-muted" />;
 
@@ -127,8 +202,8 @@ function LessonsPanel() {
         {lessons.length === 0 ? (
           <p className="text-sm text-muted-foreground">Пока нет записей на уроки.</p>
         ) : (
-          <div className="space-y-2">
-            {lessons.map((l) => (
+          <div className="space-y-5">
+            <div className="space-y-2">{lessons.map((l) => (
               <div key={l.id} className="rounded-xl border border-border p-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -155,7 +230,11 @@ function LessonsPanel() {
                   </div>
                 )}
               </div>
-            ))}
+            ))}</div>
+            <div className="space-y-2 border-t border-border pt-4">
+              <p className="text-sm font-semibold">Мотивация учеников</p>
+              {children.map(([childId, childName]) => <TeacherRewardPanel key={childId} childId={childId} childName={childName} />)}
+            </div>
           </div>
         )}
       </CardContent>

@@ -23,6 +23,7 @@ import { academyBookingRouter } from './academy-booking';
 import { academyMaterialsRouter } from './academy-materials';
 import { academyLessonTemplatesRouter } from './academy-lesson-templates';
 import { academyLessonInstancesRouter } from './academy-lesson-instances';
+import { academyGamificationRouter } from './academy-gamification';
 
 export const router = Router();
 
@@ -52,3 +53,4 @@ router.use('/academy', academyBookingRouter);
 router.use('/academy/materials', academyMaterialsRouter);
 router.use('/academy/lesson-templates', academyLessonTemplatesRouter);
 router.use('/academy/lesson-instances', academyLessonInstancesRouter);
+router.use('/academy/gamification', academyGamificationRouter);

@@ -10,3 +10,4 @@ export * from './scene-runtime';
 export * from './scene-editing';
 export * from './scene-instance';
 export * from './lesson-realtime';
+export * from './gamification';

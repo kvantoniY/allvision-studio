@@ -34,6 +34,7 @@ import { academyBookingApi } from './api/academy-booking-api';
 import { academyMaterialsApi } from './api/academy-materials-api';
 import { academyLessonTemplatesApi } from './api/academy-lesson-templates-api';
 import { academyLessonInstancesApi } from './api/academy-lesson-instances-api';
+import { academyGamificationApi } from './api/academy-gamification-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -73,6 +74,7 @@ export const store = configureStore({
     [academyMaterialsApi.reducerPath]: academyMaterialsApi.reducer,
     [academyLessonTemplatesApi.reducerPath]: academyLessonTemplatesApi.reducer,
     [academyLessonInstancesApi.reducerPath]: academyLessonInstancesApi.reducer,
+    [academyGamificationApi.reducerPath]: academyGamificationApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -110,6 +112,7 @@ export const store = configureStore({
       academyMaterialsApi.middleware,
       academyLessonTemplatesApi.middleware,
       academyLessonInstancesApi.middleware,
+      academyGamificationApi.middleware,
     ),
 });
 

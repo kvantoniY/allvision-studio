@@ -44,5 +44,6 @@ export const config = {
     '/trends/:path*',
     '/scenarios/:path*',
     '/pricing',
+    '/kid/:path*',
   ],
 };
