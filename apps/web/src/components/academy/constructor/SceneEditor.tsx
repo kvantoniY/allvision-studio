@@ -26,6 +26,7 @@ import { AcademyScenePlayer } from '@/components/academy/scene-player';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetTemplateQuery, usePublishTemplateMutation, useUpdateTemplateMutation } from '@/store/api/academy-lesson-templates-api';
@@ -576,6 +577,8 @@ function SceneInspector({ scene, onChange, onGenerateBg, onPickBg }: {
   onPickBg: () => void;
 }) {
   const hasBackground = scene.layers.some((l) => l.elements.some((e) => e.type === 'background' && e.asset));
+  const gen = (scene as { generation?: { mode?: string; prompt?: string } }).generation ?? { mode: 'layered' };
+  const fullAi = gen.mode === 'full-ai';
   return (
     <div className="space-y-3">
       <span className="text-sm font-semibold">Сцена</span>
@@ -583,13 +586,42 @@ function SceneInspector({ scene, onChange, onGenerateBg, onPickBg }: {
         <Label className="text-xs">Название сцены</Label>
         <Input value={scene.title} onChange={(e) => onChange({ ...scene, title: e.target.value })} className="h-8" />
       </div>
-      <div className="space-y-1.5 rounded-lg border border-border p-2.5">
-        <Label className="text-xs font-medium">Фон-иллюстрация {hasBackground && <span className="text-primary">✓</span>}</Label>
-        <Button variant="default" size="sm" className="w-full" onClick={onGenerateBg}>
-          <ImageIcon className="mr-1.5 h-4 w-4" /> Сгенерировать по промпту
-        </Button>
-        <Button variant="outline" size="sm" className="w-full" onClick={onPickBg}>Выбрать из библиотеки</Button>
+
+      {/* Режим генерации сцены (A6.6) */}
+      <div className="space-y-1.5 rounded-lg border border-primary/30 bg-accent/40 p-2.5">
+        <Label className="text-xs font-medium">Режим сцены</Label>
+        <div className="flex gap-1">
+          <button type="button" onClick={() => onChange({ ...scene, generation: { mode: 'layered', prompt: gen.prompt } } as AcademyScene)}
+            className={cn('flex-1 rounded-md border px-2 py-1.5 text-xs', !fullAi ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground')}>
+            Послойная
+          </button>
+          <button type="button" onClick={() => onChange({ ...scene, generation: { mode: 'full-ai', prompt: gen.prompt } } as AcademyScene)}
+            className={cn('flex-1 rounded-md border px-2 py-1.5 text-xs', fullAi ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground')}>
+            Цельная AI-сцена
+          </button>
+        </div>
+        {fullAi && (
+          <>
+            <Textarea
+              value={gen.prompt ?? ''}
+              onChange={(e) => onChange({ ...scene, generation: { mode: 'full-ai', prompt: e.target.value } } as AcademyScene)}
+              rows={3}
+              placeholder="Опиши сцену целиком: где ребёнок, что делает, окружение, стиль…"
+            />
+            <p className="text-[11px] text-muted-foreground">В шаблоне — абстрактный вид. При подготовке урока для ученика вся иллюстрация сгенерируется по его референсу.</p>
+          </>
+        )}
       </div>
+
+      {!fullAi && (
+        <div className="space-y-1.5 rounded-lg border border-border p-2.5">
+          <Label className="text-xs font-medium">Фон-иллюстрация {hasBackground && <span className="text-primary">✓</span>}</Label>
+          <Button variant="default" size="sm" className="w-full" onClick={onGenerateBg}>
+            <ImageIcon className="mr-1.5 h-4 w-4" /> Сгенерировать по промпту
+          </Button>
+          <Button variant="outline" size="sm" className="w-full" onClick={onPickBg}>Выбрать из библиотеки</Button>
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label className="text-xs">Цвет фона (если нет иллюстрации)</Label>
         <input type="color" value={scene.viewport.backgroundColor} onChange={(e) => onChange({ ...scene, viewport: { ...scene.viewport, backgroundColor: e.target.value } })} className="h-8 w-full rounded border border-border" />

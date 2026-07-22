@@ -1923,3 +1923,24 @@ Web:
 Проверки A6.5.1: билды shared/web — зелёные; shared academy — 10 passed (scene-editing). API не менялся.
 
 Долг A6.6: режим «цельная AI-сцена» — на сцене флаг генерации + промпт; при подготовке урока для ученика вся иллюстрация генерируется по референсу ребёнка (per-instance-per-scene ChildAsset) и подставляется как фон resolved-сцены. Нужен per-instance пайплайн генерации на этапе prep (модель `LessonInstanceSceneAsset` + worker-джоба + подстановка в `/scenes`).
+
+## Этап A6.6 ✅ — Цельная AI-сцена по референсу ученика
+
+Второй режим генерации из запроса владельца: сцена может генерироваться ЦЕЛИКОМ по референсу ученика. В шаблоне — абстрактный вид (обычная сцена с элементом-персонажем), а при подготовке урока для конкретного ребёнка вся иллюстрация генерируется по его APPROVED-персонажу и подставляется фоном resolved-сцены.
+
+Формат (`scene-format.ts`): у сцены добавлено `generation: { mode: 'layered' | 'full-ai', prompt? }` (опционально, default `layered` — обратная совместимость; строгая схема не ломает старые сцены). readSceneDocument/резолв работают с raw JSON, поэтому поле читается через optional chaining.
+
+Prisma (миграция `20260724120000_a6_6_instance_scene_asset`): `LessonInstanceSceneAsset` (instanceId+sceneId unique, projectId) — связка «экземпляр+сцена → academy-generation Project»; связь `LessonInstance.sceneAssets`.
+
+API:
+
+- `services/academy-full-scene-service.ts`: `ensureFullAiSceneGenerations(instance, requestedById)` — на каждую full-ai сцену с промптом (≥8 симв.) создаёт academy-generation Project (kind `scene`, персонаж ребёнка, referenceIds из APPROVED-профиля) + `LessonInstanceSceneAsset` + ставит job. Идемпотентно (уже запущенные сцены пропускаются); без APPROVED-персонажа — пропуск (сцена остаётся абстрактной). `fullSceneStatuses(instanceId)` — статусы генераций из Project.status/resultAssets.
+- `lesson-instances POST` (подготовка урока): после upsert экземпляра fire-and-forget запускает `ensureFullAiSceneGenerations` (не блокирует ответ).
+- `GET /:id/scenes`: для full-ai сцен со статусом COMPLETED подставляет сгенерированную детскую иллюстрацию фоном через `setSceneBackground` (scope `child`, participant-URL); возвращает `sceneStatuses`.
+- `GET /:id/scene-file/:childAssetId` (участник урока) — отдаёт файл сгенерированной сцены из закрытого child-assets хранилища (проверка принадлежности ребёнку экземпляра).
+
+Web (`SceneInspector` в конструкторе): переключатель «Послойная / Цельная AI-сцена» + промпт для full-ai с пояснением «в шаблоне абстрактно, при подготовке для ученика — по референсу». Блок «Фон-иллюстрация» показывается только в послойном режиме. Полностью переиспользует academy-generation (mock/fal), новых очередей нет.
+
+Проверки A6.6: билды shared/api/worker/web — зелёные; shared academy — 62 passed (формат с generation-полем не сломал строгую схему). DB-backed сквозной смоук (подготовка → генерация scene по персонажу → подстановка фоном → отдача участнику) — на проде: нужны APPROVED-персонаж, реальный fal и проведённая подготовка. Для layered-уроков поведение не меняется (ensureFullAiSceneGenerations выходит рано).
+
+Долг A6.6: индикатор «иллюстрации сцен генерируются» в prep-UI преподавателя (сейчас статус есть в `/scenes.sceneStatuses`, но отдельного экрана прогресса нет — комната покажет абстрактный вид, пока генерация не готова, и сгенерированный фон после); перегенерация full-ai сцены при смене промпта версии.

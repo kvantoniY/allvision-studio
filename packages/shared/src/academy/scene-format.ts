@@ -375,6 +375,13 @@ export const academySceneSchema = z.object({
   layers: z.array(academySceneLayerSchema).min(1).max(100),
   rules: z.array(academySceneRuleSchema).max(500).default([]),
   nextSceneId: sceneIdSchema.optional(),
+  // Режим генерации иллюстрации сцены (A6.6):
+  // layered — послойная сцена (фон + персонаж-элемент, персонаж подставляется на экземпляре);
+  // full-ai — вся иллюстрация генерируется целиком по референсу ученика на этапе подготовки урока.
+  generation: z.object({
+    mode: z.enum(['layered', 'full-ai']).default('layered'),
+    prompt: z.string().trim().max(2000).optional(),
+  }).strict().default({ mode: 'layered' }),
   metadata: z.object({
     educationalGoal: z.string().trim().max(1000).optional(),
     estimatedDurationSec: z.number().int().positive().max(86_400).optional(),

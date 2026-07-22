@@ -5,13 +5,15 @@ import {
   pickCharacterReferenceKind,
   readSceneDocument,
   resolveInstanceScene,
+  setSceneBackground,
   type CharacterInjection,
   type InstanceOverrides,
 } from '@allvision/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/require-role';
 import { HttpError } from '../utils/http-error';
-import { readCharacterRef } from '../services/child-photo-storage';
+import { readCharacterRef, readChildAsset } from '../services/child-photo-storage';
+import { ensureFullAiSceneGenerations, fullSceneStatuses } from '../services/academy-full-scene-service';
 
 export const academyLessonInstancesRouter = Router();
 academyLessonInstancesRouter.use(requireAuth);
@@ -89,6 +91,9 @@ academyLessonInstancesRouter.post('/', requireRole('TEACHER', 'METHODIST'), asyn
       await tx.lesson.update({ where: { id: lesson.id }, data: { status: 'READY' } });
       return created;
     });
+    // Запускаем генерацию цельных AI-сцен по референсу ученика (fire-and-forget, не блокирует ответ).
+    void ensureFullAiSceneGenerations({ id: instance.id, childId: lesson.child.id, version: { scene: version.scene } }, req.user!.id)
+      .catch(() => undefined);
     res.status(201).json({ instanceId: instance.id });
   } catch (err) {
     next(err);
@@ -169,8 +174,28 @@ academyLessonInstancesRouter.get('/:id/scenes', async (req: Request, res: Respon
     const instance = await loadInstanceForParticipant(req);
     const character = await characterForInstance(instance.id, instance.childId);
     const overrides = (instance.overrides ?? {}) as InstanceOverrides;
-    const scenes = readSceneDocument(instance.version.scene).map((s) => resolveInstanceScene(s, { character, overrides }));
-    res.json({ scenes, hasCharacter: Boolean(character) });
+    const statuses = await fullSceneStatuses(instance.id);
+    const scenes = readSceneDocument(instance.version.scene).map((s) => {
+      let resolved = resolveInstanceScene(s, { character, overrides });
+      // Цельная AI-сцена: если генерация по референсу ученика готова — ставим её фоном.
+      const st = statuses.get(s.id);
+      if (s.generation?.mode === 'full-ai' && st?.status === 'COMPLETED' && st.childAssetId) {
+        resolved = setSceneBackground(resolved, {
+          type: 'academy-asset',
+          assetId: st.childAssetId,
+          scope: 'child',
+          kind: 'scene',
+          fileUrl: `/api/academy/lesson-instances/${instance.id}/scene-file/${st.childAssetId}`,
+          mimeType: 'image/jpeg',
+        });
+      }
+      return resolved;
+    });
+    res.json({
+      scenes,
+      hasCharacter: Boolean(character),
+      sceneStatuses: [...statuses.values()],
+    });
   } catch (err) {
     next(err);
   }
@@ -191,6 +216,25 @@ academyLessonInstancesRouter.get('/:id/character/:refId/file', async (req: Reque
       throw new HttpError(404, 'REFERENCE_FILE_MISSING', 'Файл референса недоступен');
     });
     res.setHeader('Content-Type', ref.mimeType);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Файл сгенерированной цельной AI-сцены (участник урока), из закрытого хранилища ===
+academyLessonInstancesRouter.get('/:id/scene-file/:childAssetId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instance = await loadInstanceForParticipant(req);
+    const asset = await prisma.childAsset.findUnique({ where: { id: req.params.childAssetId } });
+    if (!asset || asset.childId !== instance.childId) {
+      throw new HttpError(404, 'SCENE_ASSET_NOT_FOUND', 'Иллюстрация сцены не найдена');
+    }
+    const buffer = await readChildAsset(asset.storageKey).catch(() => {
+      throw new HttpError(404, 'SCENE_FILE_MISSING', 'Файл иллюстрации недоступен');
+    });
+    res.setHeader('Content-Type', asset.mimeType);
     res.setHeader('Cache-Control', 'private, max-age=300');
     res.send(buffer);
   } catch (err) {
