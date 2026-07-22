@@ -56,6 +56,11 @@ export const academyBookingApi = createApi({
       query: (body) => ({ url: '/teacher/slots', method: 'POST', body }),
       invalidatesTags: ['Slots'],
     }),
+    // Сетка расписания: дни × время × повтор по неделям одним запросом.
+    createSlotsBulk: build.mutation<{ created: number; skipped: number }, { startsAt: string[]; durationMin: 25 | 45 }>({
+      query: (body) => ({ url: '/teacher/slots/bulk', method: 'POST', body }),
+      invalidatesTags: ['Slots'],
+    }),
     deleteSlot: build.mutation<{ ok: true }, string>({
       query: (id) => ({ url: `/teacher/slots/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Slots'],
@@ -85,6 +90,7 @@ export const {
   useCancelLessonMutation,
   useGetTeacherSlotsQuery,
   useCreateSlotMutation,
+  useCreateSlotsBulkMutation,
   useDeleteSlotMutation,
   useGetTeacherLessonsQuery,
   useSetLessonStatusMutation,

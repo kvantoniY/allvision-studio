@@ -1,4 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { prisma } from '@allvision/database';
 import {
   bookLessonSchema,
@@ -58,18 +59,23 @@ academyBookingRouter.get('/balance', requireAuth, requireParent, async (req: Req
 academyBookingRouter.get('/teachers', requireAuth, requireParent, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const subject = typeof req.query.subject === 'string' ? req.query.subject : undefined;
+    // Окно записи — ближайшие 90 дней: календарю на фронте нужны все свободные слоты
+    // периода, а не первые 30 подряд (иначе дальние даты выглядят пустыми).
+    const now = new Date();
+    const horizon = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const freeSlotWhere = { isBooked: false, startsAt: { gt: now, lt: horizon } };
     const teachers = await prisma.teacherProfile.findMany({
       where: {
         isActive: true,
         ...(subject ? { subjects: { has: subject } } : {}),
-        slots: { some: { isBooked: false, startsAt: { gt: new Date() } } },
+        slots: { some: freeSlotWhere },
       },
       include: {
         user: { select: { name: true, email: true } },
         slots: {
-          where: { isBooked: false, startsAt: { gt: new Date() } },
+          where: freeSlotWhere,
           orderBy: { startsAt: 'asc' },
-          take: 30,
+          take: 500,
         },
       },
     });
@@ -238,6 +244,41 @@ academyBookingRouter.post('/teacher/slots', requireAuth, requireRole('TEACHER'),
     if (startsAt <= new Date()) throw new HttpError(400, 'SLOT_IN_PAST', 'Слот должен быть в будущем');
     const slot = await prisma.teacherSlot.create({ data: { teacherId: profile.id, startsAt, durationMin: data.durationMin } });
     res.status(201).json({ slot: { id: slot.id, startsAt: slot.startsAt.toISOString(), durationMin: slot.durationMin, isBooked: slot.isBooked } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Массовое добавление слотов: расписание удобнее заводить сеткой (день × время ×
+// повтор по неделям), а не по одному. Дубли по времени тихо пропускаются.
+const bulkSlotsSchema = z.object({
+  startsAt: z.array(z.string().datetime()).min(1).max(200),
+  durationMin: z.union([z.literal(25), z.literal(45)]),
+});
+
+academyBookingRouter.post('/teacher/slots/bulk', requireAuth, requireRole('TEACHER'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = bulkSlotsSchema.parse(req.body);
+    const profile = await ensureTeacherProfile(req.user!.id);
+    const now = new Date();
+    const wanted = [...new Set(data.startsAt)]
+      .map((iso) => new Date(iso))
+      .filter((date) => date > now);
+    if (wanted.length === 0) throw new HttpError(400, 'SLOT_IN_PAST', 'Все указанные слоты в прошлом');
+
+    const existing = await prisma.teacherSlot.findMany({
+      where: { teacherId: profile.id, startsAt: { in: wanted } },
+      select: { startsAt: true },
+    });
+    const taken = new Set(existing.map((s) => s.startsAt.getTime()));
+    const fresh = wanted.filter((date) => !taken.has(date.getTime()));
+
+    if (fresh.length > 0) {
+      await prisma.teacherSlot.createMany({
+        data: fresh.map((startsAt) => ({ teacherId: profile.id, startsAt, durationMin: data.durationMin })),
+      });
+    }
+    res.status(201).json({ created: fresh.length, skipped: wanted.length - fresh.length });
   } catch (err) {
     next(err);
   }

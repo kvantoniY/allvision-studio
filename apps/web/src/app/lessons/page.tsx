@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { CalendarClock, Check, Clock, Loader2, Video, Wallet, X } from 'lucide-react';
+import { CalendarClock, Check, ChevronLeft, ChevronRight, Clock, Loader2, Video, Wallet, X } from 'lucide-react';
 import { LESSON_STATUS_LABELS, type LessonPackageOption } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -115,76 +115,259 @@ function PackagesModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** Локальный ключ дня YYYY-MM-DD (не UTC — календарь показывает время пользователя). */
+function dayKey(date: Date): string {
+  return date.toLocaleDateString('sv-SE');
+}
+
+function monthTitle(date: Date): string {
+  return date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
+}
+
+/** Сетка месяца от понедельника: 6 недель по 7 дней, чтобы высота не прыгала. */
+function monthGrid(month: Date): Date[] {
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const offset = (first.getDay() + 6) % 7; // Пн = 0
+  const start = new Date(first.getFullYear(), first.getMonth(), 1 - offset);
+  return Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
+}
+
+const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+
+function StepLabel({ n, text }: { n: number; text: string }) {
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{n}</span>
+      <span className="text-sm font-semibold">{text}</span>
+    </div>
+  );
+}
+
 function BookingSection() {
   const children = useListChildrenQuery();
   const teachers = useGetTeachersQuery();
+  const balance = useGetBalanceQuery();
   const [book, { isLoading }] = useBookLessonMutation();
-  const [childId, setChildId] = useState<string>('');
-  const kids = children.data?.items ?? [];
-  const activeChild = childId || kids[0]?.id || '';
+  const [childId, setChildId] = useState('');
+  const [teacherId, setTeacherId] = useState('');
+  const [selectedDay, setSelectedDay] = useState('');
+  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
-  const doBook = async (slotId: string) => {
+  const kids = children.data?.items ?? [];
+  const list = teachers.data?.teachers ?? [];
+  const activeChild = childId || kids[0]?.id || '';
+  const activeTeacher = list.find((t) => t.teacherId === teacherId) ?? list[0];
+
+  // Свободные слоты выбранного преподавателя, разложенные по дням.
+  const slotsByDay = new Map<string, typeof list[number]['slots']>();
+  for (const slot of activeTeacher?.slots ?? []) {
+    const key = dayKey(new Date(slot.startsAt));
+    const bucket = slotsByDay.get(key);
+    if (bucket) bucket.push(slot);
+    else slotsByDay.set(key, [slot]);
+  }
+
+  const daySlots = slotsByDay.get(selectedDay) ?? [];
+  const availableByDuration = new Map((balance.data?.balance ?? []).map((b) => [b.durationMin, b.available]));
+
+  const doBook = async (slotId: string, durationMin: number) => {
     if (!activeChild) {
-      toast({ title: 'Добавьте профиль ребёнка', variant: 'destructive' });
+      toast({ title: 'Сначала добавьте профиль ребёнка', variant: 'destructive' });
       return;
     }
     try {
       await book({ childId: activeChild, slotId }).unwrap();
-      toast({ title: 'Урок забронирован' });
+      toast({ title: 'Урок забронирован', description: 'Найдите его в списке «Мои уроки» ниже.' });
+      setSelectedDay('');
     } catch (err) {
-      toast({ title: 'Не удалось записать', description: apiErr(err), variant: 'destructive' });
+      toast({
+        title: availableByDuration.get(durationMin) ? 'Не удалось записать' : `Нет оплаченных занятий на ${durationMin} мин`,
+        description: apiErr(err),
+        variant: 'destructive',
+      });
     }
   };
 
-  const list = teachers.data?.teachers ?? [];
+  if (teachers.isLoading) return <div className="h-40 animate-pulse rounded-2xl bg-muted" />;
+
+  if (kids.length === 0) {
+    return (
+      <Card className="border-border bg-card">
+        <CardContent className="p-5 text-sm text-muted-foreground">
+          Чтобы записаться на урок, сначала добавьте профиль ребёнка в разделе{' '}
+          <Link href="/family" className="font-medium text-primary hover:underline">Семья</Link>.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (list.length === 0) {
+    return (
+      <Card className="border-border bg-card">
+        <CardContent className="p-5 text-sm text-muted-foreground">
+          Пока нет преподавателей со свободным расписанием. Мы добавим слоты в ближайшее время.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const today = dayKey(new Date());
 
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold">Записаться на урок</h2>
-      {kids.length > 1 && (
-        <div className="flex flex-wrap gap-1.5">
-          {kids.map((k) => (
-            <button
-              key={k.id}
-              type="button"
-              onClick={() => setChildId(k.id)}
-              className={cn('rounded-full border px-3 py-1.5 text-sm', k.id === activeChild ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground')}
-            >
-              {k.name}
-            </button>
-          ))}
+    <Card className="border-border bg-card shadow-sm">
+      <CardContent className="space-y-6 p-5">
+        <h2 className="text-lg font-semibold">Записаться на урок</h2>
+
+        {kids.length > 1 && (
+          <div>
+            <StepLabel n={1} text="Кто занимается" />
+            <div className="flex flex-wrap gap-1.5">
+              {kids.map((k) => (
+                <button
+                  key={k.id}
+                  type="button"
+                  onClick={() => setChildId(k.id)}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-sm transition',
+                    k.id === activeChild ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:border-primary/40',
+                  )}
+                >
+                  {k.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <StepLabel n={kids.length > 1 ? 2 : 1} text="Преподаватель" />
+          <div className="grid gap-2 sm:grid-cols-2">
+            {list.map((t) => {
+              const selected = t.teacherId === activeTeacher?.teacherId;
+              return (
+                <button
+                  key={t.teacherId}
+                  type="button"
+                  onClick={() => { setTeacherId(t.teacherId); setSelectedDay(''); }}
+                  className={cn(
+                    'rounded-xl border p-3 text-left transition',
+                    selected ? 'border-primary bg-accent/50' : 'border-border hover:border-primary/40',
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
+                      {t.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{t.name}</p>
+                      <p className="text-xs text-muted-foreground">{t.slots.length} свободных слотов</p>
+                    </div>
+                  </div>
+                  {t.bio && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{t.bio}</p>}
+                  {t.subjects.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {t.subjects.slice(0, 3).map((s) => (
+                        <span key={s} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{s}</span>
+                      ))}
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      )}
-      {teachers.isLoading ? (
-        <div className="h-20 animate-pulse rounded-xl bg-muted" />
-      ) : list.length === 0 ? (
-        <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
-          Пока нет преподавателей со свободными слотами.
-        </p>
-      ) : (
-        list.map((t) => (
-          <Card key={t.teacherId} className="border-border bg-card">
-            <CardContent className="p-4">
-              <p className="font-medium">{t.name}</p>
-              {t.bio && <p className="mb-2 text-sm text-muted-foreground">{t.bio}</p>}
-              <div className="flex flex-wrap gap-1.5">
-                {t.slots.map((s) => (
+
+        <div>
+          <StepLabel n={kids.length > 1 ? 3 : 2} text="Свободная дата" />
+          <div className="rounded-xl border border-border p-3">
+            <div className="mb-3 flex items-center justify-between">
+              <button
+                type="button"
+                aria-label="Предыдущий месяц"
+                onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <span className="text-sm font-medium capitalize">{monthTitle(month)}</span>
+              <button
+                type="button"
+                aria-label="Следующий месяц"
+                onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground">
+              {WEEKDAYS.map((d) => <span key={d}>{d}</span>)}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {monthGrid(month).map((date) => {
+                const key = dayKey(date);
+                const inMonth = date.getMonth() === month.getMonth();
+                const count = slotsByDay.get(key)?.length ?? 0;
+                const selected = key === selectedDay;
+                return (
                   <button
-                    key={s.id}
+                    key={key}
                     type="button"
-                    disabled={isLoading}
-                    onClick={() => doBook(s.id)}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-primary/40 px-3 py-1.5 text-sm text-primary transition hover:bg-accent disabled:opacity-50"
+                    disabled={count === 0}
+                    onClick={() => setSelectedDay(key)}
+                    className={cn(
+                      'relative flex h-10 flex-col items-center justify-center rounded-lg text-sm transition',
+                      !inMonth && 'opacity-40',
+                      count === 0 && 'cursor-default text-muted-foreground',
+                      count > 0 && !selected && 'border border-primary/40 font-medium text-primary hover:bg-accent',
+                      selected && 'bg-primary font-semibold text-primary-foreground',
+                      key === today && !selected && 'ring-1 ring-inset ring-border',
+                    )}
                   >
-                    <Clock className="h-3.5 w-3.5" /> {formatSlot(s.startsAt)} · {s.durationMin}м
+                    {date.getDate()}
+                    {count > 0 && !selected && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-primary" />}
                   </button>
-                ))}
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {selectedDay && (
+          <div>
+            <StepLabel n={kids.length > 1 ? 4 : 3} text="Время занятия" />
+            {daySlots.length === 0 ? (
+              <p className="text-sm text-muted-foreground">На этот день слотов не осталось.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {daySlots.map((s) => {
+                  const credits = availableByDuration.get(s.durationMin) ?? 0;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => doBook(s.id, s.durationMin)}
+                      title={credits > 0 ? undefined : `Нет оплаченных занятий на ${s.durationMin} мин`}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition disabled:opacity-50',
+                        credits > 0 ? 'border-primary/40 text-primary hover:bg-accent' : 'border-border text-muted-foreground hover:border-primary/40',
+                      )}
+                    >
+                      <Clock className="h-3.5 w-3.5" />
+                      {new Date(s.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                      <span className="text-xs opacity-70">· {s.durationMin} мин</span>
+                    </button>
+                  );
+                })}
               </div>
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </div>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              При записи списывается одно оплаченное занятие соответствующей длительности.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

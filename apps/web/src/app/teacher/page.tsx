@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import {
   useCreateSlotMutation,
+  useCreateSlotsBulkMutation,
   useDeleteSlotMutation,
   useGetTeacherEarningsQuery,
   useGetTeacherLessonsQuery,
@@ -172,12 +173,23 @@ const NEXT_STATUS: { value: LessonStatusValue; label: string }[] = [
   { value: 'NO_SHOW', label: 'Неявка' },
 ];
 
+/** Время приёма: 08:00–21:30 с шагом 30 минут. */
+const SLOT_TIMES = Array.from({ length: 28 }, (_, i) => {
+  const minutes = 8 * 60 + i * 30;
+  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+});
+
 function SlotsPanel() {
   const { data, isLoading } = useGetTeacherSlotsQuery();
   const [createSlot, { isLoading: creating }] = useCreateSlotMutation();
+  const [createSlotsBulk, { isLoading: bulkCreating }] = useCreateSlotsBulkMutation();
   const [deleteSlot] = useDeleteSlotMutation();
   const [startsAt, setStartsAt] = useState('');
   const [duration, setDuration] = useState<25 | 45>(25);
+  // Сетка: день + выбранные времена + повтор по неделям.
+  const [gridDate, setGridDate] = useState(() => new Date().toLocaleDateString('sv-SE'));
+  const [gridTimes, setGridTimes] = useState<string[]>([]);
+  const [repeatWeeks, setRepeatWeeks] = useState(1);
   const slots = data?.slots ?? [];
 
   const add = async () => {
@@ -191,31 +203,103 @@ function SlotsPanel() {
     }
   };
 
+  const addGrid = async () => {
+    if (!gridDate || gridTimes.length === 0) return;
+    const [year, month, day] = gridDate.split('-').map(Number);
+    const iso: string[] = [];
+    for (let week = 0; week < repeatWeeks; week += 1) {
+      for (const time of gridTimes) {
+        const [hour, minute] = time.split(':').map(Number);
+        iso.push(new Date(year, month - 1, day + week * 7, hour, minute).toISOString());
+      }
+    }
+    try {
+      const result = await createSlotsBulk({ startsAt: iso, durationMin: duration }).unwrap();
+      setGridTimes([]);
+      toast({
+        title: `Добавлено слотов: ${result.created}`,
+        description: result.skipped > 0 ? `Пропущено дублей: ${result.skipped}` : undefined,
+      });
+    } catch (err) {
+      toast({ title: 'Не удалось добавить', description: apiErr(err), variant: 'destructive' });
+    }
+  };
+
   return (
     <Card className="border-border bg-card shadow-sm">
       <CardContent className="p-5">
         <h2 className="mb-3 flex items-center gap-2 font-semibold"><CalendarPlus className="h-4 w-4" /> Свободные слоты</h2>
-        <div className="mb-4 flex flex-wrap items-end gap-2">
-          <div className="space-y-1.5">
-            <Label>Дата и время</Label>
-            <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="w-56" />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Длительность</Label>
-            <div className="flex gap-1">
-              {([25, 45] as const).map((d) => (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => setDuration(d)}
-                  className={`rounded-md border px-3 py-2 text-sm ${duration === d ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground'}`}
-                >
-                  {d}м
-                </button>
-              ))}
+
+        <div className="mb-4 rounded-xl border border-border p-3">
+          <p className="mb-3 text-sm font-medium">Расписание сеткой</p>
+          <div className="mb-3 flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label>День</Label>
+              <Input type="date" value={gridDate} onChange={(e) => setGridDate(e.target.value)} className="w-44" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Длительность</Label>
+              <div className="flex gap-1">
+                {([25, 45] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDuration(d)}
+                    className={`rounded-md border px-3 py-2 text-sm ${duration === d ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground'}`}
+                  >
+                    {d}м
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Повторить недель</Label>
+              <div className="flex gap-1">
+                {[1, 2, 4, 8].map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setRepeatWeeks(w)}
+                    className={`rounded-md border px-3 py-2 text-sm ${repeatWeeks === w ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground'}`}
+                  >
+                    {w}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <Button onClick={add} disabled={creating || !startsAt}>
+          <div className="mb-3 flex flex-wrap gap-1">
+            {SLOT_TIMES.map((time) => {
+              const selected = gridTimes.includes(time);
+              return (
+                <button
+                  key={time}
+                  type="button"
+                  onClick={() => setGridTimes((prev) => (selected ? prev.filter((t) => t !== time) : [...prev, time]))}
+                  className={`rounded-md border px-2 py-1 text-xs ${selected ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground hover:border-primary/40'}`}
+                >
+                  {time}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex items-center gap-3">
+            <Button onClick={addGrid} disabled={bulkCreating || gridTimes.length === 0}>
+              {bulkCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Добавить {gridTimes.length * repeatWeeks || ''} слотов
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              Выберите время — слоты создадутся на выбранный день недели на {repeatWeeks} нед. вперёд.
+            </span>
+          </div>
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-end gap-2">
+          <div className="space-y-1.5">
+            <Label>Один слот вручную</Label>
+            <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="w-56" />
+          </div>
+          <Button variant="outline" onClick={add} disabled={creating || !startsAt}>
             {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Добавить
           </Button>
         </div>

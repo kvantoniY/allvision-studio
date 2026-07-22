@@ -16,6 +16,9 @@ type StatusFilter = 'all' | 'active' | 'deleted';
 function roleLabel(role: AdminUser['role']) {
   if (role === 'ADMIN') return 'Админ';
   if (role === 'READONLY_ADMIN') return 'Readonly-админ';
+  if (role === 'TEACHER') return 'Преподаватель';
+  if (role === 'METHODIST') return 'Методист';
+  if (role === 'PARENT') return 'Родитель';
   return 'Пользователь';
 }
 
@@ -49,7 +52,10 @@ export default function AdminUsersPage() {
       <div className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-950 p-4 md:grid-cols-4">
         <select value={role} onChange={(event) => { setPage(1); setRole(event.target.value as RoleFilter); }} className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100">
           <option value="all">Все роли</option>
-          <option value="USER">Пользователи</option>
+          <option value="PARENT">Родители</option>
+          <option value="TEACHER">Преподаватели</option>
+          <option value="METHODIST">Методисты</option>
+          <option value="USER">Пользователи (legacy)</option>
           <option value="ADMIN">Админы</option>
           <option value="READONLY_ADMIN">Readonly-админы</option>
         </select>

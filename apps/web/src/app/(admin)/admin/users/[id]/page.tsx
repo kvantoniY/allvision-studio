@@ -11,11 +11,19 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
-import { type AdminUser, useGetAdminUserQuery, useUpdateAdminUserMutation } from '@/store/api/admin-users-api';
+import {
+  type AdminUser,
+  useGetAdminUserQuery,
+  useGrantLessonCreditsMutation,
+  useUpdateAdminUserMutation,
+} from '@/store/api/admin-users-api';
 
 function roleLabel(role: string) {
   if (role === 'ADMIN') return 'Админ';
   if (role === 'READONLY_ADMIN') return 'Readonly-админ';
+  if (role === 'TEACHER') return 'Преподаватель';
+  if (role === 'METHODIST') return 'Методист';
+  if (role === 'PARENT') return 'Родитель';
   return 'Пользователь';
 }
 
@@ -59,6 +67,9 @@ export default function AdminUserDetailPage() {
   const [delta, setDelta] = useState('');
   const [reason, setReason] = useState('');
   const [role, setRole] = useState<AdminUser['role']>('USER');
+  const [grantLessonCredits, grantState] = useGrantLessonCreditsMutation();
+  const [grantDuration, setGrantDuration] = useState<25 | 45>(25);
+  const [grantCount, setGrantCount] = useState(4);
   const rate = settings.data?.settings.usdToRub ?? 80;
 
   useEffect(() => {
@@ -108,20 +119,20 @@ export default function AdminUserDetailPage() {
       toast({ title: 'Роль не изменилась' });
       return;
     }
-    if (
-      !window.confirm(
-        role === 'ADMIN'
-          ? 'Выдать пользователю права администратора?'
-          : role === 'READONLY_ADMIN'
-            ? 'Выдать роль READONLY_ADMIN (только чтение админки)?'
-            : 'Снять роль администратора?',
-      )
-    ) {
-      return;
-    }
+    if (!window.confirm(`Назначить пользователю роль «${roleLabel(role)}»?`)) return;
     try {
       await updateUser({ id: params.id, role }).unwrap();
       toast({ title: `Роль обновлена: ${roleLabel(role)}` });
+    } catch (error) {
+      toast({ title: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const grantLessons = async () => {
+    try {
+      const result = await grantLessonCredits({ id: params.id, durationMin: grantDuration, count: grantCount }).unwrap();
+      const available = result.balance.find((b) => b.durationMin === grantDuration)?.available ?? result.granted;
+      toast({ title: `Выдано ${result.granted} занятий по ${grantDuration} мин`, description: `Доступно: ${available}` });
     } catch (error) {
       toast({ title: apiErrorMessage(error), variant: 'destructive' });
     }
@@ -249,7 +260,8 @@ export default function AdminUserDetailPage() {
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="font-semibold text-white">Роль</h2>
         <p className="mt-1 text-xs text-slate-500">
-          ADMIN — полный доступ к админке. READONLY_ADMIN — только просмотр. USER — обычный пользователь.
+          PARENT — родитель (кабинет семьи и запись на уроки). TEACHER — преподаватель (слоты, уроки, материалы).
+          METHODIST — учебная программа и конструктор. ADMIN — полный доступ. READONLY_ADMIN — только просмотр.
         </p>
         <div className="mt-4 flex max-w-md items-end gap-3">
           <div className="flex-1 space-y-2">
@@ -260,7 +272,10 @@ export default function AdminUserDetailPage() {
               onChange={(event) => setRole(event.target.value as AdminUser['role'])}
               className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
             >
-              <option value="USER">Пользователь</option>
+              <option value="PARENT">Родитель</option>
+              <option value="TEACHER">Преподаватель</option>
+              <option value="METHODIST">Методист</option>
+              <option value="USER">Пользователь (legacy)</option>
               <option value="ADMIN">Админ</option>
               <option value="READONLY_ADMIN">Readonly-админ</option>
             </select>
@@ -273,6 +288,48 @@ export default function AdminUserDetailPage() {
           >
             Сохранить роль
           </Button>
+        </div>
+
+        {/* Ручная выдача занятий: тестовые прогоны и компенсации без оплаты. */}
+        <div className="mt-6 border-t border-zinc-800 pt-4">
+          <h3 className="font-medium text-white">Выдать занятия (без оплаты)</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Начисляет родителю занятия на баланс (источник «manual»), чтобы записаться на урок без ЮKassa.
+          </p>
+          <div className="mt-3 flex max-w-md items-end gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="grant-duration">Длительность</Label>
+              <select
+                id="grant-duration"
+                value={grantDuration}
+                onChange={(event) => setGrantDuration(Number(event.target.value) as 25 | 45)}
+                className="flex h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+              >
+                <option value={25}>25 минут</option>
+                <option value={45}>45 минут</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="grant-count">Количество</Label>
+              <Input
+                id="grant-count"
+                type="number"
+                min={1}
+                max={50}
+                value={grantCount}
+                onChange={(event) => setGrantCount(Number(event.target.value))}
+                className="w-28"
+              />
+            </div>
+            <Button
+              type="button"
+              disabled={grantState.isLoading || grantCount < 1}
+              onClick={grantLessons}
+              className="bg-violet-600 hover:bg-violet-500"
+            >
+              Выдать
+            </Button>
+          </div>
         </div>
         {item.id === auth.user?.id && item.role === 'ADMIN' ? (
           <p className="mt-2 text-xs text-yellow-300">Нельзя снять роль ADMIN с собственного аккаунта.</p>
