@@ -5,6 +5,7 @@ import type {
   ChildPhotoDto,
   ChildProfileDto,
   ConsentTypeValue,
+  DeletionLogDto,
 } from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 
@@ -42,7 +43,7 @@ export const familyApi = createApi({
       query: ({ childId, body }) => ({ url: `/children/${childId}`, method: 'PATCH', body }),
       invalidatesTags: (_r, _e, { childId }) => ['Child', { type: 'Child', id: childId }],
     }),
-    deleteChild: build.mutation<{ ok: true }, string>({
+    deleteChild: build.mutation<{ ok: true; deletion: DeletionLogDto }, string>({
       query: (childId) => ({ url: `/children/${childId}`, method: 'DELETE' }),
       invalidatesTags: ['Child'],
     }),

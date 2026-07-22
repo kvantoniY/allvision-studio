@@ -171,7 +171,7 @@ export async function changePassword(
   };
 }
 
-export async function deleteAccount(userId: string, password: string): Promise<void> {
+export async function deleteAccount(userId: string, password: string): Promise<{ avatar: string | null }> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
 
@@ -180,12 +180,6 @@ export async function deleteAccount(userId: string, password: string): Promise<v
     throw new HttpError(400, 'INVALID_PASSWORD', 'Пароль неверный');
   }
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      deletedAt: new Date(),
-      // Освобождаем email под возможную перерегистрацию.
-      email: `deleted_${user.id}@allvision.local`,
-    },
-  });
+  // Фактическую очистку/обезличивание выполняет A10 deletion-service после проверки пароля.
+  return { avatar: user.avatar };
 }

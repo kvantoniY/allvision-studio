@@ -1149,10 +1149,12 @@ function DangerSection() {
 
   const onDelete = async () => {
     try {
-      await deleteAccount({ password: deletePassword, confirmation: 'УДАЛИТЬ' as const }).unwrap();
+      const result = await deleteAccount({ password: deletePassword, confirmation: 'УДАЛИТЬ' as const }).unwrap();
       dispatch(clearUser());
       dispatch(authApi.util.resetApiState());
-      toast({ title: 'Аккаунт удалён' });
+      toast(result.deletion.status === 'FAILED'
+        ? { title: 'Аккаунт обезличен', description: 'Ошибка физической очистки записана в журнал для повторной обработки.', variant: 'destructive' }
+        : { title: 'Аккаунт удалён', description: 'Физическая очистка файлов поставлена в защищённую очередь.' });
       router.replace('/');
     } catch (error) {
       toast({ title: 'Ошибка удаления', description: apiErrorMessage(error), variant: 'destructive' });
@@ -1167,7 +1169,7 @@ function DangerSection() {
             <ShieldAlert className="h-4 w-4" />
             Удаление аккаунта
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">Необратимо: данные, проекты и заказы будут удалены через 30 дней.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Необратимо: личные данные сразу обезличиваются, файлы удаляются фоновой задачей с журналом.</p>
         </div>
         {!showForm ? (
           <Button variant="outline" className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={() => setShowForm(true)}>
@@ -1179,7 +1181,7 @@ function DangerSection() {
         <div className="mt-4 space-y-4">
           <Alert variant="destructive">
             <AlertDescription>
-              Удаление аккаунта необратимо. Данные, проекты и заказы будут удалены через 30 дней.
+              Удаление аккаунта необратимо. Личные данные сразу обезличиваются, детские и пользовательские файлы ставятся в очередь защищённой очистки; финансовые записи сохраняются по требованиям учёта.
             </AlertDescription>
           </Alert>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">

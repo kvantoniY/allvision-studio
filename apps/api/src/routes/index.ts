@@ -24,6 +24,7 @@ import { academyMaterialsRouter } from './academy-materials';
 import { academyLessonTemplatesRouter } from './academy-lesson-templates';
 import { academyLessonInstancesRouter } from './academy-lesson-instances';
 import { academyGamificationRouter } from './academy-gamification';
+import { academyOperationsRouter } from './academy-operations';
 
 export const router = Router();
 
@@ -54,3 +55,4 @@ router.use('/academy/materials', academyMaterialsRouter);
 router.use('/academy/lesson-templates', academyLessonTemplatesRouter);
 router.use('/academy/lesson-instances', academyLessonInstancesRouter);
 router.use('/academy/gamification', academyGamificationRouter);
+router.use('/academy/operations', academyOperationsRouter);

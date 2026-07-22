@@ -45,5 +45,6 @@ export const config = {
     '/scenarios/:path*',
     '/pricing',
     '/kid/:path*',
+    '/messages/:path*',
   ],
 };

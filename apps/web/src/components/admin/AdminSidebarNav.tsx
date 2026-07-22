@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, Blocks, Clapperboard, Coins, CreditCard, FolderKanban, Gauge, GraduationCap, Images, LayoutGrid, Library, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
+import { Activity, Blocks, Clapperboard, Coins, CreditCard, FolderKanban, Gauge, GraduationCap, HandCoins, Images, LayoutGrid, Library, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -50,6 +50,7 @@ const navGroups: NavGroup[] = [
     label: 'Финансы',
     items: [
       { href: '/admin/payments', label: 'Платежи', icon: CreditCard },
+      { href: '/admin/payouts', label: 'Выплаты', icon: HandCoins },
       { href: '/admin/token-packages', label: 'Пакеты токенов', icon: Coins },
     ],
   },

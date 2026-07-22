@@ -23,16 +23,14 @@ import { uploadChildPhotos } from '../middleware/upload';
 import { HttpError } from '../utils/http-error';
 import {
   deleteChildPhoto,
-  deleteChildPhotoDir,
-  deleteCharacterRefDir,
   deleteCharacterRefFile,
-  deleteChildAssetDir,
   readCharacterRef,
   readChildPhoto,
   saveChildPhoto,
 } from '../services/child-photo-storage';
 import { addCharacterProfileJob } from '../queues';
 import { buildChildProgress } from '../services/academy-progress-service';
+import { getDeletionLog, requestChildDeletion } from '../services/academy-deletion-service';
 
 export const familyRouter = Router();
 
@@ -183,13 +181,16 @@ familyRouter.patch('/children/:childId', async (req: Request, res: Response, nex
 
 familyRouter.delete('/children/:childId', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    await findOwnedChild(req.user!.id, req.params.childId);
-    // Каскадная очистка: БД + все каталоги закрытого хранилища ребёнка.
-    await prisma.childProfile.delete({ where: { id: req.params.childId } });
-    await deleteChildPhotoDir(req.user!.id, req.params.childId);
-    await deleteCharacterRefDir(req.user!.id, req.params.childId);
-    await deleteChildAssetDir(req.user!.id, req.params.childId);
-    res.json({ ok: true });
+    const deletion = await requestChildDeletion(req.user!.id, req.params.childId);
+    res.status(202).json({ ok: true, deletion });
+  } catch (err) {
+    next(err);
+  }
+});
+
+familyRouter.get('/deletions/:deletionId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ deletion: await getDeletionLog(req.user!.id, req.params.deletionId) });
   } catch (err) {
     next(err);
   }
@@ -500,6 +501,16 @@ familyRouter.get('/children/:childId/character/references/:refId/file', async (r
     const stored = await prisma.characterReference.findUniqueOrThrow({ where: { id: ref.id } });
     const buffer = await readCharacterRef(stored.storageKey).catch(() => {
       throw new HttpError(404, 'REFERENCE_FILE_MISSING', 'Файл референса недоступен');
+    });
+    await prisma.accessLog.create({
+      data: {
+        actorId: req.user!.id,
+        childId: req.params.childId,
+        actorRole: req.user!.role,
+        action: 'VIEW',
+        resourceType: 'CHARACTER_REFERENCE',
+        resourceId: stored.id,
+      },
     });
     res.setHeader('Content-Type', stored.mimeType);
     res.setHeader('Cache-Control', 'private, max-age=300');

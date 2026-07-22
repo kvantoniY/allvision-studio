@@ -215,3 +215,30 @@ const childPhotoMulter = multer({
   fileFilter: imageFileFilter,
 });
 export const uploadChildPhotos = childPhotoMulter.array('photos', 10);
+
+// Academy A10: изображения в диалоге хранятся только в private-uploads.
+const academyMessageMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: imageFileFilter,
+});
+export const uploadAcademyMessageImage = academyMessageMulter.single('image');
+
+function payoutProofFilter(
+  _req: Express.Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback,
+) {
+  if (ALLOWED_IMAGE_MIME.has(file.mimetype) || file.mimetype === 'application/pdf') {
+    cb(null, true);
+    return;
+  }
+  cb(new Error(`INVALID_MIME: ${file.mimetype}`));
+}
+
+const payoutProofMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: payoutProofFilter,
+});
+export const uploadPayoutProof = payoutProofMulter.single('proof');

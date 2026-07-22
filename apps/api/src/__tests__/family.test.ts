@@ -3,6 +3,17 @@ import { prisma } from '@allvision/database';
 import { CONSENT_TYPES } from '@allvision/shared';
 import { app } from '../app';
 
+jest.mock('../queues', () => ({
+  addAcademyDeletionJob: jest.fn().mockResolvedValue({ id: 'family-deletion-job-test' }),
+  addAcademyGenerationJob: jest.fn(),
+  addCharacterProfileJob: jest.fn().mockResolvedValue({ id: 'character-job-test' }),
+  addProjectJob: jest.fn(),
+  addFairyTaleScriptJob: jest.fn(),
+  addCharacterJob: jest.fn(),
+  addEpisodeJob: jest.fn(),
+  addServicePipelineJob: jest.fn(),
+}));
+
 const PARENT_EMAIL = `family-parent-${Date.now()}@example.com`;
 const OTHER_EMAIL = `family-other-${Date.now()}@example.com`;
 const PASSWORD = 'password123';
@@ -157,14 +168,21 @@ describe('family: consents gate photo uploads', () => {
     expect(res.status).toBe(403);
   });
 
-  it('deleting the child cascades photos and consents', async () => {
+  it('deleting the child anonymizes the profile and cascades personal materials', async () => {
     const res = await request(app)
       .delete(`/api/family/children/${childId}`)
       .set('Cookie', parentCookies);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
+    expect(res.body.deletion.scope).toBe('CHILD');
 
     expect(await prisma.childPhoto.count({ where: { childId } })).toBe(0);
     expect(await prisma.consent.count({ where: { childId } })).toBe(0);
+    const tombstone = await prisma.childProfile.findUniqueOrThrow({ where: { id: childId } });
+    expect(tombstone.deletedAt).not.toBeNull();
+    expect(tombstone.anonymizedAt).not.toBeNull();
+    expect(tombstone.anonymizedKey).toHaveLength(64);
+    expect(tombstone.birthDate).toBeNull();
+    expect(tombstone.notes).toBeNull();
   });
 });
 

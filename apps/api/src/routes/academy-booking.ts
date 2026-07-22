@@ -25,6 +25,7 @@ import {
   topicTitles,
 } from '../services/academy-booking-service';
 import { awardLessonCompletion } from '../services/academy-gamification-service';
+import { addLessonSystemMessage } from '../services/academy-operations-service';
 
 export const academyBookingRouter = Router();
 
@@ -125,6 +126,12 @@ academyBookingRouter.post('/booking', requireAuth, requireParent, async (req: Re
       await tx.teacherEarning.create({
         data: { lessonId: created.id, teacherId: slot.teacherId, amountRub: teacherEarningRub(created.priceRub), status: 'PENDING' },
       });
+      await addLessonSystemMessage(tx, {
+        parentId: req.user!.id,
+        teacherId: slot.teacherId,
+        childId: child.id,
+        body: `Занятие забронировано на ${slot.startsAt.toLocaleString('ru-RU')}.`,
+      });
       return created;
     });
 
@@ -186,6 +193,12 @@ academyBookingRouter.post('/lessons/:id/cancel', requireAuth, async (req: Reques
           data: { parentId: lesson.child.parentId, durationMin: lesson.durationMin, source: 'refund', lessonId: lesson.id },
         });
       }
+      await addLessonSystemMessage(tx, {
+        parentId: lesson.child.parentId,
+        teacherId: lesson.teacherId,
+        childId: lesson.childId,
+        body: by === 'teacher' ? 'Преподаватель отменил занятие.' : 'Родитель отменил занятие.',
+      });
     });
     res.json({ ok: true, refunded: outcome.refundCredit });
   } catch (err) {
@@ -265,11 +278,22 @@ academyBookingRouter.post('/teacher/lessons/:id/status', requireAuth, requireRol
     const allowed: LessonStatusValue[] = ['AWAITING_PREP', 'GENERATING', 'READY', 'IN_PROGRESS', 'COMPLETED', 'NO_SHOW'];
     if (!allowed.includes(status)) throw new HttpError(400, 'INVALID_STATUS', 'Недопустимый статус урока');
     const profile = await ensureTeacherProfile(req.user!.id);
-    const lesson = await prisma.lesson.findFirst({ where: { id: req.params.id, teacherId: profile.id } });
+    const lesson = await prisma.lesson.findFirst({
+      where: { id: req.params.id, teacherId: profile.id },
+      include: { child: { select: { parentId: true } } },
+    });
     if (!lesson) throw new HttpError(404, 'LESSON_NOT_FOUND', 'Урок не найден');
 
     await prisma.$transaction(async (tx) => {
       await tx.lesson.update({ where: { id: lesson.id }, data: { status } });
+      if (status === 'READY' && lesson.status !== 'READY') {
+        await addLessonSystemMessage(tx, {
+          parentId: lesson.child.parentId,
+          teacherId: lesson.teacherId,
+          childId: lesson.childId,
+          body: 'Материалы готовы: урок подготовлен преподавателем.',
+        });
+      }
       // Завершённый урок делает начисление доступным к выплате; неявка — списание без начисления.
       if (status === 'COMPLETED') {
         await tx.teacherEarning.updateMany({ where: { lessonId: lesson.id, status: 'PENDING' }, data: { status: 'AVAILABLE' } });

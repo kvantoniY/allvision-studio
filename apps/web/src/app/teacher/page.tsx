@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { CalendarPlus, Gift, GraduationCap, Loader2, Sparkles, Trash2, Wallet } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { CalendarPlus, FileText, Gift, GraduationCap, Loader2, Sparkles, Trash2, Wallet } from 'lucide-react';
 import {
   EARNING_STATUS_LABELS,
   LESSON_STATUS_LABELS,
@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import {
   useCreateSlotMutation,
@@ -29,6 +30,10 @@ import {
   useGrantTeacherRewardMutation,
   useGrantTeacherXpMutation,
 } from '@/store/api/academy-gamification-api';
+import {
+  useGetTeacherLessonReportQuery,
+  useSaveTeacherLessonReportMutation,
+} from '@/store/api/academy-operations-api';
 
 function apiErr(err: unknown): string {
   const d = (err as { data?: { error?: { message?: string } } })?.data;
@@ -102,6 +107,58 @@ function TeacherRewardPanel({ childId, childName }: { childId: string; childName
             </div>
           )}
           <p className="text-xs text-muted-foreground">Для персонального костюма выберите готовую генерацию из закрытой библиотеки ребёнка.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LessonReportPanel({ lessonId, childId }: { lessonId: string; childId: string }) {
+  const reportQuery = useGetTeacherLessonReportQuery(lessonId);
+  const catalogQuery = useGetTeacherRewardCatalogQuery(childId);
+  const [saveReport, saveState] = useSaveTeacherLessonReportMutation();
+  const [open, setOpen] = useState(false);
+  const [summary, setSummary] = useState('');
+  const [successes, setSuccesses] = useState('');
+  const [recommendation, setRecommendation] = useState('');
+  const [assetIds, setAssetIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const report = reportQuery.data?.report;
+    if (!report) return;
+    setSummary(report.summary);
+    setSuccesses(report.successes);
+    setRecommendation(report.recommendation);
+    setAssetIds(report.resultAssets.map((asset) => asset.id));
+  }, [reportQuery.data?.report]);
+
+  const submit = async () => {
+    try {
+      await saveReport({ lessonId, body: { summary, successes, recommendation, resultAssetIds: assetIds } }).unwrap();
+      toast({ title: 'Отчёт отправлен родителю' });
+      setOpen(false);
+    } catch (error) {
+      toast({ title: 'Не удалось отправить отчёт', description: apiErr(error), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl bg-orange-50 p-3">
+      <button type="button" className="flex w-full items-center justify-between text-left text-sm font-semibold text-orange-900" onClick={() => setOpen((value) => !value)}>
+        <span className="flex items-center gap-2"><FileText className="h-4 w-4" /> {reportQuery.data?.report ? 'Отчёт родителю отправлен' : 'Заполнить отчёт родителю'}</span>
+        <span className="text-xs">{open ? 'Скрыть' : reportQuery.data?.report ? 'Изменить' : 'Открыть'}</span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3 border-t border-orange-200 pt-3">
+          <div><Label>Что прошли</Label><Textarea value={summary} onChange={(event) => setSummary(event.target.value)} maxLength={4000} placeholder="Кратко опишите занятие" /></div>
+          <div><Label>Успехи ребёнка</Label><Textarea value={successes} onChange={(event) => setSuccesses(event.target.value)} maxLength={4000} placeholder="Что особенно хорошо получилось" /></div>
+          <div><Label>Рекомендация</Label><Textarea value={recommendation} onChange={(event) => setRecommendation(event.target.value)} maxLength={4000} placeholder="Что можно повторить дома" /></div>
+          {(catalogQuery.data?.assets.length ?? 0) > 0 && (
+            <div><Label>Результаты из персональной библиотеки</Label><div className="mt-2 grid gap-1.5 sm:grid-cols-2">{catalogQuery.data?.assets.map((asset) => <label key={asset.id} className="flex items-center gap-2 rounded-lg border border-orange-200 bg-white px-3 py-2 text-xs"><input type="checkbox" checked={assetIds.includes(asset.id)} onChange={(event) => setAssetIds((current) => event.target.checked ? [...new Set([...current, asset.id])] : current.filter((id) => id !== asset.id))} /> {asset.title}</label>)}</div></div>
+          )}
+          <Button type="button" disabled={saveState.isLoading || summary.trim().length < 3 || successes.trim().length < 3 || recommendation.trim().length < 3} onClick={() => void submit()}>
+            {saveState.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Отправить отчёт
+          </Button>
         </div>
       )}
     </div>
@@ -229,6 +286,7 @@ function LessonsPanel() {
                     ))}
                   </div>
                 )}
+                {['COMPLETED', 'REPORT_SENT'].includes(l.status) && <LessonReportPanel lessonId={l.id} childId={l.childId} />}
               </div>
             ))}</div>
             <div className="space-y-2 border-t border-border pt-4">

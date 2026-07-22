@@ -7,6 +7,8 @@ import {
   Camera,
   CheckCircle2,
   ChevronDown,
+  ExternalLink,
+  FileText,
   GraduationCap,
   Gamepad2,
   Loader2,
@@ -54,6 +56,7 @@ import {
   useUnenrollChildMutation,
   useUploadChildPhotosMutation,
 } from '@/store/api/family-api';
+import { useListLessonReportsQuery, useMarkReportReadMutation } from '@/store/api/academy-operations-api';
 
 function ageLabel(birthDate: string | null): string | null {
   if (!birthDate) return null;
@@ -662,12 +665,14 @@ function ChildCard({ child }: { child: ChildProfileDto }) {
 
   const onDelete = async () => {
     const confirmed = window.confirm(
-      `Удалить профиль «${child.name}»? Будут удалены все фотографии и материалы ребёнка. Это действие необратимо.`,
+      `Удалить профиль «${child.name}»? Личные поля будут сразу обезличены, а фотографии и материалы — поставлены в защищённую очередь физической очистки. Это действие необратимо.`,
     );
     if (!confirmed) return;
     try {
-      await deleteChild(child.id).unwrap();
-      toast({ title: 'Профиль удалён', description: 'Все материалы ребёнка удалены.' });
+      const result = await deleteChild(child.id).unwrap();
+      toast(result.deletion.status === 'FAILED'
+        ? { title: 'Профиль обезличен', description: 'Очередь физической очистки временно недоступна. Ошибка записана в журнал для повторной обработки.', variant: 'destructive' }
+        : { title: 'Очистка запущена', description: 'Профиль обезличен. Закрытые файлы удаляет фоновая задача с журналом выполнения.' });
     } catch (err) {
       toast({ title: 'Не удалось удалить', description: apiErrorMessage(err), variant: 'destructive' });
     }
@@ -729,6 +734,29 @@ function ChildCard({ child }: { child: ChildProfileDto }) {
   );
 }
 
+function LessonReportsBlock() {
+  const { data, isLoading } = useListLessonReportsQuery();
+  const [markRead] = useMarkReportReadMutation();
+  const reports = data?.reports ?? [];
+  if (isLoading) return <div className="mb-6 h-24 animate-pulse rounded-2xl bg-muted" />;
+  if (reports.length === 0) return null;
+  return (
+    <section className="mb-7">
+      <h2 className="mb-3 flex items-center gap-2 text-xl font-bold"><FileText className="h-5 w-5 text-primary" /> Отчёты после занятий</h2>
+      <div className="space-y-3">{reports.map((report) => (
+        <Card key={report.id} className={cn('border-border bg-card', !report.parentReadAt && 'border-orange-300 shadow-sm')}>
+          <CardContent className="p-5">
+            <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{report.childName} · {report.teacherName}</p><p className="text-xs text-muted-foreground">{new Date(report.startsAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</p></div>{!report.parentReadAt && <Badge className="bg-orange-500">Новый отчёт</Badge>}</div>
+            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div><p className="font-semibold">Что прошли</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{report.summary}</p></div><div><p className="font-semibold">Успехи</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{report.successes}</p></div><div><p className="font-semibold">Рекомендация</p><p className="mt-1 whitespace-pre-wrap text-muted-foreground">{report.recommendation}</p></div></div>
+            {report.resultAssets.length > 0 && <div className="mt-4 flex flex-wrap gap-2">{report.resultAssets.map((asset) => <a key={asset.id} href={asset.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-primary hover:bg-accent">{asset.title}<ExternalLink className="h-3 w-3" /></a>)}</div>}
+            {!report.parentReadAt && <Button type="button" size="sm" variant="outline" className="mt-4" onClick={() => void markRead(report.id)}>Отметить прочитанным</Button>}
+          </CardContent>
+        </Card>
+      ))}</div>
+    </section>
+  );
+}
+
 export default function FamilyPage() {
   const { data, isLoading } = useListChildrenQuery();
   const [adding, setAdding] = useState(false);
@@ -748,6 +776,8 @@ export default function FamilyPage() {
               своих уроков-приключений.
             </p>
           </div>
+
+          <LessonReportsBlock />
 
           {isLoading ? (
             <div className="space-y-3">

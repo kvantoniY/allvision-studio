@@ -14,6 +14,7 @@ import { requireRole } from '../middleware/require-role';
 import { HttpError } from '../utils/http-error';
 import { readCharacterRef, readChildAsset } from '../services/child-photo-storage';
 import { ensureFullAiSceneGenerations, fullSceneStatuses } from '../services/academy-full-scene-service';
+import { addLessonSystemMessage } from '../services/academy-operations-service';
 
 export const academyLessonInstancesRouter = Router();
 academyLessonInstancesRouter.use(requireAuth);
@@ -89,6 +90,14 @@ academyLessonInstancesRouter.post('/', requireRole('TEACHER', 'METHODIST'), asyn
       });
       // Урок подготовлен → READY.
       await tx.lesson.update({ where: { id: lesson.id }, data: { status: 'READY' } });
+      if (lesson.status !== 'READY') {
+        await addLessonSystemMessage(tx, {
+          parentId: lesson.child.parentId,
+          teacherId: lesson.teacherId,
+          childId: lesson.child.id,
+          body: 'Материалы готовы: урок подготовлен преподавателем.',
+        });
+      }
       return created;
     });
     // Запускаем генерацию цельных AI-сцен по референсу ученика (fire-and-forget, не блокирует ответ).
@@ -214,6 +223,16 @@ academyLessonInstancesRouter.get('/:id/character/:refId/file', async (req: Reque
     }
     const buffer = await readCharacterRef(ref.storageKey).catch(() => {
       throw new HttpError(404, 'REFERENCE_FILE_MISSING', 'Файл референса недоступен');
+    });
+    await prisma.accessLog.create({
+      data: {
+        actorId: req.user!.id,
+        childId: instance.childId,
+        actorRole: req.user!.role,
+        action: 'VIEW',
+        resourceType: 'CHARACTER_REFERENCE',
+        resourceId: ref.id,
+      },
     });
     res.setHeader('Content-Type', ref.mimeType);
     res.setHeader('Cache-Control', 'private, max-age=300');

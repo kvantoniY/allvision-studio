@@ -8,6 +8,7 @@ import type {
   UpdateProfileResponse,
   ChangeAccountPasswordInput,
   DeleteAccountInput,
+  DeletionLogDto,
 } from '@allvision/shared';
 
 export type TransactionsQuery = {
@@ -64,7 +65,7 @@ export const accountApi = createApi({
     changePassword: build.mutation<{ ok: true }, ChangeAccountPasswordInput>({
       query: (body) => ({ url: '/profile/password', method: 'POST', body }),
     }),
-    deleteAccount: build.mutation<{ ok: true }, DeleteAccountInput>({
+    deleteAccount: build.mutation<{ ok: true; deletion: DeletionLogDto }, DeleteAccountInput>({
       query: (body) => ({ url: '/', method: 'DELETE', body }),
     }),
   }),

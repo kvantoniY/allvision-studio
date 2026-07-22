@@ -20,6 +20,10 @@ export function childAssetsRoot(): string {
   return resolveWorkspacePath(process.env.CHILD_ASSETS_DIR ?? './private-uploads/child-assets');
 }
 
+export function academyMessagesRoot(): string {
+  return resolveWorkspacePath(process.env.ACADEMY_MESSAGES_DIR ?? './private-uploads/academy-messages');
+}
+
 function resolveSafe(root: string, storageKey: string): string {
   const target = path.resolve(root, storageKey.replace(/^[/\\]+/, ''));
   if (!target.startsWith(root + path.sep) && target !== root) {
@@ -54,4 +58,27 @@ export async function writeChildAsset(storageKey: string, buffer: Buffer): Promi
 
 export async function deleteChildAsset(storageKey: string): Promise<void> {
   await fs.unlink(resolveSafe(childAssetsRoot(), storageKey)).catch(() => undefined);
+}
+
+async function removePrivateDirectory(root: string, storageKey: string): Promise<void> {
+  await fs.rm(resolveSafe(root, storageKey), { recursive: true, force: true });
+}
+
+export async function deleteChildPrivateDirectories(parentId: string, childId: string): Promise<void> {
+  const key = path.posix.join(parentId, childId);
+  await Promise.all([
+    removePrivateDirectory(childPhotosRoot(), key),
+    removePrivateDirectory(characterRefsRoot(), key),
+    removePrivateDirectory(childAssetsRoot(), key),
+    removePrivateDirectory(academyMessagesRoot(), key),
+  ]);
+}
+
+export async function deleteAccountPrivateDirectories(parentId: string): Promise<void> {
+  await Promise.all([
+    removePrivateDirectory(childPhotosRoot(), parentId),
+    removePrivateDirectory(characterRefsRoot(), parentId),
+    removePrivateDirectory(childAssetsRoot(), parentId),
+    removePrivateDirectory(academyMessagesRoot(), parentId),
+  ]);
 }

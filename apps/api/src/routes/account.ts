@@ -11,6 +11,7 @@ import { setAuthCookies, clearAuthCookies } from '../utils/cookies';
 import { HttpError } from '../utils/http-error';
 import * as account from '../services/account-service';
 import * as fileService from '../services/file-service';
+import { requestAccountDeletion } from '../services/academy-deletion-service';
 
 export const accountRouter = Router();
 
@@ -113,9 +114,13 @@ function profileAvatarStorageKey(value: string | null | undefined, userId: strin
 accountRouter.delete('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { password } = deleteAccountSchema.parse(req.body);
-    await account.deleteAccount(req.user!.id, password);
+    const candidate = await account.deleteAccount(req.user!.id, password);
+    const deletion = await requestAccountDeletion(
+      req.user!.id,
+      profileAvatarStorageKey(candidate.avatar, req.user!.id),
+    );
     clearAuthCookies(res);
-    res.json({ ok: true });
+    res.status(202).json({ ok: true, deletion });
   } catch (e) {
     next(e);
   }

@@ -10,6 +10,7 @@ export const QUEUE_NAMES = {
   SERVICE_PIPELINE: 'service-pipeline',
   CHARACTER_PROFILE: 'character-profile',
   ACADEMY_GENERATION: 'academy-generation',
+  ACADEMY_DELETION: 'academy-deletion',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -63,4 +64,14 @@ export interface AcademyGenerationJobData {
   requestedById: string;
   input: AcademyGenerationInput;
   estimatedCostUsd: number;
+}
+
+// Academy A10: физическая зачистка private/public файлов после атомарной очистки БД.
+export interface AcademyDeletionJobData {
+  deletionLogId: string;
+  scope: 'CHILD' | 'ACCOUNT';
+  parentId: string;
+  childIds: string[];
+  userId?: string;
+  publicStorageKeys: string[];
 }

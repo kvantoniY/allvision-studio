@@ -185,9 +185,10 @@ export async function refreshTokens(refreshToken: string) {
     throw new HttpError(401, 'INVALID_REFRESH', 'Refresh токен невалиден');
   }
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user) {
-    logger.warn(`[auth] refresh rejected reason=USER_NOT_FOUND userId=${payload.sub} refresh=${tokenFingerprint(refreshToken)}`);
-    throw new HttpError(401, 'USER_NOT_FOUND', 'Пользователь не найден');
+  if (!user || user.deletedAt) {
+    const reason = user?.deletedAt ? 'ACCOUNT_DELETED' : 'USER_NOT_FOUND';
+    logger.warn(`[auth] refresh rejected reason=${reason} userId=${payload.sub} refresh=${tokenFingerprint(refreshToken)}`);
+    throw new HttpError(401, reason, user?.deletedAt ? 'Аккаунт удалён' : 'Пользователь не найден');
   }
   const tokens = makeTokens(user.id, user.role);
   logIssuedTokens('refresh', user, tokens);
@@ -201,14 +202,14 @@ export async function logout(_userId: string) {
 
 export async function getMe(userId: string): Promise<SafeUser> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
+  if (!user || user.deletedAt) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
   return toSafe(user);
 }
 
 export async function requestPasswordReset(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   // Чтобы не раскрывать, зарегистрирован ли email, всегда возвращаем успех.
-  if (!user) return;
+  if (!user || user.deletedAt) return;
   if (!user.emailVerifiedAt) {
     logger.info(`[auth] password reset skipped for unverified email=${email}`);
     return;

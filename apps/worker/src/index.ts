@@ -11,6 +11,7 @@ import { processEpisode } from './processors/episode';
 import { processServicePipeline } from './processors/service-pipeline';
 import { processCharacterProfile } from './processors/character-profile';
 import { processAcademyGeneration } from './processors/academy-generation';
+import { processAcademyDeletion } from './processors/academy-deletion';
 import { initialiseWorkerProviders } from './providers';
 import { startGenerationRetentionCleanup } from './services/generation-retention';
 import { startGenerationTimeoutWatchdog } from './services/generation-timeout';
@@ -38,6 +39,7 @@ const queues: Array<[QueueName, Processor]> = [
   [QUEUE_NAMES.SERVICE_PIPELINE, processServicePipeline as Processor],
   [QUEUE_NAMES.CHARACTER_PROFILE, processCharacterProfile as Processor],
   [QUEUE_NAMES.ACADEMY_GENERATION, processAcademyGeneration as Processor],
+  [QUEUE_NAMES.ACADEMY_DELETION, processAcademyDeletion as Processor],
 ];
 
 export function queueConcurrencyFor(name: QueueName) {
@@ -47,6 +49,7 @@ export function queueConcurrencyFor(name: QueueName) {
   // Дорогая мультишаговая генерация — строго по одному профилю за раз.
   if (name === QUEUE_NAMES.CHARACTER_PROFILE) return 1;
   if (name === QUEUE_NAMES.ACADEMY_GENERATION) return 1;
+  if (name === QUEUE_NAMES.ACADEMY_DELETION) return 1;
   return CONCURRENCY;
 }
 

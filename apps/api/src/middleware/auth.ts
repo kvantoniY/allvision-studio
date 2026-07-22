@@ -48,10 +48,11 @@ async function resolveUser(req: Request): Promise<AuthUser | null> {
     const payload = verifyAccessToken(token);
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, role: true, email: true },
+      select: { id: true, role: true, email: true, deletedAt: true },
     });
-    if (!user) {
-      logger.warn(`[auth] verify rejected reason=USER_NOT_FOUND userId=${payload.sub} token=${tokenFingerprint(token)} path=${req.originalUrl}`);
+    if (!user || user.deletedAt) {
+      const reason = user?.deletedAt ? 'ACCOUNT_DELETED' : 'USER_NOT_FOUND';
+      logger.warn(`[auth] verify rejected reason=${reason} userId=${payload.sub} token=${tokenFingerprint(token)} path=${req.originalUrl}`);
       return null;
     }
     logger.info(`[auth] verify accepted userId=${user.id} role=${user.role} token=${tokenFingerprint(token)} path=${req.originalUrl}`);

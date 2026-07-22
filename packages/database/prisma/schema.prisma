@@ -45,6 +45,12 @@ model User {
   teacherProfile         TeacherProfile?
   lessonCredits          LessonCredit[]
   createdChildAssets     ChildAsset[]            @relation("ChildAssetCreatedBy")
+  academyThreads         Thread[]                @relation("ThreadParent")
+  threadMessages         ThreadMessage[]         @relation("ThreadMessageAuthor")
+  lessonReportsCreated   LessonReport[]          @relation("LessonReportCreatedBy")
+  teacherPayoutsCreated  TeacherPayout[]         @relation("TeacherPayoutCreatedBy")
+  deletionLogsRequested  DeletionLog[]           @relation("DeletionLogRequestedBy")
+  academyAccessLogs      AccessLog[]             @relation("AccessLogActor")
 }
 
 enum Role {
@@ -70,10 +76,12 @@ model ChildProfile {
   notes     String?   @db.Text
 
   // Игровой профиль (наполняется в A9, поля заложены сразу)
-  level         Int @default(1)
-  xp            Int @default(0)
-  streakCount   Int @default(0)
-  streakFreezes Int @default(1)
+  level         Int       @default(1)
+  xp            Int       @default(0)
+  streakCount   Int       @default(0)
+  streakFreezes Int       @default(1)
+  anonymizedKey String?   @unique
+  anonymizedAt  DateTime?
 
   deletedAt DateTime?
   createdAt DateTime  @default(now())
@@ -90,6 +98,8 @@ model ChildProfile {
   xpEvents         XpEvent[]
   achievements     ChildAchievement[]
   rewardItems      ChildRewardItem[]
+  threads          Thread[]
+  accessLogs       AccessLog[]
 
   @@index([parentId])
 }
@@ -420,6 +430,8 @@ model TeacherProfile {
   slots    TeacherSlot[]
   lessons  Lesson[]
   earnings TeacherEarning[]
+  threads  Thread[]
+  payouts  TeacherPayout[]
 }
 
 // Конкретный доступный слот преподавателя (UTC). Recurring-генерация — позже.
@@ -478,6 +490,7 @@ model Lesson {
   chatMessages         LessonChatMessage[]
   xpEvents             XpEvent[]
   unlockedAchievements ChildAchievement[]  @relation("AchievementSourceLesson")
+  report               LessonReport?
 
   @@index([childId, startsAt])
   @@index([teacherId, startsAt])
@@ -502,13 +515,16 @@ model TeacherEarning {
   teacherId String
   amountRub Int
   status    EarningStatus @default(PENDING)
+  payoutId  String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
   lesson  Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  payout  TeacherPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
 
   @@index([teacherId, status])
+  @@index([payoutId])
 }
 
 enum EarningStatus {
@@ -516,6 +532,144 @@ enum EarningStatus {
   AVAILABLE
   PAID
   REJECTED
+}
+
+// === Операционный контур Academy (A10): отчёты, сообщения, выплаты, аудит удаления ===
+
+model LessonReport {
+  id             String    @id @default(cuid())
+  lessonId       String    @unique
+  createdById    String?
+  summary        String    @db.Text
+  successes      String    @db.Text
+  recommendation String    @db.Text
+  resultAssetIds String[]  @default([])
+  parentReadAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("LessonReportCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
+model Thread {
+  id        String   @id @default(cuid())
+  parentId  String
+  teacherId String
+  childId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   User            @relation("ThreadParent", fields: [parentId], references: [id], onDelete: Cascade)
+  teacher  TeacherProfile  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  child    ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
+  messages ThreadMessage[]
+
+  @@unique([parentId, teacherId, childId])
+  @@index([parentId, updatedAt])
+  @@index([teacherId, updatedAt])
+  @@index([childId])
+}
+
+model ThreadMessage {
+  id                   String            @id @default(cuid())
+  threadId             String
+  authorId             String?
+  role                 ThreadMessageRole
+  body                 String?           @db.Text
+  attachmentStorageKey String?
+  attachmentFileName   String?
+  attachmentMimeType   String?
+  attachmentFileSize   Int?
+  createdAt            DateTime          @default(now())
+
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author User?  @relation("ThreadMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+  @@index([authorId])
+}
+
+enum ThreadMessageRole {
+  PARENT
+  TEACHER
+  ADMIN
+  SYSTEM
+}
+
+model TeacherPayout {
+  id                     String        @id @default(cuid())
+  teacherId              String
+  periodStart            DateTime
+  periodEnd              DateTime
+  amountRub              Int
+  status                 EarningStatus @default(AVAILABLE)
+  confirmationStorageKey String?
+  confirmationFileName   String?
+  confirmationMimeType   String?
+  rejectionReason        String?       @db.Text
+  paidAt                 DateTime?
+  createdById            String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  teacher   TeacherProfile   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  earnings  TeacherEarning[]
+  createdBy User?            @relation("TeacherPayoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([teacherId, periodStart, periodEnd])
+  @@index([status, periodEnd])
+}
+
+model DeletionLog {
+  id            String         @id @default(cuid())
+  requestedById String?
+  scope         DeletionScope
+  targetHash    String
+  status        DeletionStatus @default(PENDING)
+  summary       Json?
+  errorMessage  String?        @db.Text
+  createdAt     DateTime       @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  requestedBy User? @relation("DeletionLogRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@index([requestedById, createdAt])
+  @@index([status, createdAt])
+  @@index([targetHash])
+}
+
+enum DeletionScope {
+  CHILD
+  ACCOUNT
+}
+
+enum DeletionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model AccessLog {
+  id           String   @id @default(cuid())
+  actorId      String?
+  childId      String?
+  actorRole    String
+  action       String
+  resourceType String
+  resourceId   String
+  createdAt    DateTime @default(now())
+
+  actor User?         @relation("AccessLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+  child ChildProfile? @relation(fields: [childId], references: [id], onDelete: SetNull)
+
+  @@index([childId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([resourceType, resourceId])
 }
 
 // === Конструктор сцен (A6.2): шаблон урока с черновиком сцены ===
