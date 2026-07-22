@@ -85,9 +85,9 @@ const PAYMENT_STATUS_LABEL: Record<PaymentStatus, string> = {
 };
 
 const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
-  PENDING: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',
-  SUCCEEDED: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  FAILED: 'bg-red-500/20 text-red-300 border-red-500/30',
+  PENDING: 'bg-amber-500/10 text-amber-800 border-amber-500/30',
+  SUCCEEDED: 'bg-emerald-500/10 text-emerald-800 border-emerald-500/30',
+  FAILED: 'bg-destructive/10 text-destructive border-destructive/30',
   CANCELLED: 'bg-secondary text-muted-foreground border-border',
 };
 
@@ -476,7 +476,7 @@ function AccountSection() {
       <Card className="min-w-0 overflow-hidden border-border bg-card">
         <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
-            <KeyRound className="h-5 w-5 text-emerald-300" />
+            <KeyRound className="h-5 w-5 text-emerald-700" />
             Безопасность
           </CardTitle>
         </CardHeader>
@@ -584,7 +584,7 @@ function AvatarManager({ user }: { user: ProfileUser }) {
         <div className="min-w-0 flex-1">
           <div className="font-semibold text-foreground">Аватар</div>
           <p className="mt-1 text-sm leading-5 text-muted-foreground">
-            Загрузите новое фото или выберите готовый образ из Студии.
+            Загрузите новое фото или выберите готовый образ из личной медиатеки.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={busy}>
@@ -595,9 +595,6 @@ function AvatarManager({ user }: { user: ProfileUser }) {
               <Trash2 className="h-4 w-4" />
               Убрать
             </Button>
-            <Button asChild variant="ghost">
-              <Link href="/studio">Открыть Студию</Link>
-            </Button>
           </div>
           <input ref={fileInputRef} className="sr-only" type="file" accept="image/*" onChange={uploadAvatar} />
         </div>
@@ -606,7 +603,7 @@ function AvatarManager({ user }: { user: ProfileUser }) {
       <div>
         <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
           <ImageIcon className="h-3.5 w-3.5" />
-          Из Студии
+          Из личной медиатеки
         </div>
         {avatars.isLoading ? (
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
@@ -614,7 +611,7 @@ function AvatarManager({ user }: { user: ProfileUser }) {
           </div>
         ) : studioAvatars.length === 0 ? (
           <div className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">
-            В Студии пока нет аватаров. Загруженное фото появится здесь автоматически.
+            В личной медиатеке пока нет аватаров. Загруженное фото появится здесь автоматически.
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
@@ -625,7 +622,7 @@ function AvatarManager({ user }: { user: ProfileUser }) {
                   key={asset.id}
                   type="button"
                   disabled={busy}
-                  onClick={() => setAvatar(asset.publicUrl, 'Аватар выбран из Студии')}
+                  onClick={() => setAvatar(asset.publicUrl, 'Аватар выбран из личной медиатеки')}
                   className={cn(
                     'group relative aspect-square overflow-hidden rounded-md border bg-card transition hover:border-primary',
                     selected ? 'border-primary ring-2 ring-primary/40' : 'border-border',
@@ -670,7 +667,7 @@ function EmailVerificationPanel({
     )}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 gap-3">
-          <MailCheck className={cn('mt-0.5 h-5 w-5 shrink-0', verified ? 'text-emerald-300' : 'text-primary')} />
+          <MailCheck className={cn('mt-0.5 h-5 w-5 shrink-0', verified ? 'text-emerald-700' : 'text-primary')} />
           <div className="min-w-0">
             <div className="font-semibold text-foreground">{verified ? 'Email подтверждён' : 'Email не подтверждён'}</div>
             <p className="mt-1 max-w-xl text-sm leading-5 text-muted-foreground sm:leading-6">
@@ -955,7 +952,7 @@ function HistoryGroup({
         <h2 className="text-sm font-semibold uppercase text-muted-foreground">{title}</h2>
         {typeof count === 'number' ? <span className="text-xs text-muted-foreground">{count}</span> : null}
       </div>
-      <div className="divide-y divide-slate-800 overflow-hidden rounded-lg border border-border bg-muted">
+      <div className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-muted">
         {children}
       </div>
     </section>
@@ -970,7 +967,7 @@ function TransactionListItem({ tx }: { tx: TokenTransaction }) {
         <span
           className={cn(
             'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-            isTopup ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400',
+            isTopup ? 'bg-emerald-500/10 text-emerald-700' : 'bg-destructive/10 text-destructive',
           )}
         >
           {isTopup ? <ArrowDown className="h-4 w-4" /> : <ArrowUp className="h-4 w-4" />}
@@ -991,7 +988,7 @@ function TransactionListItem({ tx }: { tx: TokenTransaction }) {
         <div
           className={cn(
             'whitespace-nowrap text-sm font-semibold',
-            isTopup ? 'text-emerald-400' : 'text-red-400',
+          isTopup ? 'text-emerald-700' : 'text-destructive',
           )}
         >
           {isTopup ? '+' : ''}
@@ -1165,14 +1162,14 @@ function DangerSection() {
     <div className="rounded-lg border border-red-500/40 bg-muted p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 font-semibold text-red-300">
+          <div className="flex items-center gap-2 font-semibold text-destructive">
             <ShieldAlert className="h-4 w-4" />
             Удаление аккаунта
           </div>
           <p className="mt-1 text-sm text-muted-foreground">Необратимо: личные данные сразу обезличиваются, файлы удаляются фоновой задачей с журналом.</p>
         </div>
         {!showForm ? (
-          <Button variant="outline" className="border-red-500/40 text-red-300 hover:bg-red-500/10 hover:text-red-200" onClick={() => setShowForm(true)}>
+          <Button variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setShowForm(true)}>
             Удалить аккаунт
           </Button>
         ) : null}

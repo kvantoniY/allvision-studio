@@ -68,12 +68,13 @@ function htmlEscape(value: string) {
 function emailLayout(title: string, body: string, ctaLabel: string, ctaUrl: string) {
   const safeUrl = htmlEscape(ctaUrl);
   return `
-    <div style="font-family:Arial,sans-serif;background:#0f172a;padding:32px;color:#e2e8f0">
-      <div style="max-width:560px;margin:0 auto;background:#111827;border:1px solid #263244;border-radius:12px;padding:28px">
-        <h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;color:#ffffff">${htmlEscape(title)}</h1>
-        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#cbd5e1">${body}</p>
-        <a href="${safeUrl}" style="display:inline-block;background:#f59e0b;color:#0f172a;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px">${htmlEscape(ctaLabel)}</a>
-        <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#94a3b8">Если кнопка не открывается, скопируйте ссылку:<br><span style="word-break:break-all">${safeUrl}</span></p>
+    <div style="font-family:Arial,sans-serif;background:#fff7ed;padding:32px;color:#292524">
+      <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #fed7aa;border-radius:16px;padding:28px">
+        <p style="margin:0 0 18px;font-size:14px;font-weight:700;color:#ea580c">Allvision Academy</p>
+        <h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;color:#1c1917">${htmlEscape(title)}</h1>
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#57534e">${body}</p>
+        <a href="${safeUrl}" style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;font-weight:700;border-radius:10px;padding:12px 18px">${htmlEscape(ctaLabel)}</a>
+        <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#78716c">Если кнопка не открывается, скопируйте ссылку:<br><span style="word-break:break-all">${safeUrl}</span></p>
       </div>
     </div>
   `;
@@ -84,14 +85,14 @@ async function sendEmailVerification(user: Pick<User, 'email' | 'name'>, rawToke
   const name = user.name?.trim() || user.email;
   const result = await sendTransactionalEmail({
     to: user.email,
-    subject: 'Подтвердите email в Allvision Studio',
+    subject: 'Подтвердите email в Allvision Academy',
     html: emailLayout(
       'Подтвердите email',
       `Здравствуйте, ${htmlEscape(name)}. Подтвердите электронную почту, чтобы восстановить доступ к аккаунту при потере пароля.`,
       'Подтвердить email',
       verifyUrl,
     ),
-    text: `Подтвердите email в Allvision Studio: ${verifyUrl}`,
+    text: `Подтвердите email в Allvision Academy: ${verifyUrl}`,
   });
   if (!result.sent && process.env.NODE_ENV !== 'production') {
     logger.info(`[auth] email verification link: ${verifyUrl}`);
@@ -104,14 +105,14 @@ async function sendPasswordReset(user: Pick<User, 'email' | 'name'>, rawToken: s
   const name = user.name?.trim() || user.email;
   const result = await sendTransactionalEmail({
     to: user.email,
-    subject: 'Восстановление пароля Allvision Studio',
+    subject: 'Восстановление пароля Allvision Academy',
     html: emailLayout(
       'Восстановление пароля',
       `Здравствуйте, ${htmlEscape(name)}. Нажмите кнопку ниже, чтобы задать новый пароль. Ссылка действует 1 час.`,
       'Сбросить пароль',
       resetUrl,
     ),
-    text: `Сбросить пароль Allvision Studio: ${resetUrl}`,
+    text: `Сбросить пароль Allvision Academy: ${resetUrl}`,
   });
   if (!result.sent && process.env.NODE_ENV !== 'production') {
     logger.info(`[auth] password reset link: ${resetUrl}`);

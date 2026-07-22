@@ -155,7 +155,7 @@ function sanitizeDescription(value: string) {
 
 function topupDescription(packageTitle?: string) {
   const suffix = packageTitle ? `, пакет ${packageTitle}` : '';
-  return `Доступ к цифровым услугам Allvision Studio${suffix}`;
+  return `Услуги Allvision Academy${suffix}`;
 }
 
 function buildReceipt(params: {
@@ -517,7 +517,7 @@ export class RobokassaPaymentProvider implements PaymentProvider {
     const description = sanitizeDescription(
       params.purpose === 'topup'
         ? topupDescription(params.metadata.packageTitle)
-        : `Allvision Studio: заказ ${params.metadata.orderId ?? invId}`,
+        : `Allvision Academy: заказ ${params.metadata.orderId ?? invId}`,
     );
 
     const shpParams = {

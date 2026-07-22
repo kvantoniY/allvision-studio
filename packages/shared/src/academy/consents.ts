@@ -24,40 +24,47 @@ export const CONSENT_DEFINITIONS: ConsentDefinition[] = [
     type: 'IMAGE_PROCESSING',
     title: 'Обработка изображений ребёнка',
     description:
-      'Разрешаю обработку загруженных фотографий ребёнка для подготовки учебных материалов.',
+      'Как родитель или законный представитель разрешаю обрабатывать загруженные фотографии ребёнка только для подготовки и проведения его персональных занятий. Изображения не публикуются и не используются для рекламы.',
     requiredForPhotos: true,
   },
   {
     type: 'AI_CHARACTER',
     title: 'Создание AI-персонажа',
     description:
-      'Разрешаю создание синтетического персонажа с внешностью ребёнка для персонализации уроков.',
+      'Разрешаю создать синтетического учебного персонажа с внешностью ребёнка. Материалы не применяются для установления личности, распознавания лица или создания общедоступной биометрической базы.',
     requiredForPhotos: true,
   },
   {
     type: 'AI_GENERATION',
     title: 'Генерация иллюстраций и видео',
     description:
-      'Разрешаю генерацию иллюстраций и коротких видео с участием AI-персонажа ребёнка.',
+      'Разрешаю создавать закрытые иллюстрации, позы и короткие видео с AI-персонажем ребёнка для его уроков, игровых наград и отчётов о занятиях.',
     requiredForPhotos: true,
   },
   {
     type: 'EXTERNAL_PROVIDERS',
     title: 'Использование внешних AI-сервисов',
     description:
-      'Понимаю, что генерация выполняется внешними AI-сервисами; материалы передаются только через сервер платформы, без публичного доступа.',
+      'Понимаю, что для генерации минимально необходимые изображения и инструкции могут передаваться привлечённым AI-провайдерам через сервер Академии. Публичные ссылки на детские материалы не создаются.',
     requiredForPhotos: true,
   },
   {
     type: 'DATA_RETENTION',
     title: 'Правила хранения и удаления',
     description:
-      'Ознакомлен(а) с правилами хранения материалов и возможностью в любой момент удалить фотографии, персонажа и все производные данные.',
+      'Ознакомлен(а) с закрытым хранением материалов и могу отозвать согласие или удалить профиль ребёнка. После удаления персональные поля обезличиваются, а исходные и производные файлы ставятся в очередь физического удаления.',
     requiredForPhotos: true,
   },
 ];
 
-export const CONSENT_CURRENT_VERSION = 'v1';
+export const CONSENT_CURRENT_VERSION = 'v2';
+
+/** Неизменяемый текст, который сохраняется вместе с фактом принятия согласия. */
+export function consentTextSnapshot(type: ConsentTypeValue): string {
+  const definition = CONSENT_DEFINITIONS.find((item) => item.type === type);
+  if (!definition) throw new Error(`Неизвестный тип согласия: ${type}`);
+  return `${definition.title}\n${definition.description}\nРедакция: ${CONSENT_CURRENT_VERSION}`;
+}
 
 export function requiredConsentTypesForPhotos(): ConsentTypeValue[] {
   return CONSENT_DEFINITIONS.filter((item) => item.requiredForPhotos).map((item) => item.type);
@@ -65,10 +72,12 @@ export function requiredConsentTypesForPhotos(): ConsentTypeValue[] {
 
 /** Все ли обязательные для фото согласия приняты (и не отозваны). */
 export function hasAllPhotoConsents(
-  accepted: Array<{ type: string; revokedAt?: string | Date | null }>,
+  accepted: Array<{ type: string; version?: string; revokedAt?: string | Date | null }>,
 ): boolean {
   const active = new Set(
-    accepted.filter((item) => !item.revokedAt).map((item) => item.type),
+    accepted
+      .filter((item) => !item.revokedAt && item.version === CONSENT_CURRENT_VERSION)
+      .map((item) => item.type),
   );
   return requiredConsentTypesForPhotos().every((type) => active.has(type));
 }

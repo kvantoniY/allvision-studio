@@ -1,6 +1,8 @@
 import {
   CONSENT_DEFINITIONS,
+  CONSENT_CURRENT_VERSION,
   CONSENT_TYPES,
+  consentTextSnapshot,
   hasAllPhotoConsents,
   requiredConsentTypesForPhotos,
 } from '../academy/consents';
@@ -16,7 +18,7 @@ describe('academy consents', () => {
   });
 
   it('hasAllPhotoConsents: true only when every required consent is active', () => {
-    const all = CONSENT_TYPES.map((type) => ({ type, revokedAt: null }));
+    const all = CONSENT_TYPES.map((type) => ({ type, version: CONSENT_CURRENT_VERSION, revokedAt: null }));
     expect(hasAllPhotoConsents(all)).toBe(true);
     expect(hasAllPhotoConsents(all.slice(0, 4))).toBe(false);
     expect(hasAllPhotoConsents([])).toBe(false);
@@ -25,9 +27,16 @@ describe('academy consents', () => {
   it('hasAllPhotoConsents: revoked consent does not count', () => {
     const withRevoked = CONSENT_TYPES.map((type, i) => ({
       type,
+      version: CONSENT_CURRENT_VERSION,
       revokedAt: i === 0 ? new Date().toISOString() : null,
     }));
     expect(hasAllPhotoConsents(withRevoked)).toBe(false);
+  });
+
+  it('requires the current text version and produces an immutable snapshot', () => {
+    const old = CONSENT_TYPES.map((type) => ({ type, version: 'v1', revokedAt: null }));
+    expect(hasAllPhotoConsents(old)).toBe(false);
+    expect(consentTextSnapshot('IMAGE_PROCESSING')).toContain(`Редакция: ${CONSENT_CURRENT_VERSION}`);
   });
 });
 

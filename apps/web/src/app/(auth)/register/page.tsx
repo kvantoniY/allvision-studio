@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 
@@ -12,7 +13,9 @@ export default function RegisterPage() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <RegisterForm />
+        <Suspense>
+          <RegisterForm />
+        </Suspense>
         <div className="text-center text-sm text-muted-foreground">
           Уже есть аккаунт?{' '}
           <Link href="/login" className="font-medium text-primary hover:underline">

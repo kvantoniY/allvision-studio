@@ -8,6 +8,7 @@ import {
   CHILD_PHOTOS_MAX,
   CONSENT_CURRENT_VERSION,
   CONSENT_TYPES,
+  consentTextSnapshot,
   createChildProfileSchema,
   enrollChildSchema,
   hasAllPhotoConsents,
@@ -60,6 +61,7 @@ function toChildDto(child: NonNullable<ChildWithMeta>): ChildProfileDto {
   const consents = child.consents.map((consent) => ({
     type: consent.type,
     version: consent.version,
+    textSnapshot: consent.textSnapshot,
     acceptedAt: consent.acceptedAt.toISOString(),
     revokedAt: consent.revokedAt ? consent.revokedAt.toISOString() : null,
   }));
@@ -210,8 +212,14 @@ familyRouter.post('/children/:childId/consents', async (req: Request, res: Respo
           childId: req.params.childId,
           type,
           version: CONSENT_CURRENT_VERSION,
+          textSnapshot: consentTextSnapshot(type),
         },
-        update: { acceptedAt: new Date(), revokedAt: null, version: CONSENT_CURRENT_VERSION },
+        update: {
+          acceptedAt: new Date(),
+          revokedAt: null,
+          version: CONSENT_CURRENT_VERSION,
+          textSnapshot: consentTextSnapshot(type),
+        },
       });
     }
     const child = await findOwnedChild(req.user!.id, req.params.childId);

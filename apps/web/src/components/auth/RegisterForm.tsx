@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -23,6 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 const registerFormSchema = registerSchema
   .extend({
     consent: z.boolean().refine((value) => value),
+    documentsAccepted: z.boolean().refine((value) => value),
     confirmPassword: z.string(),
   })
   .refine((values) => values.password === values.confirmPassword, {
@@ -34,6 +35,7 @@ type FormValues = z.infer<typeof registerFormSchema>;
 
 export function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const dispatch = useDispatch();
   const { toast } = useToast();
   const [registerMutation, { isLoading, error }] = useRegisterMutation();
@@ -47,6 +49,7 @@ export function RegisterForm() {
     resolver: zodResolver(registerFormSchema),
     defaultValues: {
       consent: false,
+      documentsAccepted: false,
     },
   });
   const apiError = useApiErrorState(error, 'Не удалось зарегистрироваться');
@@ -64,7 +67,8 @@ export function RegisterForm() {
         title: 'Добро пожаловать в Allvision Academy!',
         description: 'Аккаунт создан. Добавьте профиль ребёнка, чтобы начать.',
       });
-      router.push('/');
+      const redirectTo = searchParams.get('redirect');
+      router.push(redirectTo?.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/');
     } catch {
       captcha.reset();
       // ошибка покажется через error ниже
@@ -98,9 +102,9 @@ export function RegisterForm() {
       </div>
 
       <label className="flex items-start gap-2 text-sm text-muted-foreground">
-        <input type="checkbox" className="mt-1" {...register('consent')} />
+        <input type="checkbox" className="mt-1" {...register('documentsAccepted')} />
         <span>
-          Согласен с{' '}
+          Соглашаюсь с{' '}
           <Link href="/offer" className="underline">
             офертой
           </Link>
@@ -111,15 +115,23 @@ export function RegisterForm() {
           ,{' '}
           <Link href="/privacy" className="underline">
             политикой конфиденциальности
-          </Link>{' '}
-          и{' '}
-          <Link href="/pd-consent" className="underline">
-            согласием на обработку персональных данных
           </Link>
           .
         </span>
       </label>
-      {errors.consent && <p className="text-sm text-destructive">Нужно согласие</p>}
+      {errors.documentsAccepted && <p className="text-sm text-destructive">Нужно принять документы сервиса</p>}
+
+      <label className="flex items-start gap-2 text-sm text-muted-foreground">
+        <input type="checkbox" className="mt-1" {...register('consent')} />
+        <span>
+          Отдельно даю{' '}
+          <Link href="/pd-consent" className="underline">
+            согласие на обработку моих персональных данных
+          </Link>
+          .
+        </span>
+      </label>
+      {errors.consent && <p className="text-sm text-destructive">Нужно отдельное согласие на обработку ПДн</p>}
 
       <ApiRequestAlert state={apiError} title="Не удалось зарегистрироваться" />
 

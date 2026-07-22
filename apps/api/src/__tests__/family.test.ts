@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { prisma } from '@allvision/database';
-import { CONSENT_TYPES } from '@allvision/shared';
+import { CONSENT_CURRENT_VERSION, CONSENT_TYPES } from '@allvision/shared';
 import { app } from '../app';
 
 jest.mock('../queues', () => ({
@@ -134,6 +134,7 @@ describe('family: consents gate photo uploads', () => {
     expect(res.status).toBe(200);
     expect(res.body.photoConsentsComplete).toBe(true);
     expect(res.body.consents).toHaveLength(CONSENT_TYPES.length);
+    expect(res.body.consents.every((item: { version: string; textSnapshot: string }) => item.version === CONSENT_CURRENT_VERSION && item.textSnapshot.includes(`Редакция: ${CONSENT_CURRENT_VERSION}`))).toBe(true);
   });
 
   it('uploads and serves a photo through the authorized endpoint', async () => {

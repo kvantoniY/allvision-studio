@@ -43,6 +43,7 @@ export type UpdateChildProfileInput = z.infer<typeof updateChildProfileSchema>;
 export interface ConsentDto {
   type: ConsentTypeValue;
   version: string;
+  textSnapshot: string;
   acceptedAt: string;
   revokedAt: string | null;
 }

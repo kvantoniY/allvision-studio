@@ -103,7 +103,7 @@ function AiContent() {
 
   const remove = async () => {
     if (!activeChatId) return;
-    if (!window.confirm('Удалить этот чат? Результаты проектов останутся в Студии.')) return;
+    if (!window.confirm('Удалить этот чат? Созданные материалы останутся в Нейролаборатории.')) return;
     await deleteChat(activeChatId).unwrap();
     setActiveChatId(null);
     void chats.refetch();

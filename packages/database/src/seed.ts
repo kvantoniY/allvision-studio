@@ -3457,7 +3457,7 @@ const publicSettings = [
   },
   { key: 'support_telegram', value: '@allvision_support' },
   { key: 'support_email', value: 'hello@allvision.studio' },
-  { key: 'company_name', value: 'Allvision Studio' },
+  { key: 'company_name', value: 'Allvision Academy' },
   { key: 'fairy_tale_tier_basic_price', value: '4990' },
   { key: 'fairy_tale_tier_extended_price', value: '7990' },
   { key: 'cartoon_base_rate_per_minute', value: '3000' },

@@ -56,12 +56,19 @@ const navGroups: NavGroup[] = [
   },
 ];
 
-export function AdminSidebarNav({ onNavigate }: { onNavigate?: () => void } = {}) {
+export function AdminSidebarNav({
+  onNavigate,
+  role = 'ADMIN',
+}: {
+  onNavigate?: () => void;
+  role?: 'ADMIN' | 'METHODIST';
+} = {}) {
   const pathname = usePathname();
+  const visibleGroups = role === 'METHODIST' ? navGroups.slice(0, 1) : navGroups;
 
   return (
     <nav className="space-y-5">
-      {navGroups.map((group) => (
+      {visibleGroups.map((group) => (
         <div key={group.label}>
           <div className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">
             {group.label}

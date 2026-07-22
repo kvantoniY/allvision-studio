@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { AcademyHome } from '@/components/academy/AcademyHome';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { pageMetadata } from '@/lib/seo';
-import { organizationSchema, websiteSchema } from '@/lib/structured-data';
+import { ACADEMY_FAQS } from '@/lib/academy-landing-content';
+import { faqSchema, organizationSchema, websiteSchema } from '@/lib/structured-data';
 
 export const metadata: Metadata = pageMetadata({
   title: 'Allvision Academy — персональная онлайн-школа для детей',
@@ -22,7 +23,7 @@ export const metadata: Metadata = pageMetadata({
 export default function HomePage() {
   return (
     <>
-      <JsonLd data={[organizationSchema(), websiteSchema()]} />
+      <JsonLd data={[organizationSchema(), websiteSchema(), faqSchema([...ACADEMY_FAQS])]} />
       <AcademyHome />
     </>
   );

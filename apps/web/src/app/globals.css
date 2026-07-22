@@ -55,7 +55,7 @@
      create a scroll container, so sticky headers keep working. Inner panels
      that need horizontal scrolling use their own `overflow-x-auto`. */
   html { overflow-x: clip; }
-  body { @apply bg-slate-950 text-foreground font-normal leading-relaxed; overflow-x: clip; }
+  body { @apply bg-background text-foreground font-normal leading-relaxed; overflow-x: clip; }
   h1 { @apply tracking-tight; }
   h2 { @apply font-bold tracking-tight; }
 }

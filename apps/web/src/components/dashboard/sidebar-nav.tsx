@@ -1,4 +1,4 @@
-import { Blocks, CalendarClock, Clapperboard, GraduationCap, Home, Library, MessageCircle, Sparkles, User, Users } from 'lucide-react';
+import { Blocks, BookOpenCheck, CalendarClock, Clapperboard, GraduationCap, HandCoins, Home, Library, MessageCircle, ShieldCheck, Sparkles, User, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -45,6 +45,7 @@ export const TEACHER_SIDEBAR_SECTIONS: SidebarSection[] = [
 export const METHODIST_SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     items: [
+      { href: '/admin/curriculum', label: 'Учебная программа', icon: BookOpenCheck },
       { href: '/constructor', label: 'Конструктор', icon: Blocks },
       { href: '/teacher/library', label: 'Материалы', icon: Library },
       { href: '/ai', label: 'Нейролаборатория', icon: Sparkles },
@@ -53,8 +54,22 @@ export const METHODIST_SIDEBAR_SECTIONS: SidebarSection[] = [
   },
 ];
 
+export const ADMIN_SIDEBAR_SECTIONS: SidebarSection[] = [
+  {
+    items: [
+      { href: '/', label: 'Главная', icon: Home },
+      { href: '/admin', label: 'Администрирование', icon: ShieldCheck },
+      { href: '/admin/curriculum', label: 'Учебная программа', icon: BookOpenCheck },
+      { href: '/admin/library', label: 'Материалы', icon: Library },
+      { href: '/admin/payouts', label: 'Выплаты', icon: HandCoins },
+      { href: '/profile', label: 'Профиль', icon: User },
+    ],
+  },
+];
+
 export function isActive(itemHref: string, pathname: string): boolean {
   if (itemHref === '/') return pathname === '/';
   if (itemHref === '/teacher') return pathname === '/teacher';
+  if (itemHref === '/admin') return pathname === '/admin';
   return pathname === itemHref || pathname.startsWith(itemHref + '/');
 }

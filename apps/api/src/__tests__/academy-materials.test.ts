@@ -1,6 +1,6 @@
 import request from 'supertest';
 import { prisma } from '@allvision/database';
-import { CONSENT_TYPES } from '@allvision/shared';
+import { CONSENT_CURRENT_VERSION, CONSENT_TYPES, consentTextSnapshot } from '@allvision/shared';
 import { app } from '../app';
 import { getStorageProvider } from '../providers';
 import { addAcademyGenerationJob } from '../queues';
@@ -86,7 +86,13 @@ beforeAll(async () => {
   const child = await prisma.childProfile.create({ data: { parentId: parent.id, name: 'Ученик A5' } });
   childId = child.id;
   await prisma.consent.createMany({
-    data: CONSENT_TYPES.map((type) => ({ parentId: parent.id, childId, type })),
+    data: CONSENT_TYPES.map((type) => ({
+      parentId: parent.id,
+      childId,
+      type,
+      version: CONSENT_CURRENT_VERSION,
+      textSnapshot: consentTextSnapshot(type),
+    })),
   });
   const profile = await prisma.characterProfile.create({ data: { childId, status: 'APPROVED', progress: 100 } });
   const ref = await prisma.characterReference.create({

@@ -240,7 +240,7 @@ export default function EpisodeDetailPage({ params }: PageProps) {
         open={confirm === 'watermark'}
         onOpenChange={(open) => setConfirm(open ? 'watermark' : null)}
         title="Убрать водяной знак?"
-        description="С баланса будет списано 60 токенов, а overlay исчезнет в плеере Allvision Studio."
+        description="С баланса будет списано 60 токенов, а overlay исчезнет в плеере Allvision Academy."
         confirmText="Убрать за 60"
         busy={removeState.isLoading}
         onConfirm={runWatermarkRemoval}

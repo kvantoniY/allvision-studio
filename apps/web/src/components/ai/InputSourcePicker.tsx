@@ -153,7 +153,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm text-foreground">{value.title}</div>
-              <div className="text-xs text-muted-foreground">{value.origin === 'studio' ? 'Студия' : value.origin === 'site' ? 'Библиотека сайта' : value.origin === 'result' ? 'Результат чата' : 'Загрузка'}</div>
+              <div className="text-xs text-muted-foreground">{value.origin === 'studio' ? 'Мои материалы' : value.origin === 'site' ? 'Библиотека Академии' : value.origin === 'result' ? 'Результат чата' : 'Загрузка'}</div>
             </div>
             <Button type="button" variant="ghost" size="icon" onClick={() => onChange(null)}>
               <X className="h-4 w-4" />
@@ -179,8 +179,8 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
               <div className="flex flex-wrap gap-2 border-b border-border p-4">
                 {[
                   { id: 'upload' as const, label: 'Загрузить с компьютера' },
-                  { id: 'studio' as const, label: 'Из моей Студии' },
-                  { id: 'site' as const, label: 'Из библиотеки сайта' },
+                  { id: 'studio' as const, label: 'Из моих материалов' },
+                  { id: 'site' as const, label: 'Из библиотеки Академии' },
                 ].map((item) => (
                   <Button
                     key={item.id}
@@ -208,7 +208,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
 
                 {tab === 'studio' && (
                   <AssetGrid
-                    emptyText={mediaKind === 'image' ? 'В Студии пока нет аватаров или локаций.' : 'Личная Студия пока хранит только изображения.'}
+                    emptyText={mediaKind === 'image' ? 'В личной медиатеке пока нет аватаров или локаций.' : 'Личная медиатека пока хранит только изображения.'}
                     items={studioItems.map((asset) => ({
                       id: asset.id,
                       ref: `asset:${asset.id}`,
@@ -227,7 +227,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
 
                 {tab === 'site' && (
                   <AssetGrid
-                    emptyText="В библиотеке сайта нет подходящих файлов."
+                    emptyText="В библиотеке Академии нет подходящих файлов."
                     items={(publicAssets.data?.assets ?? []).map((asset) => ({
                       id: asset.id,
                       ref: `asset:${asset.id}`,

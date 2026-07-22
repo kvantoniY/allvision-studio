@@ -639,8 +639,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     <>
       <div className="text-right leading-tight">
         <div className="flex items-center justify-end gap-1">
-          <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-primary' : 'text-red-300')} />
-          <span className={cn('text-xs font-semibold', canPay ? 'text-primary' : 'text-red-200')}>{costText}</span>
+          <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-primary' : 'text-destructive')} />
+          <span className={cn('text-xs font-semibold', canPay ? 'text-primary' : 'text-destructive')}>{costText}</span>
         </div>
         <div className="text-[11px] text-muted-foreground">Баланс {balance}</div>
       </div>
@@ -732,7 +732,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               </div>
             )}
             {!canPay && (
-              <div className="rounded-md border border-red-500/40 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-100">
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
                 На балансе {balance}, нужно {estimatedCostCoins}
               </div>
             )}
@@ -764,7 +764,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
             <span
               className={cn(
                 'pointer-events-none absolute right-3 top-2 rounded bg-card px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
-                promptTooLong ? 'text-red-300' : 'text-primary',
+                promptTooLong ? 'text-destructive' : 'text-primary',
               )}
             >
               {promptLength} / {CHAT_PROMPT_MAX_LENGTH}
@@ -856,7 +856,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           </div>
 
           {submitHint && (
-            <div className={cn('mt-2 truncate text-xs', canPay && !promptTooLong ? 'text-muted-foreground' : 'text-red-200')}>{submitHint}</div>
+            <div className={cn('mt-2 truncate text-xs', canPay && !promptTooLong ? 'text-muted-foreground' : 'text-destructive')}>{submitHint}</div>
           )}
         </div>
       </div>

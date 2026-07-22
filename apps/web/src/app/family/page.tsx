@@ -23,6 +23,7 @@ import {
 import {
   CHILD_PHOTO_MAX_SIZE_MB,
   CHILD_PHOTOS_MAX,
+  CONSENT_CURRENT_VERSION,
   CONSENT_DEFINITIONS,
   TOPIC_PROGRESS_LABELS,
   type ChildProfileDto,
@@ -151,7 +152,7 @@ function ConsentsBlock({ child }: { child: ChildProfileDto }) {
   const [checked, setChecked] = useState<Set<ConsentTypeValue>>(new Set());
 
   const activeTypes = useMemo(
-    () => new Set(child.consents.filter((c) => !c.revokedAt).map((c) => c.type)),
+    () => new Set(child.consents.filter((c) => !c.revokedAt && c.version === CONSENT_CURRENT_VERSION).map((c) => c.type)),
     [child.consents],
   );
   const pending = CONSENT_DEFINITIONS.filter((def) => !activeTypes.has(def.type));
@@ -197,6 +198,11 @@ function ConsentsBlock({ child }: { child: ChildProfileDto }) {
           Выбрать все
         </Button>
       </div>
+      <p className="text-xs leading-5 text-muted-foreground">
+        Редакция {CONSENT_CURRENT_VERSION}. Подтверждая пункт, вы заявляете, что являетесь родителем или законным
+        представителем ребёнка. Точный текст каждого принятого согласия сохраняется в журнале. Подробнее — в{' '}
+        <Link href="/privacy" target="_blank" className="underline hover:text-foreground">политике конфиденциальности</Link>.
+      </p>
       <div className="space-y-2">
         {pending.map((def) => (
           <label

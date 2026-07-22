@@ -6,7 +6,7 @@ import { pageMetadata } from '@/lib/seo';
 
 export const metadata: Metadata = pageMetadata({
   title: 'Контакты',
-  description: 'Связаться с Allvision Studio: Telegram поддержки, email и форма обратной связи. Отвечаем ежедневно.',
+  description: 'Связаться с Allvision Academy по вопросам занятий, расписания, оплаты и защиты данных ребёнка.',
   path: '/contacts',
 });
 
@@ -14,10 +14,10 @@ export default function ContactsPage() {
   return (
     <section className="container py-14 md:py-20">
       <div className="max-w-3xl">
-        <p className="text-sm font-medium uppercase tracking-[0.18em] text-indigo-500">Контакты</p>
+        <p className="text-sm font-medium uppercase tracking-[0.18em] text-primary">Контакты</p>
         <h1 className="mt-3 text-4xl font-bold md:text-6xl">Напишите нам</h1>
         <p className="mt-5 text-lg leading-8 text-muted-foreground">
-          Поможем выбрать услугу, разобраться с токенами, оценить заказной ролик или проверить техническую проблему.
+          Поможем выбрать длительность занятия, разобраться с расписанием и оплатой или решить техническую проблему в кабинете.
         </p>
       </div>
 

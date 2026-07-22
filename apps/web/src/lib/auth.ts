@@ -25,3 +25,10 @@ export async function requireAdminPage(): Promise<ServerUser> {
   if (me.role !== 'ADMIN') redirect('/dashboard');
   return me;
 }
+
+export async function requireAcademyStaffPage(): Promise<ServerUser> {
+  const me = await getServerMe();
+  if (!me) redirect('/login?redirect=/admin');
+  if (me.role !== 'ADMIN' && me.role !== 'METHODIST') redirect('/');
+  return me;
+}

@@ -7,7 +7,7 @@ type BrandLogoProps = {
 };
 
 /**
- * Allvision Studio brand mark. Source asset: /public/logo.png (eye on a
+ * Allvision Academy brand mark. Source asset: /public/logo.png (eye on a
  * gradient background). Square, with soft rounded corners. Size it via
  * className, e.g. `h-6 w-auto`.
  */
@@ -15,7 +15,7 @@ export function BrandLogo({ className }: BrandLogoProps) {
   return (
     <Image
       src="/logo.png"
-      alt="Allvision Studio"
+      alt="Allvision Academy"
       width={1254}
       height={1254}
       priority

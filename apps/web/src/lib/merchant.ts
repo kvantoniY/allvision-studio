@@ -1,5 +1,5 @@
 export const merchantInfo = {
-  brandName: 'Allvision Studio',
+  brandName: 'Allvision Academy',
   legalName: 'Громов Иван Олегович',
   taxStatus: 'Самозанятый, плательщик налога на профессиональный доход',
   inn: '380508498201',
@@ -12,4 +12,4 @@ export const merchantInfo = {
   workingHours: 'ежедневно с 9:00 до 22:00 МСК',
 } as const;
 
-export const legalDocumentVersion = '21.05.2026';
+export const legalDocumentVersion = '22.07.2026';

@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 // Единый источник публичного домена. Раньше домен был зашит как allvision.studio
 // в layout/sitemap — из-за этого canonical, OG и карта сайта указывали на чужой адрес.
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://allvision-pulse.ru').replace(/\/+$/, '');
-export const SITE_NAME = 'Allvision Studio';
+export const SITE_NAME = 'Allvision Academy';
 export const DEFAULT_OG_IMAGE = '/logo_socialnetwork.png';
 
 // Для серверных fetch публичных данных (sitemap, метаданные услуг).

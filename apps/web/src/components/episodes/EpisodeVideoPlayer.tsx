@@ -26,7 +26,7 @@ export function EpisodeVideoPlayer({ src, poster, watermarkRemoved }: EpisodeVid
       />
       {!watermarkRemoved && (
         <div className="pointer-events-none absolute bottom-3 right-3 rounded bg-slate-950/70 px-3 py-1.5 text-xs font-semibold text-white shadow">
-          Allvision Studio
+          Allvision Academy
         </div>
       )}
     </div>

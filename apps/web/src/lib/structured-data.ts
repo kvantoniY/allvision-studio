@@ -7,9 +7,9 @@ type Schema = Record<string, unknown>;
 export function organizationSchema(): Schema {
   return {
     '@context': 'https://schema.org',
-    '@type': 'Organization',
+    '@type': 'EducationalOrganization',
     name: SITE_NAME,
-    alternateName: ['Allvision', 'Allvision AI', 'Алвижн'],
+    alternateName: ['Allvision', 'Алвижн Академия'],
     url: SITE_URL,
     logo: absoluteImage(DEFAULT_OG_IMAGE),
     email: merchantInfo.email,
@@ -35,14 +35,9 @@ export function websiteSchema(): Schema {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     name: SITE_NAME,
-    alternateName: 'Allvision',
+    alternateName: 'Allvision Academy',
     url: SITE_URL,
     inLanguage: 'ru-RU',
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: `${SITE_URL}/services?q={search_term_string}`,
-      'query-input': 'required name=search_term_string',
-    },
   };
 }
 

@@ -182,13 +182,14 @@ model ChildAsset {
 
 // === Согласия родителя на обработку данных ребёнка ===
 model Consent {
-  id         String      @id @default(cuid())
-  parentId   String
-  childId    String
-  type       ConsentType
-  version    String      @default("v1")
-  acceptedAt DateTime    @default(now())
-  revokedAt  DateTime?
+  id           String      @id @default(cuid())
+  parentId     String
+  childId      String
+  type         ConsentType
+  version      String      @default("v2")
+  textSnapshot String      @db.Text
+  acceptedAt   DateTime    @default(now())
+  revokedAt    DateTime?
 
   parent User         @relation(fields: [parentId], references: [id], onDelete: Cascade)
   child  ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)

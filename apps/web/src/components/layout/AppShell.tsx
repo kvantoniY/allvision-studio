@@ -32,10 +32,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <>
+    <div className="academy-theme flex min-h-screen flex-col bg-background text-foreground">
       {!isAuthRoute && !isMockPaymentRoute && !isAdminRoute && <Header />}
       <main className="flex-1">{children}</main>
       {!isAuthRoute && !isMockPaymentRoute && !isAdminRoute && <Footer />}
-    </>
+    </div>
   );
 }
