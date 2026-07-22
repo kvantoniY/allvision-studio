@@ -36,8 +36,26 @@ const panel = 'rounded-2xl border border-border bg-card p-4 shadow-sm';
 const rowActive = 'bg-primary text-primary-foreground shadow-sm';
 const rowIdle = 'text-muted-foreground hover:bg-accent hover:text-accent-foreground';
 
+const TRANSLIT: Record<string, string> = {
+  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'i',
+  к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+  х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+};
+
+/**
+ * Слаг из названия. Кириллица транслитерируется (без этого русское название давало
+ * пустой слаг и API отклонял создание направления/курса/навыка).
+ */
 function slugify(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+  const base = s
+    .toLowerCase()
+    .split('')
+    .map((ch) => TRANSLIT[ch] ?? ch)
+    .join('')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+  return base.length >= 2 ? base : `item-${Date.now().toString(36)}`;
 }
 
 // === Направления ===

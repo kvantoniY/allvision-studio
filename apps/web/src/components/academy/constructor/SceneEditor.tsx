@@ -2,15 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Eye, Image as ImageIcon, Layers, Loader2, Pencil, Plus, Redo2, Trash2, Undo2,
+  ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Copy, Eye, Image as ImageIcon, Layers, Loader2, Pencil, Plus, Redo2, Trash2, Undo2, Volume2, Zap,
 } from 'lucide-react';
 import {
   ACADEMY_SCENE_ELEMENT_TYPES,
   ACADEMY_SCENE_ELEMENT_TYPE_LABELS,
+  ACADEMY_SCENE_ACTION_TYPES,
   ACADEMY_SCENE_LAYER_KINDS,
   createEmptyScene,
   addElement,
   addLayer,
+  addRule,
+  removeRule,
+  updateRule,
   patchElementTransform,
   removeElement,
   removeLayer,
@@ -35,6 +39,28 @@ import { BackgroundGenerator } from './BackgroundGenerator';
 import { RulesEditor } from './RulesEditor';
 
 const IMAGE_TYPES = ['background', 'animated-background', 'foreground', 'image', 'character', 'npc', 'prop', 'video'];
+
+// Ручки изменения размера выбранного элемента на холсте.
+type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+const RESIZE_HANDLES: ResizeHandle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+const HANDLE_POS: Record<ResizeHandle, string> = {
+  nw: '-left-1.5 -top-1.5', n: 'left-1/2 -top-1.5 -translate-x-1/2', ne: '-right-1.5 -top-1.5',
+  e: '-right-1.5 top-1/2 -translate-y-1/2', se: '-right-1.5 -bottom-1.5',
+  s: 'left-1/2 -bottom-1.5 -translate-x-1/2', sw: '-left-1.5 -bottom-1.5',
+  w: '-left-1.5 top-1/2 -translate-y-1/2',
+};
+const ELEMENT_ACTION_LABELS: Record<string, string> = {
+  'show-element': 'Показать элемент', 'hide-element': 'Скрыть элемент', 'toggle-element': 'Переключить элемент',
+  'play-sound': 'Проиграть звук', 'set-pose': 'Сменить позу', 'play-animation': 'Анимация',
+  'add-score': 'Добавить очки', 'show-hint': 'Показать подсказку', 'set-state': 'Сменить состояние сцены',
+  'set-variable': 'Задать переменную', 'allow-transition': 'Разрешить переход',
+  'next-scene': 'Следующая сцена', 'emit-event': 'Отправить событие',
+};
+
+const HANDLE_CURSOR: Record<ResizeHandle, string> = {
+  nw: 'nwse-resize', n: 'ns-resize', ne: 'nesw-resize', e: 'ew-resize',
+  se: 'nwse-resize', s: 'ns-resize', sw: 'nesw-resize', w: 'ew-resize',
+};
 const TEXT_TYPES = ['text', 'dialogue', 'button', 'card'];
 
 /** Читает документ урока: массив сцен из `{scenes:[]}` или обёртка одиночной сцены. */
@@ -371,6 +397,8 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
             <ElementInspector
               key={selected.id}
               element={selected}
+              scene={scene}
+              onSceneChange={apply}
               onChange={(patch) => apply(updateElement(scene, selected.id, patch))}
               onDelete={() => { apply(removeElement(scene, selected.id)); setSelectedId(null); }}
               onReorder={(dir) => selectedLayerId && apply(reorderElement(scene, selectedLayerId, selected.id, dir))}
@@ -421,20 +449,60 @@ function EditCanvas({
     return () => ro.disconnect();
   }, []);
   const scale = width / scene.viewport.width;
-  const drag = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number } | null>(null);
+  type DragState = {
+    id: string;
+    mode: 'move' | 'resize';
+    handle?: ResizeHandle;
+    startX: number;
+    startY: number;
+    ox: number; oy: number; ow: number; oh: number;
+  };
+  const drag = useRef<DragState | null>(null);
 
   const onPointerDown = (e: React.PointerEvent, el: AcademySceneElement) => {
     e.stopPropagation();
     onSelect(el.id);
     onBeginDrag();
-    drag.current = { id: el.id, startX: e.clientX, startY: e.clientY, ox: el.transform.x, oy: el.transform.y };
+    drag.current = {
+      id: el.id, mode: 'move',
+      startX: e.clientX, startY: e.clientY,
+      ox: el.transform.x, oy: el.transform.y, ow: el.transform.width, oh: el.transform.height,
+    };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
+
+  const onResizeDown = (e: React.PointerEvent, el: AcademySceneElement, handle: ResizeHandle) => {
+    e.stopPropagation();
+    onSelect(el.id);
+    onBeginDrag();
+    drag.current = {
+      id: el.id, mode: 'resize', handle,
+      startX: e.clientX, startY: e.clientY,
+      ox: el.transform.x, oy: el.transform.y, ow: el.transform.width, oh: el.transform.height,
+    };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    const dx = (e.clientX - drag.current.startX) / scale;
-    const dy = (e.clientY - drag.current.startY) / scale;
-    onApply(patchElementTransform(scene, drag.current.id, { x: Math.round(drag.current.ox + dx), y: Math.round(drag.current.oy + dy) }));
+    const d = drag.current;
+    if (!d) return;
+    const dx = (e.clientX - d.startX) / scale;
+    const dy = (e.clientY - d.startY) / scale;
+
+    if (d.mode === 'move') {
+      onApply(patchElementTransform(scene, d.id, { x: Math.round(d.ox + dx), y: Math.round(d.oy + dy) }));
+      return;
+    }
+    const h = d.handle!;
+    const MIN = 16;
+    let { ox: x, oy: y, ow: w, oh: hgt } = d;
+    if (h.includes('e')) w = Math.max(MIN, d.ow + dx);
+    if (h.includes('s')) hgt = Math.max(MIN, d.oh + dy);
+    if (h.includes('w')) { const nw = Math.max(MIN, d.ow - dx); x = d.ox + (d.ow - nw); w = nw; }
+    if (h.includes('n')) { const nh = Math.max(MIN, d.oh - dy); y = d.oy + (d.oh - nh); hgt = nh; }
+    onApply(patchElementTransform(scene, d.id, {
+      x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(hgt),
+    }));
   };
   const onPointerUp = () => { drag.current = null; };
 
@@ -448,7 +516,9 @@ function EditCanvas({
         style={{ aspectRatio: `${scene.viewport.width} / ${scene.viewport.height}`, backgroundColor: scene.viewport.backgroundColor }}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onClick={() => onSelect('')}
+        // Снимаем выделение ТОЛЬКО по клику в пустое место холста: иначе клик по элементу
+        // всплывал сюда и тут же сбрасывал только что выбранный элемент.
+        onClick={(e) => { if (e.target === e.currentTarget) onSelect(''); }}
       >
         {layers.filter((l) => l.visible).map((layer) =>
           layer.elements.map((el) => (
@@ -466,6 +536,17 @@ function EditCanvas({
               }}
             >
               <ElementVisual element={el} />
+              {el.id === selectedId && !el.locked && RESIZE_HANDLES.map((h) => (
+                <span
+                  key={h}
+                  onPointerDown={(e) => onResizeDown(e, el, h)}
+                  className={cn(
+                    'absolute z-10 h-2.5 w-2.5 rounded-full border border-white bg-primary shadow',
+                    HANDLE_POS[h],
+                  )}
+                  style={{ cursor: HANDLE_CURSOR[h] }}
+                />
+              ))}
             </div>
           )),
         )}
@@ -475,11 +556,96 @@ function EditCanvas({
 }
 
 function ElementVisual({ element }: { element: AcademySceneElement }) {
+  // Реальная картинка, если материал уже привязан.
+  if (IMAGE_TYPES.includes(element.type) && element.asset?.fileUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={element.asset.fileUrl} alt={element.name} className="h-full w-full object-contain" draggable={false} />;
+  }
+
+  // Персонаж ученика: абстрактный силуэт (реальный ребёнок подставится при подготовке урока).
+  if (element.type === 'character') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 p-1">
+        <svg viewBox="0 0 40 64" className="h-full w-auto max-h-full text-primary/45" fill="currentColor" preserveAspectRatio="xMidYMid meet">
+          <circle cx="20" cy="12" r="9" />
+          <path d="M20 23c-9 0-15 6-15 14v20a3 3 0 003 3h24a3 3 0 003-3V37c0-8-6-14-15-14z" />
+        </svg>
+        <span className="mt-0.5 shrink-0 text-[9px] font-medium text-primary/70">Персонаж ученика</span>
+      </div>
+    );
+  }
+
+  // NPC — силуэт другого оттенка.
+  if (element.type === 'npc') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-400/60 bg-slate-400/10 p-1">
+        <svg viewBox="0 0 40 64" className="h-full w-auto max-h-full text-slate-500/50" fill="currentColor" preserveAspectRatio="xMidYMid meet">
+          <circle cx="20" cy="12" r="9" />
+          <path d="M20 23c-9 0-15 6-15 14v20a3 3 0 003 3h24a3 3 0 003-3V37c0-8-6-14-15-14z" />
+        </svg>
+        <span className="mt-0.5 shrink-0 text-[9px] font-medium text-slate-600">NPC</span>
+      </div>
+    );
+  }
+
+  // Поле ввода — выглядит как поле ввода.
+  if (element.type === 'input') {
+    return (
+      <div className="flex h-full w-full items-center rounded-md border border-slate-300 bg-white px-2 shadow-inner">
+        <span className="truncate text-slate-400" style={{ fontSize: Math.max(9, (element.style.fontSize ?? 20) * 0.6) }}>
+          {element.content.placeholder ?? 'Ответ ученика…'}
+        </span>
+        <span className="ml-0.5 h-[55%] w-px animate-pulse bg-slate-400" />
+      </div>
+    );
+  }
+
+  if (element.type === 'timer') {
+    const sec = Math.round((element.content.durationMs ?? 5000) / 1000);
+    return (
+      <div className="flex h-full w-full items-center justify-center gap-1 rounded-full border border-amber-300 bg-amber-50 text-amber-700">
+        <Clock className="h-[38%] w-auto" />
+        <span className="font-semibold" style={{ fontSize: Math.max(9, (element.transform.height * 0.28)) }}>{sec}s</span>
+      </div>
+    );
+  }
+
+  if (element.type === 'progress' || element.type === 'indicator') {
+    return (
+      <div className="flex h-full w-full items-center rounded-full border border-slate-300 bg-slate-100 p-[3px]">
+        <div className="h-full w-1/2 rounded-full bg-primary/70" />
+      </div>
+    );
+  }
+
+  if (element.type === 'hotspot' || element.type === 'collision') {
+    return <div className="h-full w-full rounded-lg border-2 border-dashed border-sky-400/70 bg-sky-400/10" />;
+  }
+
+  if (element.type === 'platform') {
+    return <div className="h-full w-full rounded-md border-b-4 border-emerald-700/60 bg-emerald-500/50" />;
+  }
+
+  if (element.type === 'audio') {
+    return (
+      <div className="flex h-full w-full items-center justify-center gap-1 rounded-lg border border-violet-300 bg-violet-50 text-violet-600">
+        <Volume2 className="h-[45%] w-auto" />
+      </div>
+    );
+  }
+
+  if (element.type === 'particles') {
+    return (
+      <div className="relative h-full w-full overflow-hidden rounded-lg border border-dashed border-fuchsia-300 bg-fuchsia-50/60">
+        {[[20, 30], [55, 20], [75, 60], [35, 70], [60, 45]].map(([l, t], i) => (
+          <span key={i} className="absolute rounded-full bg-fuchsia-400/70" style={{ left: `${l}%`, top: `${t}%`, width: 5, height: 5 }} />
+        ))}
+      </div>
+    );
+  }
+
+  // Незаполненные картиночные типы (фон, предмет, видео…) — заглушка с подписью.
   if (IMAGE_TYPES.includes(element.type)) {
-    if (element.asset?.fileUrl) {
-      // eslint-disable-next-line @next/next/no-img-element
-      return <img src={element.asset.fileUrl} alt={element.name} className="h-full w-full object-contain" draggable={false} />;
-    }
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-1 rounded border-2 border-dashed border-primary/40 bg-primary/5 text-center text-[11px] text-primary/70">
         <ImageIcon className="h-4 w-4" />
@@ -512,9 +678,11 @@ function ElementVisual({ element }: { element: AcademySceneElement }) {
 
 // === Инспектор элемента ===
 function ElementInspector({
-  element, onChange, onDelete, onReorder, onPickAsset,
+  element, scene, onSceneChange, onChange, onDelete, onReorder, onPickAsset,
 }: {
   element: AcademySceneElement;
+  scene: AcademyScene;
+  onSceneChange: (scene: AcademyScene) => void;
   onChange: (patch: Partial<AcademySceneElement>) => void;
   onDelete: () => void;
   onReorder: (dir: -1 | 1) => void;
@@ -522,6 +690,19 @@ function ElementInspector({
 }) {
   const t = element.transform;
   const setT = (patch: Partial<AcademySceneElement['transform']>) => onChange({ transform: { ...t, ...patch } });
+
+  // Правила, привязанные именно к этому элементу.
+  const ownRules = scene.rules.filter((r) => r.event.sourceElementId === element.id);
+  const otherElements = scene.layers.flatMap((l) => l.elements).filter((e) => e.id !== element.id);
+
+  const addClickRule = () => {
+    const created = addRule(scene);
+    onSceneChange(updateRule(created.scene, created.ruleId, {
+      name: `Клик: ${element.name}`,
+      event: { type: 'element-click', sourceElementId: element.id },
+      actions: [{ type: 'add-score', value: 10 }],
+    }));
+  };
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -564,6 +745,79 @@ function ElementInspector({
       <div className="flex gap-1.5">
         <Button variant="outline" size="sm" className="flex-1" onClick={() => onReorder(-1)}>Ниже</Button>
         <Button variant="outline" size="sm" className="flex-1" onClick={() => onReorder(1)}>Выше</Button>
+      </div>
+
+      {/* События именно этого элемента */}
+      <div className="space-y-2 rounded-lg border border-border p-2.5">
+        <div className="flex items-center justify-between">
+          <Label className="flex items-center gap-1.5 text-xs font-medium"><Zap className="h-3.5 w-3.5 text-primary" /> Что происходит при клике</Label>
+          <Button variant="outline" size="sm" className="h-7 px-2" onClick={addClickRule}><Plus className="h-3.5 w-3.5" /></Button>
+        </div>
+        {ownRules.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground">Нет действий. Нажмите «+», чтобы ученик, кликнув по элементу, получал очки, открывал объект и т.д.</p>
+        ) : (
+          <div className="space-y-2">
+            {ownRules.map((rule) => (
+              <div key={rule.id} className="rounded-md border border-border bg-muted/40 p-2">
+                <div className="mb-1 flex items-center gap-1">
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-medium">{rule.name}</span>
+                  <button
+                    type="button"
+                    aria-label="Удалить действие"
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => onSceneChange(removeRule(scene, rule.id))}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {rule.actions.map((action, idx) => (
+                  <div key={idx} className="mb-1 flex flex-wrap items-center gap-1">
+                    <select
+                      value={action.type}
+                      onChange={(e) => onSceneChange(updateRule(scene, rule.id, {
+                        actions: rule.actions.map((a, i) => (i === idx ? { ...a, type: e.target.value as typeof a.type } : a)),
+                      }))}
+                      className="rounded border border-border bg-background px-1 py-0.5 text-[11px]"
+                    >
+                      {ACADEMY_SCENE_ACTION_TYPES.map((tp) => <option key={tp} value={tp}>{ELEMENT_ACTION_LABELS[tp] ?? tp}</option>)}
+                    </select>
+                    {['show-element', 'hide-element', 'toggle-element', 'play-sound', 'set-pose', 'play-animation'].includes(action.type) && (
+                      <select
+                        value={action.elementId ?? ''}
+                        onChange={(e) => onSceneChange(updateRule(scene, rule.id, {
+                          actions: rule.actions.map((a, i) => (i === idx ? { ...a, elementId: e.target.value || undefined } : a)),
+                        }))}
+                        className="rounded border border-border bg-background px-1 py-0.5 text-[11px]"
+                      >
+                        <option value="">— элемент —</option>
+                        {otherElements.map((el) => <option key={el.id} value={el.id}>{el.name}</option>)}
+                        <option value={element.id}>(этот элемент)</option>
+                      </select>
+                    )}
+                    {action.type === 'add-score' && (
+                      <input
+                        type="number"
+                        value={typeof action.value === 'number' ? action.value : 10}
+                        onChange={(e) => onSceneChange(updateRule(scene, rule.id, {
+                          actions: rule.actions.map((a, i) => (i === idx ? { ...a, value: Number(e.target.value) } : a)),
+                        }))}
+                        className="h-6 w-14 rounded border border-border bg-background px-1 text-[11px]"
+                      />
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  className="text-[11px] text-primary hover:underline"
+                  onClick={() => onSceneChange(updateRule(scene, rule.id, { actions: [...rule.actions, { type: 'add-score', value: 10 }] }))}
+                >
+                  + действие
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-[10px] text-muted-foreground">Сложные правила (условия, таймеры, клавиши) — в панели «Правила» внизу.</p>
       </div>
     </div>
   );

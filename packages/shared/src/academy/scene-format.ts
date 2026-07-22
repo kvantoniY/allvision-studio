@@ -233,7 +233,10 @@ export const academySceneElementSchema = z.object({
     keyboardShortcut: z.string().trim().max(40).optional(),
   }).strict().optional(),
 }).strict().superRefine((element, ctx) => {
-  const sourceTypes = ['animated-background', 'video', 'foreground', 'image', 'character', 'npc', 'prop', 'audio'];
+  // ВАЖНО: `character` (персонаж ученика) сюда НЕ входит — в шаблоне он намеренно
+  // абстрактный, конкретный ребёнок подставляется при подготовке урока
+  // (resolveInstanceScene). Требовать у него ассет на публикации нельзя.
+  const sourceTypes = ['animated-background', 'video', 'foreground', 'image', 'npc', 'prop', 'audio'];
   if (sourceTypes.includes(element.type) && !element.asset && !element.content.sourceUrl) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
