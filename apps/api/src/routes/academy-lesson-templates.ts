@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { Prisma, prisma } from '@allvision/database';
-import { createEmptyScene, validateScene } from '@allvision/shared';
+import { createEmptyScene, readSceneDocument, validateScene } from '@allvision/shared';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/require-role';
 import { HttpError } from '../utils/http-error';
@@ -29,6 +29,17 @@ const updateSchema = z.object({
 
 function isAdmin(req: Request) {
   return req.user!.role === 'ADMIN';
+}
+
+/** Валидирует документ урока (одну или несколько сцен) строгой схемой. */
+function validateLessonDocument(sceneJson: unknown): { ok: true } | { ok: false; issue: string } {
+  const scenes = readSceneDocument(sceneJson);
+  if (scenes.length === 0) return { ok: false, issue: 'В уроке нет сцен' };
+  for (let i = 0; i < scenes.length; i += 1) {
+    const result = validateScene(scenes[i]);
+    if (!result.ok) return { ok: false, issue: `Сцена ${i + 1}: ${result.issues[0] ?? 'невалидна'}` };
+  }
+  return { ok: true };
 }
 
 async function findTemplate(req: Request) {
@@ -92,15 +103,16 @@ academyLessonTemplatesRouter.patch('/:id', async (req: Request, res: Response, n
       if (Buffer.byteLength(JSON.stringify(data.scene)) > MAX_SCENE_BYTES) {
         throw new HttpError(413, 'SCENE_TOO_LARGE', 'Сцена слишком большая');
       }
-      if (!Array.isArray((data.scene as { layers?: unknown }).layers)) {
+      const shape = data.scene as { layers?: unknown; scenes?: unknown };
+      if (!Array.isArray(shape.layers) && !Array.isArray(shape.scenes)) {
         throw new HttpError(400, 'INVALID_SCENE_SHAPE', 'Некорректная структура сцены');
       }
     }
-    // Публикация требует строго валидной сцены.
+    // Публикация требует строго валидного документа (все сцены).
     if (data.status === 'published') {
       const sceneToCheck = data.scene ?? (await prisma.lessonTemplate.findUnique({ where: { id: req.params.id } }))?.scene;
-      const check = validateScene(sceneToCheck);
-      if (!check.ok) throw new HttpError(400, 'SCENE_INVALID', `Нельзя опубликовать: ${check.issues[0] ?? 'сцена невалидна'}`);
+      const check = validateLessonDocument(sceneToCheck);
+      if (!check.ok) throw new HttpError(400, 'SCENE_INVALID', `Нельзя опубликовать: ${check.issue}`);
     }
 
     const template = await prisma.lessonTemplate.update({
@@ -122,8 +134,8 @@ academyLessonTemplatesRouter.patch('/:id', async (req: Request, res: Response, n
 academyLessonTemplatesRouter.post('/:id/publish', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const template = await findTemplate(req);
-    const check = validateScene(template.scene);
-    if (!check.ok) throw new HttpError(400, 'SCENE_INVALID', `Нельзя опубликовать: ${check.issues[0] ?? 'сцена невалидна'}`);
+    const check = validateLessonDocument(template.scene);
+    if (!check.ok) throw new HttpError(400, 'SCENE_INVALID', `Нельзя опубликовать: ${check.issue}`);
     const version = template.latestVersion + 1;
     const created = await prisma.$transaction(async (tx) => {
       const v = await tx.lessonTemplateVersion.create({

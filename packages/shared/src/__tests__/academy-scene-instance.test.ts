@@ -1,5 +1,5 @@
 import { createEmptyScene, addElement } from '../academy/scene-editing';
-import { pickCharacterReferenceKind, resolveInstanceScene } from '../academy/scene-instance';
+import { pickCharacterReferenceKind, readSceneDocument, resolveInstanceScene } from '../academy/scene-instance';
 
 function sceneWithCharacter() {
   const base = createEmptyScene();
@@ -30,6 +30,24 @@ describe('resolveInstanceScene', () => {
     resolveInstanceScene(scene, { character: { assetId: 'x', fileUrl: '/f', mimeType: 'image/jpeg' } });
     const original = scene.layers.flatMap((l) => l.elements).find((e) => e.id === characterId);
     expect(original?.asset).toBeUndefined();
+  });
+});
+
+describe('readSceneDocument', () => {
+  it('reads a multi-scene document', () => {
+    const a = createEmptyScene({ title: 'A' });
+    const b = createEmptyScene({ title: 'B' });
+    expect(readSceneDocument({ scenes: [a, b] })).toHaveLength(2);
+  });
+
+  it('wraps a single legacy scene', () => {
+    const single = createEmptyScene();
+    expect(readSceneDocument(single)).toHaveLength(1);
+  });
+
+  it('returns empty for malformed input', () => {
+    expect(readSceneDocument({})).toEqual([]);
+    expect(readSceneDocument(null)).toEqual([]);
   });
 });
 

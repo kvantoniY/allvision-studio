@@ -5,7 +5,6 @@ import {
   pickCharacterReferenceKind,
   readSceneDocument,
   resolveInstanceScene,
-  type AcademyScene,
   type CharacterInjection,
   type InstanceOverrides,
 } from '@allvision/shared';
@@ -137,25 +136,11 @@ async function loadInstanceForParticipant(req: Request) {
 academyLessonInstancesRouter.get('/:id/scene', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const instance = await loadInstanceForParticipant(req);
-    const scene = instance.version.scene as unknown as AcademyScene;
-
-    // Подстановка персонажа: APPROVED-профиль ребёнка → лучший референс.
-    let character: CharacterInjection | null = null;
-    const profile = await prisma.characterProfile.findFirst({
-      where: { childId: instance.childId, status: 'APPROVED' },
-      include: { references: true },
-    });
-    if (profile && profile.references.length > 0) {
-      const kind = pickCharacterReferenceKind(profile.references.map((r) => r.kind));
-      const ref = profile.references.find((r) => r.kind === kind) ?? profile.references[0];
-      character = {
-        assetId: ref.id,
-        fileUrl: `/api/academy/lesson-instances/${instance.id}/character/${ref.id}/file`,
-        mimeType: ref.mimeType,
-      };
-    }
-
-    const resolved = resolveInstanceScene(scene, { character, overrides: (instance.overrides ?? {}) as InstanceOverrides });
+    // Первая сцена документа урока (для быстрого превью подготовки).
+    const first = readSceneDocument(instance.version.scene)[0];
+    if (!first) throw new HttpError(404, 'SCENE_EMPTY', 'В уроке нет сцен');
+    const character = await characterForInstance(instance.id, instance.childId);
+    const resolved = resolveInstanceScene(first, { character, overrides: (instance.overrides ?? {}) as InstanceOverrides });
     res.json({ scene: resolved, hasCharacter: Boolean(character) });
   } catch (err) {
     next(err);

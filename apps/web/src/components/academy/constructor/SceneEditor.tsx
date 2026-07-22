@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, Check, Eye, Image as ImageIcon, Layers, Loader2, Pencil, Plus, Redo2, Trash2, Undo2,
+  ArrowLeft, Check, ChevronLeft, ChevronRight, Copy, Eye, Image as ImageIcon, Layers, Loader2, Pencil, Plus, Redo2, Trash2, Undo2,
 } from 'lucide-react';
 import {
   ACADEMY_SCENE_ELEMENT_TYPES,
@@ -34,11 +34,14 @@ import { RulesEditor } from './RulesEditor';
 const IMAGE_TYPES = ['background', 'animated-background', 'foreground', 'image', 'character', 'npc', 'prop', 'video'];
 const TEXT_TYPES = ['text', 'dialogue', 'button', 'card'];
 
-function safeScene(raw: unknown, title: string): AcademyScene {
-  const s = raw as AcademyScene | undefined;
-  if (s && s.viewport && Array.isArray(s.layers) && Array.isArray(s.states)) return s;
-  // Malformed draft → пересоздаём валидный каркас (крайне редкий случай).
-  return createEmptyScene({ title });
+/** Читает документ урока: массив сцен из `{scenes:[]}` или обёртка одиночной сцены. */
+function documentFrom(raw: unknown, title: string): AcademyScene[] {
+  if (raw && typeof raw === 'object') {
+    const r = raw as { scenes?: unknown; layers?: unknown };
+    if (Array.isArray(r.scenes) && r.scenes.length > 0) return r.scenes as AcademyScene[];
+    if (Array.isArray(r.layers)) return [raw as AcademyScene];
+  }
+  return [createEmptyScene({ title })];
 }
 
 function NumberField({ label, value, onChange, step = 1 }: { label: string; value: number; onChange: (v: number) => void; step?: number }) {
@@ -61,14 +64,15 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
   const [updateTemplate] = useUpdateTemplateMutation();
   const [publishTemplate] = usePublishTemplateMutation();
 
-  const [scene, setScene] = useState<AcademyScene | null>(null);
+  const [scenes, setScenes] = useState<AcademyScene[] | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
   const [title, setTitle] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
   const [previewRole, setPreviewRole] = useState<'student' | 'teacher'>('student');
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [past, setPast] = useState<AcademyScene[]>([]);
-  const [future, setFuture] = useState<AcademyScene[]>([]);
+  const [past, setPast] = useState<AcademyScene[][]>([]);
+  const [future, setFuture] = useState<AcademyScene[][]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -77,45 +81,115 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
   useEffect(() => {
     if (!data || loadedFor.current === templateId) return;
     loadedFor.current = templateId;
-    setScene(safeScene(data.template.scene, data.template.title));
+    setScenes(documentFrom(data.template.scene, data.template.title));
+    setActiveIndex(0);
     setTitle(data.template.title);
   }, [data, templateId]);
 
-  const apply = useCallback((next: AcademyScene) => {
-    setScene((current) => {
-      if (current) setPast((p) => [...p.slice(-49), current]);
+  const scene = scenes ? scenes[activeIndex] ?? scenes[0] ?? null : null;
+
+  const pushUndo = useCallback((snapshot: AcademyScene[]) => {
+    setPast((p) => [...p.slice(-49), snapshot]);
+    setFuture([]);
+  }, []);
+
+  // Правка активной сцены (с записью в undo).
+  const apply = useCallback((nextScene: AcademyScene) => {
+    setScenes((cur) => {
+      if (!cur) return cur;
+      pushUndo(cur);
+      const next = cur.slice();
+      next[activeIndex] = nextScene;
       return next;
     });
-    setFuture([]);
     setDirty(true);
-  }, []);
+  }, [activeIndex, pushUndo]);
+
+  // Правка активной сцены БЕЗ undo — для драга на канвасе (снимок делается один раз в начале).
+  const applyNoUndo = useCallback((nextScene: AcademyScene) => {
+    setScenes((cur) => {
+      if (!cur) return cur;
+      const next = cur.slice();
+      next[activeIndex] = nextScene;
+      return next;
+    });
+    setDirty(true);
+  }, [activeIndex]);
+
+  const snapshotForDrag = useCallback(() => { setScenes((cur) => { if (cur) pushUndo(cur); return cur; }); }, [pushUndo]);
 
   const undo = () => {
     setPast((p) => {
-      if (p.length === 0 || !scene) return p;
-      setFuture((f) => [scene, ...f].slice(0, 50));
-      setScene(p[p.length - 1]);
+      if (p.length === 0 || !scenes) return p;
+      setFuture((f) => [scenes, ...f].slice(0, 50));
+      const prev = p[p.length - 1];
+      setScenes(prev);
+      setActiveIndex((i) => Math.min(i, prev.length - 1));
       setDirty(true);
       return p.slice(0, -1);
     });
   };
   const redo = () => {
     setFuture((f) => {
-      if (f.length === 0 || !scene) return f;
-      setPast((p) => [...p, scene]);
-      setScene(f[0]);
+      if (f.length === 0 || !scenes) return f;
+      setPast((p) => [...p, scenes]);
+      const nx = f[0];
+      setScenes(nx);
+      setActiveIndex((i) => Math.min(i, nx.length - 1));
       setDirty(true);
       return f.slice(1);
     });
   };
 
-  // Автосохранение (debounce 1.5с).
+  // Операции со сценами урока.
+  const addScene = () => {
+    if (!scenes) return;
+    pushUndo(scenes);
+    setScenes([...scenes, createEmptyScene({ title: `Сцена ${scenes.length + 1}` })]);
+    setActiveIndex(scenes.length);
+    setSelectedId(null);
+    setDirty(true);
+  };
+  const duplicateScene = () => {
+    if (!scenes || !scene) return;
+    pushUndo(scenes);
+    const copy: AcademyScene = JSON.parse(JSON.stringify(scene));
+    copy.id = `${copy.id}-copy-${Date.now().toString(36)}`.slice(0, 110);
+    copy.title = `${copy.title} (копия)`.slice(0, 200);
+    const next = [...scenes];
+    next.splice(activeIndex + 1, 0, copy);
+    setScenes(next);
+    setActiveIndex(activeIndex + 1);
+    setDirty(true);
+  };
+  const deleteScene = () => {
+    if (!scenes || scenes.length <= 1) return;
+    if (!window.confirm('Удалить эту сцену урока?')) return;
+    pushUndo(scenes);
+    setScenes(scenes.filter((_, i) => i !== activeIndex));
+    setActiveIndex(Math.max(0, activeIndex - 1));
+    setSelectedId(null);
+    setDirty(true);
+  };
+  const moveScene = (dir: -1 | 1) => {
+    if (!scenes) return;
+    const target = activeIndex + dir;
+    if (target < 0 || target >= scenes.length) return;
+    pushUndo(scenes);
+    const next = [...scenes];
+    [next[activeIndex], next[target]] = [next[target], next[activeIndex]];
+    setScenes(next);
+    setActiveIndex(target);
+    setDirty(true);
+  };
+
+  // Автосохранение документа урока (debounce 1.5с).
   useEffect(() => {
-    if (!dirty || !scene) return undefined;
+    if (!dirty || !scenes) return undefined;
     const timer = setTimeout(async () => {
       setSaving(true);
       try {
-        await updateTemplate({ id: templateId, body: { title, scene } }).unwrap();
+        await updateTemplate({ id: templateId, body: { title, scene: { scenes } } }).unwrap();
         setDirty(false);
       } catch {
         // молча — попробуем на следующем изменении
@@ -124,7 +198,7 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
       }
     }, 1500);
     return () => clearTimeout(timer);
-  }, [dirty, scene, title, templateId, updateTemplate]);
+  }, [dirty, scenes, title, templateId, updateTemplate]);
 
   const selected = useMemo(
     () => scene?.layers.flatMap((l) => l.elements).find((e) => e.id === selectedId) ?? null,
@@ -135,20 +209,27 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
     [scene, selectedId],
   );
 
+  const validateDoc = (): { ok: boolean; issue?: string } => {
+    if (!scenes) return { ok: false };
+    for (let i = 0; i < scenes.length; i += 1) {
+      const r = validateScene(scenes[i]);
+      if (!r.ok) return { ok: false, issue: `Сцена ${i + 1}: ${r.issues[0] ?? 'невалидна'}` };
+    }
+    return { ok: true };
+  };
+
   const runValidate = () => {
-    if (!scene) return;
-    const result = validateScene(scene);
-    if (result.ok) toast({ title: 'Сцена валидна ✓' });
-    else toast({ title: `Проблемы (${result.issues.length})`, description: result.issues.slice(0, 3).join('; '), variant: 'destructive' });
+    const result = validateDoc();
+    if (result.ok) toast({ title: `Урок валиден ✓ (${scenes?.length ?? 0} сцен)` });
+    else toast({ title: 'Есть проблемы', description: result.issue, variant: 'destructive' });
   };
 
   const publish = async () => {
-    if (!scene) return;
-    const result = validateScene(scene);
-    if (!result.ok) { toast({ title: 'Нельзя опубликовать', description: result.issues[0], variant: 'destructive' }); return; }
+    if (!scenes) return;
+    const result = validateDoc();
+    if (!result.ok) { toast({ title: 'Нельзя опубликовать', description: result.issue, variant: 'destructive' }); return; }
     try {
-      // Сохраняем текущий черновик, затем публикуем его новой immutable-версией.
-      await updateTemplate({ id: templateId, body: { title, scene } }).unwrap();
+      await updateTemplate({ id: templateId, body: { title, scene: { scenes } } }).unwrap();
       setDirty(false);
       const res = await publishTemplate(templateId).unwrap();
       toast({ title: `Опубликована версия ${res.version.version}`, description: 'Экземпляры на прошлых версиях не изменятся.' });
@@ -158,7 +239,7 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
     }
   };
 
-  if (isLoading || !scene) {
+  if (isLoading || !scenes || !scene) {
     return <div className="flex h-[70vh] items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
 
@@ -177,6 +258,32 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
           <Button variant="outline" size="sm" onClick={runValidate}><Check className="mr-1 h-4 w-4" /> Проверить</Button>
           <Button variant={preview ? 'default' : 'outline'} size="sm" onClick={() => setPreview((v) => !v)}><Eye className="mr-1 h-4 w-4" /> Предпросмотр</Button>
           <Button size="sm" onClick={publish}>Опубликовать</Button>
+        </div>
+      </div>
+
+      {/* Лента сцен урока (сцена за сценой) */}
+      <div className="flex items-center gap-2 overflow-x-auto rounded-xl border border-border bg-card px-2 py-2">
+        <span className="shrink-0 text-xs font-semibold text-muted-foreground">Сцены:</span>
+        {scenes.map((s, i) => (
+          <button
+            key={s.id + i}
+            type="button"
+            onClick={() => { setActiveIndex(i); setSelectedId(null); setPreview(false); }}
+            className={cn(
+              'shrink-0 rounded-lg border px-3 py-1.5 text-xs',
+              i === activeIndex ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:border-primary/40',
+            )}
+            title={s.title}
+          >
+            <span className="font-semibold">{i + 1}.</span> {s.title.length > 18 ? `${s.title.slice(0, 18)}…` : s.title}
+          </button>
+        ))}
+        <div className="ml-1 flex shrink-0 items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={() => moveScene(-1)} disabled={activeIndex <= 0} aria-label="Левее"><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => moveScene(1)} disabled={activeIndex >= scenes.length - 1} aria-label="Правее"><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={duplicateScene} aria-label="Дублировать сцену"><Copy className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={deleteScene} disabled={scenes.length <= 1} aria-label="Удалить сцену"><Trash2 className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" onClick={addScene}><Plus className="mr-1 h-4 w-4" /> Сцена</Button>
         </div>
       </div>
 
@@ -249,7 +356,7 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
               </div>
             </div>
           ) : (
-            <EditCanvas scene={scene} selectedId={selectedId} onSelect={setSelectedId} onApply={apply} onBeginDrag={() => { if (scene) setPast((p) => [...p.slice(-49), scene]); }} />
+            <EditCanvas scene={scene} selectedId={selectedId} onSelect={setSelectedId} onApply={applyNoUndo} onBeginDrag={snapshotForDrag} />
           )}
         </div>
 
