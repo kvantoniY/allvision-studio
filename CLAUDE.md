@@ -2047,3 +2047,24 @@ SEO и legal:
 Проверки A11.2: билды database/shared/api/worker/web, shared (17 suites / 108 tests) и worker без DB-backed `pipeline-runner|piapi-provider|academy-deletion-processor` (21 suite / 120 tests) — зелёные; web сохранил только 4 прежних lint warnings в legacy-файлах. Production-server smoke подтвердил 307 со старых `/admin/services` и `/admin/users/*` на `/admin`, а новые защищённые маршруты без сессии — на login. Новых миграций и DB-backed сценариев нет.
 
 Границы A11.2: физическая зачистка legacy Studio не выполнялась; A8/LiveKit, origin, прод и деплой не затрагивались. Полный A11 DoD остаётся открытым до A8 и end-to-end проверки на проде.
+
+## Ревью A11.2 ✅ — Возврат операционных разделов админки
+
+При проверке работы Codex перед деплоем найдена функциональная регрессия A11.2: middleware
+307-редиректил на `/admin` не только Studio-каталог, но и операционные разделы платформы.
+Критично: `/admin/users` — единственный способ назначить роль `TEACHER`/`METHODIST`, без него
+Academy нерабочая (нет преподавателей → нет уроков); плюс терялись мониторинг, диагностика,
+учёт расходов AI и платежи на живом сервисе с реальными деньгами.
+
+- `middleware.ts`: `RETIRED_ADMIN_PREFIXES` сокращён до Studio-каталога (`services`,
+  `categories`, `media-assets`, `style-presets`, `scenario-templates`, `trends`,
+  `token-packages`). Операционные (`users`, `payments`, `usage`, `models`, `diagnostics`,
+  `monitoring`, `projects`, `support`) снова доступны.
+- `AdminSidebarNav`: в группу «Операции» добавлены «Пользователи» и «Платежи»; добавлена
+  admin-only группа «Платформа» (Мониторинг, Диагностика, AI-консоль, Модели и цены).
+
+Остальное в работе Codex (A7.2, A9, A10, A11.1, A11.2) принято: билды shared/api/worker/web
+зелёные, shared 108 passed (17 suites), worker без DB-backed 120 passed (21 suite), миграции
+аддитивные; `20260727120000_a11_consent_snapshots` корректно бэкфиллит `textSnapshot` до
+`SET NOT NULL`. Согласия переведены на v2 — исторические v1 требуют повторного принятия
+(на проде это 1 тестовый ребёнок).

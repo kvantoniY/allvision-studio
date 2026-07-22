@@ -4,8 +4,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 // остаются; публичные Studio-страницы редиректим на Academy-главную.
 const STUDIO_SURFACE_PREFIXES = ['/services', '/trends', '/scenarios', '/studio', '/pricing', '/dashboard'];
 
-// Старый Studio-backoffice сохранён в коде, но больше не входит в рабочую IA Academy.
-// Прямые старые закладки мягко возвращаем на новый обзор без удаления данных/роутов.
+// Каталог Studio (gift factory) больше не входит в рабочую IA Academy: витрина скрыта,
+// поэтому её backoffice-разделы мягко возвращаем на новый обзор без удаления данных/роутов.
+// ВАЖНО: операционные разделы платформы (пользователи/роли, платежи, расходы AI, модели,
+// диагностика, мониторинг, проекты, поддержка) НЕ выводятся из строя — они нужны для
+// эксплуатации живого сервиса. В частности /admin/users — единственный способ назначить
+// роль TEACHER/METHODIST, без которого Academy не работает.
 const RETIRED_ADMIN_PREFIXES = [
   '/admin/services',
   '/admin/categories',
@@ -13,14 +17,6 @@ const RETIRED_ADMIN_PREFIXES = [
   '/admin/style-presets',
   '/admin/scenario-templates',
   '/admin/trends',
-  '/admin/usage',
-  '/admin/models',
-  '/admin/diagnostics',
-  '/admin/monitoring',
-  '/admin/users',
-  '/admin/projects',
-  '/admin/support',
-  '/admin/payments',
   '/admin/token-packages',
 ];
 

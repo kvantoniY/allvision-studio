@@ -3,13 +3,19 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  Activity,
   Blocks,
   Clapperboard,
+  Coins,
+  CreditCard,
+  Gauge,
   GraduationCap,
   HandCoins,
   LayoutDashboard,
   Library,
+  LineChart,
   MessageCircle,
+  Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -34,6 +40,19 @@ const navGroups: NavGroup[] = [
     items: [
       { href: '/admin/messages', label: 'Диалоги', description: 'Родители и учителя', icon: MessageCircle },
       { href: '/admin/payouts', label: 'Выплаты', description: 'Начисления учителям', icon: HandCoins },
+      { href: '/admin/users', label: 'Пользователи', description: 'Роли и доступы', icon: Users },
+      { href: '/admin/payments', label: 'Платежи', description: 'Оплаты и возвраты', icon: CreditCard },
+    ],
+  },
+  {
+    // Эксплуатация живого сервиса: расходы на AI, здоровье прода, диагностика.
+    label: 'Платформа',
+    adminOnly: true,
+    items: [
+      { href: '/admin/monitoring', label: 'Мониторинг', description: 'SSL, домен, балансы, ошибки', icon: Gauge },
+      { href: '/admin/diagnostics', label: 'Диагностика', description: 'Очереди, env, состояние', icon: Activity },
+      { href: '/admin/usage', label: 'AI-консоль', description: 'Расходы и вызовы', icon: LineChart },
+      { href: '/admin/models', label: 'Модели и цены', description: 'Себестоимость генераций', icon: Coins },
     ],
   },
 ];
