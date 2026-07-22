@@ -132,6 +132,30 @@ export function attachAsset(scene: AcademyScene, elementId: string, drag: Academ
   });
 }
 
+/** Ставит изображение как фон сцены: находит/создаёт элемент типа `background` на весь вьюпорт. */
+export function setSceneBackground(scene: AcademyScene, drag: AcademyAssetDragData): AcademyScene {
+  const asset = {
+    type: 'academy-asset' as const,
+    assetId: drag.assetId,
+    scope: drag.scope,
+    kind: drag.kind,
+    fileUrl: drag.fileUrl,
+    mimeType: drag.mimeType,
+  };
+  const bgLayer = scene.layers.find((l) => l.kind === 'background') ?? scene.layers[0];
+  if (!bgLayer) return scene;
+  const existing = bgLayer.elements.find((e) => e.type === 'background');
+  if (existing) return updateElement(scene, existing.id, { asset });
+
+  const id = uniqueSceneId('background', collectSceneIds(scene));
+  const element = makeElement(scene, 'background', id);
+  element.name = 'Фон сцены';
+  element.transform = { ...element.transform, x: 0, y: 0, width: scene.viewport.width, height: scene.viewport.height };
+  element.zIndex = -100;
+  element.asset = asset;
+  return { ...scene, layers: scene.layers.map((l) => (l.id === bgLayer.id ? { ...l, elements: [element, ...l.elements] } : l)) };
+}
+
 export function removeElement(scene: AcademyScene, elementId: string): AcademyScene {
   return {
     ...scene,

@@ -17,6 +17,7 @@ import {
   reorderElement,
   updateElement,
   attachAsset,
+  setSceneBackground,
   validateScene,
   type AcademyScene,
   type AcademySceneElement,
@@ -29,6 +30,7 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetTemplateQuery, usePublishTemplateMutation, useUpdateTemplateMutation } from '@/store/api/academy-lesson-templates-api';
 import { AssetPickerDialog } from './AssetPickerDialog';
+import { BackgroundGenerator } from './BackgroundGenerator';
 import { RulesEditor } from './RulesEditor';
 
 const IMAGE_TYPES = ['background', 'animated-background', 'foreground', 'image', 'character', 'npc', 'prop', 'video'];
@@ -71,6 +73,8 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
   const [preview, setPreview] = useState(false);
   const [previewRole, setPreviewRole] = useState<'student' | 'teacher'>('student');
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [bgGenOpen, setBgGenOpen] = useState(false);
+  const [bgPickerOpen, setBgPickerOpen] = useState(false);
   const [past, setPast] = useState<AcademyScene[][]>([]);
   const [future, setFuture] = useState<AcademyScene[][]>([]);
   const [dirty, setDirty] = useState(false);
@@ -372,7 +376,7 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
               onPickAsset={() => setPickerOpen(true)}
             />
           ) : (
-            <SceneInspector scene={scene} onChange={apply} />
+            <SceneInspector scene={scene} onChange={apply} onGenerateBg={() => setBgGenOpen(true)} onPickBg={() => setBgPickerOpen(true)} />
           )}
         </div>
       </div>
@@ -384,6 +388,12 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
 
       {pickerOpen && selected && (
         <AssetPickerDialog onClose={() => setPickerOpen(false)} onPick={(drag) => apply(attachAsset(scene, selected.id, drag))} />
+      )}
+      {bgGenOpen && (
+        <BackgroundGenerator onClose={() => setBgGenOpen(false)} onGenerated={(drag) => apply(setSceneBackground(scene, drag))} />
+      )}
+      {bgPickerOpen && (
+        <AssetPickerDialog onClose={() => setBgPickerOpen(false)} onPick={(drag) => apply(setSceneBackground(scene, drag))} />
       )}
     </div>
   );
@@ -559,7 +569,13 @@ function ElementInspector({
 }
 
 // === Инспектор сцены ===
-function SceneInspector({ scene, onChange }: { scene: AcademyScene; onChange: (scene: AcademyScene) => void }) {
+function SceneInspector({ scene, onChange, onGenerateBg, onPickBg }: {
+  scene: AcademyScene;
+  onChange: (scene: AcademyScene) => void;
+  onGenerateBg: () => void;
+  onPickBg: () => void;
+}) {
+  const hasBackground = scene.layers.some((l) => l.elements.some((e) => e.type === 'background' && e.asset));
   return (
     <div className="space-y-3">
       <span className="text-sm font-semibold">Сцена</span>
@@ -567,8 +583,15 @@ function SceneInspector({ scene, onChange }: { scene: AcademyScene; onChange: (s
         <Label className="text-xs">Название сцены</Label>
         <Input value={scene.title} onChange={(e) => onChange({ ...scene, title: e.target.value })} className="h-8" />
       </div>
+      <div className="space-y-1.5 rounded-lg border border-border p-2.5">
+        <Label className="text-xs font-medium">Фон-иллюстрация {hasBackground && <span className="text-primary">✓</span>}</Label>
+        <Button variant="default" size="sm" className="w-full" onClick={onGenerateBg}>
+          <ImageIcon className="mr-1.5 h-4 w-4" /> Сгенерировать по промпту
+        </Button>
+        <Button variant="outline" size="sm" className="w-full" onClick={onPickBg}>Выбрать из библиотеки</Button>
+      </div>
       <div className="space-y-1.5">
-        <Label className="text-xs">Цвет фона</Label>
+        <Label className="text-xs">Цвет фона (если нет иллюстрации)</Label>
         <input type="color" value={scene.viewport.backgroundColor} onChange={(e) => onChange({ ...scene, viewport: { ...scene.viewport, backgroundColor: e.target.value } })} className="h-8 w-full rounded border border-border" />
       </div>
       <div className="space-y-1.5">

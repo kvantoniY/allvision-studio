@@ -7,6 +7,7 @@ import {
   patchElementTransform,
   removeElement,
   reorderElement,
+  setSceneBackground,
   uniqueSceneId,
   updateRule,
   validateScene,
@@ -91,6 +92,25 @@ describe('scene-editing helpers', () => {
     const result = validateScene(broken);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.issues.join(' ')).toContain('Начальное состояние');
+  });
+
+  it('setSceneBackground creates a full-viewport background element with the asset', () => {
+    const scene = createEmptyScene();
+    const next = setSceneBackground(scene, {
+      type: 'academy-asset', assetId: 'bg1', scope: 'teacher', kind: 'academy-background',
+      fileUrl: '/static/bg.jpg', mimeType: 'image/jpeg',
+    });
+    const bg = next.layers.flatMap((l) => l.elements).find((e) => e.type === 'background');
+    expect(bg?.asset?.assetId).toBe('bg1');
+    expect(bg?.transform.width).toBe(scene.viewport.width);
+    // повторный вызов заменяет ассет того же фон-элемента, не плодит новый
+    const again = setSceneBackground(next, {
+      type: 'academy-asset', assetId: 'bg2', scope: 'teacher', kind: 'academy-background',
+      fileUrl: '/static/bg2.jpg', mimeType: 'image/jpeg',
+    });
+    const bgs = again.layers.flatMap((l) => l.elements).filter((e) => e.type === 'background');
+    expect(bgs).toHaveLength(1);
+    expect(bgs[0].asset?.assetId).toBe('bg2');
   });
 
   it('addLayer keeps the scene valid', () => {
