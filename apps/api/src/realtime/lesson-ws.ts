@@ -13,6 +13,7 @@ import {
 } from '@allvision/shared';
 import { verifyAccessToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
+import { loadRoom, saveRoom } from './room-store';
 
 interface Member {
   ws: WebSocket;
@@ -29,6 +30,20 @@ interface Room {
   unlocked: boolean;
   strokesByScene: Map<number, LessonStroke[]>;
   members: Set<Member>;
+  persistTimer?: ReturnType<typeof setTimeout>;
+}
+
+/** Дебаунс-сохранение состояния комнаты в Redis (переживает рестарт API). */
+function schedulePersist(room: Room) {
+  if (room.persistTimer) return;
+  room.persistTimer = setTimeout(() => {
+    room.persistTimer = undefined;
+    saveRoom(room.lessonId, {
+      sceneIndex: room.sceneIndex,
+      unlocked: room.unlocked,
+      strokesByScene: Object.fromEntries(room.strokesByScene),
+    });
+  }, 600);
 }
 
 const rooms = new Map<string, Room>();
@@ -83,10 +98,19 @@ async function loadRoomContext(lessonId: string, userId: string, isAdmin: boolea
   return { role, name, sceneCount };
 }
 
-function getOrCreateRoom(lessonId: string, sceneCount: number): Room {
+async function getOrCreateRoom(lessonId: string, sceneCount: number): Promise<Room> {
   let room = rooms.get(lessonId);
   if (!room) {
     room = { lessonId, sceneCount, sceneIndex: 0, unlocked: false, strokesByScene: new Map(), members: new Set() };
+    // Восстановление позиции/штрихов после рестарта API или при перезаходе.
+    const persisted = await loadRoom(lessonId);
+    if (persisted) {
+      room.sceneIndex = Math.min(persisted.sceneIndex, Math.max(0, sceneCount - 1));
+      room.unlocked = persisted.unlocked;
+      for (const [idx, strokes] of Object.entries(persisted.strokesByScene)) {
+        room.strokesByScene.set(Number(idx), strokes);
+      }
+    }
     rooms.set(lessonId, room);
   } else {
     room.sceneCount = sceneCount; // на случай переподготовки урока
@@ -154,11 +178,13 @@ async function handleMessage(room: Room, member: Member, raw: string) {
       room.unlocked = false;
       broadcast(room, { t: 'nav', sceneIndex: idx, strokes: currentStrokes(room) });
       broadcast(room, { t: 'unlock', value: false });
+      schedulePersist(room);
       return;
     }
     case 'unlock':
       room.unlocked = Boolean(msg.value);
       broadcast(room, { t: 'unlock', value: room.unlocked });
+      schedulePersist(room);
       return;
     case 'reward':
       broadcast(room, { t: 'reward' });
@@ -166,6 +192,7 @@ async function handleMessage(room: Room, member: Member, raw: string) {
     case 'draw-clear':
       room.strokesByScene.set(room.sceneIndex, []);
       broadcast(room, { t: 'draw-clear' });
+      schedulePersist(room);
       return;
     case 'draw-start': {
       const stroke: LessonStroke = { id: msg.id, color: msg.color, size: msg.size, points: [msg.point] };
@@ -173,6 +200,7 @@ async function handleMessage(room: Room, member: Member, raw: string) {
       list.push(stroke);
       room.strokesByScene.set(room.sceneIndex, list.slice(-500));
       broadcast(room, { t: 'draw-start', id: msg.id, color: msg.color, size: msg.size, point: msg.point }, member);
+      schedulePersist(room);
       return;
     }
     case 'draw-append': {
@@ -180,6 +208,7 @@ async function handleMessage(room: Room, member: Member, raw: string) {
       const stroke = list.find((s) => s.id === msg.id);
       if (stroke) stroke.points.push(...msg.points.slice(0, 200));
       broadcast(room, { t: 'draw-append', id: msg.id, points: msg.points }, member);
+      schedulePersist(room);
       return;
     }
     case 'draw-end':
@@ -215,7 +244,7 @@ export function initLessonWebSocket(server: Server) {
       const ctx = await loadRoomContext(lessonId, userId, isAdmin);
       if (!ctx) { ws.close(4003, 'forbidden'); return; }
 
-      const room = getOrCreateRoom(lessonId, ctx.sceneCount);
+      const room = await getOrCreateRoom(lessonId, ctx.sceneCount);
       const member: Member = { ws, role: ctx.role, userId, name: ctx.name, alive: true };
       room.members.add(member);
 
@@ -237,8 +266,18 @@ export function initLessonWebSocket(server: Server) {
       ws.on('pong', () => { member.alive = true; });
       ws.on('close', () => {
         room.members.delete(member);
-        if (room.members.size === 0) rooms.delete(lessonId);
-        else broadcast(room, { t: 'presence', presence: presenceOf(room) });
+        if (room.members.size === 0) {
+          // Финальный флаш состояния в Redis, затем выгружаем из памяти
+          // (Redis хранит — перезаход восстановит позицию и рисунки).
+          saveRoom(room.lessonId, {
+            sceneIndex: room.sceneIndex,
+            unlocked: room.unlocked,
+            strokesByScene: Object.fromEntries(room.strokesByScene),
+          });
+          rooms.delete(lessonId);
+        } else {
+          broadcast(room, { t: 'presence', presence: presenceOf(room) });
+        }
       });
     } catch (err) {
       logger.warn(`[lesson-ws] connection error: ${(err as Error).message}`);

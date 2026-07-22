@@ -53,7 +53,9 @@ export function connectLessonSocket(
       handlers.onStatus?.('closed');
       if (closed) return;
       retries += 1;
-      const delay = Math.min(1000 * 2 ** retries, 15000);
+      // Экспоненциальный backoff с джиттером ±20% (мягче к серверу на массовом обрыве).
+      const base = Math.min(1000 * 2 ** retries, 15000);
+      const delay = Math.round(base * (0.8 + Math.random() * 0.4));
       setTimeout(open, delay);
     };
     ws.onerror = () => { ws?.close(); };
