@@ -17,18 +17,18 @@ export function AdminMobileNav({ role = 'ADMIN' }: { role?: 'ADMIN' | 'METHODIST
           variant="ghost"
           size="icon"
           aria-label="Открыть меню админки"
-          className="-ml-1 text-slate-300 hover:bg-violet-500/10 hover:text-white lg:hidden"
+          className="-ml-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground lg:hidden"
         >
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="admin-theme w-72 border-zinc-800 bg-zinc-950 p-0 text-slate-100">
-        <SheetHeader className="border-b border-zinc-800/80 p-4 text-left">
-          <SheetTitle className="flex items-center gap-2.5 text-base font-semibold tracking-tight text-white">
-            <BrandLogo className="h-6 w-auto" />
+      <SheetContent side="left" className="academy-theme w-80 border-border bg-card p-0 text-foreground">
+        <SheetHeader className="border-b border-border p-4 text-left">
+          <SheetTitle className="flex items-center gap-2.5 text-base font-semibold tracking-tight text-foreground">
+            <BrandLogo className="h-8 w-8" />
             Allvision Academy
-            <span className="rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-violet-300 ring-1 ring-inset ring-violet-500/30">
-              {role === 'METHODIST' ? 'Методист' : 'Admin'}
+            <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-foreground ring-1 ring-inset ring-primary/15">
+              {role === 'METHODIST' ? 'Методист' : 'Админ'}
             </span>
           </SheetTitle>
         </SheetHeader>

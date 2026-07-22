@@ -21,8 +21,8 @@ export async function getServerMe(): Promise<ServerUser | null> {
 
 export async function requireAdminPage(): Promise<ServerUser> {
   const me = await getServerMe();
-  if (!me) redirect('/login?redirect=/admin/trends');
-  if (me.role !== 'ADMIN') redirect('/dashboard');
+  if (!me) redirect('/login?redirect=/admin');
+  if (me.role !== 'ADMIN') redirect('/');
   return me;
 }
 

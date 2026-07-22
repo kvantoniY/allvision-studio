@@ -25,10 +25,10 @@ function apiError(error: unknown): string {
 }
 
 const STATUS_CLASS: Record<EarningStatusValue, string> = {
-  PENDING: 'bg-amber-600',
-  AVAILABLE: 'bg-blue-600',
-  PAID: 'bg-emerald-600',
-  REJECTED: 'bg-red-700',
+  PENDING: 'border-amber-500/30 bg-amber-500/10 text-amber-800',
+  AVAILABLE: 'border-sky-500/30 bg-sky-500/10 text-sky-800',
+  PAID: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800',
+  REJECTED: 'border-destructive/30 bg-destructive/10 text-destructive',
 };
 
 export default function AdminPayoutsPage() {
@@ -75,17 +75,17 @@ export default function AdminPayoutsPage() {
 
   return (
     <div className="space-y-6">
-      <div><h1 className="flex items-center gap-2 text-3xl font-bold text-white"><HandCoins className="h-8 w-8 text-violet-300" /> Выплаты преподавателям</h1><p className="mt-2 text-sm text-slate-400">Ручная выплата доступных начислений по периоду. Регламентный день — 5-е число; подтверждение обязательно.</p></div>
-      <Card className="border-zinc-800 bg-zinc-950"><CardHeader><CardTitle className="text-base">Период начислений</CardTitle></CardHeader><CardContent className="flex flex-wrap items-end gap-3"><div><Label>С</Label><Input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} className="mt-1 w-44" /></div><div><Label>По</Label><Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} className="mt-1 w-44" /></div>{query.isFetching && <Loader2 className="mb-2 h-5 w-5 animate-spin text-violet-300" />}</CardContent></Card>
+      <div><h1 className="flex items-center gap-2 text-3xl font-bold text-foreground"><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground"><HandCoins className="h-6 w-6" /></span> Выплаты преподавателям</h1><p className="mt-2 text-sm text-muted-foreground">Ручная выплата доступных начислений по периоду. Регламентный день — 5-е число; подтверждение обязательно.</p></div>
+      <Card className="border-border bg-card shadow-sm"><CardHeader><CardTitle className="text-base">Период начислений</CardTitle></CardHeader><CardContent className="flex flex-wrap items-end gap-3"><div><Label>С</Label><Input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} className="mt-1 w-44" /></div><div><Label>По</Label><Input type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} className="mt-1 w-44" /></div>{query.isFetching && <Loader2 className="mb-2 h-5 w-5 animate-spin text-primary" />}</CardContent></Card>
       <div className="space-y-3">
-        {query.data?.teachers.length === 0 && <Card className="border-zinc-800 bg-zinc-950"><CardContent className="p-8 text-center text-slate-400">За выбранный период начислений нет.</CardContent></Card>}
+        {query.data?.teachers.length === 0 && <Card className="border-dashed border-border bg-card"><CardContent className="p-8 text-center text-muted-foreground">За выбранный период начислений нет.</CardContent></Card>}
         {query.data?.teachers.map((teacher) => (
-          <Card key={teacher.teacherId} className="border-zinc-800 bg-zinc-950">
+          <Card key={teacher.teacherId} className="border-border bg-card shadow-sm">
             <CardContent className="p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-white">{teacher.teacherName}</p><p className="mt-1 text-xs text-slate-400">Ожидает: {teacher.pendingRub.toLocaleString('ru-RU')} ₽ · доступно: {teacher.availableRub.toLocaleString('ru-RU')} ₽ ({teacher.availableCount}) · выплачено: {teacher.paidRub.toLocaleString('ru-RU')} ₽</p></div>{teacher.payout ? <Badge className={STATUS_CLASS[teacher.payout.status]}>{EARNING_STATUS_LABELS[teacher.payout.status]}</Badge> : <Button size="sm" disabled={teacher.availableCount === 0 || prepareState.isLoading} onClick={() => void prepareFor(teacher.teacherId)}>Сформировать {teacher.availableRub.toLocaleString('ru-RU')} ₽</Button>}</div>
-              {teacher.payout && <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-slate-200">{teacher.payout.amountRub.toLocaleString('ru-RU')} ₽ · {teacher.payout.earningsCount} занятий · {teacher.payout.periodStart}—{teacher.payout.periodEnd}</p>{teacher.payout.confirmationFileUrl && <a href={teacher.payout.confirmationFileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-violet-300 hover:text-violet-200"><FileCheck2 className="h-4 w-4" /> {teacher.payout.confirmationFileName}</a>}</div>
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-foreground">{teacher.teacherName}</p><p className="mt-1 text-xs text-muted-foreground">Ожидает: {teacher.pendingRub.toLocaleString('ru-RU')} ₽ · доступно: {teacher.availableRub.toLocaleString('ru-RU')} ₽ ({teacher.availableCount}) · выплачено: {teacher.paidRub.toLocaleString('ru-RU')} ₽</p></div>{teacher.payout ? <Badge variant="outline" className={STATUS_CLASS[teacher.payout.status]}>{EARNING_STATUS_LABELS[teacher.payout.status]}</Badge> : <Button size="sm" disabled={teacher.availableCount === 0 || prepareState.isLoading} onClick={() => void prepareFor(teacher.teacherId)}>Сформировать {teacher.availableRub.toLocaleString('ru-RU')} ₽</Button>}</div>
+              {teacher.payout && <div className="mt-4 rounded-xl border border-border bg-secondary/40 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm text-foreground">{teacher.payout.amountRub.toLocaleString('ru-RU')} ₽ · {teacher.payout.earningsCount} занятий · {teacher.payout.periodStart}—{teacher.payout.periodEnd}</p>{teacher.payout.confirmationFileUrl && <a href={teacher.payout.confirmationFileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-primary hover:underline"><FileCheck2 className="h-4 w-4" /> {teacher.payout.confirmationFileName}</a>}</div>
                 {teacher.payout.status === 'AVAILABLE' && <div className="mt-3 flex flex-wrap items-center gap-2"><Input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="max-w-sm" onChange={(event) => setProofs((current) => ({ ...current, [teacher.payout!.id]: event.target.files?.[0] }))} /><Button size="sm" disabled={!proofs[teacher.payout.id] || payState.isLoading} onClick={() => void payNow(teacher.payout!.id)}><CheckCircle2 className="mr-1.5 h-4 w-4" /> Выплачено</Button><Button size="sm" variant="destructive" disabled={rejectState.isLoading} onClick={() => void rejectNow(teacher.payout!.id)}><XCircle className="mr-1.5 h-4 w-4" /> Корректировка</Button></div>}
-                {teacher.payout.rejectionReason && <p className="mt-2 text-xs text-red-300">Причина: {teacher.payout.rejectionReason}</p>}
+                {teacher.payout.rejectionReason && <p className="mt-2 text-xs text-destructive">Причина: {teacher.payout.rejectionReason}</p>}
               </div>}
             </CardContent>
           </Card>

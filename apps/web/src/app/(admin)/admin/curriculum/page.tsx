@@ -32,9 +32,9 @@ function apiError(err: unknown): string {
   return data?.error?.message ?? 'Ошибка, попробуйте ещё раз';
 }
 
-const panel = 'rounded-xl border border-zinc-800 bg-zinc-900/60 p-4';
-const rowActive = 'bg-violet-500/15 ring-1 ring-inset ring-violet-500/40 text-white';
-const rowIdle = 'text-slate-300 hover:bg-zinc-800/60 hover:text-white';
+const panel = 'rounded-2xl border border-border bg-card p-4 shadow-sm';
+const rowActive = 'bg-primary text-primary-foreground shadow-sm';
+const rowIdle = 'text-muted-foreground hover:bg-accent hover:text-accent-foreground';
 
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
@@ -69,7 +69,7 @@ function SubjectsColumn({
   return (
     <div className={panel}>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-white">Направления</h2>
+        <h2 className="text-sm font-semibold text-foreground">Направления</h2>
         <Button size="sm" variant="ghost" onClick={() => setAdding((v) => !v)}>
           <Plus className="h-4 w-4" />
         </Button>
@@ -91,11 +91,11 @@ function SubjectsColumn({
             <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => onSelect(s.id)}>
               {s.title}
             </button>
-            <span className="text-xs text-slate-500">{s.courses.length}</span>
+            <span className={cn('text-xs', s.id === selectedId ? 'text-primary-foreground/70' : 'text-muted-foreground')}>{s.courses.length}</span>
             <button
               type="button"
               aria-label="Удалить"
-              className="text-slate-500 hover:text-rose-400"
+              className={cn(s.id === selectedId ? 'text-primary-foreground/70 hover:text-primary-foreground' : 'text-muted-foreground hover:text-destructive')}
               onClick={async () => {
                 if (!window.confirm(`Удалить направление «${s.title}» со всеми курсами?`)) return;
                 await deleteSubject(s.id).unwrap().catch((err) => toast({ title: 'Ошибка', description: apiError(err), variant: 'destructive' }));
@@ -105,7 +105,7 @@ function SubjectsColumn({
             </button>
           </div>
         ))}
-        {subjects.length === 0 && <p className="text-sm text-slate-500">Пока нет направлений.</p>}
+        {subjects.length === 0 && <p className="text-sm text-muted-foreground">Пока нет направлений.</p>}
       </div>
     </div>
   );
@@ -155,7 +155,7 @@ function CoursesColumn({
     <div className="space-y-4">
       <div className={panel}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-white">Курсы · {subject.title}</h2>
+          <h2 className="text-sm font-semibold text-foreground">Курсы · {subject.title}</h2>
           <Button size="sm" variant="ghost" onClick={() => setAdding((v) => !v)}>
             <Plus className="h-4 w-4" />
           </Button>
@@ -173,12 +173,12 @@ function CoursesColumn({
           {subject.courses.map((c) => (
             <div key={c.id} className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-sm', c.id === selectedCourseId ? rowActive : rowIdle)}>
               <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => onSelect(c.id)}>
-                {c.title} {c.level && <span className="text-xs text-slate-500">· {c.level}</span>}
+                {c.title} {c.level && <span className={cn('text-xs', c.id === selectedCourseId ? 'text-primary-foreground/70' : 'text-muted-foreground')}>· {c.level}</span>}
               </button>
               <button
                 type="button"
                 aria-label="Удалить"
-                className="text-slate-500 hover:text-rose-400"
+                className={cn(c.id === selectedCourseId ? 'text-primary-foreground/70 hover:text-primary-foreground' : 'text-muted-foreground hover:text-destructive')}
                 onClick={async () => {
                   if (!window.confirm(`Удалить курс «${c.title}»?`)) return;
                   await deleteCourse(c.id).unwrap().catch((err) => toast({ title: 'Ошибка', description: apiError(err), variant: 'destructive' }));
@@ -188,12 +188,12 @@ function CoursesColumn({
               </button>
             </div>
           ))}
-          {subject.courses.length === 0 && <p className="text-sm text-slate-500">Нет курсов.</p>}
+          {subject.courses.length === 0 && <p className="text-sm text-muted-foreground">Нет курсов.</p>}
         </div>
       </div>
 
       <div className={panel}>
-        <h2 className="mb-3 text-sm font-semibold text-white">Навыки направления</h2>
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Навыки направления</h2>
         <div className="mb-3 flex gap-2">
           <Input placeholder="Знает числа 1–10" value={skillTitle} onChange={(e) => setSkillTitle(e.target.value)} />
           <Button
@@ -213,14 +213,14 @@ function CoursesColumn({
         </div>
         <div className="flex flex-wrap gap-1.5">
           {subjectSkills.map((sk) => (
-            <span key={sk.id} className="inline-flex items-center gap-1 rounded-full border border-zinc-700 bg-zinc-800/60 px-2.5 py-1 text-xs text-slate-300">
+            <span key={sk.id} className="inline-flex items-center gap-1 rounded-full border border-border bg-secondary px-2.5 py-1 text-xs text-secondary-foreground">
               {sk.title}
-              <button type="button" aria-label="Удалить навык" className="text-slate-500 hover:text-rose-400" onClick={() => deleteSkill(sk.id)}>
+              <button type="button" aria-label="Удалить навык" className="text-muted-foreground hover:text-destructive" onClick={() => deleteSkill(sk.id)}>
                 <Trash2 className="h-3 w-3" />
               </button>
             </span>
           ))}
-          {subjectSkills.length === 0 && <p className="text-sm text-slate-500">Навыки задают, что осваивает ребёнок.</p>}
+          {subjectSkills.length === 0 && <p className="text-sm text-muted-foreground">Навыки задают, что осваивает ребёнок.</p>}
         </div>
       </div>
     </div>
@@ -268,17 +268,17 @@ function TopicRow({ topic, subjectSkills, courseTopics }: { topic: CurriculumTop
     setter(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950/40">
+    <div className="rounded-xl border border-border bg-background">
       <div className="flex items-center gap-2 px-3 py-2">
         <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => setOpen((v) => !v)}>
-          <ChevronRight className={cn('h-4 w-4 shrink-0 text-slate-500 transition-transform', open && 'rotate-90')} />
-          <span className="truncate text-sm text-slate-200">{topic.title}</span>
-          <span className="text-xs text-slate-500">{topic.durationMin} мин</span>
+          <ChevronRight className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-90')} />
+          <span className="truncate text-sm text-foreground">{topic.title}</span>
+          <span className="text-xs text-muted-foreground">{topic.durationMin} мин</span>
         </button>
         <button
           type="button"
           aria-label="Удалить тему"
-          className="text-slate-500 hover:text-rose-400"
+          className="text-muted-foreground hover:text-destructive"
           onClick={async () => {
             if (!window.confirm(`Удалить тему «${topic.title}»?`)) return;
             await deleteTopic(topic.id).unwrap().catch((err) => toast({ title: 'Ошибка', description: apiError(err), variant: 'destructive' }));
@@ -288,7 +288,7 @@ function TopicRow({ topic, subjectSkills, courseTopics }: { topic: CurriculumTop
         </button>
       </div>
       {open && (
-        <div className="space-y-3 border-t border-zinc-800 p-3">
+        <div className="space-y-3 border-t border-border bg-secondary/25 p-3">
           <div className="space-y-1.5">
             <Label>Название</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -306,7 +306,7 @@ function TopicRow({ topic, subjectSkills, courseTopics }: { topic: CurriculumTop
                     key={d}
                     type="button"
                     onClick={() => setDuration(d)}
-                    className={cn('flex-1 rounded-md border px-2 py-1.5 text-xs', duration === d ? 'border-violet-500 bg-violet-500/15 text-white' : 'border-zinc-700 text-slate-400')}
+                    className={cn('flex-1 rounded-lg border px-2 py-1.5 text-xs', duration === d ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground')}
                   >
                     {d} мин
                   </button>
@@ -330,12 +330,12 @@ function TopicRow({ topic, subjectSkills, courseTopics }: { topic: CurriculumTop
                   key={sk.id}
                   type="button"
                   onClick={() => toggle(skillIds, sk.id, setSkillIds)}
-                  className={cn('rounded-full border px-2.5 py-1 text-xs', skillIds.includes(sk.id) ? 'border-violet-500 bg-violet-500/15 text-white' : 'border-zinc-700 text-slate-400')}
+                  className={cn('rounded-full border px-2.5 py-1 text-xs', skillIds.includes(sk.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground')}
                 >
                   {sk.title}
                 </button>
               ))}
-              {subjectSkills.length === 0 && <span className="text-xs text-slate-500">Сначала добавьте навыки направления.</span>}
+              {subjectSkills.length === 0 && <span className="text-xs text-muted-foreground">Сначала добавьте навыки направления.</span>}
             </div>
           </div>
           <div className="space-y-1.5">
@@ -346,12 +346,12 @@ function TopicRow({ topic, subjectSkills, courseTopics }: { topic: CurriculumTop
                   key={t.id}
                   type="button"
                   onClick={() => toggle(prereqIds, t.id, setPrereqIds)}
-                  className={cn('rounded-full border px-2.5 py-1 text-xs', prereqIds.includes(t.id) ? 'border-violet-500 bg-violet-500/15 text-white' : 'border-zinc-700 text-slate-400')}
+                  className={cn('rounded-full border px-2.5 py-1 text-xs', prereqIds.includes(t.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground')}
                 >
                   {t.title}
                 </button>
               ))}
-              {courseTopics.length <= 1 && <span className="text-xs text-slate-500">Другие темы курса появятся здесь.</span>}
+              {courseTopics.length <= 1 && <span className="text-xs text-muted-foreground">Другие темы курса появятся здесь.</span>}
             </div>
           </div>
           <Button size="sm" disabled={isLoading} onClick={save}>
@@ -373,7 +373,7 @@ function CourseDetail({ course, subjectSkills }: { course: CurriculumCourse; sub
 
   return (
     <div className={panel}>
-      <h2 className="mb-3 text-sm font-semibold text-white">Модули и темы · {course.title}</h2>
+      <h2 className="mb-3 text-sm font-semibold text-foreground">Модули и темы · {course.title}</h2>
       <div className="mb-4 flex gap-2">
         <Input placeholder="Новый модуль" value={moduleTitle} onChange={(e) => setModuleTitle(e.target.value)} />
         <Button
@@ -395,7 +395,7 @@ function CourseDetail({ course, subjectSkills }: { course: CurriculumCourse; sub
         {course.modules.map((m) => (
           <ModuleBlock key={m.id} module={m} subjectSkills={subjectSkills} allTopics={allTopics} onDelete={() => deleteModule(m.id)} onAddTopic={(title) => createTopic({ moduleId: m.id, title })} />
         ))}
-        {course.modules.length === 0 && <p className="text-sm text-slate-500">Добавьте первый модуль.</p>}
+        {course.modules.length === 0 && <p className="text-sm text-muted-foreground">Добавьте первый модуль.</p>}
       </div>
     </div>
   );
@@ -416,13 +416,13 @@ function ModuleBlock({
 }) {
   const [topicTitle, setTopicTitle] = useState('');
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
+    <div className="rounded-xl border border-border bg-secondary/35 p-3">
       <div className="mb-2 flex items-center justify-between">
-        <h3 className="text-sm font-medium text-white">{module.title}</h3>
+        <h3 className="text-sm font-medium text-foreground">{module.title}</h3>
         <button
           type="button"
           aria-label="Удалить модуль"
-          className="text-slate-500 hover:text-rose-400"
+          className="text-muted-foreground hover:text-destructive"
           onClick={() => {
             if (window.confirm(`Удалить модуль «${module.title}»?`)) onDelete();
           }}
@@ -467,29 +467,29 @@ export default function AdminCurriculumPage() {
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-500/15 text-violet-300">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-accent-foreground">
           <GraduationCap className="h-5 w-5" />
         </span>
         <div>
-          <h1 className="text-xl font-semibold text-white">Учебная программа</h1>
-          <p className="text-sm text-slate-400">Направление → Курс → Модуль → Тема → Навыки</p>
+          <h1 className="text-2xl font-bold text-foreground">Учебная программа</h1>
+          <p className="text-sm text-muted-foreground">Направление → Курс → Модуль → Тема → Навыки</p>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="h-40 animate-pulse rounded-xl bg-zinc-900/60" />
+        <div className="h-40 animate-pulse rounded-2xl bg-muted" />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(260px,1.2fr)_minmax(320px,2fr)]">
           <SubjectsColumn subjects={subjects} selectedId={subject?.id ?? null} onSelect={(id) => { setSubjectId(id); setCourseId(null); }} />
           {subject ? (
             <CoursesColumn subject={subject} selectedCourseId={course?.id ?? null} onSelect={setCourseId} skills={skills} />
           ) : (
-            <div className={panel}><p className="text-sm text-slate-500">Выберите направление.</p></div>
+            <div className={panel}><p className="text-sm text-muted-foreground">Выберите направление.</p></div>
           )}
           {course ? (
             <CourseDetail course={course} subjectSkills={subjectSkills} />
           ) : (
-            <div className={panel}><p className="text-sm text-slate-500">Выберите курс, чтобы собрать модули и темы.</p></div>
+            <div className={panel}><p className="text-sm text-muted-foreground">Выберите курс, чтобы собрать модули и темы.</p></div>
           )}
         </div>
       )}
