@@ -28,6 +28,8 @@ export interface PixiScenePlayerOptions {
   debugBoundaries?: boolean;
   onStateChange?: (state: AcademySceneRuntimeState) => void;
   onEffect?: (effect: AcademySceneRuntimeEffect) => void;
+  /** Локальный пользовательский ввод; programmatic send() сюда не попадает. */
+  onEvent?: (event: AcademySceneRuntimeEvent) => void;
   onError?: (error: Error) => void;
 }
 
@@ -116,7 +118,7 @@ export class PixiScenePlayer {
 
     this.keyHandler = (event) => {
       if (event.key === 'Tab') return;
-      this.enqueueEvent({ type: 'key-press', key: event.key, role: this.role });
+      this.enqueueLocalEvent({ type: 'key-press', key: event.key, role: this.role });
     };
     canvas.addEventListener('keydown', this.keyHandler);
 
@@ -166,6 +168,19 @@ export class PixiScenePlayer {
     this.eventQueue = this.eventQueue
       .then(() => this.dispatch(event))
       .catch((error) => this.reportError(error));
+  }
+
+  /**
+   * Локальное событие сначала зеркалится хосту, затем ровно один раз применяется здесь.
+   * `send()` использует enqueueEvent напрямую, поэтому удалённое событие не создаёт эхо.
+   */
+  private enqueueLocalEvent(event: AcademySceneRuntimeEvent): void {
+    try {
+      this.options.onEvent?.(event);
+    } catch (error) {
+      this.reportError(error);
+    }
+    this.enqueueEvent(event);
   }
 
   private async dispatch(event: AcademySceneRuntimeEvent): Promise<void> {
@@ -291,11 +306,11 @@ export class PixiScenePlayer {
       wrapper.eventMode = 'static';
       wrapper.cursor = 'pointer';
       wrapper.on('pointertap', () => {
-        this.enqueueEvent({ type: 'element-click', sourceElementId: element.id, role: this.role });
+        this.enqueueLocalEvent({ type: 'element-click', sourceElementId: element.id, role: this.role });
         if (element.content.correctAnswer !== undefined) {
           const correct = element.content.correctAnswer === true
             || Object.is(element.content.value, element.content.correctAnswer);
-          this.enqueueEvent({
+          this.enqueueLocalEvent({
             type: correct ? 'answer-correct' : 'answer-incorrect',
             sourceElementId: element.id,
             value: element.content.value,

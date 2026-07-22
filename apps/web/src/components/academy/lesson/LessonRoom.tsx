@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import {
   LESSON_DRAW_COLORS,
+  type AcademySceneRuntimeEvent,
   type LessonChatEntry,
   type LessonPoint,
   type LessonRole,
@@ -76,7 +77,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
           case 'reward': setReward(true); setTimeout(() => setReward(false), 2600); break;
           case 'chat': setChat((p) => [...p, msg.entry]); break;
           case 'presence': setPresence(msg.presence); break;
-          case 'scene-event': playerRef.current?.send(msg.event as never); break;
+          case 'scene-event': playerRef.current?.send({ ...msg.event, role: msg.from }); break;
           default: break;
         }
       },
@@ -105,6 +106,11 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     if (!body) return;
     send({ t: 'chat', body });
     setChatInput('');
+  };
+  const mirrorSceneEvent = (event: AcademySceneRuntimeEvent) => {
+    const { role: eventRole, ...wireEvent } = event;
+    void eventRole;
+    send({ t: 'scene-event', event: wireEvent });
   };
 
   // Рисование (учитель).
@@ -155,7 +161,13 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
           <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-muted/40">
             {scene ? (
               <div className="absolute inset-0">
-                <AcademyScenePlayer ref={playerRef} scene={scene} role={role ?? 'student'} className="h-full" />
+                <AcademyScenePlayer
+                  ref={playerRef}
+                  scene={scene}
+                  role={role ?? 'student'}
+                  className="h-full"
+                  onEvent={mirrorSceneEvent}
+                />
                 <DrawingCanvas
                   strokes={strokes}
                   active={isTeacher && penOn}

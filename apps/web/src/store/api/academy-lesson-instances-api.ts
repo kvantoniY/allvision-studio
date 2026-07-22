@@ -16,10 +16,16 @@ export type LessonInstanceSummary = {
   overrides: { hiddenElementIds?: string[] };
 };
 
+export type FullSceneGenerationStatus = {
+  sceneId: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  childAssetId: string | null;
+};
+
 export const academyLessonInstancesApi = createApi({
   reducerPath: 'academyLessonInstancesApi',
   baseQuery: createBaseQueryWithReauth('/api/academy/lesson-instances'),
-  tagTypes: ['Instance'],
+  tagTypes: ['Instance', 'InstanceScenes'],
   endpoints: (build) => ({
     getPublishedTemplates: build.query<{ items: PublishedTemplateOption[] }, void>({
       query: () => ({ url: '/published-templates' }),
@@ -30,13 +36,21 @@ export const academyLessonInstancesApi = createApi({
     }),
     createInstance: build.mutation<{ instanceId: string }, { lessonId: string; templateVersionId: string; overrides?: { hiddenElementIds?: string[] } }>({
       query: (body) => ({ url: '/', method: 'POST', body }),
-      invalidatesTags: (_r, _e, { lessonId }) => [{ type: 'Instance', id: lessonId }],
+      invalidatesTags: (result, _e, { lessonId }) => [
+        { type: 'Instance', id: lessonId },
+        ...(result ? [{ type: 'InstanceScenes' as const, id: result.instanceId }] : []),
+      ],
     }),
     getInstanceScene: build.query<{ scene: AcademyScene; hasCharacter: boolean }, string>({
       query: (id) => ({ url: `/${id}/scene` }),
     }),
-    getInstanceScenes: build.query<{ scenes: AcademyScene[]; hasCharacter: boolean }, string>({
+    getInstanceScenes: build.query<{
+      scenes: AcademyScene[];
+      hasCharacter: boolean;
+      sceneStatuses: FullSceneGenerationStatus[];
+    }, string>({
       query: (id) => ({ url: `/${id}/scenes` }),
+      providesTags: (_r, _e, id) => [{ type: 'InstanceScenes', id }],
     }),
   }),
 });

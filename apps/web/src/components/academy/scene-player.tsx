@@ -25,6 +25,7 @@ interface AcademyScenePlayerProps {
   onReady?: () => void;
   onStateChange?: (state: AcademySceneRuntimeState) => void;
   onEffect?: (effect: AcademySceneRuntimeEffect) => void;
+  onEvent?: (event: AcademySceneRuntimeEvent) => void;
   onError?: (error: Error) => void;
 }
 
@@ -37,14 +38,15 @@ export const AcademyScenePlayer = forwardRef<AcademyScenePlayerHandle, AcademySc
     onReady,
     onStateChange,
     onEffect,
+    onEvent,
     onError,
   }, forwardedRef) {
     const hostRef = useRef<HTMLDivElement>(null);
     const playerRef = useRef<PixiScenePlayer | null>(null);
-    const callbacksRef = useRef({ onReady, onStateChange, onEffect, onError });
+    const callbacksRef = useRef({ onReady, onStateChange, onEffect, onEvent, onError });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    callbacksRef.current = { onReady, onStateChange, onEffect, onError };
+    callbacksRef.current = { onReady, onStateChange, onEffect, onEvent, onError };
 
     useImperativeHandle(forwardedRef, () => ({
       reset: () => playerRef.current?.reset(),
@@ -73,6 +75,7 @@ export const AcademyScenePlayer = forwardRef<AcademyScenePlayerHandle, AcademySc
             debugBoundaries,
             onStateChange: (state) => callbacksRef.current.onStateChange?.(state),
             onEffect: (effect) => callbacksRef.current.onEffect?.(effect),
+            onEvent: (event) => callbacksRef.current.onEvent?.(event),
             onError: (caught) => {
               setError(caught.message);
               callbacksRef.current.onError?.(caught);

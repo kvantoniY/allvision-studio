@@ -2,6 +2,8 @@
 // Координаты рисования нормализованы (0..1) относительно вьюпорта сцены,
 // чтобы масштабироваться на любой размер окна/полноэкранный режим.
 
+import type { AcademySceneRuntimeEvent } from './scene-runtime';
+
 export type LessonRole = 'teacher' | 'student';
 
 export interface LessonPoint {
@@ -39,13 +41,11 @@ export interface LessonRoomState {
   strokes: LessonStroke[];
 }
 
-/** Событие рантайма сцены (клик по элементу, ответ и т.п.), проксируемое между участниками. */
-export interface LessonSceneEvent {
-  type: string;
-  elementId?: string;
-  key?: string;
-  value?: string | number | boolean | null;
-}
+/**
+ * Сырое событие рантайма сцены, проксируемое между участниками.
+ * Роль не принимаем от клиента: сервер добавляет проверенную роль отправителя в `from`.
+ */
+export type LessonSceneEvent = Omit<AcademySceneRuntimeEvent, 'role'>;
 
 // --- Клиент → сервер ---
 export type LessonClientMessage =
