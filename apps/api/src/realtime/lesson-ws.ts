@@ -2,11 +2,13 @@ import type { Server } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { prisma } from '@allvision/database';
 import {
+  EMPTY_PARTICIPANT_STATE,
   LESSON_CHAT_MAX_LENGTH,
   LESSON_WS_PATH,
   readSceneDocument,
   type LessonChatEntry,
   type LessonClientMessage,
+  type LessonPresence,
   type LessonRole,
   type LessonServerMessage,
   type LessonStroke,
@@ -21,6 +23,8 @@ interface Member {
   userId: string;
   name: string;
   alive: boolean;
+  /** Индикаторы участника (вкладка/чат/микрофон/речь) — обновляются сообщением `status`. */
+  status: { focused: boolean; inChat: boolean; micOn: boolean; speaking: boolean };
 }
 
 interface Room {
@@ -69,14 +73,21 @@ function broadcast(room: Room, message: LessonServerMessage, exclude?: Member) {
   }
 }
 
-function presenceOf(room: Room) {
-  let teacher = false;
-  let student = false;
+function presenceOf(room: Room): LessonPresence {
+  const presence: LessonPresence = {
+    teacher: { ...EMPTY_PARTICIPANT_STATE },
+    student: { ...EMPTY_PARTICIPANT_STATE },
+  };
   for (const m of room.members) {
-    if (m.role === 'teacher') teacher = true;
-    else student = true;
+    // Если у роли несколько вкладок — берём максимально «живое» состояние.
+    const slot = presence[m.role];
+    slot.online = true;
+    slot.focused = slot.focused || m.status.focused;
+    slot.inChat = slot.inChat || m.status.inChat;
+    slot.micOn = slot.micOn || m.status.micOn;
+    slot.speaking = slot.speaking || m.status.speaking;
   }
-  return { teacher, student };
+  return presence;
 }
 
 async function loadRoomContext(lessonId: string, userId: string, isAdmin: boolean) {
@@ -95,7 +106,25 @@ async function loadRoomContext(lessonId: string, userId: string, isAdmin: boolea
   const role: LessonRole = isTeacher ? 'teacher' : 'student';
   const name = isTeacher ? (lesson.teacher.user.name ?? lesson.teacher.user.email) : lesson.child.name;
   const sceneCount = lesson.instance ? readSceneDocument(lesson.instance.version.scene).length : 0;
-  return { role, name, sceneCount };
+  return { role, name, sceneCount, status: lesson.status };
+}
+
+/**
+ * Вход преподавателя в комнату = урок начался. Это единственный честный сигнал
+ * «идёт сейчас» для списка занятий родителя — руками статус никто не переключает.
+ */
+const LESSON_STARTABLE = new Set(['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY']);
+
+async function markLessonStarted(lessonId: string, currentStatus: string) {
+  if (!LESSON_STARTABLE.has(currentStatus)) return;
+  try {
+    await prisma.lesson.updateMany({
+      where: { id: lessonId, status: { in: [...LESSON_STARTABLE] as never } },
+      data: { status: 'IN_PROGRESS' },
+    });
+  } catch (err) {
+    logger.warn(`[lesson-ws] не удалось отметить старт урока: ${(err as Error).message}`);
+  }
 }
 
 async function getOrCreateRoom(lessonId: string, sceneCount: number): Promise<Room> {
@@ -164,6 +193,19 @@ async function handleMessage(room: Room, member: Member, raw: string) {
       // Проксируем взаимодействие ДРУГИМ участникам (плеер-инициатор применил локально).
       broadcast(room, { t: 'scene-event', event: msg.event, from: member.role }, member);
       return;
+    case 'status': {
+      // Индикаторы участника. `speaking` шлётся часто, поэтому рассылаем только
+      // при фактическом изменении состояния комнаты.
+      const before = JSON.stringify(member.status);
+      if (msg.focused !== undefined) member.status.focused = Boolean(msg.focused);
+      if (msg.inChat !== undefined) member.status.inChat = Boolean(msg.inChat);
+      if (msg.micOn !== undefined) member.status.micOn = Boolean(msg.micOn);
+      if (msg.speaking !== undefined) member.status.speaking = Boolean(msg.speaking);
+      if (JSON.stringify(member.status) !== before) {
+        broadcast(room, { t: 'presence', presence: presenceOf(room) });
+      }
+      return;
+    }
     default:
       break;
   }
@@ -245,8 +287,16 @@ export function initLessonWebSocket(server: Server) {
       if (!ctx) { ws.close(4003, 'forbidden'); return; }
 
       const room = await getOrCreateRoom(lessonId, ctx.sceneCount);
-      const member: Member = { ws, role: ctx.role, userId, name: ctx.name, alive: true };
+      const member: Member = {
+        ws,
+        role: ctx.role,
+        userId,
+        name: ctx.name,
+        alive: true,
+        status: { focused: true, inChat: false, micOn: false, speaking: false },
+      };
       room.members.add(member);
+      if (ctx.role === 'teacher') void markLessonStarted(lessonId, ctx.status);
 
       send(ws, {
         t: 'state',

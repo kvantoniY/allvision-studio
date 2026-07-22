@@ -6,6 +6,7 @@ import {
   buildLessonPackages,
   cancelLessonSchema,
   createSlotSchema,
+  hasAllPhotoConsents,
   LESSON_BASE_PRICE_RUB,
   purchaseLessonPackageSchema,
   resolveCancellation,
@@ -97,8 +98,23 @@ academyBookingRouter.get('/teachers', requireAuth, requireParent, async (req: Re
 academyBookingRouter.post('/booking', requireAuth, requireParent, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = bookLessonSchema.parse(req.body);
-    const child = await prisma.childProfile.findFirst({ where: { id: data.childId, parentId: req.user!.id, deletedAt: null } });
+    const child = await prisma.childProfile.findFirst({
+      where: { id: data.childId, parentId: req.user!.id, deletedAt: null },
+      include: { consents: true, characterProfile: { select: { status: true } } },
+    });
     if (!child) throw new HttpError(404, 'CHILD_NOT_FOUND', 'Ребёнок не найден');
+
+    // Урок строится вокруг AI-персонажа ребёнка: без согласий и утверждённого
+    // персонажа преподаватель не сможет подготовить сцены.
+    const consentsComplete = hasAllPhotoConsents(
+      child.consents.map((c) => ({ type: c.type, version: c.version, revokedAt: c.revokedAt })),
+    );
+    if (!consentsComplete) {
+      throw new HttpError(403, 'CONSENTS_REQUIRED', 'Примите все согласия в профиле ребёнка перед записью на урок');
+    }
+    if (child.characterProfile?.status !== 'APPROVED') {
+      throw new HttpError(403, 'CHARACTER_REQUIRED', 'Создайте и утвердите AI-персонажа ребёнка перед записью на урок');
+    }
     const slot = await prisma.teacherSlot.findUnique({ where: { id: data.slotId } });
     if (!slot || slot.isBooked || slot.startsAt <= new Date()) {
       throw new HttpError(409, 'SLOT_UNAVAILABLE', 'Слот уже занят или недоступен');

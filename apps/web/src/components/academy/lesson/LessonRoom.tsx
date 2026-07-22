@@ -7,16 +7,20 @@ import {
   Minimize2, Monitor, Pencil, Send, Unlock, Video, VideoOff,
 } from 'lucide-react';
 import {
+  EMPTY_PARTICIPANT_STATE,
   LESSON_DRAW_COLORS,
   type AcademySceneRuntimeEvent,
   type LessonChatEntry,
+  type LessonParticipantState,
   type LessonPoint,
+  type LessonPresence,
   type LessonRole,
   type LessonServerMessage,
   type LessonStroke,
 } from '@allvision/shared';
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
+import { useMicLevel } from '@/components/academy/lesson/use-mic-level';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
@@ -32,7 +36,13 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const [sceneIndex, setSceneIndex] = useState(0);
   const [sceneCount, setSceneCount] = useState(0);
   const [unlocked, setUnlocked] = useState(false);
-  const [presence, setPresence] = useState({ teacher: false, student: false });
+  const [presence, setPresence] = useState<LessonPresence>({
+    teacher: { ...EMPTY_PARTICIPANT_STATE },
+    student: { ...EMPTY_PARTICIPANT_STATE },
+  });
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
+  const [micOn, setMicOn] = useState(false);
+  const [chatFocused, setChatFocused] = useState(false);
   const [strokes, setStrokes] = useState<LessonStroke[]>([]);
   const [chat, setChat] = useState<LessonChatEntry[]>([]);
   const [reward, setReward] = useState(false);
@@ -58,6 +68,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   useEffect(() => {
     const socket = connectLessonSocket(lessonId, {
       onStatus: setStatus,
+      onLatency: setLatencyMs,
       onMessage: (msg: LessonServerMessage) => {
         switch (msg.t) {
           case 'state':
@@ -94,7 +105,27 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   }, []);
 
   const isTeacher = role === 'teacher';
-  const send = (m: Parameters<LessonSocket['send']>[0]) => socketRef.current?.send(m);
+  const send = useCallback((m: Parameters<LessonSocket['send']>[0]) => socketRef.current?.send(m), []);
+
+  // Индикатор речи: локальный уровень микрофона → флаг «говорит» собеседнику.
+  const mic = useMicLevel(micOn, useCallback((speaking: boolean) => send({ t: 'status', speaking }), [send]));
+
+  // Активна ли вкладка урока — собеседник видит, что человек отвлёкся.
+  useEffect(() => {
+    const report = () => send({ t: 'status', focused: document.visibilityState === 'visible' && document.hasFocus() });
+    report();
+    document.addEventListener('visibilitychange', report);
+    window.addEventListener('focus', report);
+    window.addEventListener('blur', report);
+    return () => {
+      document.removeEventListener('visibilitychange', report);
+      window.removeEventListener('focus', report);
+      window.removeEventListener('blur', report);
+    };
+  }, [send, status]);
+
+  useEffect(() => { send({ t: 'status', inChat: chatFocused }); }, [chatFocused, send]);
+  useEffect(() => { send({ t: 'status', micOn }); }, [micOn, send]);
 
   const nav = (idx: number) => { if (isTeacher) send({ t: 'nav', sceneIndex: idx }); };
   const toggleFullscreen = () => {
@@ -140,13 +171,10 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
       <div className="flex items-center gap-3 border-b border-border px-4 py-2">
         <span className="font-semibold">{instanceQuery.data.instance.title}</span>
         <span className="text-xs text-muted-foreground">Сцена {sceneCount ? sceneIndex + 1 : 0} из {sceneCount}</span>
-        <span className={cn('ml-2 inline-flex items-center gap-1 text-xs', status === 'open' ? 'text-emerald-700' : 'text-muted-foreground')}>
-          <span className={cn('h-2 w-2 rounded-full', status === 'open' ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
-          {status === 'open' ? 'на связи' : status === 'connecting' ? 'подключение…' : 'нет связи'}
-        </span>
+        <ConnectionBadge status={status} latencyMs={latencyMs} />
         <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1"><span className={cn('h-2 w-2 rounded-full', presence.teacher ? 'bg-emerald-500' : 'bg-muted-foreground/30')} /> Учитель</span>
-          <span className="inline-flex items-center gap-1"><span className={cn('h-2 w-2 rounded-full', presence.student ? 'bg-emerald-500' : 'bg-muted-foreground/30')} /> Ученик</span>
+          <PresenceChip label="Учитель" state={presence.teacher} />
+          <PresenceChip label="Ученик" state={presence.student} />
           <Button variant="ghost" size="icon" onClick={toggleFullscreen} aria-label="Полный экран">
             {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
@@ -218,9 +246,24 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
 
         {/* Правая колонка: видео + чат */}
         <div className="flex min-h-0 w-full flex-col gap-3 border-t border-border p-3 lg:w-[340px] lg:border-l lg:border-t-0">
-          <VideoPanel />
+          <VideoPanel
+            role={role}
+            presence={presence}
+            micOn={micOn}
+            micLevel={mic.level}
+            micError={mic.error}
+            onToggleMic={() => setMicOn((v) => !v)}
+          />
           <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border bg-card">
-            <div className="border-b border-border px-3 py-2 text-sm font-semibold">Чат урока</div>
+            <div className="flex items-center justify-between border-b border-border px-3 py-2">
+              <span className="text-sm font-semibold">Чат урока</span>
+              {role && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className={cn('h-1.5 w-1.5 rounded-full', presence[role === 'teacher' ? 'student' : 'teacher'].inChat ? 'bg-emerald-500' : 'bg-muted-foreground/30')} />
+                  {presence[role === 'teacher' ? 'student' : 'teacher'].inChat ? 'собеседник в чате' : 'собеседник не в чате'}
+                </span>
+              )}
+            </div>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               {chat.length === 0 && <p className="text-xs text-muted-foreground">Сообщений пока нет.</p>}
               {chat.map((m) => (
@@ -236,6 +279,8 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendChat()}
+                onFocus={() => setChatFocused(true)}
+                onBlur={() => setChatFocused(false)}
                 placeholder="Сообщение…"
                 className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
               />
@@ -248,24 +293,130 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   );
 }
 
-// Видео-панель — визуальный каркас; подключение LiveKit (камера/микрофон/демонстрация экрана) — этап A8.
-function VideoPanel() {
+/** Качество связи: цвет и подпись по задержке round-trip. */
+function ConnectionBadge({ status, latencyMs }: { status: 'connecting' | 'open' | 'closed'; latencyMs: number | null }) {
+  if (status !== 'open') {
+    return (
+      <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <span className={cn('h-2 w-2 rounded-full', status === 'connecting' ? 'animate-pulse bg-amber-500' : 'bg-destructive')} />
+        {status === 'connecting' ? 'подключение…' : 'нет связи'}
+      </span>
+    );
+  }
+  const weak = latencyMs !== null && latencyMs > 400;
+  const poor = latencyMs !== null && latencyMs > 1000;
+  return (
+    <span className={cn('ml-2 inline-flex items-center gap-1 text-xs', poor ? 'text-destructive' : weak ? 'text-amber-600' : 'text-emerald-700')}>
+      <span className={cn('h-2 w-2 rounded-full', poor ? 'bg-destructive' : weak ? 'bg-amber-500' : 'bg-emerald-500')} />
+      {poor ? 'связь слабая' : weak ? 'связь нестабильна' : 'на связи'}
+      {latencyMs !== null && <span className="opacity-60">{latencyMs} мс</span>}
+    </span>
+  );
+}
+
+/** Компактный статус участника в шапке: онлайн, вкладка, чат, микрофон. */
+function PresenceChip({ label, state }: { label: string; state: LessonParticipantState }) {
+  const title = state.online
+    ? [state.focused ? 'вкладка активна' : 'вкладка свёрнута', state.inChat ? 'в чате' : null, state.micOn ? 'микрофон включён' : null]
+        .filter(Boolean)
+        .join(' · ')
+    : 'не подключён';
+  return (
+    <span className="inline-flex items-center gap-1" title={title}>
+      <span
+        className={cn(
+          'h-2 w-2 rounded-full',
+          !state.online ? 'bg-muted-foreground/30' : state.focused ? 'bg-emerald-500' : 'bg-amber-500',
+        )}
+      />
+      {label}
+      {state.online && !state.focused && <span className="opacity-60">отвлёкся</span>}
+      {state.speaking && <Mic className="h-3 w-3 text-primary" />}
+    </span>
+  );
+}
+
+/** Плитка участника: рамка подсвечивается, когда человек говорит. */
+function ParticipantTile({
+  label,
+  state,
+  self,
+  level,
+}: {
+  label: string;
+  state: LessonParticipantState;
+  self?: boolean;
+  level?: number;
+}) {
+  const speaking = self ? (level ?? 0) > 0.12 : state.speaking;
+  return (
+    <div
+      className={cn(
+        'relative flex aspect-video items-center justify-center rounded-xl bg-muted text-xs text-muted-foreground transition',
+        speaking ? 'ring-2 ring-primary ring-offset-2 ring-offset-card' : 'ring-1 ring-border',
+      )}
+    >
+      <VideoOff className="h-5 w-5 opacity-40" />
+      <span className="absolute bottom-1 left-1.5 flex items-center gap-1">
+        <span className={cn('h-1.5 w-1.5 rounded-full', state.online ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
+        {label}
+      </span>
+      <span className="absolute bottom-1 right-1.5 flex items-center gap-1">
+        {state.inChat && <span className="text-[10px] text-primary">чат</span>}
+        {state.micOn ? <Mic className="h-3 w-3 text-primary" /> : <MicOff className="h-3 w-3 opacity-40" />}
+      </span>
+      {/* Шкала громкости своего микрофона — видно, что звук реально идёт. */}
+      {self && (
+        <span className="absolute inset-x-1.5 top-1.5 h-1 overflow-hidden rounded-full bg-background/60">
+          <span className="block h-full bg-primary transition-[width] duration-75" style={{ width: `${Math.round((level ?? 0) * 100)}%` }} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Видео пока не передаётся: камера и демонстрация экрана — этап A8 (LiveKit).
+// Микрофон уже работает локально и даёт собеседнику индикатор речи.
+function VideoPanel({
+  role,
+  presence,
+  micOn,
+  micLevel,
+  micError,
+  onToggleMic,
+}: {
+  role: LessonRole | null;
+  presence: LessonPresence;
+  micOn: boolean;
+  micLevel: number;
+  micError: string | null;
+  onToggleMic: () => void;
+}) {
+  const selfRole: LessonRole = role ?? 'student';
+  const otherRole: LessonRole = selfRole === 'teacher' ? 'student' : 'teacher';
+  const nameOf = (r: LessonRole) => (r === 'teacher' ? 'Учитель' : 'Ученик');
+
   return (
     <div className="rounded-2xl border border-border bg-card p-3">
       <div className="grid grid-cols-2 gap-2">
-        {['Вы', 'Собеседник'].map((label) => (
-          <div key={label} className="relative flex aspect-video items-center justify-center rounded-xl bg-muted text-xs text-muted-foreground">
-            <VideoOff className="h-5 w-5 opacity-40" />
-            <span className="absolute bottom-1 left-1.5">{label}</span>
-          </div>
-        ))}
+        <ParticipantTile label={`Вы · ${nameOf(selfRole)}`} state={{ ...presence[selfRole], micOn }} self level={micLevel} />
+        <ParticipantTile label={nameOf(otherRole)} state={presence[otherRole]} />
       </div>
       <div className="mt-2 flex items-center justify-center gap-2">
-        <Button variant="outline" size="icon" disabled aria-label="Микрофон"><Mic className="h-4 w-4" /></Button>
+        <Button
+          variant={micOn ? 'default' : 'outline'}
+          size="icon"
+          onClick={onToggleMic}
+          aria-label={micOn ? 'Выключить микрофон' : 'Включить микрофон'}
+        >
+          {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+        </Button>
         <Button variant="outline" size="icon" disabled aria-label="Камера"><Video className="h-4 w-4" /></Button>
         <Button variant="outline" size="icon" disabled aria-label="Демонстрация экрана"><Monitor className="h-4 w-4" /></Button>
       </div>
-      <p className="mt-1 text-center text-[10px] text-muted-foreground">Видеосвязь и демонстрация экрана — на подключении (A8)</p>
+      <p className="mt-1 text-center text-[10px] text-muted-foreground">
+        {micError ?? 'Микрофон показывает индикатор речи. Передача звука и видео — на подключении (A8)'}
+      </p>
     </div>
   );
 }

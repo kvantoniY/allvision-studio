@@ -39,6 +39,7 @@ familyRouter.use(requireAuth, requireParent);
 
 const childInclude = {
   consents: true,
+  characterProfile: { select: { status: true } },
   _count: { select: { photos: true } },
 } as const;
 
@@ -65,6 +66,8 @@ function toChildDto(child: NonNullable<ChildWithMeta>): ChildProfileDto {
     acceptedAt: consent.acceptedAt.toISOString(),
     revokedAt: consent.revokedAt ? consent.revokedAt.toISOString() : null,
   }));
+  const consentsComplete = hasAllPhotoConsents(consents);
+  const characterStatus = (child.characterProfile?.status ?? null) as ChildProfileDto['characterStatus'];
   return {
     id: child.id,
     name: child.name,
@@ -77,7 +80,11 @@ function toChildDto(child: NonNullable<ChildWithMeta>): ChildProfileDto {
     createdAt: child.createdAt.toISOString(),
     consents,
     photosCount: child._count.photos,
-    photoConsentsComplete: hasAllPhotoConsents(consents),
+    photoConsentsComplete: consentsComplete,
+    characterStatus,
+    // Урок строится вокруг AI-персонажа ребёнка, поэтому запись открывается только
+    // после принятых согласий и утверждённого персонажа.
+    readyForLessons: consentsComplete && characterStatus === 'APPROVED',
   };
 }
 

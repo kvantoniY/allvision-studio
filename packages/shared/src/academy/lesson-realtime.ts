@@ -26,10 +26,32 @@ export interface LessonChatEntry {
   createdAt: string;
 }
 
-export interface LessonPresence {
-  teacher: boolean;
-  student: boolean;
+/** Состояние одного участника комнаты — для индикаторов в окне урока. */
+export interface LessonParticipantState {
+  /** Есть открытое соединение с комнатой. */
+  online: boolean;
+  /** Окно/вкладка урока активны (не свёрнуты, не в другой вкладке). */
+  focused: boolean;
+  /** Панель чата открыта — видно, читает ли собеседник сообщения. */
+  inChat: boolean;
+  /** Микрофон разрешён и включён. */
+  micOn: boolean;
+  /** Сейчас говорит (уровень звука выше порога). */
+  speaking: boolean;
 }
+
+export interface LessonPresence {
+  teacher: LessonParticipantState;
+  student: LessonParticipantState;
+}
+
+export const EMPTY_PARTICIPANT_STATE: LessonParticipantState = {
+  online: false,
+  focused: false,
+  inChat: false,
+  micOn: false,
+  speaking: false,
+};
 
 export interface LessonRoomState {
   sceneIndex: number;
@@ -57,6 +79,8 @@ export type LessonClientMessage =
   | { t: 'draw-clear' } // teacher
   | { t: 'reward' } // teacher
   | { t: 'scene-event'; event: LessonSceneEvent } // interaction
+  // Индикаторы участника: активность вкладки, открытый чат, микрофон и речь.
+  | { t: 'status'; focused?: boolean; inChat?: boolean; micOn?: boolean; speaking?: boolean }
   | { t: 'chat'; body: string }
   | { t: 'ping' };
 

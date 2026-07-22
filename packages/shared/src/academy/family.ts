@@ -74,4 +74,8 @@ export interface ChildProfileDto {
   photosCount: number;
   /** Приняты ли все согласия, обязательные для загрузки фото. */
   photoConsentsComplete: boolean;
+  /** Статус AI-персонажа (null — профиль ещё не создавали). Нужен для гейта записи на урок. */
+  characterStatus: 'DRAFT' | 'GENERATING' | 'READY' | 'APPROVED' | 'FAILED' | null;
+  /** Готов ли ребёнок к записи: согласия приняты и персонаж утверждён. */
+  readyForLessons: boolean;
 }

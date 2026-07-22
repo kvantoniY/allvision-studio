@@ -16,69 +16,132 @@ export async function ensureFullAiSceneGenerations(
   instance: { id: string; childId: string; version: { scene: unknown } },
   requestedById: string,
 ): Promise<void> {
-  const scenes = readSceneDocument(instance.version.scene);
-  const fullAi = scenes.filter(
-    (s) => s.generation?.mode === 'full-ai' && (s.generation.prompt ?? '').trim().length >= 8,
-  );
+  const fullAi = fullAiScenes(instance.version.scene);
   if (fullAi.length === 0) return;
 
-  const profile = await prisma.characterProfile.findFirst({
-    where: { childId: instance.childId, status: 'APPROVED' },
-    include: { references: true },
-  });
-  if (!profile || profile.references.length === 0) {
-    logger.warn(`[full-scene] нет APPROVED-персонажа у ребёнка ${instance.childId}; цельные сцены не генерируются`);
-    return;
-  }
-  const characterReferenceIds = profile.references.map((r) => r.id).slice(0, 14);
+  const characterReferenceIds = await approvedCharacterRefs(instance.childId);
+  if (!characterReferenceIds) return;
 
   const existing = await prisma.lessonInstanceSceneAsset.findMany({ where: { instanceId: instance.id }, select: { sceneId: true } });
   const done = new Set(existing.map((e) => e.sceneId));
 
   for (const scene of fullAi) {
     if (done.has(scene.id)) continue;
-    const input: AcademyGenerationInput = {
-      kind: 'scene',
-      operation: 'generate',
-      title: `Урок-сцена: ${scene.title}`.slice(0, 160),
-      prompt: (scene.generation?.prompt ?? '').trim(),
-      model: 'nano-banana',
-      style: 'cinematic-animation',
-      aspectRatio: '16:9',
-      quality: 'medium',
-      resolution: '1K',
-      count: 1,
-      transparentBackground: false,
+    await startSceneGeneration({
+      instanceId: instance.id,
       childId: instance.childId,
+      sceneId: scene.id,
+      sceneTitle: scene.title,
+      prompt: (scene.generation?.prompt ?? '').trim(),
       characterReferenceIds,
-      referenceAssetIds: [],
-      tags: ['lesson-scene'],
-      maxCostUsd: FULL_SCENE_MAX_COST,
-    };
-    const estimatedCostUsd = estimateAcademyGenerationCostUsd(input);
-    try {
-      const project = await prisma.project.create({
-        data: {
-          userId: requestedById,
-          mode: 'academy-generation',
-          title: input.title,
-          status: 'PENDING',
-          progress: 0,
-          inputImages: [],
-          inputText: input.prompt,
-          tokensCost: 0,
-          userInputs: { academyGeneration: input, estimatedCostUsd } as unknown as Prisma.InputJsonValue,
-          pipelineSnapshot: [{ blockSlug: 'academy-generation', params: input }] as unknown as Prisma.InputJsonValue,
-        },
-      });
-      await prisma.lessonInstanceSceneAsset.create({
-        data: { instanceId: instance.id, sceneId: scene.id, projectId: project.id },
-      });
-      await addAcademyGenerationJob({ projectId: project.id, requestedById, input, estimatedCostUsd });
-    } catch (err) {
-      logger.error(`[full-scene] не удалось запустить генерацию сцены ${scene.id}`, err);
-    }
+      requestedById,
+    });
   }
+}
+
+/** Сцены, которые генерируются целиком по референсу ученика. */
+function fullAiScenes(sceneDocument: unknown) {
+  return readSceneDocument(sceneDocument).filter(
+    (s) => s.generation?.mode === 'full-ai' && (s.generation.prompt ?? '').trim().length >= 8,
+  );
+}
+
+/** Референсы утверждённого AI-персонажа ребёнка; null — генерировать нечем. */
+async function approvedCharacterRefs(childId: string): Promise<string[] | null> {
+  const profile = await prisma.characterProfile.findFirst({
+    where: { childId, status: 'APPROVED' },
+    include: { references: true },
+  });
+  if (!profile || profile.references.length === 0) {
+    logger.warn(`[full-scene] нет APPROVED-персонажа у ребёнка ${childId}; цельные сцены не генерируются`);
+    return null;
+  }
+  return profile.references.map((r) => r.id).slice(0, 14);
+}
+
+async function startSceneGeneration(params: {
+  instanceId: string;
+  childId: string;
+  sceneId: string;
+  sceneTitle: string;
+  prompt: string;
+  characterReferenceIds: string[];
+  requestedById: string;
+}): Promise<string | null> {
+  const input: AcademyGenerationInput = {
+    kind: 'scene',
+    operation: 'generate',
+    title: `Урок-сцена: ${params.sceneTitle}`.slice(0, 160),
+    prompt: params.prompt,
+    model: 'nano-banana',
+    style: 'cinematic-animation',
+    aspectRatio: '16:9',
+    quality: 'medium',
+    resolution: '1K',
+    count: 1,
+    transparentBackground: false,
+    childId: params.childId,
+    characterReferenceIds: params.characterReferenceIds,
+    referenceAssetIds: [],
+    tags: ['lesson-scene'],
+    maxCostUsd: FULL_SCENE_MAX_COST,
+  };
+  const estimatedCostUsd = estimateAcademyGenerationCostUsd(input);
+  try {
+    const project = await prisma.project.create({
+      data: {
+        userId: params.requestedById,
+        mode: 'academy-generation',
+        title: input.title,
+        status: 'PENDING',
+        progress: 0,
+        inputImages: [],
+        inputText: input.prompt,
+        tokensCost: 0,
+        userInputs: { academyGeneration: input, estimatedCostUsd } as unknown as Prisma.InputJsonValue,
+        pipelineSnapshot: [{ blockSlug: 'academy-generation', params: input }] as unknown as Prisma.InputJsonValue,
+      },
+    });
+    // upsert: перегенерация заменяет связку сцены на новый проект.
+    await prisma.lessonInstanceSceneAsset.upsert({
+      where: { instanceId_sceneId: { instanceId: params.instanceId, sceneId: params.sceneId } },
+      create: { instanceId: params.instanceId, sceneId: params.sceneId, projectId: project.id },
+      update: { projectId: project.id },
+    });
+    await addAcademyGenerationJob({ projectId: project.id, requestedById: params.requestedById, input, estimatedCostUsd });
+    return project.id;
+  } catch (err) {
+    logger.error(`[full-scene] не удалось запустить генерацию сцены ${params.sceneId}`, err);
+    return null;
+  }
+}
+
+/**
+ * Перегенерация одной цельной AI-сцены — преподаватель может переделать
+ * иллюстрацию в любой момент до урока, если результат не понравился.
+ * Переделываются только сцены с участием AI-персонажа (`full-ai`).
+ */
+export async function regenerateFullAiScene(
+  instance: { id: string; childId: string; version: { scene: unknown } },
+  sceneId: string,
+  requestedById: string,
+): Promise<{ ok: boolean; reason?: 'SCENE_NOT_AI' | 'CHARACTER_NOT_READY' | 'FAILED' }> {
+  const scene = fullAiScenes(instance.version.scene).find((s) => s.id === sceneId);
+  if (!scene) return { ok: false, reason: 'SCENE_NOT_AI' };
+
+  const characterReferenceIds = await approvedCharacterRefs(instance.childId);
+  if (!characterReferenceIds) return { ok: false, reason: 'CHARACTER_NOT_READY' };
+
+  const projectId = await startSceneGeneration({
+    instanceId: instance.id,
+    childId: instance.childId,
+    sceneId: scene.id,
+    sceneTitle: scene.title,
+    prompt: (scene.generation?.prompt ?? '').trim(),
+    characterReferenceIds,
+    requestedById,
+  });
+  return projectId ? { ok: true } : { ok: false, reason: 'FAILED' };
 }
 
 export interface FullSceneStatus {

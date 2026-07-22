@@ -156,12 +156,35 @@ export function setSceneBackground(scene: AcademyScene, drag: AcademyAssetDragDa
   return { ...scene, layers: scene.layers.map((l) => (l.id === bgLayer.id ? { ...l, elements: [element, ...l.elements] } : l)) };
 }
 
+/**
+ * Убирает из правил ссылки на исчезнувшие элементы. Без этого удаление элемента/слоя
+ * оставляет битое правило, которое нельзя ни увидеть, ни починить в редакторе, —
+ * публикация падает на «Связанный элемент не найден».
+ */
+export function pruneDanglingRefs(scene: AcademyScene): AcademyScene {
+  const alive = new Set(scene.layers.flatMap((layer) => layer.elements.map((el) => el.id)));
+  const missing = (id: string | undefined) => Boolean(id) && !alive.has(id as string);
+
+  const rules = scene.rules
+    // Правило без своего источника события бессмысленно — удаляем целиком.
+    .filter((rule) => !missing(rule.event.sourceElementId))
+    .map((rule) => ({
+      ...rule,
+      conditions: rule.conditions.filter((condition) => !missing(condition.elementId)),
+      actions: rule.actions.filter((action) => !missing(action.elementId)),
+    }))
+    // Если все действия ссылались на удалённые элементы, правило пустое — оно и
+    // не пройдёт валидацию (минимум одно действие), поэтому убираем его.
+    .filter((rule) => rule.actions.length > 0);
+
+  return { ...scene, rules };
+}
+
 export function removeElement(scene: AcademyScene, elementId: string): AcademyScene {
-  return {
+  return pruneDanglingRefs({
     ...scene,
     layers: scene.layers.map((layer) => ({ ...layer, elements: layer.elements.filter((el) => el.id !== elementId) })),
-    rules: scene.rules.filter((rule) => rule.event.sourceElementId !== elementId),
-  };
+  });
 }
 
 export function addLayer(scene: AcademyScene, kind: AcademySceneLayer['kind']): { scene: AcademyScene; layerId: string } {
@@ -180,7 +203,7 @@ export function addLayer(scene: AcademyScene, kind: AcademySceneLayer['kind']): 
 
 export function removeLayer(scene: AcademyScene, layerId: string): AcademyScene {
   if (scene.layers.length <= 1) return scene;
-  return { ...scene, layers: scene.layers.filter((l) => l.id !== layerId) };
+  return pruneDanglingRefs({ ...scene, layers: scene.layers.filter((l) => l.id !== layerId) });
 }
 
 /** Двигает элемент по z (порядку в слое). */

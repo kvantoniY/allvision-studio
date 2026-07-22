@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { CalendarClock, Check, ChevronLeft, ChevronRight, Clock, Loader2, Video, Wallet, X } from 'lucide-react';
-import { LESSON_STATUS_LABELS, type LessonPackageOption } from '@allvision/shared';
+import { LESSON_STATUS_LABELS, type LessonDto, type LessonPackageOption } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -156,6 +156,7 @@ function BookingSection() {
   const kids = children.data?.items ?? [];
   const list = teachers.data?.teachers ?? [];
   const activeChild = childId || kids[0]?.id || '';
+  const child = kids.find((k) => k.id === activeChild);
   const activeTeacher = list.find((t) => t.teacherId === teacherId) ?? list[0];
 
   // Свободные слоты выбранного преподавателя, разложенные по дням.
@@ -239,7 +240,35 @@ function BookingSection() {
           </div>
         )}
 
-        <div>
+        {child && !child.readyForLessons && (
+          <div className="rounded-xl border border-primary/40 bg-accent/40 p-4">
+            <p className="text-sm font-semibold">Перед записью подготовьте профиль {child.name}</p>
+            <ul className="mt-2 space-y-1.5 text-sm">
+              <li className="flex items-center gap-2">
+                {child.photoConsentsComplete
+                  ? <Check className="h-4 w-4 shrink-0 text-primary" />
+                  : <span className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground" />}
+                <span className={cn(!child.photoConsentsComplete && 'text-muted-foreground')}>Приняты все согласия</span>
+              </li>
+              <li className="flex items-center gap-2">
+                {child.characterStatus === 'APPROVED'
+                  ? <Check className="h-4 w-4 shrink-0 text-primary" />
+                  : <span className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground" />}
+                <span className={cn(child.characterStatus !== 'APPROVED' && 'text-muted-foreground')}>
+                  Создан и утверждён AI-персонаж
+                  {child.characterStatus === 'GENERATING' && ' (генерация идёт)'}
+                  {child.characterStatus === 'READY' && ' — осталось утвердить'}
+                  {child.characterStatus === 'FAILED' && ' — генерация не удалась'}
+                </span>
+              </li>
+            </ul>
+            <Link href="/family" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
+              Перейти в раздел «Семья» →
+            </Link>
+          </div>
+        )}
+
+        <div className={cn(child && !child.readyForLessons && 'pointer-events-none opacity-50')}>
           <StepLabel n={kids.length > 1 ? 2 : 1} text="Преподаватель" />
           <div className="grid gap-2 sm:grid-cols-2">
             {list.map((t) => {
@@ -277,7 +306,7 @@ function BookingSection() {
           </div>
         </div>
 
-        <div>
+        <div className={cn(child && !child.readyForLessons && 'pointer-events-none opacity-50')}>
           <StepLabel n={kids.length > 1 ? 3 : 2} text="Свободная дата" />
           <div className="rounded-xl border border-border p-3">
             <div className="mb-3 flex items-center justify-between">
@@ -371,51 +400,138 @@ function BookingSection() {
   );
 }
 
+const CANCELLED_STATUSES = new Set(['CANCELLED_BY_PARENT', 'CANCELLED_BY_TEACHER', 'CANCELLED_BY_SYSTEM', 'NO_SHOW']);
+const DONE_STATUSES = new Set(['COMPLETED', 'REPORT_SENT']);
+
+function LessonRow({ lesson, onCancel }: { lesson: LessonDto; onCancel?: (lesson: LessonDto) => void }) {
+  const live = lesson.status === 'IN_PROGRESS';
+  const done = DONE_STATUSES.has(lesson.status);
+  const cancelled = CANCELLED_STATUSES.has(lesson.status);
+  const start = new Date(lesson.startsAt);
+  // «Скоро» — можно заходить в комнату заранее, чтобы не опаздывать.
+  const soon = !live && start.getTime() - Date.now() < 15 * 60 * 1000 && start.getTime() > Date.now() - 60 * 60 * 1000;
+
+  return (
+    <div className={cn('flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3', live ? 'border-primary bg-accent/40' : 'border-border')}>
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-2 truncate text-sm font-medium">
+          {lesson.childName}
+          {live && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground" /> Урок идёт
+            </span>
+          )}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {formatSlot(lesson.startsAt)} · {lesson.durationMin} мин · {lesson.teacherName}
+          {lesson.topicTitle ? ` · ${lesson.topicTitle}` : ''}
+        </p>
+      </div>
+
+      {done ? (
+        <span className="inline-flex items-center gap-1 text-sm text-primary">
+          <Check className="h-4 w-4" />
+          {lesson.status === 'REPORT_SENT' ? 'Отчёт готов' : 'Проведён'}
+        </span>
+      ) : cancelled ? (
+        <span className="text-sm text-muted-foreground">{LESSON_STATUS_LABELS[lesson.status]}</span>
+      ) : (
+        <Badge variant="outline">{LESSON_STATUS_LABELS[lesson.status]}</Badge>
+      )}
+
+      {(live || soon || lesson.status === 'READY') && (
+        <Link href={`/lesson/${lesson.id}`}>
+          <Button size="sm" variant={live ? 'default' : 'outline'}>
+            <Video className="mr-1 h-3.5 w-3.5" /> {live ? 'Присоединиться' : 'Войти'}
+          </Button>
+        </Link>
+      )}
+
+      {onCancel && ACTIVE_STATUSES.has(lesson.status) && !live && (
+        <button type="button" aria-label="Отменить" className="text-muted-foreground hover:text-destructive" onClick={() => onCancel(lesson)}>
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function LessonGroup({ title, count, hint, children }: { title: string; count: number; hint?: string; children: React.ReactNode }) {
+  if (count === 0) return null;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{count}</span>
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      </div>
+      <div className="space-y-2">{children}</div>
+    </div>
+  );
+}
+
 function MyLessons() {
-  const { data, isLoading } = useGetLessonsQuery();
+  // Поллинг: статус «урок идёт» ставит сервер при входе преподавателя в комнату.
+  const { data, isLoading } = useGetLessonsQuery(undefined, { pollingInterval: 20000 });
   const [cancel] = useCancelLessonMutation();
   const lessons = data?.lessons ?? [];
 
+  const doCancel = async (lesson: LessonDto) => {
+    if (!window.confirm('Отменить урок? Занятие вернётся на баланс, если до начала ≥ 8 часов.')) return;
+    const res = await cancel({ id: lesson.id }).unwrap().catch((err) => {
+      toast({ title: 'Ошибка', description: apiErr(err), variant: 'destructive' });
+      return null;
+    });
+    if (res) toast({ title: res.refunded ? 'Урок отменён, занятие возвращено на баланс' : 'Урок отменён (занятие сгорело)' });
+  };
+
   if (isLoading) return <div className="h-20 animate-pulse rounded-xl bg-muted" />;
-  if (lessons.length === 0) return null;
+
+  const live = lessons.filter((l) => l.status === 'IN_PROGRESS');
+  const upcoming = lessons
+    .filter((l) => l.status !== 'IN_PROGRESS' && ACTIVE_STATUSES.has(l.status))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const past = lessons
+    .filter((l) => DONE_STATUSES.has(l.status) || CANCELLED_STATUSES.has(l.status))
+    .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
+  const completedCount = past.filter((l) => DONE_STATUSES.has(l.status)).length;
+
+  if (lessons.length === 0) {
+    return (
+      <Card className="border-border bg-card">
+        <CardContent className="p-5 text-sm text-muted-foreground">
+          Занятий пока нет. Запишитесь на первое — оно появится здесь.
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      <h2 className="text-sm font-semibold">Мои уроки</h2>
-      <div className="space-y-2">
-        {lessons.map((l) => {
-          const active = ACTIVE_STATUSES.has(l.status);
-          return (
-            <div key={l.id} className="flex items-center gap-3 rounded-xl border border-border bg-card p-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{l.childName} · {l.teacherName}</p>
-                <p className="text-xs text-muted-foreground">{formatSlot(l.startsAt)} · {l.durationMin} мин</p>
-              </div>
-              <Badge variant="outline" className={cn(l.status === 'COMPLETED' && 'border-primary/40 text-primary')}>
-                {LESSON_STATUS_LABELS[l.status]}
-              </Badge>
-              {['READY', 'IN_PROGRESS'].includes(l.status) && (
-                <Link href={`/lesson/${l.id}`}><Button size="sm"><Video className="mr-1 h-3.5 w-3.5" /> Войти</Button></Link>
-              )}
-              {active && (
-                <button
-                  type="button"
-                  aria-label="Отменить"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={async () => {
-                    if (!window.confirm('Отменить урок? Кредит вернётся, если до занятия ≥ 8 часов.')) return;
-                    const res = await cancel({ id: l.id }).unwrap().catch((err) => { toast({ title: 'Ошибка', description: apiErr(err), variant: 'destructive' }); return null; });
-                    if (res) toast({ title: res.refunded ? 'Урок отменён, кредит возвращён' : 'Урок отменён (кредит сгорел)' });
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-              {l.status === 'COMPLETED' && <Check className="h-4 w-4 text-primary" />}
-            </div>
-          );
-        })}
+    <div className="space-y-5">
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { label: 'Идёт сейчас', value: live.length },
+          { label: 'Предстоящие', value: upcoming.length },
+          { label: 'Проведено', value: completedCount },
+        ].map((stat) => (
+          <div key={stat.label} className="rounded-xl border border-border bg-card p-3 text-center">
+            <p className="text-2xl font-semibold">{stat.value}</p>
+            <p className="text-xs text-muted-foreground">{stat.label}</p>
+          </div>
+        ))}
       </div>
+
+      <LessonGroup title="Идёт сейчас" count={live.length} hint="преподаватель уже в классе">
+        {live.map((l) => <LessonRow key={l.id} lesson={l} />)}
+      </LessonGroup>
+
+      <LessonGroup title="Предстоящие занятия" count={upcoming.length}>
+        {upcoming.map((l) => <LessonRow key={l.id} lesson={l} onCancel={doCancel} />)}
+      </LessonGroup>
+
+      <LessonGroup title="Прошедшие занятия" count={past.length}>
+        {past.map((l) => <LessonRow key={l.id} lesson={l} />)}
+      </LessonGroup>
     </div>
   );
 }

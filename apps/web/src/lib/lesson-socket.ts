@@ -21,12 +21,15 @@ export function connectLessonSocket(
     onMessage: (message: LessonServerMessage) => void;
     onOpen?: () => void;
     onStatus?: (status: 'connecting' | 'open' | 'closed') => void;
+    /** Задержка round-trip в мс — качество связи в интерфейсе урока. */
+    onLatency?: (ms: number) => void;
   },
 ): LessonSocket {
   let ws: WebSocket | null = null;
   let closed = false;
   let retries = 0;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
+  let pingSentAt = 0;
 
   const open = () => {
     if (closed) return;
@@ -37,13 +40,22 @@ export function connectLessonSocket(
       retries = 0;
       handlers.onStatus?.('open');
       handlers.onOpen?.();
-      pingTimer = setInterval(() => {
-        if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'ping' }));
-      }, 25000);
+      const ping = () => {
+        if (ws?.readyState !== WebSocket.OPEN) return;
+        pingSentAt = Date.now();
+        ws.send(JSON.stringify({ t: 'ping' }));
+      };
+      ping(); // сразу меряем задержку, не ждём первый интервал
+      pingTimer = setInterval(ping, 10000);
     };
     ws.onmessage = (event) => {
       try {
-        handlers.onMessage(JSON.parse(event.data as string) as LessonServerMessage);
+        const message = JSON.parse(event.data as string) as LessonServerMessage;
+        if (message.t === 'pong') {
+          if (pingSentAt) handlers.onLatency?.(Date.now() - pingSentAt);
+          return;
+        }
+        handlers.onMessage(message);
       } catch {
         /* ignore malformed */
       }

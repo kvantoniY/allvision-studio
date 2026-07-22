@@ -22,10 +22,40 @@ export type FullSceneGenerationStatus = {
   childAssetId: string | null;
 };
 
+/** Статус сцены урока в панели генераций преподавателя. */
+export type SceneGenerationStatus =
+  | 'NOT_NEEDED' // послойная сцена из готовых материалов
+  | 'BLOCKED' // нужен AI-персонаж ребёнка
+  | 'NOT_STARTED'
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'FAILED';
+
+export type SceneGenerationItem = {
+  sceneId: string;
+  index: number;
+  title: string;
+  mode: 'layered' | 'full-ai';
+  needsGeneration: boolean;
+  prompt: string | null;
+  status: SceneGenerationStatus;
+  previewUrl: string | null;
+};
+
+export type SceneGenerationsReport = {
+  hasCharacter: boolean;
+  scenes: SceneGenerationItem[];
+  total: number;
+  ready: number;
+  running: number;
+  failed: number;
+};
+
 export const academyLessonInstancesApi = createApi({
   reducerPath: 'academyLessonInstancesApi',
   baseQuery: createBaseQueryWithReauth('/api/academy/lesson-instances'),
-  tagTypes: ['Instance', 'InstanceScenes'],
+  tagTypes: ['Instance', 'InstanceScenes', 'InstanceGenerations'],
   endpoints: (build) => ({
     getPublishedTemplates: build.query<{ items: PublishedTemplateOption[] }, void>({
       query: () => ({ url: '/published-templates' }),
@@ -52,6 +82,17 @@ export const academyLessonInstancesApi = createApi({
       query: (id) => ({ url: `/${id}/scenes` }),
       providesTags: (_r, _e, id) => [{ type: 'InstanceScenes', id }],
     }),
+    getInstanceGenerations: build.query<SceneGenerationsReport, string>({
+      query: (id) => ({ url: `/${id}/generations` }),
+      providesTags: (_r, _e, id) => [{ type: 'InstanceGenerations', id }],
+    }),
+    regenerateScene: build.mutation<{ ok: true }, { instanceId: string; sceneId: string }>({
+      query: ({ instanceId, sceneId }) => ({ url: `/${instanceId}/generations/${sceneId}/regenerate`, method: 'POST' }),
+      invalidatesTags: (_r, _e, { instanceId }) => [
+        { type: 'InstanceGenerations', id: instanceId },
+        { type: 'InstanceScenes', id: instanceId },
+      ],
+    }),
   }),
 });
 
@@ -61,4 +102,6 @@ export const {
   useCreateInstanceMutation,
   useLazyGetInstanceSceneQuery,
   useGetInstanceScenesQuery,
+  useGetInstanceGenerationsQuery,
+  useRegenerateSceneMutation,
 } = academyLessonInstancesApi;

@@ -6,6 +6,7 @@ import {
   createEmptyScene,
   patchElementTransform,
   removeElement,
+  removeLayer,
   reorderElement,
   setSceneBackground,
   uniqueSceneId,
@@ -73,6 +74,42 @@ describe('scene-editing helpers', () => {
     expect(scene.rules).toHaveLength(1);
     scene = removeElement(scene, added.elementId);
     expect(scene.rules).toHaveLength(0);
+  });
+
+  it('removeLayer prunes rules pointing at elements of that layer', () => {
+    // Регрессия: удаление слоя оставляло правило на исчезнувший элемент,
+    // и сцена больше не публиковалась («Связанный элемент не найден»).
+    let scene = createEmptyScene();
+    const added = addElement(scene, 'ui', 'button');
+    scene = added.scene;
+    const ruleAdded = addRule(scene);
+    scene = updateRule(ruleAdded.scene, ruleAdded.ruleId, {
+      event: { type: 'element-click', sourceElementId: added.elementId },
+    });
+    scene = removeLayer(scene, 'ui');
+    expect(scene.rules).toHaveLength(0);
+    expect(validateScene(scene).ok).toBe(true);
+  });
+
+  it('pruneDanglingRefs strips missing element refs from conditions and actions', () => {
+    let scene = createEmptyScene();
+    const source = addElement(scene, 'ui', 'button');
+    scene = source.scene;
+    const target = addElement(scene, 'ui', 'card');
+    scene = target.scene;
+    const ruleAdded = addRule(scene);
+    scene = updateRule(ruleAdded.scene, ruleAdded.ruleId, {
+      event: { type: 'element-click', sourceElementId: source.elementId },
+      actions: [
+        { type: 'show-element', elementId: target.elementId },
+        { type: 'add-score', value: 5 },
+      ],
+    });
+    scene = removeElement(scene, target.elementId);
+    // Правило живо (источник и второе действие на месте), битое действие вычищено.
+    expect(scene.rules).toHaveLength(1);
+    expect(scene.rules[0].actions).toEqual([{ type: 'add-score', value: 5 }]);
+    expect(validateScene(scene).ok).toBe(true);
   });
 
   it('reorderElement swaps z-order within a layer', () => {

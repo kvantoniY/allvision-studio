@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CheckCircle2, Eye, Loader2, Video, Wand2, X } from 'lucide-react';
 import type { AcademyScene } from '@allvision/shared';
 import { AcademyScenePlayer } from '@/components/academy/scene-player';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
+import { SceneGenerationsPanel } from '@/components/academy/SceneGenerationsPanel';
 import {
   useCreateInstanceMutation,
   useGetInstanceByLessonQuery,
-  useGetInstanceScenesQuery,
   useGetPublishedTemplatesQuery,
   useLazyGetInstanceSceneQuery,
 } from '@/store/api/academy-lesson-instances-api';
@@ -18,58 +18,6 @@ import {
 function apiErr(err: unknown): string {
   const d = (err as { data?: { error?: { message?: string } } })?.data;
   return d?.error?.message ?? 'Ошибка';
-}
-
-function sceneNoun(count: number): string {
-  const tail = count % 100;
-  if (tail >= 11 && tail <= 14) return 'сцен';
-  if (count % 10 === 1) return 'сцена';
-  if (count % 10 >= 2 && count % 10 <= 4) return 'сцены';
-  return 'сцен';
-}
-
-function FullSceneStatusIndicator({ instanceId }: { instanceId: string }) {
-  const [polling, setPolling] = useState(true);
-  const emptyPolls = useRef(0);
-  const { data, fulfilledTimeStamp } = useGetInstanceScenesQuery(instanceId, {
-    pollingInterval: polling ? 2500 : 0,
-    skipPollingIfUnfocused: true,
-    refetchOnFocus: true,
-    refetchOnReconnect: true,
-  });
-  const sceneStatuses = data?.sceneStatuses ?? [];
-  const generatingCount = sceneStatuses.filter((item) => item.status === 'PENDING' || item.status === 'PROCESSING').length;
-  const readyCount = sceneStatuses.filter((item) => item.status === 'COMPLETED').length;
-  const failedCount = sceneStatuses.filter((item) => item.status === 'FAILED').length;
-
-  useEffect(() => {
-    if (!fulfilledTimeStamp) return;
-    if (generatingCount > 0) {
-      emptyPolls.current = 0;
-      setPolling(true);
-      return;
-    }
-    if (sceneStatuses.length > 0) {
-      setPolling(false);
-      return;
-    }
-    // Fire-and-forget генерация может создать связки чуть позже ответа POST.
-    // Даём ей несколько коротких поллов, но не опрашиваем layered-уроки бесконечно.
-    emptyPolls.current += 1;
-    if (emptyPolls.current >= 4) setPolling(false);
-  }, [fulfilledTimeStamp, generatingCount, sceneStatuses.length]);
-
-  if (sceneStatuses.length === 0) return null;
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs ${failedCount > 0 ? 'text-red-700' : generatingCount > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-      {generatingCount > 0 ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-      {generatingCount > 0
-        ? `${generatingCount} ${sceneNoun(generatingCount)} ${generatingCount === 1 ? 'генерируется' : 'генерируются'} · готово ${readyCount} из ${sceneStatuses.length}`
-        : failedCount > 0
-          ? `Готово ${readyCount} из ${sceneStatuses.length} · ошибок ${failedCount}`
-          : `AI-сцены готовы: ${readyCount} из ${sceneStatuses.length}`}
-    </span>
-  );
 }
 
 function PrepareModal({ lessonId, onClose }: { lessonId: string; onClose: () => void }) {
@@ -172,10 +120,10 @@ export function LessonPrepare({ lessonId }: { lessonId: string }) {
           <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
             <CheckCircle2 className="h-3.5 w-3.5" /> Подготовлен: {instance.title} v{instance.version}
           </span>
-          <FullSceneStatusIndicator key={`${instance.id}:${instance.version}`} instanceId={instance.id} />
           <Link href={`/lesson/${lessonId}`}><Button size="sm"><Video className="mr-1 h-3.5 w-3.5" /> Войти в урок</Button></Link>
           <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}><Eye className="mr-1 h-3.5 w-3.5" /> Предпросмотр</Button>
           <Button size="sm" variant="ghost" onClick={() => setPrepareOpen(true)}>Сменить шаблон</Button>
+          <SceneGenerationsPanel key={`${instance.id}:${instance.version}`} instanceId={instance.id} />
         </>
       ) : (
         <Button size="sm" variant="outline" onClick={() => setPrepareOpen(true)}><Wand2 className="mr-1 h-3.5 w-3.5" /> Подготовить урок</Button>

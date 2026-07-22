@@ -16,6 +16,7 @@ import {
   removeRule,
   updateRule,
   patchElementTransform,
+  pruneDanglingRefs,
   removeElement,
   removeLayer,
   reorderElement,
@@ -63,12 +64,16 @@ const HANDLE_CURSOR: Record<ResizeHandle, string> = {
 };
 const TEXT_TYPES = ['text', 'dialogue', 'button', 'card'];
 
-/** Читает документ урока: массив сцен из `{scenes:[]}` или обёртка одиночной сцены. */
+/**
+ * Читает документ урока: массив сцен из `{scenes:[]}` или обёртка одиночной сцены.
+ * Сразу подчищает битые ссылки правил — в старых черновиках остались правила на
+ * удалённые элементы, из-за которых публикация падала неустранимой ошибкой.
+ */
 function documentFrom(raw: unknown, title: string): AcademyScene[] {
   if (raw && typeof raw === 'object') {
     const r = raw as { scenes?: unknown; layers?: unknown };
-    if (Array.isArray(r.scenes) && r.scenes.length > 0) return r.scenes as AcademyScene[];
-    if (Array.isArray(r.layers)) return [raw as AcademyScene];
+    if (Array.isArray(r.scenes) && r.scenes.length > 0) return (r.scenes as AcademyScene[]).map(pruneDanglingRefs);
+    if (Array.isArray(r.layers)) return [pruneDanglingRefs(raw as AcademyScene)];
   }
   return [createEmptyScene({ title })];
 }

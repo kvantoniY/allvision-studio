@@ -13,7 +13,7 @@ import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/require-role';
 import { HttpError } from '../utils/http-error';
 import { readCharacterRef, readChildAsset } from '../services/child-photo-storage';
-import { ensureFullAiSceneGenerations, fullSceneStatuses } from '../services/academy-full-scene-service';
+import { ensureFullAiSceneGenerations, fullSceneStatuses, regenerateFullAiScene } from '../services/academy-full-scene-service';
 import { addLessonSystemMessage } from '../services/academy-operations-service';
 
 export const academyLessonInstancesRouter = Router();
@@ -205,6 +205,73 @@ academyLessonInstancesRouter.get('/:id/scenes', async (req: Request, res: Respon
       hasCharacter: Boolean(character),
       sceneStatuses: [...statuses.values()],
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Отчёт по генерациям сцен (участник): что генерируется, что готово, что не требует AI ===
+academyLessonInstancesRouter.get('/:id/generations', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instance = await loadInstanceForParticipant(req);
+    const statuses = await fullSceneStatuses(instance.id);
+    const hasCharacter = Boolean(await characterForInstance(instance.id, instance.childId));
+
+    const scenes = readSceneDocument(instance.version.scene).map((scene, index) => {
+      const prompt = (scene.generation?.prompt ?? '').trim();
+      // AI-генерация нужна только цельным сценам с промптом; послойные собраны из
+      // готовых материалов и переделывать в них нечего.
+      const needsGeneration = scene.generation?.mode === 'full-ai' && prompt.length >= 8;
+      const status = statuses.get(scene.id);
+      return {
+        sceneId: scene.id,
+        index,
+        title: scene.title,
+        mode: (scene.generation?.mode ?? 'layered') as 'layered' | 'full-ai',
+        needsGeneration,
+        prompt: needsGeneration ? prompt : null,
+        status: needsGeneration ? (status?.status ?? (hasCharacter ? 'NOT_STARTED' : 'BLOCKED')) : 'NOT_NEEDED',
+        previewUrl: status?.childAssetId
+          ? `/api/academy/lesson-instances/${instance.id}/scene-file/${status.childAssetId}`
+          : null,
+      };
+    });
+
+    res.json({
+      hasCharacter,
+      scenes,
+      total: scenes.filter((s) => s.needsGeneration).length,
+      ready: scenes.filter((s) => s.status === 'COMPLETED').length,
+      running: scenes.filter((s) => s.status === 'PENDING' || s.status === 'PROCESSING').length,
+      failed: scenes.filter((s) => s.status === 'FAILED').length,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Перегенерация одной AI-сцены (преподаватель урока или админ) ===
+academyLessonInstancesRouter.post('/:id/generations/:sceneId/regenerate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instance = await loadInstanceForParticipant(req);
+    if (!isAdmin(req) && instance.lesson.teacher.userId !== req.user!.id) {
+      throw new HttpError(403, 'FORBIDDEN', 'Перегенерацию запускает преподаватель урока');
+    }
+    const result = await regenerateFullAiScene(
+      { id: instance.id, childId: instance.childId, version: { scene: instance.version.scene } },
+      req.params.sceneId,
+      req.user!.id,
+    );
+    if (!result.ok) {
+      if (result.reason === 'SCENE_NOT_AI') {
+        throw new HttpError(400, 'SCENE_NOT_AI', 'Эта сцена собрана из готовых материалов — генерировать в ней нечего');
+      }
+      if (result.reason === 'CHARACTER_NOT_READY') {
+        throw new HttpError(409, 'CHARACTER_NOT_READY', 'У ребёнка нет утверждённого AI-персонажа');
+      }
+      throw new HttpError(500, 'REGENERATE_FAILED', 'Не удалось запустить генерацию');
+    }
+    res.status(202).json({ ok: true });
   } catch (err) {
     next(err);
   }
