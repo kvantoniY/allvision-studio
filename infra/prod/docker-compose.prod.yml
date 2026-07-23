@@ -106,6 +106,24 @@ services:
       start_period: 30s
       retries: 5
 
+  # Видеосвязь урока (A8). host-network: WebRTC-медиа идёт напрямую на публичный IP,
+  # сигналинг проксирует ХОСТОВЫЙ nginx по пути /livekit (см. docs/LIVEKIT.md).
+  livekit:
+    image: livekit/livekit-server:v1.8
+    container_name: allvision-studio-livekit
+    restart: unless-stopped
+    network_mode: host
+    command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS}
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
   nginx:
     image: nginx:1.27-alpine
     container_name: allvision-studio-nginx

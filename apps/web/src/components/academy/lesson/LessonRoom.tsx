@@ -21,6 +21,8 @@ import {
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
 import { useMicLevel } from '@/components/academy/lesson/use-mic-level';
+import { useLessonVideo } from '@/components/academy/lesson/use-lesson-video';
+import { VideoTile } from '@/components/academy/lesson/VideoTile';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
@@ -247,6 +249,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
         {/* Правая колонка: видео + чат */}
         <div className="flex min-h-0 w-full flex-col gap-3 border-t border-border p-3 lg:w-[340px] lg:border-l lg:border-t-0">
           <VideoPanel
+            lessonId={lessonId}
             role={role}
             presence={presence}
             micOn={micOn}
@@ -375,9 +378,13 @@ function ParticipantTile({
   );
 }
 
-// Видео пока не передаётся: камера и демонстрация экрана — этап A8 (LiveKit).
-// Микрофон уже работает локально и даёт собеседнику индикатор речи.
+/**
+ * Видеосвязь урока через self-hosted LiveKit. Пока сервер видеосвязи не настроен
+ * (`enabled: false`), панель мягко деградирует до индикаторов присутствия —
+ * урок остаётся рабочим: сцена, рисование и чат идут по нашему WebSocket.
+ */
 function VideoPanel({
+  lessonId,
   role,
   presence,
   micOn,
@@ -385,6 +392,7 @@ function VideoPanel({
   micError,
   onToggleMic,
 }: {
+  lessonId: string;
   role: LessonRole | null;
   presence: LessonPresence;
   micOn: boolean;
@@ -392,30 +400,79 @@ function VideoPanel({
   micError: string | null;
   onToggleMic: () => void;
 }) {
+  const video = useLessonVideo(lessonId);
   const selfRole: LessonRole = role ?? 'student';
   const otherRole: LessonRole = selfRole === 'teacher' ? 'student' : 'teacher';
   const nameOf = (r: LessonRole) => (r === 'teacher' ? 'Учитель' : 'Ученик');
 
+  // Видеосвязь выключена/недоступна — прежние индикаторные плитки.
+  if (video.enabled !== true) {
+    return (
+      <div className="rounded-2xl border border-border bg-card p-3">
+        <div className="grid grid-cols-2 gap-2">
+          <ParticipantTile label={`Вы · ${nameOf(selfRole)}`} state={{ ...presence[selfRole], micOn }} self level={micLevel} />
+          <ParticipantTile label={nameOf(otherRole)} state={presence[otherRole]} />
+        </div>
+        <div className="mt-2 flex items-center justify-center gap-2">
+          <Button variant={micOn ? 'default' : 'outline'} size="icon" onClick={onToggleMic} aria-label={micOn ? 'Выключить микрофон' : 'Включить микрофон'}>
+            {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+          </Button>
+          <Button variant="outline" size="icon" disabled aria-label="Камера"><Video className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" disabled aria-label="Демонстрация экрана"><Monitor className="h-4 w-4" /></Button>
+        </div>
+        <p className="mt-1 text-center text-[10px] text-muted-foreground">
+          {micError ?? video.error ?? (video.enabled === null ? 'Подключаем видеосвязь…' : 'Видеосвязь недоступна — идут сцена, рисование и чат')}
+        </p>
+      </div>
+    );
+  }
+
+  const local = video.participants.find((p) => p.isLocal) ?? null;
+  const remote = video.participants.find((p) => !p.isLocal) ?? null;
+  const connecting = video.connection !== 'connected';
+
   return (
     <div className="rounded-2xl border border-border bg-card p-3">
       <div className="grid grid-cols-2 gap-2">
-        <ParticipantTile label={`Вы · ${nameOf(selfRole)}`} state={{ ...presence[selfRole], micOn }} self level={micLevel} />
-        <ParticipantTile label={nameOf(otherRole)} state={presence[otherRole]} />
+        <VideoTile participant={local} label={`Вы · ${nameOf(selfRole)}`} />
+        <VideoTile participant={remote} label={nameOf(otherRole)} />
       </div>
+
+      {video.needsAudioUnlock && (
+        <Button size="sm" className="mt-2 w-full" onClick={() => void video.unlockAudio()}>
+          Включить звук собеседника
+        </Button>
+      )}
+
       <div className="mt-2 flex items-center justify-center gap-2">
         <Button
-          variant={micOn ? 'default' : 'outline'}
+          variant={video.micEnabled ? 'default' : 'outline'}
           size="icon"
-          onClick={onToggleMic}
-          aria-label={micOn ? 'Выключить микрофон' : 'Включить микрофон'}
+          onClick={() => void video.toggleMic()}
+          aria-label={video.micEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
         >
-          {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+          {video.micEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
         </Button>
-        <Button variant="outline" size="icon" disabled aria-label="Камера"><Video className="h-4 w-4" /></Button>
-        <Button variant="outline" size="icon" disabled aria-label="Демонстрация экрана"><Monitor className="h-4 w-4" /></Button>
+        <Button
+          variant={video.cameraEnabled ? 'default' : 'outline'}
+          size="icon"
+          onClick={() => void video.toggleCamera()}
+          aria-label={video.cameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
+        >
+          {video.cameraEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+        </Button>
+        <Button
+          variant={video.screenEnabled ? 'default' : 'outline'}
+          size="icon"
+          onClick={() => void video.toggleScreenShare()}
+          aria-label={video.screenEnabled ? 'Остановить демонстрацию' : 'Показать экран'}
+        >
+          <Monitor className="h-4 w-4" />
+        </Button>
       </div>
+
       <p className="mt-1 text-center text-[10px] text-muted-foreground">
-        {micError ?? 'Микрофон показывает индикатор речи. Передача звука и видео — на подключении (A8)'}
+        {video.error ?? (connecting ? 'Подключаемся к видеосвязи…' : remote ? 'Видеосвязь активна' : 'Ждём собеседника')}
       </p>
     </div>
   );

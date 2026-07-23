@@ -27,6 +27,7 @@ import {
   topicTitles,
 } from '../services/academy-booking-service';
 import { awardLessonCompletion } from '../services/academy-gamification-service';
+import { createLessonVideoToken } from '../services/lesson-video-service';
 import { addLessonSystemMessage } from '../services/academy-operations-service';
 
 export const academyBookingRouter = Router();
@@ -191,6 +192,37 @@ async function loadLessonForActor(lessonId: string, userId: string) {
   if (!isParent && !isTeacher) throw new HttpError(403, 'FORBIDDEN', 'Нет доступа к уроку');
   return { lesson, by: (isTeacher ? 'teacher' : 'parent') as 'teacher' | 'parent' };
 }
+
+// === Токен видеосвязи урока (A8): участник урока получает доступ в свою комнату LiveKit ===
+academyBookingRouter.get('/lessons/:id/video-token', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const isAdmin = req.user!.role === 'ADMIN';
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: req.params.id },
+      include: {
+        child: { select: { parentId: true, name: true } },
+        teacher: { select: { userId: true, user: { select: { name: true, email: true } } } },
+      },
+    });
+    if (!lesson) throw new HttpError(404, 'LESSON_NOT_FOUND', 'Урок не найден');
+
+    const isTeacher = isAdmin || lesson.teacher.userId === req.user!.id;
+    const isParent = lesson.child.parentId === req.user!.id;
+    if (!isTeacher && !isParent) throw new HttpError(403, 'FORBIDDEN', 'Нет доступа к уроку');
+
+    const result = await createLessonVideoToken({
+      lessonId: lesson.id,
+      userId: req.user!.id,
+      role: isTeacher ? 'teacher' : 'student',
+      displayName: isTeacher ? (lesson.teacher.user.name ?? lesson.teacher.user.email) : lesson.child.name,
+    });
+    // Видеосвязь не настроена — это не ошибка: комната урока работает и без неё.
+    if (!result) return res.json({ enabled: false });
+    res.json({ enabled: true, ...result });
+  } catch (err) {
+    next(err);
+  }
+});
 
 academyBookingRouter.post('/lessons/:id/cancel', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
