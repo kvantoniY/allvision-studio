@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ChevronLeft, ChevronRight, Eraser, Gift, Loader2, LogOut, Maximize2, Mic, MicOff,
-  Minimize2, Monitor, MonitorOff, Pencil, RefreshCw, Send, Unlock, Video, VideoOff,
+  Minimize2, Monitor, MonitorOff, Pencil, RefreshCw, Send, Settings, Unlock, Video, VideoOff,
 } from 'lucide-react';
 import {
   EMPTY_PARTICIPANT_STATE,
@@ -20,7 +20,7 @@ import {
 } from '@allvision/shared';
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
-import { LessonPreJoin } from '@/components/academy/lesson/LessonPreJoin';
+import { LessonPreJoin, DeviceSelect } from '@/components/academy/lesson/LessonPreJoin';
 import { VideoTile } from '@/components/academy/lesson/VideoTile';
 import { useLessonVideo, type JoinPrefs, type LessonVideoPhase } from '@/components/academy/lesson/use-lesson-video';
 import { Button } from '@/components/ui/button';
@@ -82,13 +82,17 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const doJoin = useCallback((prefs: JoinPrefs) => {
     sessionStorage.setItem(prejoinKey, JSON.stringify(prefs));
     setJoined(true);
-    void video.start(prefs);
+    void video.connect(prefs);
   }, [prejoinKey, video]);
 
+  // «Войти без видео» тоже подключает комнату (камера/микрофон выключены), чтобы кнопки
+  // и настройки устройств оставались рабочими и можно было включить видео позже.
   const skipVideo = useCallback(() => {
-    sessionStorage.setItem(prejoinKey, JSON.stringify({ camera: false, mic: false, skipped: true }));
+    const prefs: JoinPrefs = { camera: false, mic: false };
+    sessionStorage.setItem(prejoinKey, JSON.stringify(prefs));
     setJoined(true);
-  }, [prejoinKey]);
+    void video.connect(prefs);
+  }, [prejoinKey, video]);
 
   // Перезагрузка страницы: если уже проходили пред-вход — возвращаемся в урок
   // с прежним выбором устройств, не спрашивая заново.
@@ -98,9 +102,9 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     if (!saved) return;
     autoJoined.current = true;
     try {
-      const prefs = JSON.parse(saved) as JoinPrefs & { skipped?: boolean };
+      const prefs = JSON.parse(saved) as JoinPrefs;
       setJoined(true);
-      if (!prefs.skipped) void video.start({ camera: prefs.camera, mic: prefs.mic });
+      void video.connect({ camera: !!prefs.camera, mic: !!prefs.mic, cameraId: prefs.cameraId, micId: prefs.micId });
     } catch {
       setJoined(true);
     }
@@ -197,7 +201,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const retryVideo = () => {
     const saved = sessionStorage.getItem(prejoinKey);
     let prefs: JoinPrefs = { camera: true, mic: true };
-    try { if (saved) { const p = JSON.parse(saved); prefs = { camera: !!p.camera, mic: !!p.mic }; } } catch { /* дефолт */ }
+    try { if (saved) { const p = JSON.parse(saved) as JoinPrefs; prefs = { camera: !!p.camera, mic: !!p.mic, cameraId: p.cameraId, micId: p.micId }; } } catch { /* дефолт */ }
     void video.retry(prefs);
   };
 
@@ -403,9 +407,11 @@ function VideoPanel({ video, role, onRetry }: { video: UseLessonVideo; role: Les
   const selfRole: LessonRole = role ?? 'student';
   const otherRole: LessonRole = selfRole === 'teacher' ? 'student' : 'teacher';
   const nameOf = (r: LessonRole) => (r === 'teacher' ? 'Учитель' : 'Ученик');
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const local = video.participants.find((p) => p.isLocal) ?? null;
   const remote = video.participants.find((p) => !p.isLocal) ?? null;
+  const connected = video.phase === 'connected';
 
   return (
     <div className="rounded-2xl border border-border bg-card p-3">
@@ -445,7 +451,7 @@ function VideoPanel({ video, role, onRetry }: { video: UseLessonVideo; role: Les
         <Button
           variant={video.micEnabled ? 'default' : 'outline'}
           size="icon"
-          disabled={video.phase !== 'connected'}
+          disabled={!connected}
           onClick={() => void video.toggleMic()}
           aria-label={video.micEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
         >
@@ -454,7 +460,7 @@ function VideoPanel({ video, role, onRetry }: { video: UseLessonVideo; role: Les
         <Button
           variant={video.cameraEnabled ? 'default' : 'outline'}
           size="icon"
-          disabled={video.phase !== 'connected'}
+          disabled={!connected}
           onClick={() => void video.toggleCamera()}
           aria-label={video.cameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
         >
@@ -463,13 +469,29 @@ function VideoPanel({ video, role, onRetry }: { video: UseLessonVideo; role: Les
         <Button
           variant={video.screenEnabled ? 'default' : 'outline'}
           size="icon"
-          disabled={video.phase !== 'connected'}
+          disabled={!connected}
           onClick={() => void video.toggleScreenShare()}
           aria-label={video.screenEnabled ? 'Остановить демонстрацию' : 'Показать экран'}
         >
           {video.screenEnabled ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
         </Button>
+        <Button
+          variant={settingsOpen ? 'default' : 'outline'}
+          size="icon"
+          disabled={!connected}
+          onClick={() => { setSettingsOpen((v) => !v); if (!settingsOpen) void video.refreshDevices(); }}
+          aria-label="Настройки устройств"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
       </div>
+
+      {settingsOpen && connected && (
+        <div className="mt-2 space-y-2 rounded-xl border border-border bg-background/60 p-2">
+          <DeviceSelect icon={<Video className="h-4 w-4" />} value={video.activeCameraId ?? ''} options={video.cameras} onChange={(id) => void video.switchCamera(id)} />
+          <DeviceSelect icon={<Mic className="h-4 w-4" />} value={video.activeMicId ?? ''} options={video.mics} onChange={(id) => void video.switchMic(id)} />
+        </div>
+      )}
     </div>
   );
 }

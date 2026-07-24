@@ -17,9 +17,10 @@ import {
  * Видеосвязь урока (A8) поверх self-hosted LiveKit.
  * Токен выдаёт наш API на конкретную комнату урока; ключи на клиент не попадают.
  *
- * Поток: сначала fetch токена → `enabled`. Подключение НЕ автоматическое —
- * его запускает пред-вход (green room) вызовом `start()` с выбранными
- * устройствами, чтобы камера/микрофон включались сразу и осознанно.
+ * Ключевой принцип: при входе всегда подключаемся к комнате (даже с выключенными
+ * устройствами), поэтому кнопки камеры/микрофона живые всегда, а не блокируются
+ * до успешного медиа-соединения. Камера и микрофон — независимые toggle поверх
+ * уже установленного соединения.
  */
 
 export interface LessonVideoParticipant {
@@ -29,23 +30,29 @@ export interface LessonVideoParticipant {
   isSpeaking: boolean;
   micEnabled: boolean;
   cameraEnabled: boolean;
-  /** Видеодорожка камеры для отрисовки. */
   videoTrack: Track | null;
-  /** Демонстрация экрана (приоритетнее камеры при показе). */
   screenTrack: Track | null;
 }
 
-/** Фаза видеосвязи для явной индикации в интерфейсе. */
 export type LessonVideoPhase = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
+
+export interface DeviceOption {
+  deviceId: string;
+  label: string;
+}
 
 export interface JoinPrefs {
   camera: boolean;
   mic: boolean;
+  cameraId?: string;
+  micId?: string;
 }
 
 type TokenResponse =
   | { enabled: false }
   | { enabled: true; url: string; token: string; room: string };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function useLessonVideo(lessonId: string) {
   const [enabled, setEnabled] = useState<boolean | null>(null); // null — ещё не знаем
@@ -56,13 +63,15 @@ export function useLessonVideo(lessonId: string) {
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [screenEnabled, setScreenEnabled] = useState(false);
   const [localSpeaking, setLocalSpeaking] = useState(false);
-  /** Браузер заблокировал автовоспроизведение звука — нужен клик пользователя. */
   const [needsAudioUnlock, setNeedsAudioUnlock] = useState(false);
+  const [cameras, setCameras] = useState<DeviceOption[]>([]);
+  const [mics, setMics] = useState<DeviceOption[]>([]);
+  const [activeCameraId, setActiveCameraId] = useState<string | null>(null);
+  const [activeMicId, setActiveMicId] = useState<string | null>(null);
 
   const tokenRef = useRef<{ url: string; token: string } | null>(null);
   const roomRef = useRef<Room | null>(null);
   const startingRef = useRef(false);
-  // Скрытые <audio> для дорожек собеседника: без них видео есть, а звука нет.
   const audioElements = useRef(new Map<string, HTMLAudioElement>());
 
   const snapshot = useCallback((r: Room) => {
@@ -84,7 +93,18 @@ export function useLessonVideo(lessonId: string) {
     setLocalSpeaking(r.localParticipant.isSpeaking);
   }, []);
 
-  // Шаг 1: узнаём, включена ли видеосвязь на сервере, и берём токен (без подключения).
+  /** Обновляет списки камер/микрофонов (лейблы доступны только после выдачи доступа). */
+  const refreshDevices = useCallback(async () => {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      setCameras(list.filter((d) => d.kind === 'videoinput').map((d) => ({ deviceId: d.deviceId, label: d.label || 'Камера' })));
+      setMics(list.filter((d) => d.kind === 'audioinput').map((d) => ({ deviceId: d.deviceId, label: d.label || 'Микрофон' })));
+    } catch {
+      /* без списка устройств переживём — останутся системные по умолчанию */
+    }
+  }, []);
+
+  // Шаг 1: узнаём, включена ли видеосвязь, берём токен (без подключения).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -117,18 +137,39 @@ export function useLessonVideo(lessonId: string) {
     audioElements.current.delete(id);
   }, []);
 
-  /** Шаг 2: подключение к комнате и включение выбранных устройств. */
-  const start = useCallback(async (prefs: JoinPrefs) => {
+  /** Включение камеры с повтором: сразу после освобождения превью ОС может отдать «занято». */
+  const enableCameraWithRetry = useCallback(async (r: Room, deviceId?: string) => {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await r.localParticipant.setCameraEnabled(true, deviceId ? { deviceId } : undefined);
+        return true;
+      } catch {
+        if (attempt === 0) await sleep(700);
+      }
+    }
+    setError('Не удалось включить камеру — возможно, она занята другим приложением');
+    return false;
+  }, []);
+
+  /** Подключение к комнате и включение выбранных устройств. */
+  const connect = useCallback(async (prefs: JoinPrefs) => {
     if (startingRef.current || roomRef.current) return;
     const creds = tokenRef.current;
     if (!creds) { setError('Видеосвязь недоступна'); setPhase('failed'); return; }
     startingRef.current = true;
     setError(null);
     setPhase('connecting');
+    setActiveCameraId(prefs.cameraId ?? null);
+    setActiveMicId(prefs.micId ?? null);
 
     try {
       const { Room: RoomCtor } = await import('livekit-client');
-      const options: RoomOptions = { adaptiveStream: true, dynacast: true };
+      const options: RoomOptions = {
+        adaptiveStream: true,
+        dynacast: true,
+        videoCaptureDefaults: prefs.cameraId ? { deviceId: prefs.cameraId } : undefined,
+        audioCaptureDefaults: prefs.micId ? { deviceId: prefs.micId } : undefined,
+      };
       const r = new RoomCtor(options);
       roomRef.current = r;
 
@@ -150,15 +191,13 @@ export function useLessonVideo(lessonId: string) {
         .on(RoomEvent.LocalTrackPublished, (_pub: LocalTrackPublication) => refresh())
         .on(RoomEvent.LocalTrackUnpublished, refresh)
         .on(RoomEvent.ActiveSpeakersChanged, refresh)
+        .on(RoomEvent.MediaDevicesChanged, () => { void refreshDevices(); })
         .on(RoomEvent.Reconnecting, () => setPhase('reconnecting'))
         .on(RoomEvent.Reconnected, () => { setPhase('connected'); refresh(); })
         .on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
           roomRef.current = null;
           startingRef.current = false;
-          // DUPLICATE_IDENTITY — второй вход тем же пользователем (перезагрузка/вторая вкладка).
-          if (reason === DisconnectReason.DUPLICATE_IDENTITY) {
-            setError('Урок открыт в другом окне');
-          }
+          if (reason === DisconnectReason.DUPLICATE_IDENTITY) setError('Урок открыт в другом окне');
           setPhase('failed');
         })
         .on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
@@ -166,43 +205,37 @@ export function useLessonVideo(lessonId: string) {
         });
 
       await r.connect(creds.url, creds.token);
+      // Соединение установлено — кнопки уже рабочие, даже если устройства не включатся.
+      setPhase('connected');
+      startingRef.current = false;
 
-      // Включаем устройства сразу после входа — пользователь видит себя без лишних кликов.
-      // Камера и микрофон включаются раздельно: отказ по одному не блокирует второй.
       if (prefs.mic) {
-        await r.localParticipant.setMicrophoneEnabled(true).catch(() => {
-          setError('Не удалось включить микрофон — проверьте доступ в браузере');
-        });
+        await r.localParticipant.setMicrophoneEnabled(true, prefs.micId ? { deviceId: prefs.micId } : undefined)
+          .catch(() => setError('Не удалось включить микрофон — проверьте доступ в браузере'));
       }
       if (prefs.camera) {
-        await r.localParticipant.setCameraEnabled(true).catch(() => {
-          setError('Не удалось включить камеру — проверьте доступ в браузере');
-        });
+        await enableCameraWithRetry(r, prefs.cameraId);
       }
 
-      setPhase('connected');
       setNeedsAudioUnlock(!r.canPlaybackAudio);
+      void refreshDevices();
       snapshot(r);
     } catch {
       roomRef.current = null;
       startingRef.current = false;
       setError('Не удалось подключиться к видеосвязи');
       setPhase('failed');
-    } finally {
-      startingRef.current = false;
     }
-  }, [snapshot, attachAudio, detachAudio]);
+  }, [snapshot, attachAudio, detachAudio, enableCameraWithRetry, refreshDevices]);
 
-  /** Повторная попытка после разрыва (кнопка «Переподключиться»). */
   const retry = useCallback(async (prefs: JoinPrefs) => {
     const r = roomRef.current;
     if (r) { await r.disconnect().catch(() => undefined); roomRef.current = null; }
     startingRef.current = false;
     setPhase('idle');
-    await start(prefs);
-  }, [start]);
+    await connect(prefs);
+  }, [connect]);
 
-  // Отключение при уходе со страницы.
   useEffect(() => {
     const audioMap = audioElements.current;
     return () => {
@@ -224,34 +257,58 @@ export function useLessonVideo(lessonId: string) {
     const r = roomRef.current;
     if (!r) return;
     try {
-      await r.localParticipant.setMicrophoneEnabled(!r.localParticipant.isMicrophoneEnabled);
+      await r.localParticipant.setMicrophoneEnabled(!r.localParticipant.isMicrophoneEnabled, activeMicId ? { deviceId: activeMicId } : undefined);
       snapshot(r);
     } catch {
       setError('Нет доступа к микрофону');
     }
-  }, [snapshot]);
+  }, [snapshot, activeMicId]);
 
   const toggleCamera = useCallback(async () => {
     const r = roomRef.current;
     if (!r) return;
-    try {
-      await r.localParticipant.setCameraEnabled(!r.localParticipant.isCameraEnabled);
+    if (r.localParticipant.isCameraEnabled) {
+      await r.localParticipant.setCameraEnabled(false).catch(() => undefined);
       snapshot(r);
-    } catch {
-      setError('Нет доступа к камере');
+    } else {
+      await enableCameraWithRetry(r, activeCameraId ?? undefined);
+      snapshot(r);
     }
-  }, [snapshot]);
+  }, [snapshot, enableCameraWithRetry, activeCameraId]);
 
   const toggleScreenShare = useCallback(async () => {
     const r = roomRef.current;
     if (!r) return;
     try {
-      // Звук вкладки берём вместе с картинкой — иначе видео в демонстрации немое.
       await r.localParticipant.setScreenShareEnabled(!r.localParticipant.isScreenShareEnabled, { audio: true });
       snapshot(r);
     } catch {
-      // Пользователь просто закрыл системный диалог выбора экрана — не ошибка.
       snapshot(r);
+    }
+  }, [snapshot]);
+
+  /** Смена активной камеры на лету (шестерёнка в уроке). */
+  const switchCamera = useCallback(async (deviceId: string) => {
+    setActiveCameraId(deviceId);
+    const r = roomRef.current;
+    if (!r) return;
+    try {
+      await r.switchActiveDevice('videoinput', deviceId);
+      snapshot(r);
+    } catch {
+      setError('Не удалось переключить камеру');
+    }
+  }, [snapshot]);
+
+  const switchMic = useCallback(async (deviceId: string) => {
+    setActiveMicId(deviceId);
+    const r = roomRef.current;
+    if (!r) return;
+    try {
+      await r.switchActiveDevice('audioinput', deviceId);
+      snapshot(r);
+    } catch {
+      setError('Не удалось переключить микрофон');
     }
   }, [snapshot]);
 
@@ -265,11 +322,18 @@ export function useLessonVideo(lessonId: string) {
     screenEnabled,
     localSpeaking,
     needsAudioUnlock,
-    start,
+    cameras,
+    mics,
+    activeCameraId,
+    activeMicId,
+    connect,
     retry,
     unlockAudio,
     toggleMic,
     toggleCamera,
     toggleScreenShare,
+    switchCamera,
+    switchMic,
+    refreshDevices,
   };
 }
