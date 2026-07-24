@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
   ChevronLeft, ChevronRight, Eraser, Gift, Loader2, LogOut, Maximize2, Mic, MicOff,
-  Minimize2, Monitor, Pencil, Send, Unlock, Video, VideoOff,
+  Minimize2, Monitor, MonitorOff, Pencil, RefreshCw, Send, Unlock, Video, VideoOff,
 } from 'lucide-react';
 import {
   EMPTY_PARTICIPANT_STATE,
@@ -20,18 +20,22 @@ import {
 } from '@allvision/shared';
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
-import { useMicLevel } from '@/components/academy/lesson/use-mic-level';
-import { useLessonVideo } from '@/components/academy/lesson/use-lesson-video';
+import { LessonPreJoin } from '@/components/academy/lesson/LessonPreJoin';
 import { VideoTile } from '@/components/academy/lesson/VideoTile';
+import { useLessonVideo, type JoinPrefs, type LessonVideoPhase } from '@/components/academy/lesson/use-lesson-video';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
 import { useGetInstanceByLessonQuery, useGetInstanceScenesQuery } from '@/store/api/academy-lesson-instances-api';
 
+type UseLessonVideo = ReturnType<typeof useLessonVideo>;
+
 export function LessonRoom({ lessonId }: { lessonId: string }) {
   const instanceQuery = useGetInstanceByLessonQuery(lessonId);
   const instanceId = instanceQuery.data?.instance?.id;
   const scenesQuery = useGetInstanceScenesQuery(instanceId ?? '', { skip: !instanceId });
+
+  const video = useLessonVideo(lessonId);
 
   const [role, setRole] = useState<LessonRole | null>(null);
   const [status, setStatus] = useState<'connecting' | 'open' | 'closed'>('connecting');
@@ -43,12 +47,17 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     student: { ...EMPTY_PARTICIPANT_STATE },
   });
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
-  const [micOn, setMicOn] = useState(false);
   const [chatFocused, setChatFocused] = useState(false);
   const [strokes, setStrokes] = useState<LessonStroke[]>([]);
   const [chat, setChat] = useState<LessonChatEntry[]>([]);
   const [reward, setReward] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+
+  // Прошёл ли пользователь пред-вход (проверку устройств). Видеосвязь выключена
+  // на сервере → пред-вход не нужен, сразу в комнату.
+  const [joined, setJoined] = useState(false);
+  const prejoinKey = `lesson-prejoin-${lessonId}`;
+  const autoJoined = useRef(false);
 
   const [penOn, setPenOn] = useState(false);
   const [penColor, setPenColor] = useState<string>(LESSON_DRAW_COLORS[0]);
@@ -66,8 +75,40 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     setStrokes((p) => p.map((s) => (s.id === id ? { ...s, points: [...s.points, ...points] } : s)));
   }, []);
 
-  // Подключение к комнате.
+  // Видеосвязь выключена на сервере — пред-вход пропускаем.
+  const videoGate = video.enabled === true && !joined;
+  const ready = video.enabled !== null && !videoGate;
+
+  const doJoin = useCallback((prefs: JoinPrefs) => {
+    sessionStorage.setItem(prejoinKey, JSON.stringify(prefs));
+    setJoined(true);
+    void video.start(prefs);
+  }, [prejoinKey, video]);
+
+  const skipVideo = useCallback(() => {
+    sessionStorage.setItem(prejoinKey, JSON.stringify({ camera: false, mic: false, skipped: true }));
+    setJoined(true);
+  }, [prejoinKey]);
+
+  // Перезагрузка страницы: если уже проходили пред-вход — возвращаемся в урок
+  // с прежним выбором устройств, не спрашивая заново.
   useEffect(() => {
+    if (video.enabled !== true || joined || autoJoined.current) return;
+    const saved = sessionStorage.getItem(prejoinKey);
+    if (!saved) return;
+    autoJoined.current = true;
+    try {
+      const prefs = JSON.parse(saved) as JoinPrefs & { skipped?: boolean };
+      setJoined(true);
+      if (!prefs.skipped) void video.start({ camera: prefs.camera, mic: prefs.mic });
+    } catch {
+      setJoined(true);
+    }
+  }, [video.enabled, joined, prejoinKey, video]);
+
+  // Подключение к комнате урока (WebSocket) — только после входа.
+  useEffect(() => {
+    if (!ready) return;
     const socket = connectLessonSocket(lessonId, {
       onStatus: setStatus,
       onLatency: setLatencyMs,
@@ -97,7 +138,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     });
     socketRef.current = socket;
     return () => socket.close();
-  }, [lessonId, applyStart, applyAppend]);
+  }, [ready, lessonId, applyStart, applyAppend]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ block: 'end' }); }, [chat]);
   useEffect(() => {
@@ -109,11 +150,13 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const isTeacher = role === 'teacher';
   const send = useCallback((m: Parameters<LessonSocket['send']>[0]) => socketRef.current?.send(m), []);
 
-  // Индикатор речи: локальный уровень микрофона → флаг «говорит» собеседнику.
-  const mic = useMicLevel(micOn, useCallback((speaking: boolean) => send({ t: 'status', speaking }), [send]));
+  // Индикаторы участника берём из LiveKit (микрофон и речь) и шлём в presence.
+  useEffect(() => { send({ t: 'status', micOn: video.micEnabled }); }, [video.micEnabled, send]);
+  useEffect(() => { send({ t: 'status', speaking: video.localSpeaking }); }, [video.localSpeaking, send]);
 
   // Активна ли вкладка урока — собеседник видит, что человек отвлёкся.
   useEffect(() => {
+    if (!ready) return;
     const report = () => send({ t: 'status', focused: document.visibilityState === 'visible' && document.hasFocus() });
     report();
     document.addEventListener('visibilitychange', report);
@@ -124,10 +167,9 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
       window.removeEventListener('focus', report);
       window.removeEventListener('blur', report);
     };
-  }, [send, status]);
+  }, [send, ready]);
 
   useEffect(() => { send({ t: 'status', inChat: chatFocused }); }, [chatFocused, send]);
-  useEffect(() => { send({ t: 'status', micOn }); }, [micOn, send]);
 
   const nav = (idx: number) => { if (isTeacher) send({ t: 'nav', sceneIndex: idx }); };
   const toggleFullscreen = () => {
@@ -152,7 +194,14 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const onDrawEnd = (id: string) => send({ t: 'draw-end', id });
   const clearDraw = () => { setStrokes([]); send({ t: 'draw-clear' }); };
 
-  if (instanceQuery.isLoading) {
+  const retryVideo = () => {
+    const saved = sessionStorage.getItem(prejoinKey);
+    let prefs: JoinPrefs = { camera: true, mic: true };
+    try { if (saved) { const p = JSON.parse(saved); prefs = { camera: !!p.camera, mic: !!p.mic }; } } catch { /* дефолт */ }
+    void video.retry(prefs);
+  };
+
+  if (instanceQuery.isLoading || video.enabled === null) {
     return <div className="flex h-dvh items-center justify-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
   if (!instanceQuery.data?.instance) {
@@ -165,7 +214,13 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     );
   }
 
+  // Пред-вход: проверка камеры/микрофона до входа в урок.
+  if (videoGate) {
+    return <LessonPreJoin title={instanceQuery.data.instance.title} onJoin={doJoin} onSkip={skipVideo} />;
+  }
+
   const scene = scenes[sceneIndex] ?? null;
+  const usingVideo = video.enabled === true;
 
   return (
     <div ref={rootRef} className="academy-theme flex h-dvh flex-col bg-background text-foreground">
@@ -248,15 +303,11 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
 
         {/* Правая колонка: видео + чат */}
         <div className="flex min-h-0 w-full flex-col gap-3 border-t border-border p-3 lg:w-[340px] lg:border-l lg:border-t-0">
-          <VideoPanel
-            lessonId={lessonId}
-            role={role}
-            presence={presence}
-            micOn={micOn}
-            micLevel={mic.level}
-            micError={mic.error}
-            onToggleMic={() => setMicOn((v) => !v)}
-          />
+          {usingVideo ? (
+            <VideoPanel video={video} role={role} onRetry={retryVideo} />
+          ) : (
+            <PresenceOnlyPanel presence={presence} role={role} />
+          )}
           <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-border bg-card">
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <span className="text-sm font-semibold">Чат урока</span>
@@ -296,7 +347,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   );
 }
 
-/** Качество связи: цвет и подпись по задержке round-trip. */
+/** Качество связи с комнатой урока: цвет и подпись по задержке round-trip. */
 function ConnectionBadge({ status, latencyMs }: { status: 'connecting' | 'open' | 'closed'; latencyMs: number | null }) {
   if (status !== 'open') {
     return (
@@ -339,97 +390,22 @@ function PresenceChip({ label, state }: { label: string; state: LessonParticipan
   );
 }
 
-/** Плитка участника: рамка подсвечивается, когда человек говорит. */
-function ParticipantTile({
-  label,
-  state,
-  self,
-  level,
-}: {
-  label: string;
-  state: LessonParticipantState;
-  self?: boolean;
-  level?: number;
-}) {
-  const speaking = self ? (level ?? 0) > 0.12 : state.speaking;
-  return (
-    <div
-      className={cn(
-        'relative flex aspect-video items-center justify-center rounded-xl bg-muted text-xs text-muted-foreground transition',
-        speaking ? 'ring-2 ring-primary ring-offset-2 ring-offset-card' : 'ring-1 ring-border',
-      )}
-    >
-      <VideoOff className="h-5 w-5 opacity-40" />
-      <span className="absolute bottom-1 left-1.5 flex items-center gap-1">
-        <span className={cn('h-1.5 w-1.5 rounded-full', state.online ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
-        {label}
-      </span>
-      <span className="absolute bottom-1 right-1.5 flex items-center gap-1">
-        {state.inChat && <span className="text-[10px] text-primary">чат</span>}
-        {state.micOn ? <Mic className="h-3 w-3 text-primary" /> : <MicOff className="h-3 w-3 opacity-40" />}
-      </span>
-      {/* Шкала громкости своего микрофона — видно, что звук реально идёт. */}
-      {self && (
-        <span className="absolute inset-x-1.5 top-1.5 h-1 overflow-hidden rounded-full bg-background/60">
-          <span className="block h-full bg-primary transition-[width] duration-75" style={{ width: `${Math.round((level ?? 0) * 100)}%` }} />
-        </span>
-      )}
-    </div>
-  );
-}
+const VIDEO_PHASE_TEXT: Record<LessonVideoPhase, string> = {
+  idle: 'Готовимся…',
+  connecting: 'Подключаемся к видеосвязи…',
+  connected: 'Видеосвязь активна',
+  reconnecting: 'Связь прервалась, восстанавливаем…',
+  failed: 'Видеосвязь потеряна',
+};
 
-/**
- * Видеосвязь урока через self-hosted LiveKit. Пока сервер видеосвязи не настроен
- * (`enabled: false`), панель мягко деградирует до индикаторов присутствия —
- * урок остаётся рабочим: сцена, рисование и чат идут по нашему WebSocket.
- */
-function VideoPanel({
-  lessonId,
-  role,
-  presence,
-  micOn,
-  micLevel,
-  micError,
-  onToggleMic,
-}: {
-  lessonId: string;
-  role: LessonRole | null;
-  presence: LessonPresence;
-  micOn: boolean;
-  micLevel: number;
-  micError: string | null;
-  onToggleMic: () => void;
-}) {
-  const video = useLessonVideo(lessonId);
+/** Реальная видеосвязь LiveKit. */
+function VideoPanel({ video, role, onRetry }: { video: UseLessonVideo; role: LessonRole | null; onRetry: () => void }) {
   const selfRole: LessonRole = role ?? 'student';
   const otherRole: LessonRole = selfRole === 'teacher' ? 'student' : 'teacher';
   const nameOf = (r: LessonRole) => (r === 'teacher' ? 'Учитель' : 'Ученик');
 
-  // Видеосвязь выключена/недоступна — прежние индикаторные плитки.
-  if (video.enabled !== true) {
-    return (
-      <div className="rounded-2xl border border-border bg-card p-3">
-        <div className="grid grid-cols-2 gap-2">
-          <ParticipantTile label={`Вы · ${nameOf(selfRole)}`} state={{ ...presence[selfRole], micOn }} self level={micLevel} />
-          <ParticipantTile label={nameOf(otherRole)} state={presence[otherRole]} />
-        </div>
-        <div className="mt-2 flex items-center justify-center gap-2">
-          <Button variant={micOn ? 'default' : 'outline'} size="icon" onClick={onToggleMic} aria-label={micOn ? 'Выключить микрофон' : 'Включить микрофон'}>
-            {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
-          </Button>
-          <Button variant="outline" size="icon" disabled aria-label="Камера"><Video className="h-4 w-4" /></Button>
-          <Button variant="outline" size="icon" disabled aria-label="Демонстрация экрана"><Monitor className="h-4 w-4" /></Button>
-        </div>
-        <p className="mt-1 text-center text-[10px] text-muted-foreground">
-          {micError ?? video.error ?? (video.enabled === null ? 'Подключаем видеосвязь…' : 'Видеосвязь недоступна — идут сцена, рисование и чат')}
-        </p>
-      </div>
-    );
-  }
-
   const local = video.participants.find((p) => p.isLocal) ?? null;
   const remote = video.participants.find((p) => !p.isLocal) ?? null;
-  const connecting = video.connection !== 'connected';
 
   return (
     <div className="rounded-2xl border border-border bg-card p-3">
@@ -437,6 +413,27 @@ function VideoPanel({
         <VideoTile participant={local} label={`Вы · ${nameOf(selfRole)}`} />
         <VideoTile participant={remote} label={nameOf(otherRole)} />
       </div>
+
+      {/* Явный статус подключения видеосвязи. */}
+      <div className="mt-2 flex items-center justify-center gap-1.5 text-[11px]">
+        <span
+          className={cn(
+            'h-2 w-2 rounded-full',
+            video.phase === 'connected' ? 'bg-emerald-500'
+              : video.phase === 'reconnecting' || video.phase === 'connecting' ? 'animate-pulse bg-amber-500'
+                : video.phase === 'failed' ? 'bg-destructive' : 'bg-muted-foreground/40',
+          )}
+        />
+        <span className={cn(video.phase === 'failed' ? 'text-destructive' : 'text-muted-foreground')}>
+          {video.error ?? (video.phase === 'connected' && !remote ? 'Ждём собеседника' : VIDEO_PHASE_TEXT[video.phase])}
+        </span>
+      </div>
+
+      {video.phase === 'failed' && (
+        <Button size="sm" variant="outline" className="mt-2 w-full" onClick={onRetry}>
+          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Переподключиться
+        </Button>
+      )}
 
       {video.needsAudioUnlock && (
         <Button size="sm" className="mt-2 w-full" onClick={() => void video.unlockAudio()}>
@@ -448,6 +445,7 @@ function VideoPanel({
         <Button
           variant={video.micEnabled ? 'default' : 'outline'}
           size="icon"
+          disabled={video.phase !== 'connected'}
           onClick={() => void video.toggleMic()}
           aria-label={video.micEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
         >
@@ -456,6 +454,7 @@ function VideoPanel({
         <Button
           variant={video.cameraEnabled ? 'default' : 'outline'}
           size="icon"
+          disabled={video.phase !== 'connected'}
           onClick={() => void video.toggleCamera()}
           aria-label={video.cameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
         >
@@ -464,16 +463,38 @@ function VideoPanel({
         <Button
           variant={video.screenEnabled ? 'default' : 'outline'}
           size="icon"
+          disabled={video.phase !== 'connected'}
           onClick={() => void video.toggleScreenShare()}
           aria-label={video.screenEnabled ? 'Остановить демонстрацию' : 'Показать экран'}
         >
-          <Monitor className="h-4 w-4" />
+          {video.screenEnabled ? <MonitorOff className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
         </Button>
       </div>
+    </div>
+  );
+}
 
-      <p className="mt-1 text-center text-[10px] text-muted-foreground">
-        {video.error ?? (connecting ? 'Подключаемся к видеосвязи…' : remote ? 'Видеосвязь активна' : 'Ждём собеседника')}
-      </p>
+/** Видеосвязь не настроена на сервере — показываем только присутствие по WebSocket. */
+function PresenceOnlyPanel({ presence, role }: { presence: LessonPresence; role: LessonRole | null }) {
+  const selfRole: LessonRole = role ?? 'student';
+  const otherRole: LessonRole = selfRole === 'teacher' ? 'student' : 'teacher';
+  const nameOf = (r: LessonRole) => (r === 'teacher' ? 'Учитель' : 'Ученик');
+  const tile = (label: string, state: LessonParticipantState) => (
+    <div className={cn('relative flex aspect-video items-center justify-center rounded-xl bg-muted text-xs text-muted-foreground', state.speaking ? 'ring-2 ring-primary' : 'ring-1 ring-border')}>
+      <VideoOff className="h-5 w-5 opacity-40" />
+      <span className="absolute bottom-1 left-1.5 flex items-center gap-1">
+        <span className={cn('h-1.5 w-1.5 rounded-full', state.online ? 'bg-emerald-500' : 'bg-muted-foreground/40')} />
+        {label}
+      </span>
+    </div>
+  );
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <div className="grid grid-cols-2 gap-2">
+        {tile(`Вы · ${nameOf(selfRole)}`, presence[selfRole])}
+        {tile(nameOf(otherRole), presence[otherRole])}
+      </div>
+      <p className="mt-2 text-center text-[10px] text-muted-foreground">Видеосвязь недоступна — идут сцена, рисование и чат</p>
     </div>
   );
 }
