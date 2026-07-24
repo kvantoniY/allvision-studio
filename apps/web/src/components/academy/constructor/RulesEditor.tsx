@@ -27,6 +27,7 @@ const CONDITION_LABELS: Record<string, string> = {
   'variable-equals': 'Переменная =', 'variable-not-equals': 'Переменная ≠', 'variable-greater-than': 'Переменная >',
   'variable-less-than': 'Переменная <', 'score-at-least': 'Очки ≥', 'score-below': 'Очки <',
   'element-visible': 'Элемент виден', 'element-hidden': 'Элемент скрыт', 'role-is': 'Роль =', 'answer-is-correct': 'Ответ верный',
+  'input-correct': 'Поле заполнено верно', 'input-incorrect': 'Поле заполнено неверно',
 };
 const ACTION_LABELS: Record<string, string> = {
   'show-element': 'Показать элемент', 'hide-element': 'Скрыть элемент', 'toggle-element': 'Переключить элемент',

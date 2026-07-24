@@ -103,7 +103,30 @@ function compareNumbers(left: AcademySceneScalar, right: AcademySceneScalar, ope
     : false;
 }
 
+/** Нормализация ответа для сравнения: строки — trim + нижний регистр, числа/булевы как есть. */
+function normalizeAnswer(value: AcademySceneScalar | undefined): AcademySceneScalar {
+  if (typeof value === 'string') return value.trim().toLowerCase();
+  return value ?? '';
+}
+
+/**
+ * Правильно ли заполнено поле ввода: сравнивает текущее значение (variables[elementId])
+ * с content.correctAnswer и списком content.acceptedValues.
+ */
+function isInputCorrect(scene: AcademyScene, state: AcademySceneRuntimeState, elementId: string | undefined): boolean {
+  if (!elementId) return false;
+  const element = allElements(scene).find((item) => item.id === elementId);
+  if (!element) return false;
+  const candidates = [element.content.correctAnswer, ...(element.content.acceptedValues ?? [])]
+    .filter((value) => value !== undefined && value !== null)
+    .map(normalizeAnswer);
+  if (candidates.length === 0) return false;
+  const current = normalizeAnswer(state.variables[elementId] as AcademySceneScalar);
+  return candidates.some((candidate) => candidate === current);
+}
+
 function conditionMatches(
+  scene: AcademyScene,
   condition: AcademyScene['rules'][number]['conditions'][number],
   state: AcademySceneRuntimeState,
   event: AcademySceneRuntimeEvent,
@@ -122,8 +145,19 @@ function conditionMatches(
     case 'element-hidden': return state.visibility[condition.elementId!] === false;
     case 'role-is': return event.role === condition.role;
     case 'answer-is-correct': return event.correct === true || event.type === 'answer-correct';
+    case 'input-correct': return isInputCorrect(scene, state, condition.elementId);
+    case 'input-incorrect': return !isInputCorrect(scene, state, condition.elementId);
     default: return false;
   }
+}
+
+/** Записывает набранное учеником значение поля ввода в переменные состояния (для проверки ответа). */
+export function setSceneInputValue(
+  state: AcademySceneRuntimeState,
+  elementId: string,
+  value: AcademySceneScalar,
+): AcademySceneRuntimeState {
+  return { ...state, variables: { ...state.variables, [elementId]: value }, revision: state.revision + 1 };
 }
 
 function applySceneState(scene: AcademyScene, state: AcademySceneRuntimeState, stateId: string): AcademySceneRuntimeState {
@@ -222,7 +256,7 @@ export function transitionAcademyScene(
     .sort((left, right) => right.rule.priority - left.rule.priority || left.index - right.index);
 
   for (const { rule } of rules) {
-    if (!rule.conditions.every((condition) => conditionMatches(condition, state, event))) continue;
+    if (!rule.conditions.every((condition) => conditionMatches(scene, condition, state, event))) continue;
     matchedRuleIds.push(rule.id);
     for (const action of rule.actions) {
       const applied = applyAction(scene, state, action);

@@ -3,6 +3,7 @@ import {
   createAcademySceneRuntimeState,
   parseAcademyScene,
   resolveAcademySceneElement,
+  setSceneInputValue,
   transitionAcademyScene,
   type AcademyScene,
 } from '../academy';
@@ -293,5 +294,45 @@ describe('Academy A6.1 deterministic scene runtime', () => {
     });
     expect(result.state.nextSceneId).toBeNull();
     expect(result.effects).not.toContainEqual({ type: 'navigate', sceneId: 'number-castle-lock' });
+  });
+
+  it('checks a typed input answer via input-correct/input-incorrect conditions', () => {
+    const scene = parseAcademyScene({
+      formatVersion: 1,
+      id: 'answer-check',
+      title: 'Проверка ответа',
+      checkMode: 'automatic',
+      viewport: { width: 1280, height: 720, backgroundColor: '#ffffff' },
+      initialState: 'main',
+      states: [{ id: 'main', name: 'Основное' }],
+      layers: [{
+        id: 'ui', name: 'UI', kind: 'ui', zIndex: 0,
+        elements: [
+          { id: 'answer', name: 'Ответ', type: 'input', content: { correctAnswer: 'apple', acceptedValues: ['яблоко'] } },
+          { id: 'check', name: 'Проверить', type: 'button', interactive: true, content: { text: 'Проверить' } },
+        ],
+      }],
+      rules: [
+        { id: 'ok', name: 'Верно', event: { type: 'element-click', sourceElementId: 'check' }, conditions: [{ type: 'input-correct', elementId: 'answer' }], actions: [{ type: 'add-score', value: 10 }] },
+        { id: 'no', name: 'Неверно', event: { type: 'element-click', sourceElementId: 'check' }, conditions: [{ type: 'input-incorrect', elementId: 'answer' }], actions: [{ type: 'show-hint', value: 'Ещё раз' }] },
+      ],
+    });
+
+    // Пустое поле — ответ неверный.
+    let state = createAcademySceneRuntimeState(scene);
+    let result = transitionAcademyScene(scene, state, { type: 'element-click', sourceElementId: 'check', role: 'student' });
+    expect(result.matchedRuleIds).toEqual(['no']);
+    expect(result.state.score).toBe(0);
+
+    // Правильный ответ (регистр/пробелы игнорируются).
+    state = setSceneInputValue(createAcademySceneRuntimeState(scene), 'answer', '  Apple ');
+    result = transitionAcademyScene(scene, state, { type: 'element-click', sourceElementId: 'check', role: 'student' });
+    expect(result.matchedRuleIds).toEqual(['ok']);
+    expect(result.state.score).toBe(10);
+
+    // Синоним из acceptedValues тоже засчитывается.
+    state = setSceneInputValue(createAcademySceneRuntimeState(scene), 'answer', 'Яблоко');
+    result = transitionAcademyScene(scene, state, { type: 'element-click', sourceElementId: 'check', role: 'student' });
+    expect(result.matchedRuleIds).toEqual(['ok']);
   });
 });

@@ -24,6 +24,10 @@ import {
   attachAsset,
   setSceneBackground,
   validateScene,
+  elementFillColor,
+  elementTextColor,
+  elementObjectFit,
+  elementBorderRadius,
   type AcademyScene,
   type AcademySceneElement,
 } from '@allvision/shared';
@@ -89,6 +93,28 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
         onChange={(e) => onChange(Number(e.target.value))}
         className="h-8 rounded-md border border-border bg-background px-2 text-sm"
       />
+    </label>
+  );
+}
+
+/** Только hex-цвета типа #rrggbb можно показать в нативном color-инпуте. */
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+/** Цветовое поле: свотч (нативный color) + текст (любой CSS-цвет), с кнопкой сброса. */
+function ColorField({ label, value, fallback, onChange }: { label: string; value?: string; fallback: string; onChange: (v: string | undefined) => void }) {
+  const swatch = value && HEX_RE.test(value) ? value : fallback;
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <div className="flex items-center gap-1.5">
+        <input type="color" value={swatch} onChange={(e) => onChange(e.target.value)} className="h-8 w-9 shrink-0 cursor-pointer rounded border border-border bg-background p-0.5" aria-label={label} />
+        <input
+          value={value ?? ''}
+          placeholder={fallback}
+          onChange={(e) => onChange(e.target.value.trim() || undefined)}
+          className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs"
+        />
+      </div>
     </label>
   );
 }
@@ -560,11 +586,18 @@ function EditCanvas({
   );
 }
 
+/** URL материала: в dev добавляем origin API, чтобы /api/... грузился с бэкенда. */
+function assetUrl(src: string): string {
+  const api = process.env.NEXT_PUBLIC_API_URL;
+  if (api && src.startsWith('/api/')) return `${api.replace(/\/+$/, '')}${src}`;
+  return src;
+}
+
 function ElementVisual({ element }: { element: AcademySceneElement }) {
-  // Реальная картинка, если материал уже привязан.
+  // Реальная картинка, если материал уже привязан — вписываем так же, как в уроке (Pixi).
   if (IMAGE_TYPES.includes(element.type) && element.asset?.fileUrl) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={element.asset.fileUrl} alt={element.name} className="h-full w-full object-contain" draggable={false} />;
+    return <img src={assetUrl(element.asset.fileUrl)} alt={element.name} className="h-full w-full" style={{ objectFit: elementObjectFit(element) }} draggable={false} />;
   }
 
   // Персонаж ученика: абстрактный силуэт (реальный ребёнок подставится при подготовке урока).
@@ -593,14 +626,22 @@ function ElementVisual({ element }: { element: AcademySceneElement }) {
     );
   }
 
-  // Поле ввода — выглядит как поле ввода.
+  // Поле ввода — выглядит и позиционируется как настоящий инпут в уроке.
   if (element.type === 'input') {
     return (
-      <div className="flex h-full w-full items-center rounded-md border border-slate-300 bg-white px-2 shadow-inner">
-        <span className="truncate text-slate-400" style={{ fontSize: Math.max(9, (element.style.fontSize ?? 20) * 0.6) }}>
-          {element.content.placeholder ?? 'Ответ ученика…'}
+      <div
+        className="flex h-full w-full items-center overflow-hidden"
+        style={{
+          background: element.style.fill ?? '#ffffff',
+          border: `2px solid ${element.style.stroke ?? '#d6d3d1'}`,
+          borderRadius: elementBorderRadius(element),
+          padding: `0 ${element.style.padding ?? 12}px`,
+          justifyContent: element.style.textAlign === 'center' ? 'center' : element.style.textAlign === 'right' ? 'flex-end' : 'flex-start',
+        }}
+      >
+        <span className="truncate opacity-60" style={{ color: elementTextColor(element), fontSize: Math.max(9, (element.style.fontSize ?? 22) * 0.7) }}>
+          {element.content.placeholder ?? 'Ответ…'}
         </span>
-        <span className="ml-0.5 h-[55%] w-px animate-pulse bg-slate-400" />
       </div>
     );
   }
@@ -659,15 +700,22 @@ function ElementVisual({ element }: { element: AcademySceneElement }) {
     );
   }
   if (TEXT_TYPES.includes(element.type)) {
+    const hasBg = element.type === 'button' || element.type === 'card' || element.type === 'dialogue';
+    const align = element.style.textAlign ?? 'center';
     return (
       <div
-        className={cn('flex h-full w-full items-center justify-center overflow-hidden px-1 text-center', (element.type === 'button' || element.type === 'card') && 'rounded-lg')}
+        className="flex h-full w-full items-center overflow-hidden"
         style={{
-          color: element.style.fill ?? '#1f2937',
+          color: elementTextColor(element),
           fontSize: (element.style.fontSize ?? 24) * 0.7,
           fontWeight: Number(element.style.fontWeight ?? 600),
-          background: element.type === 'button' ? 'hsl(24 94% 50%)' : element.type === 'card' ? '#ffffff' : 'transparent',
-          border: element.type === 'card' ? '1px solid #e5e7eb' : undefined,
+          fontFamily: element.style.fontFamily,
+          background: hasBg ? elementFillColor(element) : 'transparent',
+          border: element.style.stroke ? `${element.style.strokeWidth ?? 2}px solid ${element.style.stroke}` : undefined,
+          borderRadius: elementBorderRadius(element),
+          padding: `0 ${element.style.padding ?? 12}px`,
+          justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
+          textAlign: align,
         }}
       >
         {element.content.text ?? element.name}
@@ -695,10 +743,13 @@ function ElementInspector({
 }) {
   const t = element.transform;
   const setT = (patch: Partial<AcademySceneElement['transform']>) => onChange({ transform: { ...t, ...patch } });
+  const setStyle = (patch: Partial<AcademySceneElement['style']>) => onChange({ style: { ...element.style, ...patch } });
+  const setContent = (patch: Partial<AcademySceneElement['content']>) => onChange({ content: { ...element.content, ...patch } });
 
   // Правила, привязанные именно к этому элементу.
   const ownRules = scene.rules.filter((r) => r.event.sourceElementId === element.id);
   const otherElements = scene.layers.flatMap((l) => l.elements).filter((e) => e.id !== element.id);
+  const inputElements = scene.layers.flatMap((l) => l.elements).filter((e) => e.type === 'input');
 
   const addClickRule = () => {
     const created = addRule(scene);
@@ -707,6 +758,43 @@ function ElementInspector({
       event: { type: 'element-click', sourceElementId: element.id },
       actions: [{ type: 'add-score', value: 10 }],
     }));
+  };
+
+  // Кнопка проверяет поле ввода: два правила «клик → верно / неверно».
+  const addCheckRules = (inputId: string) => {
+    onChange({ interactive: true, studentInteractive: true });
+    const a = addRule(scene);
+    const s1 = updateRule(a.scene, a.ruleId, {
+      name: `Проверка: верно (${element.name})`,
+      event: { type: 'element-click', sourceElementId: element.id },
+      conditions: [{ type: 'input-correct', elementId: inputId }],
+      actions: [{ type: 'add-score', value: 10 }, { type: 'show-hint', value: 'Верно!' }],
+    });
+    const b = addRule(s1);
+    const s2 = updateRule(b.scene, b.ruleId, {
+      name: `Проверка: неверно (${element.name})`,
+      event: { type: 'element-click', sourceElementId: element.id },
+      conditions: [{ type: 'input-incorrect', elementId: inputId }],
+      actions: [{ type: 'show-hint', value: 'Попробуй ещё раз' }],
+    });
+    onSceneChange(s2);
+  };
+
+  // Реакция сцены на выбор варианта ответа (любой правильной/неправильной кнопки).
+  const addAnswerReactionRules = () => {
+    const a = addRule(scene);
+    const s1 = updateRule(a.scene, a.ruleId, {
+      name: 'Верный ответ',
+      event: { type: 'answer-correct' },
+      actions: [{ type: 'add-score', value: 10 }, { type: 'show-hint', value: 'Верно!' }],
+    });
+    const b = addRule(s1);
+    const s2 = updateRule(b.scene, b.ruleId, {
+      name: 'Неверный ответ',
+      event: { type: 'answer-incorrect' },
+      actions: [{ type: 'show-hint', value: 'Неверно, попробуй ещё' }],
+    });
+    onSceneChange(s2);
   };
   return (
     <div className="space-y-3">
@@ -742,6 +830,126 @@ function ElementInspector({
           <Input value={element.content.text ?? ''} onChange={(e) => onChange({ content: { ...element.content, text: e.target.value } })} className="h-8" />
         </div>
       )}
+
+      {/* Стиль элемента — совпадает с уроком (WYSIWYG) */}
+      {(TEXT_TYPES.includes(element.type) || element.type === 'input') && (
+        <div className="space-y-2 rounded-lg border border-border p-2.5">
+          <Label className="text-xs font-medium">Оформление</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <ColorField label="Цвет текста" value={element.style.textColor} fallback={elementTextColor(element)} onChange={(v) => setStyle({ textColor: v })} />
+            {(element.type === 'button' || element.type === 'card' || element.type === 'dialogue' || element.type === 'input') && (
+              <ColorField label="Фон" value={element.style.fill} fallback={elementFillColor(element)} onChange={(v) => setStyle({ fill: v })} />
+            )}
+            <ColorField label="Рамка" value={element.style.stroke} fallback="#d6d3d1" onChange={(v) => setStyle({ stroke: v })} />
+            <NumberField label="Размер шрифта" value={element.style.fontSize ?? 24} onChange={(v) => setStyle({ fontSize: Math.max(6, v) })} />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-muted-foreground">Насыщенность</span>
+              <select value={element.style.fontWeight ?? '600'} onChange={(e) => setStyle({ fontWeight: e.target.value as NonNullable<AcademySceneElement['style']['fontWeight']> })} className="h-8 rounded-md border border-border bg-background px-2 text-sm">
+                <option value="400">Обычный</option>
+                <option value="500">Средний</option>
+                <option value="600">Полужирный</option>
+                <option value="700">Жирный</option>
+                <option value="800">Очень жирный</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] text-muted-foreground">Выравнивание</span>
+              <select value={element.style.textAlign ?? 'center'} onChange={(e) => setStyle({ textAlign: e.target.value as 'left' | 'center' | 'right' })} className="h-8 rounded-md border border-border bg-background px-2 text-sm">
+                <option value="left">Слева</option>
+                <option value="center">По центру</option>
+                <option value="right">Справа</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      )}
+      {IMAGE_TYPES.includes(element.type) && (
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] text-muted-foreground">Как вписывать картинку</span>
+          <select value={element.style.objectFit ?? elementObjectFit(element)} onChange={(e) => setStyle({ objectFit: e.target.value as 'cover' | 'contain' | 'fill' })} className="h-8 rounded-md border border-border bg-background px-2 text-sm">
+            <option value="cover">Заполнить (с обрезкой)</option>
+            <option value="contain">Целиком (с полями)</option>
+            <option value="fill">Растянуть</option>
+          </select>
+        </label>
+      )}
+
+      {/* Поле ввода: правильный ответ и проверка */}
+      {element.type === 'input' && (
+        <div className="space-y-2 rounded-lg border border-border p-2.5">
+          <Label className="text-xs font-medium">Ответ ученика</Label>
+          <div className="space-y-1.5">
+            <span className="text-[11px] text-muted-foreground">Подсказка в поле</span>
+            <Input value={element.content.placeholder ?? ''} onChange={(e) => setContent({ placeholder: e.target.value })} placeholder="Например: Введите ответ" className="h-8" />
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-[11px] text-muted-foreground">Правильный ответ</span>
+            <Input value={String(element.content.correctAnswer ?? '')} onChange={(e) => setContent({ correctAnswer: e.target.value })} placeholder="Например: apple" className="h-8" />
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-[11px] text-muted-foreground">Другие принимаемые ответы (через запятую)</span>
+            <Input
+              value={(element.content.acceptedValues ?? []).map(String).join(', ')}
+              onChange={(e) => setContent({ acceptedValues: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
+              placeholder="яблоко, apples"
+              className="h-8"
+            />
+          </div>
+          <p className="text-[11px] text-muted-foreground">Сравнение без учёта регистра и пробелов. Проверку запускает кнопка (см. её настройки).</p>
+        </div>
+      )}
+
+      {/* Кнопка: проверка поля ввода или вариант ответа */}
+      {element.type === 'button' && (
+        <div className="space-y-2 rounded-lg border border-border p-2.5">
+          <Label className="flex items-center gap-1.5 text-xs font-medium"><Zap className="h-3.5 w-3.5 text-primary" /> Роль кнопки</Label>
+
+          <div className="space-y-1.5">
+            <span className="text-[11px] text-muted-foreground">Проверять поле ввода</span>
+            <select
+              value=""
+              onChange={(e) => { if (e.target.value) addCheckRules(e.target.value); }}
+              className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm"
+            >
+              <option value="">+ добавить проверку поля…</option>
+              {inputElements.map((el) => <option key={el.id} value={el.id}>{el.name}</option>)}
+            </select>
+            {inputElements.length === 0 && <p className="text-[11px] text-muted-foreground">Сначала добавьте элемент «Поле ввода».</p>}
+          </div>
+
+          <div className="border-t border-border pt-2">
+            <span className="text-[11px] text-muted-foreground">Вариант ответа (выбор правильной кнопки)</span>
+            <div className="mt-1 flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => onChange({ interactive: true, studentInteractive: true, content: { ...element.content, correctAnswer: true } })}
+                className={cn('flex-1 rounded-md border px-2 py-1.5 text-xs', element.content.correctAnswer === true ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-border')}
+              >
+                ✓ Правильный
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange({ interactive: true, studentInteractive: true, content: { ...element.content, correctAnswer: false } })}
+                className={cn('flex-1 rounded-md border px-2 py-1.5 text-xs', element.content.correctAnswer === false ? 'border-rose-400 bg-rose-50 text-rose-600' : 'border-border')}
+              >
+                ✗ Неправильный
+              </button>
+            </div>
+            {element.content.correctAnswer !== undefined && (
+              <button type="button" onClick={() => { const c = { ...element.content }; delete c.correctAnswer; onChange({ content: c }); }} className="mt-1 text-[11px] text-muted-foreground hover:underline">
+                убрать роль варианта
+              </button>
+            )}
+            <p className="mt-1 text-[11px] text-muted-foreground">Отметьте варианты; реакцию на верный/неверный ответ добавьте кнопкой ниже.</p>
+            <Button variant="outline" size="sm" className="mt-1 h-7 w-full text-xs" onClick={addAnswerReactionRules}>
+              + реакция на верный/неверный ответ
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-1">
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={element.visible} onChange={(e) => onChange({ visible: e.target.checked })} /> Виден</label>
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={element.studentInteractive} onChange={(e) => onChange({ studentInteractive: e.target.checked })} /> Доступен ученику</label>

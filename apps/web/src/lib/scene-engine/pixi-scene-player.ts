@@ -1,7 +1,12 @@
 import {
   createAcademySceneRuntimeState,
+  elementBorderRadius,
+  elementFillColor,
+  elementObjectFit,
+  elementTextColor,
   parseAcademyScene,
   resolveAcademySceneElement,
+  setSceneInputValue,
   transitionAcademyScene,
   type AcademyScene,
   type AcademySceneElement,
@@ -53,12 +58,6 @@ function withApiOrigin(source: string): string {
   return `${API_URL.replace(/\/+$/, '')}${source}`;
 }
 
-function textFill(element: AcademySceneElement): string {
-  if (element.style.tint) return element.style.tint;
-  if (element.type === 'button') return '#ffffff';
-  return '#292524';
-}
-
 /**
  * Императивный PixiJS v8-адаптер. Бизнес-логика остаётся в shared state machine;
  * этот класс только рисует её состояние и переводит pointer/keyboard в события.
@@ -77,6 +76,11 @@ export class PixiScenePlayer {
   private eventQueue: Promise<void> = Promise.resolve();
   private keyHandler: ((event: KeyboardEvent) => void) | null = null;
   private privateTextures = new Map<string, Texture>();
+  // Поля ввода рендерятся как настоящие HTML-инпуты поверх канваса (в WebGL ввода нет),
+  // чтобы в уроке они выглядели и работали как поле ввода.
+  private overlay: HTMLDivElement | null = null;
+  private inputElements = new Map<string, HTMLInputElement>();
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(options: PixiScenePlayerOptions) {
     this.options = options;
@@ -114,7 +118,23 @@ export class PixiScenePlayer {
     canvas.tabIndex = 0;
     canvas.setAttribute('role', 'application');
     canvas.setAttribute('aria-label', `Интерактивная сцена: ${this.scene.title}`);
-    this.options.host.replaceChildren(canvas);
+
+    // Обёртка: канвас + оверлей HTML-полей ввода, спозиционированный точно по канвасу.
+    const wrap = document.createElement('div');
+    wrap.style.position = 'relative';
+    wrap.style.width = '100%';
+    wrap.style.lineHeight = '0';
+    wrap.appendChild(canvas);
+    this.overlay = document.createElement('div');
+    this.overlay.style.position = 'absolute';
+    this.overlay.style.inset = '0';
+    this.overlay.style.pointerEvents = 'none';
+    wrap.appendChild(this.overlay);
+    this.options.host.replaceChildren(wrap);
+
+    // Пересчёт позиций инпутов при изменении размера канваса (адаптив/полный экран).
+    this.resizeObserver = new ResizeObserver(() => this.positionInputs());
+    this.resizeObserver.observe(canvas);
 
     this.keyHandler = (event) => {
       if (event.key === 'Tab') return;
@@ -150,6 +170,11 @@ export class PixiScenePlayer {
     this.destroyed = true;
     this.drawRevision += 1;
     if (this.keyHandler) this.app.canvas.removeEventListener('keydown', this.keyHandler);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.inputElements.forEach((el) => el.remove());
+    this.inputElements.clear();
+    this.overlay = null;
     this.displayObjects.clear();
     this.root = null;
     if (this.initialized) {
@@ -255,6 +280,7 @@ export class PixiScenePlayer {
     const revision = ++this.drawRevision;
     const nextRoot = new Container({ sortableChildren: true, label: `scene:${this.scene.id}` });
     const nextObjects = new Map<string, Container>();
+    const visibleInputs: AcademySceneElement[] = [];
 
     const layers = [...this.scene.layers].sort((left, right) => left.zIndex - right.zIndex);
     for (const layer of layers) {
@@ -265,6 +291,8 @@ export class PixiScenePlayer {
       const rendered = await Promise.all(elements.map(async (base) => {
         const element = resolveAcademySceneElement(base, this.runtime);
         if (!element.visible || (this.role === 'teacher' && !element.teacherVisible)) return null;
+        // Поля ввода — HTML-оверлей, а не Pixi (в WebGL нет ввода).
+        if (element.type === 'input') { visibleInputs.push(element); return null; }
         const display = await this.createElement(element);
         display.zIndex = element.zIndex;
         nextObjects.set(element.id, display);
@@ -287,6 +315,71 @@ export class PixiScenePlayer {
     }
     this.root = nextRoot;
     this.displayObjects = nextObjects;
+    this.syncInputs(visibleInputs);
+  }
+
+  /** Создаёт/обновляет/удаляет HTML-инпуты поверх канваса по видимым input-элементам. */
+  private syncInputs(inputs: AcademySceneElement[]): void {
+    if (!this.overlay) return;
+    const wanted = new Set(inputs.map((el) => el.id));
+    for (const [id, el] of this.inputElements) {
+      if (!wanted.has(id)) { el.remove(); this.inputElements.delete(id); }
+    }
+    const editable = this.role === 'student'; // учитель видит поле, но не печатает за ученика
+    for (const element of inputs) {
+      let input = this.inputElements.get(element.id);
+      if (!input) {
+        input = document.createElement('input');
+        input.type = 'text';
+        input.style.position = 'absolute';
+        input.style.boxSizing = 'border-box';
+        input.style.pointerEvents = 'auto';
+        input.style.outline = 'none';
+        input.addEventListener('input', () => {
+          this.runtime = setSceneInputValue(this.runtime, element.id, input!.value);
+          this.options.onStateChange?.(this.runtime);
+        });
+        this.overlay.appendChild(input);
+        this.inputElements.set(element.id, input);
+      }
+      const current = this.runtime.variables[element.id];
+      if (typeof current === 'string' && input.value !== current) input.value = current;
+      input.placeholder = element.content.placeholder ?? 'Ответ…';
+      input.disabled = !editable;
+      input.dataset.elementId = element.id;
+      // Стиль поля — как в редакторе: белый фон, рамка, цвет текста.
+      input.style.background = elementFillColor({ type: 'input', style: element.style }) === '#f5f5f4'
+        ? '#ffffff'
+        : elementFillColor({ type: 'input', style: element.style });
+      input.style.color = elementTextColor(element);
+      input.style.borderRadius = `${elementBorderRadius(element)}px`;
+      input.style.border = `2px solid ${element.style.stroke ?? '#d6d3d1'}`;
+      input.style.textAlign = element.style.textAlign ?? 'left';
+      input.style.fontFamily = element.style.fontFamily ?? 'Inter, Arial, sans-serif';
+      input.style.fontWeight = element.style.fontWeight ?? '600';
+    }
+    this.positionInputs();
+  }
+
+  /** Пересчёт пиксельных позиций инпутов относительно текущего размера канваса. */
+  private positionInputs(): void {
+    if (!this.overlay || this.inputElements.size === 0) return;
+    const scale = this.app.canvas.clientWidth / this.scene.viewport.width;
+    if (!Number.isFinite(scale) || scale <= 0) return;
+    const byId = new Map(this.scene.layers.flatMap((l) => l.elements).map((e) => [e.id, e]));
+    for (const [id, input] of this.inputElements) {
+      const base = byId.get(id);
+      if (!base) continue;
+      const element = resolveAcademySceneElement(base, this.runtime);
+      const t = element.transform;
+      input.style.left = `${t.x * scale}px`;
+      input.style.top = `${t.y * scale}px`;
+      input.style.width = `${t.width * scale}px`;
+      input.style.height = `${t.height * scale}px`;
+      input.style.paddingLeft = `${(element.style.padding ?? 12) * scale}px`;
+      input.style.paddingRight = `${(element.style.padding ?? 12) * scale}px`;
+      input.style.fontSize = `${(element.style.fontSize ?? 22) * scale}px`;
+    }
   }
 
   private async createElement(element: AcademySceneElement): Promise<Container> {
@@ -340,10 +433,29 @@ export class PixiScenePlayer {
     try {
       const texture = element.asset?.scope === 'child'
         ? await this.loadPrivateTexture(element.asset.assetId, source)
-        : await Assets.load<Texture>(source);
+        : await Assets.load<Texture>(withApiOrigin(source));
       const sprite = new Sprite(texture);
-      sprite.width = element.transform.width;
-      sprite.height = element.transform.height;
+      const { width, height } = element.transform;
+      const fit = elementObjectFit(element);
+      // Вписывание картинки как в редакторе: cover заполняет с обрезкой, contain — целиком.
+      if (fit === 'fill') {
+        sprite.width = width;
+        sprite.height = height;
+      } else {
+        const tw = texture.width || width;
+        const th = texture.height || height;
+        const ratio = fit === 'cover' ? Math.max(width / tw, height / th) : Math.min(width / tw, height / th);
+        sprite.width = tw * ratio;
+        sprite.height = th * ratio;
+        sprite.x = (width - sprite.width) / 2;
+        sprite.y = (height - sprite.height) / 2;
+        if (fit === 'cover') {
+          // Обрезаем выступающие края маской по рамке элемента.
+          const mask = new Graphics().rect(0, 0, width, height).fill({ color: '#ffffff' });
+          wrapper.addChild(mask);
+          sprite.mask = mask;
+        }
+      }
       if (element.style.tint) sprite.tint = element.style.tint;
       wrapper.addChild(sprite);
     } catch {
@@ -386,8 +498,11 @@ export class PixiScenePlayer {
 
   private addGraphic(wrapper: Container, element: AcademySceneElement): void {
     const { width, height } = element.transform;
-    const radius = element.style.borderRadius ?? (['button', 'card', 'dialogue'].includes(element.type) ? 18 : 0);
-    const fill = element.style.fill ?? this.defaultFill(element.type);
+    const radius = elementBorderRadius(element);
+    // Пустой фон-элемент берёт цвет вьюпорта, чтобы не перекрывать сцену серым.
+    const fill = element.type === 'background' && !element.style.fill
+      ? this.scene.viewport.backgroundColor
+      : elementFillColor(element);
     const graphic = new Graphics();
 
     if (element.type === 'particles') {
@@ -418,9 +533,8 @@ export class PixiScenePlayer {
     wrapper.addChild(graphic);
 
     const contentText = element.content.text
-      ?? (element.type === 'input' ? element.content.placeholder : undefined)
       ?? (element.type === 'timer' && element.content.durationMs ? `${Math.ceil(element.content.durationMs / 1000)} сек.` : undefined);
-    if (contentText) this.addText(wrapper, element, contentText, textFill(element));
+    if (contentText) this.addText(wrapper, element, contentText, elementTextColor(element));
   }
 
   private addText(wrapper: Container, element: AcademySceneElement, value: string, fill: string): void {
@@ -446,14 +560,5 @@ export class PixiScenePlayer {
         : element.transform.width / 2;
     label.y = element.transform.height / 2;
     wrapper.addChild(label);
-  }
-
-  private defaultFill(type: AcademySceneElement['type']): string {
-    if (type === 'background') return this.scene.viewport.backgroundColor;
-    if (type === 'button') return '#f97316';
-    if (type === 'dialogue') return '#ffffff';
-    if (['hotspot', 'collision', 'platform'].includes(type)) return '#ef4444';
-    if (type === 'particles') return '#fbbf24';
-    return '#f5f5f4';
   }
 }

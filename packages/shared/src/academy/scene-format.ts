@@ -68,6 +68,8 @@ export const ACADEMY_SCENE_CONDITION_TYPES = [
   'element-hidden',
   'role-is',
   'answer-is-correct',
+  'input-correct',
+  'input-incorrect',
 ] as const;
 
 export const ACADEMY_SCENE_ACTION_TYPES = [
@@ -148,6 +150,8 @@ export const sceneTransformSchema = z.object({
 
 export const sceneElementStyleSchema = z.object({
   fill: z.string().trim().min(1).max(80).optional(),
+  /** Цвет текста элемента (кнопки/текст/карточки). Отдельно от fill (это фон/заливка). */
+  textColor: z.string().trim().min(1).max(80).optional(),
   stroke: z.string().trim().min(1).max(80).optional(),
   strokeWidth: z.number().min(0).max(40).optional(),
   borderRadius: z.number().min(0).max(500).optional(),
@@ -157,6 +161,8 @@ export const sceneElementStyleSchema = z.object({
   textAlign: z.enum(['left', 'center', 'right']).optional(),
   padding: z.number().min(0).max(200).optional(),
   tint: z.string().trim().min(1).max(80).optional(),
+  /** Как картинка вписывается в рамку элемента — одинаково в редакторе и в уроке. */
+  objectFit: z.enum(['cover', 'contain', 'fill']).optional(),
 }).strict();
 
 export const sceneAssetReferenceSchema = z.object({
@@ -313,7 +319,7 @@ export const academySceneConditionSchema = z.object({
   if (['score-at-least', 'score-below'].includes(condition.type) && typeof condition.value !== 'number') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['value'], message: 'Укажите числовой порог' });
   }
-  if (['element-visible', 'element-hidden'].includes(condition.type) && !condition.elementId) {
+  if (['element-visible', 'element-hidden', 'input-correct', 'input-incorrect'].includes(condition.type) && !condition.elementId) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['elementId'], message: 'Укажите элемент' });
   }
   if (condition.type === 'role-is' && !condition.role) {
@@ -472,4 +478,45 @@ export type AcademySceneScalar = z.infer<typeof sceneScalarSchema>;
 /** Парсинг — единственная точка входа для JSON из БД/редактора. */
 export function parseAcademyScene(input: unknown): AcademyScene {
   return academySceneSchema.parse(input);
+}
+
+// === Единые правила отрисовки: редактор и Pixi-плеер обязаны совпадать (WYSIWYG) ===
+
+const TEXT_ELEMENT_TYPES = ['text', 'dialogue', 'button', 'card'] as const;
+const IMAGE_COVER_TYPES = ['background', 'animated-background', 'foreground', 'video'] as const;
+
+/** Фон/заливка фигуры (кнопка, карточка, диалог, прогресс…). */
+export function elementFillColor(element: Pick<AcademySceneElement, 'type' | 'style'>): string {
+  if (element.style.fill) return element.style.fill;
+  if (element.type === 'button') return '#f97316';
+  if (element.type === 'dialogue' || element.type === 'card') return '#ffffff';
+  if (element.type === 'particles') return '#fbbf24';
+  if (['hotspot', 'collision', 'platform'].includes(element.type)) return '#ef4444';
+  return '#f5f5f4';
+}
+
+/** Цвет текста: явный textColor, иначе разумный дефолт под тип. */
+export function elementTextColor(element: Pick<AcademySceneElement, 'type' | 'style'>): string {
+  if (element.style.textColor) return element.style.textColor;
+  if (element.style.tint) return element.style.tint; // обратная совместимость со старыми сценами
+  if (element.type === 'button') return '#ffffff';
+  return '#292524';
+}
+
+/** Как картинка вписывается в рамку. Фон/передний план по умолчанию заполняют (cover). */
+export function elementObjectFit(element: Pick<AcademySceneElement, 'type' | 'style'>): 'cover' | 'contain' | 'fill' {
+  if (element.style.objectFit) return element.style.objectFit;
+  return (IMAGE_COVER_TYPES as readonly string[]).includes(element.type) ? 'cover' : 'contain';
+}
+
+/** Радиус скругления фигуры (кнопка/карточка/диалог/поле ввода скруглены по умолчанию). */
+export function elementBorderRadius(element: Pick<AcademySceneElement, 'type' | 'style'>): number {
+  if (element.style.borderRadius !== undefined) return element.style.borderRadius;
+  if (['button', 'card', 'dialogue'].includes(element.type)) return 18;
+  if (element.type === 'input') return 10;
+  return 0;
+}
+
+export function isTextElement(type: AcademySceneElement['type']): boolean {
+  return (TEXT_ELEMENT_TYPES as readonly string[]).includes(type);
 }
