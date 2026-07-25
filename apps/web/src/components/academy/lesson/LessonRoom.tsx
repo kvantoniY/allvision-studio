@@ -19,6 +19,7 @@ import {
   type LessonServerMessage,
   type LessonStroke,
 } from '@allvision/shared';
+import type { Track } from 'livekit-client';
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
 import { LessonPreJoin, DeviceSelect } from '@/components/academy/lesson/LessonPreJoin';
@@ -35,11 +36,14 @@ type UseLessonVideo = ReturnType<typeof useLessonVideo>;
 
 export function LessonRoom({ lessonId }: { lessonId: string }) {
   // Пока урок не подготовлен — опрашиваем, чтобы ученик автоматически вошёл, как только
-  // преподаватель выберет шаблон (не нужно обновлять страницу).
+  // преподаватель выберет шаблон. Как только экземпляр появился — поллинг выключаем
+  // (иначе лишние рефетчи каждые 5с дёргают ре-рендеры во время урока).
+  const instanceReadyRef = useRef(false);
   const instanceQuery = useGetInstanceByLessonQuery(lessonId, {
-    pollingInterval: 5000,
+    pollingInterval: instanceReadyRef.current ? 0 : 5000,
     skipPollingIfUnfocused: true,
   });
+  instanceReadyRef.current = Boolean(instanceQuery.data?.instance);
   const instanceId = instanceQuery.data?.instance?.id;
   const scenesQuery = useGetInstanceScenesQuery(instanceId ?? '', { skip: !instanceId });
 
@@ -58,7 +62,6 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     student: { ...EMPTY_PARTICIPANT_STATE },
   });
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
-  const [chatFocused, setChatFocused] = useState(false);
   const [strokes, setStrokes] = useState<LessonStroke[]>([]);
   const [chat, setChat] = useState<LessonChatEntry[]>([]);
   const [reward, setReward] = useState(false);
@@ -165,27 +168,8 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const isTeacher = role === 'teacher';
   const send = useCallback((m: Parameters<LessonSocket['send']>[0]) => socketRef.current?.send(m), []);
 
-  // Индикаторы участника берём из LiveKit (микрофон и речь) и шлём в presence.
-  useEffect(() => { send({ t: 'status', micOn: video.micEnabled }); }, [video.micEnabled, send]);
-  useEffect(() => { send({ t: 'status', speaking: video.localSpeaking }); }, [video.localSpeaking, send]);
-
-  // Активна ли вкладка урока — собеседник видит, что человек отвлёкся.
-  useEffect(() => {
-    if (!ready) return;
-    const report = () => send({ t: 'status', focused: document.visibilityState === 'visible' && document.hasFocus() });
-    report();
-    document.addEventListener('visibilitychange', report);
-    window.addEventListener('focus', report);
-    window.addEventListener('blur', report);
-    return () => {
-      document.removeEventListener('visibilitychange', report);
-      window.removeEventListener('focus', report);
-      window.removeEventListener('blur', report);
-    };
-  }, [send, ready]);
-
-  useEffect(() => { send({ t: 'status', inChat: chatFocused }); }, [chatFocused, send]);
-
+  // Единый источник правды для «кто в комнате / говорит / микрофон» — LiveKit.
+  // Раньше это дублировалось нашим WebSocket-статусом и расходилось между сторонами.
   const nav = (idx: number) => { if (isTeacher) send({ t: 'nav', sceneIndex: idx }); };
   const toggleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -264,6 +248,19 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const scene = scenes[sceneIndex] ?? null;
   const usingVideo = video.enabled === true;
 
+  // Presence из LiveKit (единый источник для обеих сторон), fallback на WS-presence
+  // когда видеосвязь на сервере выключена.
+  const findByRole = (r: LessonRole) => video.participants.find((p) => p.identity.startsWith(`${r}-`));
+  const liveOnline = (r: LessonRole) => Boolean(findByRole(r));
+  const teacherState: LessonParticipantState = usingVideo
+    ? { online: liveOnline('teacher'), focused: liveOnline('teacher'), inChat: false, micOn: findByRole('teacher')?.micEnabled ?? false, speaking: findByRole('teacher')?.isSpeaking ?? false }
+    : presence.teacher;
+  const studentState: LessonParticipantState = usingVideo
+    ? { online: liveOnline('student'), focused: liveOnline('student'), inChat: false, micOn: findByRole('student')?.micEnabled ?? false, speaking: findByRole('student')?.isSpeaking ?? false }
+    : presence.student;
+  // Демонстрация экрана любого участника — показываем крупно поверх сцены.
+  const screenShare = video.participants.find((p) => p.screenTrack);
+
   return (
     <div ref={rootRef} className="academy-theme flex h-dvh flex-col bg-background text-foreground">
       {/* Шапка */}
@@ -272,8 +269,8 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
         <span className="text-xs text-muted-foreground">Сцена {sceneCount ? sceneIndex + 1 : 0} из {sceneCount}</span>
         <ConnectionBadge status={status} latencyMs={latencyMs} />
         <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-          <PresenceChip label="Учитель" state={presence.teacher} />
-          <PresenceChip label="Ученик" state={presence.student} />
+          <PresenceChip label="Учитель" state={teacherState} />
+          <PresenceChip label="Ученик" state={studentState} />
           {isTeacher && (
             <Button size="sm" variant="outline" className="h-8" onClick={endLesson} disabled={ending}>
               {ending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />} Завершить урок
@@ -323,6 +320,18 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
                 {scenesQuery.isLoading ? 'Загружаем сцены…' : 'В уроке нет сцен'}
               </div>
             )}
+
+            {/* Демонстрация экрана — крупно поверх сцены (как «шаринг на главной сцене» в Zoom). */}
+            {screenShare && (
+              <div className="absolute inset-0 z-10 flex flex-col bg-black">
+                <div className="flex items-center gap-2 bg-black/80 px-3 py-1.5 text-xs text-white">
+                  <Monitor className="h-3.5 w-3.5" />
+                  Демонстрация экрана · {screenShare.identity.startsWith('teacher-') ? 'Учитель' : 'Ученик'}
+                  {screenShare.isLocal && ' (вы)'}
+                </div>
+                <ScreenShareView track={screenShare.screenTrack} />
+              </div>
+            )}
           </div>
 
           {/* Панель управления учителя */}
@@ -360,8 +369,8 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
               <span className="text-sm font-semibold">Чат урока</span>
               {role && (
                 <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <span className={cn('h-1.5 w-1.5 rounded-full', presence[role === 'teacher' ? 'student' : 'teacher'].inChat ? 'bg-emerald-500' : 'bg-muted-foreground/30')} />
-                  {presence[role === 'teacher' ? 'student' : 'teacher'].inChat ? 'собеседник в чате' : 'собеседник не в чате'}
+                  <span className={cn('h-1.5 w-1.5 rounded-full', (role === 'teacher' ? studentState : teacherState).online ? 'bg-emerald-500' : 'bg-muted-foreground/30')} />
+                  {(role === 'teacher' ? studentState : teacherState).online ? 'собеседник на связи' : 'собеседник не в сети'}
                 </span>
               )}
             </div>
@@ -380,8 +389,6 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && sendChat()}
-                onFocus={() => setChatFocused(true)}
-                onBlur={() => setChatFocused(false)}
                 placeholder="Сообщение…"
                 className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
               />
@@ -392,6 +399,18 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
       </div>
     </div>
   );
+}
+
+/** Крупный показ демонстрации экрана (contain, без зеркалирования). */
+function ScreenShareView({ track }: { track: Track | null }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !track) return;
+    track.attach(el);
+    return () => { track.detach(el); };
+  }, [track]);
+  return <video ref={ref} autoPlay playsInline className="min-h-0 flex-1 bg-black object-contain" />;
 }
 
 /** Качество связи с комнатой урока: цвет и подпись по задержке round-trip. */
