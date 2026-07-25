@@ -37,6 +37,11 @@ async function loadLessonParticipants(lessonId: string) {
   });
 }
 
+/** Роль текущего пользователя в уроке — для гейта (ученик не входит без подготовки). */
+function viewerRole(req: Request, lesson: { teacher: { userId: string }; child: { parentId: string } }): 'teacher' | 'student' {
+  return isAdmin(req) || lesson.teacher.userId === req.user!.id ? 'teacher' : 'student';
+}
+
 function assertParticipant(
   req: Request,
   lesson: { teacher: { userId: string }; child: { parentId: string } },
@@ -47,18 +52,41 @@ function assertParticipant(
 }
 
 // === Список опубликованных шаблонов для подготовки урока (преподаватель) ===
-academyLessonInstancesRouter.get('/published-templates', requireRole('TEACHER', 'METHODIST'), async (_req: Request, res: Response, next: NextFunction) => {
+// ?lessonId — если у урока задана тема, показываем прикреплённые к ней уроки первыми.
+academyLessonInstancesRouter.get('/published-templates', requireRole('TEACHER', 'METHODIST'), async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const lessonId = typeof req.query.lessonId === 'string' ? req.query.lessonId : undefined;
+    let lessonTopicId: string | null = null;
+    if (lessonId) {
+      const lesson = await prisma.lesson.findUnique({ where: { id: lessonId }, select: { topicId: true } });
+      lessonTopicId = lesson?.topicId ?? null;
+    }
+
     const templates = await prisma.lessonTemplate.findMany({
       where: { status: 'published', latestVersion: { gt: 0 } },
       orderBy: { updatedAt: 'desc' },
       include: { versions: { orderBy: { version: 'desc' }, take: 1, select: { id: true, version: true } } },
     });
-    res.json({
-      items: templates
-        .filter((t) => t.versions.length > 0)
-        .map((t) => ({ templateId: t.id, title: t.title, versionId: t.versions[0].id, version: t.versions[0].version })),
-    });
+    const published = templates.filter((t) => t.versions.length > 0);
+    // Названия тем для группировки/подписи.
+    const topicIds = [...new Set(published.map((t) => t.topicId).filter((id): id is string => Boolean(id)))];
+    const topics = topicIds.length
+      ? await prisma.topic.findMany({ where: { id: { in: topicIds } }, select: { id: true, title: true } })
+      : [];
+    const topicTitle = new Map(topics.map((t) => [t.id, t.title]));
+
+    const items = published.map((t) => ({
+      templateId: t.id,
+      title: t.title,
+      versionId: t.versions[0].id,
+      version: t.versions[0].version,
+      topicId: t.topicId,
+      topicTitle: t.topicId ? topicTitle.get(t.topicId) ?? null : null,
+      matchesLessonTopic: Boolean(lessonTopicId && t.topicId === lessonTopicId),
+    }));
+    // Уроки темы этого занятия — вперёд.
+    items.sort((a, b) => Number(b.matchesLessonTopic) - Number(a.matchesLessonTopic));
+    res.json({ items, lessonTopicId });
   } catch (err) {
     next(err);
   }
@@ -115,12 +143,15 @@ academyLessonInstancesRouter.get('/by-lesson/:lessonId', async (req: Request, re
     const lesson = await loadLessonParticipants(req.params.lessonId);
     if (!lesson) throw new HttpError(404, 'LESSON_NOT_FOUND', 'Урок не найден');
     assertParticipant(req, lesson);
+    const role = viewerRole(req, lesson);
     const instance = await prisma.lessonInstance.findUnique({
       where: { lessonId: req.params.lessonId },
       include: { version: { include: { template: { select: { title: true } } } } },
     });
-    if (!instance) return res.json({ instance: null });
+    if (!instance) return res.json({ instance: null, viewerRole: role, lessonStatus: lesson.status });
     res.json({
+      viewerRole: role,
+      lessonStatus: lesson.status,
       instance: {
         id: instance.id,
         title: instance.version.template.title,

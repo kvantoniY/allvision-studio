@@ -260,6 +260,47 @@ academyBookingRouter.post('/lessons/:id/cancel', requireAuth, async (req: Reques
   }
 });
 
+// === Перенос урока на другое время (преподаватель или родитель) ===
+const rescheduleSchema = z.object({ startsAt: z.string().datetime() });
+// Переносить можно только до начала занятия и до его завершения/отмены.
+const RESCHEDULABLE = new Set(['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY']);
+
+academyBookingRouter.post('/lessons/:id/reschedule', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { startsAt } = rescheduleSchema.parse(req.body ?? {});
+    const nextStart = new Date(startsAt);
+    if (Number.isNaN(nextStart.getTime()) || nextStart <= new Date()) {
+      throw new HttpError(400, 'RESCHEDULE_IN_PAST', 'Новое время должно быть в будущем');
+    }
+    const { lesson, by } = await loadLessonForActor(req.params.id, req.user!.id);
+    if (!RESCHEDULABLE.has(lesson.status)) {
+      throw new HttpError(400, 'RESCHEDULE_NOT_ALLOWED', 'Этот урок уже нельзя перенести');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Освобождаем старый слот и создаём новый занятый слот у того же преподавателя.
+      await tx.teacherSlot.update({ where: { id: lesson.slotId }, data: { isBooked: false } });
+      const newSlot = await tx.teacherSlot.create({
+        data: { teacherId: lesson.teacherId, startsAt: nextStart, durationMin: lesson.durationMin, isBooked: true },
+      });
+      const result = await tx.lesson.update({
+        where: { id: lesson.id },
+        data: { slotId: newSlot.id, startsAt: nextStart },
+      });
+      await addLessonSystemMessage(tx, {
+        parentId: lesson.child.parentId,
+        teacherId: lesson.teacherId,
+        childId: lesson.childId,
+        body: `${by === 'teacher' ? 'Преподаватель' : 'Родитель'} перенёс занятие на ${nextStart.toLocaleString('ru-RU')}.`,
+      });
+      return result;
+    });
+    res.json({ ok: true, startsAt: updated.startsAt.toISOString() });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // === Преподаватель ===
 
 academyBookingRouter.get('/teacher/me', requireAuth, requireRole('TEACHER'), async (req: Request, res: Response, next: NextFunction) => {

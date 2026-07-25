@@ -7,6 +7,9 @@ export type PublishedTemplateOption = {
   title: string;
   versionId: string;
   version: number;
+  topicId: string | null;
+  topicTitle: string | null;
+  matchesLessonTopic: boolean;
 };
 
 export type LessonInstanceSummary = {
@@ -14,6 +17,12 @@ export type LessonInstanceSummary = {
   title: string;
   version: number;
   overrides: { hiddenElementIds?: string[] };
+};
+
+export type LessonInstanceByLesson = {
+  instance: LessonInstanceSummary | null;
+  viewerRole: 'teacher' | 'student';
+  lessonStatus: string;
 };
 
 export type FullSceneGenerationStatus = {
@@ -57,10 +66,10 @@ export const academyLessonInstancesApi = createApi({
   baseQuery: createBaseQueryWithReauth('/api/academy/lesson-instances'),
   tagTypes: ['Instance', 'InstanceScenes', 'InstanceGenerations'],
   endpoints: (build) => ({
-    getPublishedTemplates: build.query<{ items: PublishedTemplateOption[] }, void>({
-      query: () => ({ url: '/published-templates' }),
+    getPublishedTemplates: build.query<{ items: PublishedTemplateOption[]; lessonTopicId: string | null }, { lessonId?: string } | void>({
+      query: (arg) => ({ url: arg?.lessonId ? `/published-templates?lessonId=${arg.lessonId}` : '/published-templates' }),
     }),
-    getInstanceByLesson: build.query<{ instance: LessonInstanceSummary | null }, string>({
+    getInstanceByLesson: build.query<LessonInstanceByLesson, string>({
       query: (lessonId) => ({ url: `/by-lesson/${lessonId}` }),
       providesTags: (_r, _e, lessonId) => [{ type: 'Instance', id: lessonId }],
     }),

@@ -18,12 +18,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import {
+  useCancelLessonMutation,
   useCreateSlotMutation,
   useCreateSlotsBulkMutation,
   useDeleteSlotMutation,
   useGetTeacherEarningsQuery,
   useGetTeacherLessonsQuery,
   useGetTeacherSlotsQuery,
+  useRescheduleLessonMutation,
   useSetLessonStatusMutation,
 } from '@/store/api/academy-booking-api';
 import {
@@ -328,6 +330,56 @@ function SlotsPanel() {
   );
 }
 
+const RESCHEDULABLE_STATUSES = ['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY'];
+
+/** Перенос и отмена урока преподавателем. */
+function LessonManage({ lessonId, startsAt }: { lessonId: string; startsAt: string }) {
+  const [reschedule, { isLoading: moving }] = useRescheduleLessonMutation();
+  const [cancel, { isLoading: cancelling }] = useCancelLessonMutation();
+  const [open, setOpen] = useState(false);
+  const [when, setWhen] = useState('');
+
+  const doMove = async () => {
+    if (!when) return;
+    try {
+      await reschedule({ id: lessonId, startsAt: new Date(when).toISOString() }).unwrap();
+      toast({ title: 'Урок перенесён' });
+      setOpen(false);
+      setWhen('');
+    } catch (err) {
+      toast({ title: 'Не удалось перенести', description: apiErr(err), variant: 'destructive' });
+    }
+  };
+
+  const doCancel = async () => {
+    if (!window.confirm('Отменить урок? Занятие вернётся родителю на баланс, если до начала ≥ 8 часов.')) return;
+    try {
+      const res = await cancel({ id: lessonId }).unwrap();
+      toast({ title: res.refunded ? 'Урок отменён, занятие возвращено' : 'Урок отменён' });
+    } catch (err) {
+      toast({ title: 'Не удалось отменить', description: apiErr(err), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setOpen((v) => !v); setWhen(startsAt.slice(0, 16)); }}>Перенести</Button>
+        <Button size="sm" variant="outline" className="h-7 text-xs text-destructive hover:text-destructive" disabled={cancelling} onClick={doCancel}>Отменить</Button>
+      </div>
+      {open && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 p-2">
+          <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="h-8 w-52" />
+          <Button size="sm" className="h-8" disabled={moving || !when} onClick={doMove}>
+            {moving && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />} Перенести
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8" onClick={() => setOpen(false)}>Отмена</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LessonsPanel() {
   const { data, isLoading } = useGetTeacherLessonsQuery();
   const [setStatus] = useSetLessonStatusMutation();
@@ -370,6 +422,7 @@ function LessonsPanel() {
                     ))}
                   </div>
                 )}
+                {RESCHEDULABLE_STATUSES.includes(l.status) && <LessonManage lessonId={l.id} startsAt={l.startsAt} />}
                 {['COMPLETED', 'REPORT_SENT'].includes(l.status) && <LessonReportPanel lessonId={l.id} childId={l.childId} />}
               </div>
             ))}</div>

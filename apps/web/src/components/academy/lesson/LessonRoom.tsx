@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
-  ChevronLeft, ChevronRight, Eraser, Gift, Loader2, LogOut, Maximize2, Mic, MicOff,
+  CheckCircle2, ChevronLeft, ChevronRight, Eraser, Gift, Loader2, LogOut, Maximize2, Mic, MicOff,
   Minimize2, Monitor, MonitorOff, Pencil, RefreshCw, Send, Settings, Unlock, Video, VideoOff,
 } from 'lucide-react';
 import {
@@ -27,15 +28,25 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
 import { useGetInstanceByLessonQuery, useGetInstanceScenesQuery } from '@/store/api/academy-lesson-instances-api';
+import { useSetLessonStatusMutation } from '@/store/api/academy-booking-api';
+import { toast } from '@/hooks/use-toast';
 
 type UseLessonVideo = ReturnType<typeof useLessonVideo>;
 
 export function LessonRoom({ lessonId }: { lessonId: string }) {
-  const instanceQuery = useGetInstanceByLessonQuery(lessonId);
+  // Пока урок не подготовлен — опрашиваем, чтобы ученик автоматически вошёл, как только
+  // преподаватель выберет шаблон (не нужно обновлять страницу).
+  const instanceQuery = useGetInstanceByLessonQuery(lessonId, {
+    pollingInterval: 5000,
+    skipPollingIfUnfocused: true,
+  });
   const instanceId = instanceQuery.data?.instance?.id;
   const scenesQuery = useGetInstanceScenesQuery(instanceId ?? '', { skip: !instanceId });
 
   const video = useLessonVideo(lessonId);
+  const router = useRouter();
+  const [setLessonStatus] = useSetLessonStatusMutation();
+  const [ending, setEnding] = useState(false);
 
   const [role, setRole] = useState<LessonRole | null>(null);
   const [status, setStatus] = useState<'connecting' | 'open' | 'closed'>('connecting');
@@ -205,15 +216,42 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     void video.retry(prefs);
   };
 
+  // Преподаватель завершает урок → статус COMPLETED (начисление доступно), затем в кабинет к отчёту.
+  const endLesson = async () => {
+    if (!window.confirm('Завершить урок? После этого можно заполнить отчёт в кабинете.')) return;
+    setEnding(true);
+    try {
+      await setLessonStatus({ id: lessonId, status: 'COMPLETED' }).unwrap();
+      toast({ title: 'Урок завершён', description: 'Заполните отчёт в кабинете преподавателя.' });
+      router.push('/teacher');
+    } catch (err) {
+      toast({ title: 'Не удалось завершить', description: (err as { data?: { error?: { message?: string } } })?.data?.error?.message, variant: 'destructive' });
+      setEnding(false);
+    }
+  };
+
   if (instanceQuery.isLoading || video.enabled === null) {
     return <div className="flex h-dvh items-center justify-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
   }
+  // Урок не подготовлен: ученик ждёт (автовход при готовности), преподаватель идёт готовить.
   if (!instanceQuery.data?.instance) {
+    const asTeacher = instanceQuery.data?.viewerRole === 'teacher';
     return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-3 bg-background px-6 text-center">
-        <p className="text-lg font-semibold">Урок ещё не подготовлен</p>
-        <p className="max-w-sm text-sm text-muted-foreground">Преподаватель должен выбрать шаблон урока в своём кабинете, прежде чем начинать занятие.</p>
-        <Link href="/"><Button variant="outline">На главную</Button></Link>
+      <div className="academy-theme flex h-dvh flex-col items-center justify-center gap-3 bg-background px-6 text-center text-foreground">
+        {asTeacher ? (
+          <>
+            <p className="text-lg font-semibold">Урок ещё не подготовлен</p>
+            <p className="max-w-sm text-sm text-muted-foreground">Выберите шаблон урока в кабинете преподавателя, затем начните занятие.</p>
+            <Link href="/teacher"><Button>Кабинет преподавателя</Button></Link>
+          </>
+        ) : (
+          <>
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-lg font-semibold">Ждём преподавателя</p>
+            <p className="max-w-sm text-sm text-muted-foreground">Преподаватель готовит урок. Как только всё будет готово, вы войдёте автоматически — страницу можно не обновлять.</p>
+            <Link href="/lessons"><Button variant="outline">К моим занятиям</Button></Link>
+          </>
+        )}
       </div>
     );
   }
@@ -236,6 +274,11 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
         <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
           <PresenceChip label="Учитель" state={presence.teacher} />
           <PresenceChip label="Ученик" state={presence.student} />
+          {isTeacher && (
+            <Button size="sm" variant="outline" className="h-8" onClick={endLesson} disabled={ending}>
+              {ending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />} Завершить урок
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={toggleFullscreen} aria-label="Полный экран">
             {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>

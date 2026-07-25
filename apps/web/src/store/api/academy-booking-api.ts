@@ -47,6 +47,10 @@ export const academyBookingApi = createApi({
       query: ({ id, reason }) => ({ url: `/lessons/${id}/cancel`, method: 'POST', body: { reason } }),
       invalidatesTags: ['Balance', 'Lessons', 'Teachers'],
     }),
+    rescheduleLesson: build.mutation<{ ok: true; startsAt: string }, { id: string; startsAt: string }>({
+      query: ({ id, startsAt }) => ({ url: `/lessons/${id}/reschedule`, method: 'POST', body: { startsAt } }),
+      invalidatesTags: ['Lessons', 'Slots', 'Teachers'],
+    }),
     // Teacher
     getTeacherSlots: build.query<{ slots: TeacherSlotDto[] }, void>({
       query: () => ({ url: '/teacher/slots' }),
@@ -88,6 +92,7 @@ export const {
   useBookLessonMutation,
   useGetLessonsQuery,
   useCancelLessonMutation,
+  useRescheduleLessonMutation,
   useGetTeacherSlotsQuery,
   useCreateSlotMutation,
   useCreateSlotsBulkMutation,

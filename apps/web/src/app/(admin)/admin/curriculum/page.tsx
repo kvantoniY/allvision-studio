@@ -1,13 +1,15 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronRight, GraduationCap, Loader2, Plus, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { BookOpen, ChevronRight, ExternalLink, GraduationCap, Loader2, Plus, Trash2 } from 'lucide-react';
 import { TOPIC_DURATIONS } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { useListTemplatesQuery, useUpdateTemplateMutation } from '@/store/api/academy-lesson-templates-api';
 import {
   useCreateCourseMutation,
   useCreateModuleMutation,
@@ -245,6 +247,61 @@ function CoursesColumn({
   );
 }
 
+// === Уроки, прикреплённые к теме ===
+function TopicLessons({ topicId }: { topicId: string }) {
+  const { data } = useListTemplatesQuery();
+  const [updateTemplate, { isLoading }] = useUpdateTemplateMutation();
+  const all = data?.items ?? [];
+  const attached = all.filter((t) => t.topicId === topicId);
+  // Прикреплять можно только опубликованные уроки, ещё не привязанные к этой теме.
+  const available = all.filter((t) => t.status === 'published' && t.topicId !== topicId);
+
+  const attach = async (id: string) => {
+    if (!id) return;
+    await updateTemplate({ id, body: { topicId } }).unwrap().catch((err) => toast({ title: 'Ошибка', description: apiError(err), variant: 'destructive' }));
+  };
+  const detach = async (id: string) => {
+    await updateTemplate({ id, body: { topicId: null } }).unwrap().catch((err) => toast({ title: 'Ошибка', description: apiError(err), variant: 'destructive' }));
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1.5"><BookOpen className="h-3.5 w-3.5" /> Уроки темы</Label>
+      {attached.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Пока нет прикреплённых уроков. Уроки создаются в конструкторе и публикуются.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {attached.map((t) => (
+            <div key={t.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5">
+              <span className="min-w-0 flex-1 truncate text-sm">{t.title}</span>
+              <span className={cn('shrink-0 rounded-full px-1.5 py-0.5 text-[10px]', t.status === 'published' ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground')}>
+                {t.status === 'published' ? 'опубликован' : 'черновик'}
+              </span>
+              <button type="button" aria-label="Открепить" className="shrink-0 text-muted-foreground hover:text-destructive" disabled={isLoading} onClick={() => detach(t.id)}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <select
+          value=""
+          onChange={(e) => { if (e.target.value) void attach(e.target.value); }}
+          disabled={isLoading || available.length === 0}
+          className="h-8 flex-1 rounded-md border border-border bg-background px-2 text-sm"
+        >
+          <option value="">{available.length === 0 ? 'Нет свободных опубликованных уроков' : '+ прикрепить урок…'}</option>
+          {available.map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+        </select>
+        <Link href="/admin/constructor" className="shrink-0 text-xs text-primary hover:underline inline-flex items-center gap-1">
+          Конструктор <ExternalLink className="h-3 w-3" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 // === Тема (редактор) ===
 function TopicRow({ topic, subjectSkills, courseTopics }: { topic: CurriculumTopic; subjectSkills: CurriculumSkill[]; courseTopics: CurriculumTopic[] }) {
   const [updateTopic, { isLoading }] = useUpdateTopicMutation();
@@ -371,6 +428,9 @@ function TopicRow({ topic, subjectSkills, courseTopics }: { topic: CurriculumTop
               ))}
               {courseTopics.length <= 1 && <span className="text-xs text-muted-foreground">Другие темы курса появятся здесь.</span>}
             </div>
+          </div>
+          <div className="border-t border-border pt-3">
+            <TopicLessons topicId={topic.id} />
           </div>
           <Button size="sm" disabled={isLoading} onClick={save}>
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Сохранить тему

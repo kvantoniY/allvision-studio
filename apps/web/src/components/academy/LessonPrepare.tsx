@@ -7,6 +7,7 @@ import type { AcademyScene } from '@allvision/shared';
 import { AcademyScenePlayer } from '@/components/academy/scene-player';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import { SceneGenerationsPanel } from '@/components/academy/SceneGenerationsPanel';
 import {
   useCreateInstanceMutation,
@@ -21,9 +22,10 @@ function apiErr(err: unknown): string {
 }
 
 function PrepareModal({ lessonId, onClose }: { lessonId: string; onClose: () => void }) {
-  const { data, isLoading } = useGetPublishedTemplatesQuery();
+  const { data, isLoading } = useGetPublishedTemplatesQuery({ lessonId });
   const [createInstance, { isLoading: creating }] = useCreateInstanceMutation();
   const items = data?.items ?? [];
+  const hasTopic = Boolean(data?.lessonTopicId);
 
   const pick = async (templateVersionId: string) => {
     try {
@@ -48,16 +50,25 @@ function PrepareModal({ lessonId, onClose }: { lessonId: string; onClose: () => 
           <p className="py-6 text-center text-sm text-muted-foreground">Нет опубликованных шаблонов. Методист публикует их в конструкторе.</p>
         ) : (
           <div className="space-y-2">
+            {hasTopic && (
+              <p className="text-xs text-muted-foreground">Уроки темы этого занятия показаны первыми и отмечены.</p>
+            )}
             {items.map((t) => (
               <button
                 key={t.versionId}
                 type="button"
                 disabled={creating}
                 onClick={() => pick(t.versionId)}
-                className="flex w-full items-center justify-between rounded-xl border border-border p-3 text-left transition hover:border-primary"
+                className={cn('flex w-full items-center justify-between gap-2 rounded-xl border p-3 text-left transition hover:border-primary', t.matchesLessonTopic ? 'border-primary/50 bg-accent/40' : 'border-border')}
               >
-                <span className="font-medium">{t.title}</span>
-                <span className="text-xs text-muted-foreground">v{t.version}</span>
+                <span className="min-w-0">
+                  <span className="block truncate font-medium">{t.title}</span>
+                  {t.topicTitle && <span className="block truncate text-[11px] text-muted-foreground">Тема: {t.topicTitle}</span>}
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                  {t.matchesLessonTopic && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">тема урока</span>}
+                  v{t.version}
+                </span>
               </button>
             ))}
           </div>
