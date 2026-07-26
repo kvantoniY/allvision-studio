@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { CalendarClock, Check, ChevronLeft, ChevronRight, Clock, Loader2, Video, Wallet, X } from 'lucide-react';
+import Image from 'next/image';
+import { BookOpen, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, GraduationCap, Loader2, Sparkles, Video, Wallet, X } from 'lucide-react';
 import { LESSON_STATUS_LABELS, type LessonDto, type LessonPackageOption } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -17,9 +18,17 @@ import {
   useGetBalanceQuery,
   useGetLessonsQuery,
   useGetPackagesQuery,
+  useGetTeacherProfileQuery,
   useGetTeachersQuery,
   usePurchasePackageMutation,
 } from '@/store/api/academy-booking-api';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? '';
+
+function photoSrc(url: string | null): string | null {
+  if (!url) return null;
+  return url.startsWith('http') ? url : `${API_BASE}${url}`;
+}
 
 function apiErr(err: unknown): string {
   const d = (err as { data?: { error?: { message?: string } } })?.data;
@@ -143,13 +152,30 @@ function StepLabel({ n, text }: { n: number; text: string }) {
   );
 }
 
-function BookingSection() {
+function TeacherAvatar({ name, photoUrl, size = 40 }: { name: string; photoUrl: string | null; size?: number }) {
+  const src = photoSrc(photoUrl);
+  return (
+    <span
+      className="relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-accent font-semibold text-accent-foreground"
+      style={{ width: size, height: size }}
+    >
+      {src ? (
+        <Image src={src} alt={name} fill className="object-cover" unoptimized sizes={`${size}px`} />
+      ) : (
+        name.slice(0, 1).toUpperCase()
+      )}
+    </span>
+  );
+}
+
+function BookingSection({ onBuy }: { onBuy: () => void }) {
   const children = useListChildrenQuery();
   const teachers = useGetTeachersQuery();
   const balance = useGetBalanceQuery();
   const [book, { isLoading }] = useBookLessonMutation();
   const [childId, setChildId] = useState('');
   const [teacherId, setTeacherId] = useState('');
+  const [courseId, setCourseId] = useState('');
   const [selectedDay, setSelectedDay] = useState('');
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 
@@ -158,6 +184,8 @@ function BookingSection() {
   const activeChild = childId || kids[0]?.id || '';
   const child = kids.find((k) => k.id === activeChild);
   const activeTeacher = list.find((t) => t.teacherId === teacherId) ?? list[0];
+  const courses = activeTeacher?.courses ?? [];
+  const activeCourse = courses.find((c) => c.id === courseId) ?? courses[0];
 
   // Свободные слоты выбранного преподавателя, разложенные по дням.
   const slotsByDay = new Map<string, typeof list[number]['slots']>();
@@ -178,7 +206,10 @@ function BookingSection() {
     }
     try {
       await book({ childId: activeChild, slotId }).unwrap();
-      toast({ title: 'Урок забронирован', description: 'Найдите его в списке «Мои уроки» ниже.' });
+      toast({
+        title: 'Урок забронирован',
+        description: activeCourse ? `Курс «${activeCourse.title}». Найдите урок во вкладке «Мои занятия».` : 'Найдите его во вкладке «Мои занятия».',
+      });
       setSelectedDay('');
     } catch (err) {
       toast({
@@ -213,197 +244,251 @@ function BookingSection() {
   }
 
   const today = dayKey(new Date());
+  const blocked = child && !child.readyForLessons;
+  let step = 0;
+  const nextStep = () => (step += 1);
 
   return (
-    <Card className="border-border bg-card shadow-sm">
-      <CardContent className="space-y-6 p-5">
-        <h2 className="text-lg font-semibold">Записаться на урок</h2>
-
-        {kids.length > 1 && (
-          <div>
-            <StepLabel n={1} text="Кто занимается" />
-            <div className="flex flex-wrap gap-1.5">
-              {kids.map((k) => (
-                <button
-                  key={k.id}
-                  type="button"
-                  onClick={() => setChildId(k.id)}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-sm transition',
-                    k.id === activeChild ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:border-primary/40',
-                  )}
-                >
-                  {k.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {child && !child.readyForLessons && (
-          <div className="rounded-xl border border-primary/40 bg-accent/40 p-4">
-            <p className="text-sm font-semibold">Перед записью подготовьте профиль {child.name}</p>
-            <ul className="mt-2 space-y-1.5 text-sm">
-              <li className="flex items-center gap-2">
-                {child.photoConsentsComplete
-                  ? <Check className="h-4 w-4 shrink-0 text-primary" />
-                  : <span className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground" />}
-                <span className={cn(!child.photoConsentsComplete && 'text-muted-foreground')}>Приняты все согласия</span>
-              </li>
-              <li className="flex items-center gap-2">
-                {child.characterStatus === 'APPROVED'
-                  ? <Check className="h-4 w-4 shrink-0 text-primary" />
-                  : <span className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground" />}
-                <span className={cn(child.characterStatus !== 'APPROVED' && 'text-muted-foreground')}>
-                  Создан и утверждён AI-персонаж
-                  {child.characterStatus === 'GENERATING' && ' (генерация идёт)'}
-                  {child.characterStatus === 'READY' && ' — осталось утвердить'}
-                  {child.characterStatus === 'FAILED' && ' — генерация не удалась'}
-                </span>
-              </li>
-            </ul>
-            <Link href="/family" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
-              Перейти в раздел «Семья» →
-            </Link>
-          </div>
-        )}
-
-        <div className={cn(child && !child.readyForLessons && 'pointer-events-none opacity-50')}>
-          <StepLabel n={kids.length > 1 ? 2 : 1} text="Преподаватель" />
-          <div className="grid gap-2 sm:grid-cols-2">
-            {list.map((t) => {
-              const selected = t.teacherId === activeTeacher?.teacherId;
-              return (
-                <button
-                  key={t.teacherId}
-                  type="button"
-                  onClick={() => { setTeacherId(t.teacherId); setSelectedDay(''); }}
-                  className={cn(
-                    'rounded-xl border p-3 text-left transition',
-                    selected ? 'border-primary bg-accent/50' : 'border-border hover:border-primary/40',
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
-                      {t.name.slice(0, 1).toUpperCase()}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{t.name}</p>
-                      <p className="text-xs text-muted-foreground">{t.slots.length} свободных слотов</p>
-                    </div>
-                  </div>
-                  {t.bio && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{t.bio}</p>}
-                  {t.subjects.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {t.subjects.slice(0, 3).map((s) => (
-                        <span key={s} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{s}</span>
-                      ))}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className={cn(child && !child.readyForLessons && 'pointer-events-none opacity-50')}>
-          <StepLabel n={kids.length > 1 ? 3 : 2} text="Свободная дата" />
-          <div className="rounded-xl border border-border p-3">
-            <div className="mb-3 flex items-center justify-between">
-              <button
-                type="button"
-                aria-label="Предыдущий месяц"
-                onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
-                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <span className="text-sm font-medium capitalize">{monthTitle(month)}</span>
-              <button
-                type="button"
-                aria-label="Следующий месяц"
-                onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
-                className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground">
-              {WEEKDAYS.map((d) => <span key={d}>{d}</span>)}
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {monthGrid(month).map((date) => {
-                const key = dayKey(date);
-                const inMonth = date.getMonth() === month.getMonth();
-                const count = slotsByDay.get(key)?.length ?? 0;
-                const selected = key === selectedDay;
-                return (
+    <div className="space-y-4">
+      <BalanceCard onBuy={onBuy} />
+      <Card className="border-border bg-card shadow-sm">
+        <CardContent className="space-y-6 p-5">
+          {kids.length > 1 && (
+            <div>
+              <StepLabel n={nextStep()} text="Кто занимается" />
+              <div className="flex flex-wrap gap-1.5">
+                {kids.map((k) => (
                   <button
-                    key={key}
+                    key={k.id}
                     type="button"
-                    disabled={count === 0}
-                    onClick={() => setSelectedDay(key)}
+                    onClick={() => setChildId(k.id)}
                     className={cn(
-                      'relative flex h-10 flex-col items-center justify-center rounded-lg text-sm transition',
-                      !inMonth && 'opacity-40',
-                      count === 0 && 'cursor-default text-muted-foreground',
-                      count > 0 && !selected && 'border border-primary/40 font-medium text-primary hover:bg-accent',
-                      selected && 'bg-primary font-semibold text-primary-foreground',
-                      key === today && !selected && 'ring-1 ring-inset ring-border',
+                      'rounded-full border px-3 py-1.5 text-sm transition',
+                      k.id === activeChild ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:border-primary/40',
                     )}
                   >
-                    {date.getDate()}
-                    {count > 0 && !selected && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-primary" />}
+                    {k.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {blocked && (
+            <div className="rounded-xl border border-primary/40 bg-accent/40 p-4">
+              <p className="text-sm font-semibold">Перед записью подготовьте профиль {child?.name}</p>
+              <ul className="mt-2 space-y-1.5 text-sm">
+                <li className="flex items-center gap-2">
+                  {child?.photoConsentsComplete
+                    ? <Check className="h-4 w-4 shrink-0 text-primary" />
+                    : <span className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground" />}
+                  <span className={cn(!child?.photoConsentsComplete && 'text-muted-foreground')}>Приняты все согласия</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  {child?.characterStatus === 'APPROVED'
+                    ? <Check className="h-4 w-4 shrink-0 text-primary" />
+                    : <span className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground" />}
+                  <span className={cn(child?.characterStatus !== 'APPROVED' && 'text-muted-foreground')}>
+                    Создан и утверждён AI-персонаж
+                    {child?.characterStatus === 'GENERATING' && ' (генерация идёт)'}
+                    {child?.characterStatus === 'READY' && ' — осталось утвердить'}
+                    {child?.characterStatus === 'FAILED' && ' — генерация не удалась'}
+                  </span>
+                </li>
+              </ul>
+              <Link href="/family" className="mt-3 inline-block text-sm font-medium text-primary hover:underline">
+                Перейти в раздел «Семья» →
+              </Link>
+            </div>
+          )}
+
+          <div className={cn(blocked && 'pointer-events-none opacity-50')}>
+            <StepLabel n={nextStep()} text="Преподаватель" />
+            <div className="grid gap-2 sm:grid-cols-2">
+              {list.map((t) => {
+                const selected = t.teacherId === activeTeacher?.teacherId;
+                return (
+                  <button
+                    key={t.teacherId}
+                    type="button"
+                    onClick={() => { setTeacherId(t.teacherId); setCourseId(''); setSelectedDay(''); }}
+                    className={cn(
+                      'rounded-xl border p-3 text-left transition',
+                      selected ? 'border-primary bg-accent/50' : 'border-border hover:border-primary/40',
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <TeacherAvatar name={t.name} photoUrl={t.photoUrl} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">{t.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          Провёл уроков: {t.lessonsCount} · {t.slots.length} слотов
+                        </p>
+                      </div>
+                    </div>
+                    {t.bio && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{t.bio}</p>}
+                    {t.subjects.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {t.subjects.slice(0, 3).map((s) => (
+                          <span key={s} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{s}</span>
+                        ))}
+                      </div>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
-        </div>
 
-        {selectedDay && (
-          <div>
-            <StepLabel n={kids.length > 1 ? 4 : 3} text="Время занятия" />
-            {daySlots.length === 0 ? (
-              <p className="text-sm text-muted-foreground">На этот день слотов не осталось.</p>
-            ) : (
+          {courses.length > 0 && (
+            <div className={cn(blocked && 'pointer-events-none opacity-50')}>
+              <StepLabel n={nextStep()} text="Курс" />
               <div className="flex flex-wrap gap-1.5">
-                {daySlots.map((s) => {
-                  const credits = availableByDuration.get(s.durationMin) ?? 0;
+                {courses.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCourseId(c.id)}
+                    className={cn(
+                      'rounded-lg border px-3 py-1.5 text-left text-sm transition',
+                      c.id === activeCourse?.id ? 'border-primary bg-accent/60' : 'border-border text-muted-foreground hover:border-primary/40',
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <BookOpen className="h-3.5 w-3.5" /> {c.title}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">{c.subjectTitle}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className={cn(blocked && 'pointer-events-none opacity-50')}>
+            <StepLabel n={nextStep()} text="Свободная дата" />
+            <div className="rounded-xl border border-border p-3">
+              <div className="mb-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  aria-label="Предыдущий месяц"
+                  onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                  className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-sm font-medium capitalize">{monthTitle(month)}</span>
+                <button
+                  type="button"
+                  aria-label="Следующий месяц"
+                  onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                  className="rounded-lg p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground">
+                {WEEKDAYS.map((d) => <span key={d}>{d}</span>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {monthGrid(month).map((date) => {
+                  const key = dayKey(date);
+                  const inMonth = date.getMonth() === month.getMonth();
+                  const count = slotsByDay.get(key)?.length ?? 0;
+                  const selected = key === selectedDay;
                   return (
                     <button
-                      key={s.id}
+                      key={key}
                       type="button"
-                      disabled={isLoading}
-                      onClick={() => doBook(s.id, s.durationMin)}
-                      title={credits > 0 ? undefined : `Нет оплаченных занятий на ${s.durationMin} мин`}
+                      disabled={count === 0}
+                      onClick={() => setSelectedDay(key)}
                       className={cn(
-                        'inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition disabled:opacity-50',
-                        credits > 0 ? 'border-primary/40 text-primary hover:bg-accent' : 'border-border text-muted-foreground hover:border-primary/40',
+                        'relative flex h-10 flex-col items-center justify-center rounded-lg text-sm transition',
+                        !inMonth && 'opacity-40',
+                        count === 0 && 'cursor-default text-muted-foreground',
+                        count > 0 && !selected && 'border border-primary/40 font-medium text-primary hover:bg-accent',
+                        selected && 'bg-primary font-semibold text-primary-foreground',
+                        key === today && !selected && 'ring-1 ring-inset ring-border',
                       )}
                     >
-                      <Clock className="h-3.5 w-3.5" />
-                      {new Date(s.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
-                      <span className="text-xs opacity-70">· {s.durationMin} мин</span>
+                      {date.getDate()}
+                      {count > 0 && !selected && <span className="absolute bottom-1 h-1 w-1 rounded-full bg-primary" />}
                     </button>
                   );
                 })}
               </div>
-            )}
-            <p className="mt-2 text-xs text-muted-foreground">
-              При записи списывается одно оплаченное занятие соответствующей длительности.
-            </p>
+            </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
+
+          {selectedDay && (
+            <div>
+              <StepLabel n={nextStep()} text="Время занятия" />
+              {daySlots.length === 0 ? (
+                <p className="text-sm text-muted-foreground">На этот день слотов не осталось.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {daySlots.map((s) => {
+                    const credits = availableByDuration.get(s.durationMin) ?? 0;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={isLoading}
+                        onClick={() => doBook(s.id, s.durationMin)}
+                        title={credits > 0 ? undefined : `Нет оплаченных занятий на ${s.durationMin} мин`}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition disabled:opacity-50',
+                          credits > 0 ? 'border-primary/40 text-primary hover:bg-accent' : 'border-border text-muted-foreground hover:border-primary/40',
+                        )}
+                      >
+                        <Clock className="h-3.5 w-3.5" />
+                        {new Date(s.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}
+                        <span className="text-xs opacity-70">· {s.durationMin} мин</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">
+                При записи списывается одно оплаченное занятие соответствующей длительности.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
-const CANCELLED_STATUSES = new Set(['CANCELLED_BY_PARENT', 'CANCELLED_BY_TEACHER', 'CANCELLED_BY_SYSTEM', 'NO_SHOW']);
+const CANCELLED_STATUSES = new Set(['CANCELLED_PARENT', 'CANCELLED_TEACHER', 'NO_SHOW']);
 const DONE_STATUSES = new Set(['COMPLETED', 'REPORT_SENT']);
 
-function LessonRow({ lesson, onCancel }: { lesson: LessonDto; onCancel?: (lesson: LessonDto) => void }) {
+function TeacherProfilePanel({ teacherId }: { teacherId: string }) {
+  const { data, isLoading } = useGetTeacherProfileQuery(teacherId);
+  if (isLoading) return <div className="mt-3 h-16 animate-pulse rounded-lg bg-muted" />;
+  if (!data) return null;
+  return (
+    <div className="mt-3 flex gap-3 rounded-xl border border-border bg-background/60 p-3">
+      <TeacherAvatar name={data.name} photoUrl={data.photoUrl} size={56} />
+      <div className="min-w-0 flex-1">
+        <p className="flex items-center gap-1.5 text-sm font-semibold">
+          <GraduationCap className="h-4 w-4 text-primary" /> {data.name}
+        </p>
+        <p className="text-xs text-muted-foreground">Провёл занятий: {data.lessonsCount}</p>
+        {data.subjects.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {data.subjects.map((s) => (
+              <span key={s} className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">{s}</span>
+            ))}
+          </div>
+        )}
+        {data.bio && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{data.bio}</p>}
+      </div>
+    </div>
+  );
+}
+
+function LessonRow({ lesson, ordinal, onCancel, expandable }: { lesson: LessonDto; ordinal?: number; onCancel?: (lesson: LessonDto) => void; expandable?: boolean }) {
+  const [open, setOpen] = useState(false);
   const live = lesson.status === 'IN_PROGRESS';
   const done = DONE_STATUSES.has(lesson.status);
   const cancelled = CANCELLED_STATUSES.has(lesson.status);
@@ -412,46 +497,62 @@ function LessonRow({ lesson, onCancel }: { lesson: LessonDto; onCancel?: (lesson
   const soon = !live && start.getTime() - Date.now() < 15 * 60 * 1000 && start.getTime() > Date.now() - 60 * 60 * 1000;
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3', live ? 'border-primary bg-accent/40' : 'border-border')}>
-      <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 truncate text-sm font-medium">
-          {lesson.childName}
-          {live && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground" /> Урок идёт
-            </span>
-          )}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {formatSlot(lesson.startsAt)} · {lesson.durationMin} мин · {lesson.teacherName}
-          {lesson.topicTitle ? ` · ${lesson.topicTitle}` : ''}
-        </p>
+    <div className={cn('rounded-xl border bg-card p-3', live ? 'border-primary bg-accent/40' : 'border-border')}>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 truncate text-sm font-medium">
+            {ordinal ? <span className="shrink-0 rounded-md bg-accent px-1.5 py-0.5 text-[11px] font-semibold text-accent-foreground">Занятие №{ordinal}</span> : null}
+            {lesson.childName}
+            {live && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground" /> Урок идёт
+              </span>
+            )}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {formatSlot(lesson.startsAt)} · {lesson.durationMin} мин · {lesson.teacherName}
+            {lesson.topicTitle ? ` · ${lesson.topicTitle}` : ''}
+          </p>
+        </div>
+
+        {done ? (
+          <span className="inline-flex items-center gap-1 text-sm text-primary">
+            <Check className="h-4 w-4" />
+            {lesson.status === 'REPORT_SENT' ? 'Отчёт готов' : 'Проведён'}
+          </span>
+        ) : cancelled ? (
+          <span className="text-sm text-muted-foreground">{LESSON_STATUS_LABELS[lesson.status]}</span>
+        ) : (
+          <Badge variant="outline">{LESSON_STATUS_LABELS[lesson.status]}</Badge>
+        )}
+
+        {(live || soon || lesson.status === 'READY') && (
+          <Link href={`/lesson/${lesson.id}`}>
+            <Button size="sm" variant={live ? 'default' : 'outline'}>
+              <Video className="mr-1 h-3.5 w-3.5" /> {live ? 'Присоединиться' : 'Войти'}
+            </Button>
+          </Link>
+        )}
+
+        {expandable && (
+          <button
+            type="button"
+            aria-label="Профиль преподавателя"
+            className="text-muted-foreground transition hover:text-foreground"
+            onClick={() => setOpen((v) => !v)}
+          >
+            <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
+          </button>
+        )}
+
+        {onCancel && ACTIVE_STATUSES.has(lesson.status) && !live && (
+          <button type="button" aria-label="Отменить" className="text-muted-foreground hover:text-destructive" onClick={() => onCancel(lesson)}>
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {done ? (
-        <span className="inline-flex items-center gap-1 text-sm text-primary">
-          <Check className="h-4 w-4" />
-          {lesson.status === 'REPORT_SENT' ? 'Отчёт готов' : 'Проведён'}
-        </span>
-      ) : cancelled ? (
-        <span className="text-sm text-muted-foreground">{LESSON_STATUS_LABELS[lesson.status]}</span>
-      ) : (
-        <Badge variant="outline">{LESSON_STATUS_LABELS[lesson.status]}</Badge>
-      )}
-
-      {(live || soon || lesson.status === 'READY') && (
-        <Link href={`/lesson/${lesson.id}`}>
-          <Button size="sm" variant={live ? 'default' : 'outline'}>
-            <Video className="mr-1 h-3.5 w-3.5" /> {live ? 'Присоединиться' : 'Войти'}
-          </Button>
-        </Link>
-      )}
-
-      {onCancel && ACTIVE_STATUSES.has(lesson.status) && !live && (
-        <button type="button" aria-label="Отменить" className="text-muted-foreground hover:text-destructive" onClick={() => onCancel(lesson)}>
-          <X className="h-4 w-4" />
-        </button>
-      )}
+      {expandable && open && <TeacherProfilePanel teacherId={lesson.teacherId} />}
     </div>
   );
 }
@@ -470,11 +571,26 @@ function LessonGroup({ title, count, hint, children }: { title: string; count: n
   );
 }
 
-function MyLessons() {
+function MyLessons({ onBook }: { onBook: () => void }) {
   // Поллинг: статус «урок идёт» ставит сервер при входе преподавателя в комнату.
   const { data, isLoading } = useGetLessonsQuery(undefined, { pollingInterval: 20000 });
   const [cancel] = useCancelLessonMutation();
   const lessons = data?.lessons ?? [];
+
+  // Порядковый номер занятия ребёнка (по времени начала среди всех его уроков).
+  const ordinals = useMemo(() => {
+    const byChild = new Map<string, LessonDto[]>();
+    for (const l of lessons) {
+      const arr = byChild.get(l.childId) ?? [];
+      arr.push(l);
+      byChild.set(l.childId, arr);
+    }
+    const map = new Map<string, number>();
+    for (const arr of byChild.values()) {
+      arr.sort((a, b) => a.startsAt.localeCompare(b.startsAt)).forEach((l, i) => map.set(l.id, i + 1));
+    }
+    return map;
+  }, [lessons]);
 
   const doCancel = async (lesson: LessonDto) => {
     if (!window.confirm('Отменить урок? Занятие вернётся на баланс, если до начала ≥ 8 часов.')) return;
@@ -499,8 +615,14 @@ function MyLessons() {
   if (lessons.length === 0) {
     return (
       <Card className="border-border bg-card">
-        <CardContent className="p-5 text-sm text-muted-foreground">
-          Занятий пока нет. Запишитесь на первое — оно появится здесь.
+        <CardContent className="flex flex-col items-center gap-3 p-8 text-center">
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent text-accent-foreground">
+            <CalendarClock className="h-6 w-6" />
+          </span>
+          <p className="text-sm text-muted-foreground">Занятий пока нет. Запишитесь на первое — оно появится здесь.</p>
+          <Button size="lg" onClick={onBook}>
+            <Sparkles className="mr-1.5 h-4 w-4" /> Записаться на занятие
+          </Button>
         </CardContent>
       </Card>
     );
@@ -522,35 +644,61 @@ function MyLessons() {
       </div>
 
       <LessonGroup title="Идёт сейчас" count={live.length} hint="преподаватель уже в классе">
-        {live.map((l) => <LessonRow key={l.id} lesson={l} />)}
+        {live.map((l) => <LessonRow key={l.id} lesson={l} ordinal={ordinals.get(l.id)} expandable />)}
       </LessonGroup>
 
-      <LessonGroup title="Предстоящие занятия" count={upcoming.length}>
-        {upcoming.map((l) => <LessonRow key={l.id} lesson={l} onCancel={doCancel} />)}
+      <LessonGroup title="Предстоящие занятия" count={upcoming.length} hint="нажмите на стрелку, чтобы открыть профиль преподавателя">
+        {upcoming.map((l) => <LessonRow key={l.id} lesson={l} ordinal={ordinals.get(l.id)} onCancel={doCancel} expandable />)}
       </LessonGroup>
 
       <LessonGroup title="Прошедшие занятия" count={past.length}>
-        {past.map((l) => <LessonRow key={l.id} lesson={l} />)}
+        {past.map((l) => <LessonRow key={l.id} lesson={l} ordinal={ordinals.get(l.id)} />)}
       </LessonGroup>
     </div>
   );
 }
 
+type Tab = 'lessons' | 'book';
+
 export default function LessonsPage() {
   const [buyOpen, setBuyOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>('lessons');
+
   return (
     <AuthGuard>
       <div className="academy-theme min-h-screen">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
-          <div>
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
-              <CalendarClock className="h-3.5 w-3.5" /> Занятия
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">
+                <CalendarClock className="h-3.5 w-3.5" /> Занятия
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight">{tab === 'lessons' ? 'Мои занятия' : 'Записаться на занятие'}</h1>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Уроки и абонементы</h1>
+            {tab === 'lessons' && (
+              <Button size="lg" onClick={() => setTab('book')}>
+                <Sparkles className="mr-1.5 h-4 w-4" /> Записаться
+              </Button>
+            )}
           </div>
-          <BalanceCard onBuy={() => setBuyOpen(true)} />
-          <BookingSection />
-          <MyLessons />
+
+          <div className="inline-flex rounded-xl border border-border bg-card p-1">
+            {([['lessons', 'Мои занятия'], ['book', 'Записаться']] as Array<[Tab, string]>).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTab(value)}
+                className={cn(
+                  'rounded-lg px-4 py-1.5 text-sm font-medium transition',
+                  tab === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {tab === 'lessons' ? <MyLessons onBook={() => setTab('book')} /> : <BookingSection onBuy={() => setBuyOpen(true)} />}
         </div>
         {buyOpen && <PackagesModal onClose={() => setBuyOpen(false)} />}
       </div>

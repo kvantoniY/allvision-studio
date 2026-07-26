@@ -137,6 +137,21 @@ export const ACADEMY_GENERATION_STYLE_LABELS: Record<(typeof ACADEMY_GENERATION_
 export const ACADEMY_BACKGROUND_REMOVAL_ENDPOINT = 'fal-ai/birefnet/v2';
 export const ACADEMY_BACKGROUND_REMOVAL_ESTIMATED_USD = 0.02;
 
+// Видео для кат-сцен: image-to-video (оживляет референс/персонажа) и text-to-video (по промпту).
+export const ACADEMY_VIDEO_MODELS = [
+  { slug: 'kling-3-std', block: 'image-to-video', label: 'Kling 3.0 — оживить картинку', source: 'image' },
+  { slug: 'kling-3-pro', block: 'image-to-video', label: 'Kling 3.0 Pro — оживить картинку', source: 'image' },
+  { slug: 'seedance-2', block: 'text-to-video', label: 'Seedance 2.0 — по промпту', source: 'text' },
+  { slug: 'veo-3.1', block: 'text-to-video', label: 'Veo 3.1 — по промпту', source: 'text' },
+] as const;
+export type AcademyVideoModelSlug = (typeof ACADEMY_VIDEO_MODELS)[number]['slug'];
+export const ACADEMY_VIDEO_MODEL_SLUGS = ACADEMY_VIDEO_MODELS.map((m) => m.slug) as [AcademyVideoModelSlug, ...AcademyVideoModelSlug[]];
+
+export function academyVideoModel(slug: string) {
+  return ACADEMY_VIDEO_MODELS.find((m) => m.slug === slug);
+}
+export const ACADEMY_VIDEO_DURATIONS = [5, 10, 15] as const;
+
 export function isChildAssetKind(kind: string): kind is ChildAssetKind {
   return (CHILD_ASSET_KINDS as readonly string[]).includes(kind);
 }
@@ -171,6 +186,10 @@ export const academyGenerationSchema = z.object({
   resolution: z.enum(['1K', '2K', '4K']).default('1K'),
   count: z.number().int().min(1).max(4).default(1),
   transparentBackground: z.boolean().default(false),
+  // Видео для кат-сцен. media='image' по умолчанию — прежнее поведение не меняется.
+  media: z.enum(['image', 'video']).default('image'),
+  videoModel: z.enum(ACADEMY_VIDEO_MODEL_SLUGS).default('kling-3-std'),
+  durationSec: z.number().int().min(3).max(15).default(5),
   childId: z.string().min(1).optional(),
   topicId: z.string().min(1).optional(),
   characterReferenceIds: z.array(z.string().min(1)).max(14).default([]),
@@ -199,6 +218,20 @@ export const academyGenerationSchema = z.object({
       path: ['transparentBackground'],
       message: 'Прозрачный фон доступен для предметов, NPC, эффектов и поз',
     });
+  }
+  if (input.media === 'video') {
+    const model = academyVideoModel(input.videoModel);
+    // image-to-video оживляет картинку: для общей библиотеки нужен референс, для детской — персонаж.
+    if (model?.source === 'image' && target.scope === 'teacher' && input.referenceAssetIds.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['referenceAssetIds'],
+        message: 'Для оживления картинки выберите изображение-референс из библиотеки',
+      });
+    }
+    if (input.transparentBackground) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['transparentBackground'], message: 'Прозрачный фон недоступен для видео' });
+    }
   }
   if (
     target.scope === 'teacher'
@@ -239,6 +272,19 @@ export function estimateAcademyGenerationCostUsd(input: Pick<
   });
   const removal = input.transparentBackground ? ACADEMY_BACKGROUND_REMOVAL_ESTIMATED_USD : 0;
   return Number(((perImage + removal) * input.count).toFixed(4));
+}
+
+export function estimateAcademyVideoCostUsd(input: Pick<AcademyGenerationInput, 'videoModel' | 'durationSec' | 'aspectRatio'>): number {
+  const meta = academyVideoModel(input.videoModel);
+  if (!meta) return 0;
+  const model = getBlockCatalogItem(meta.block)?.supportedModels.find((item) => item.slug === meta.slug);
+  if (!model) return 0;
+  return Number(estimateModelCostUsd(model, { duration: input.durationSec, aspect_ratio: input.aspectRatio }).toFixed(4));
+}
+
+/** Единая оценка стоимости панели: видео или изображения. */
+export function estimateAcademyCostUsd(input: AcademyGenerationInput): number {
+  return input.media === 'video' ? estimateAcademyVideoCostUsd(input) : estimateAcademyGenerationCostUsd(input);
 }
 
 const KIND_PROMPTS: Record<AcademyGenerationKind, string> = {

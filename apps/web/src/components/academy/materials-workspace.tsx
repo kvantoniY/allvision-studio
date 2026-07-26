@@ -24,13 +24,16 @@ import {
   ACADEMY_GENERATION_OPERATIONS,
   ACADEMY_GENERATION_STYLE_LABELS,
   ACADEMY_GENERATION_STYLES,
-  estimateAcademyGenerationCostUsd,
+  ACADEMY_VIDEO_MODELS,
+  ACADEMY_VIDEO_DURATIONS,
+  estimateAcademyCostUsd,
   generationKindToAsset,
   type AcademyAssetDto,
   type AcademyGenerationInput,
   type AcademyGenerationKind,
   type AcademyGenerationOperation,
   type AcademyLibraryScope,
+  type AcademyVideoModelSlug,
 } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -70,6 +73,9 @@ type FormState = {
   resolution: '1K' | '2K' | '4K';
   count: number;
   transparentBackground: boolean;
+  media: 'image' | 'video';
+  videoModel: AcademyVideoModelSlug;
+  durationSec: number;
   childId: string;
   outfit: string;
   emotion: string;
@@ -91,6 +97,9 @@ const initialForm: FormState = {
   resolution: '1K',
   count: 1,
   transparentBackground: false,
+  media: 'image',
+  videoModel: 'kling-3-std',
+  durationSec: 5,
   childId: '',
   outfit: '',
   emotion: '',
@@ -113,8 +122,11 @@ function buildInput(form: FormState, referenceAssetIds: string[]): AcademyGenera
     aspectRatio: form.aspectRatio,
     quality: form.quality,
     resolution: form.resolution,
-    count: form.count,
-    transparentBackground,
+    count: form.media === 'video' ? 1 : form.count,
+    transparentBackground: form.media === 'video' ? false : transparentBackground,
+    media: form.media,
+    videoModel: form.videoModel,
+    durationSec: form.durationSec,
     childId: childTarget ? form.childId || undefined : undefined,
     topicId: undefined,
     characterReferenceIds: [],
@@ -140,7 +152,7 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
     pollingInterval: polling ? 2000 : 0,
   });
   const input = useMemo(() => buildInput(form, referenceAssetIds), [form, referenceAssetIds]);
-  const estimate = useMemo(() => estimateAcademyGenerationCostUsd(input), [input]);
+  const estimate = useMemo(() => estimateAcademyCostUsd(input), [input]);
   const childTarget = generationKindToAsset(form.kind).scope === 'child';
   const childOptions = useMemo(() => children.data?.items ?? [], [children.data?.items]);
 
@@ -202,6 +214,29 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Оценка до запуска</p>
             <p className="text-lg font-bold text-primary">${estimate.toFixed(2)}</p>
           </div>
+        </div>
+
+        <div>
+          <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
+            {(['image', 'video'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setForm((current) => ({ ...current, media: m }))}
+                className={cn(
+                  'rounded-lg px-4 py-1.5 text-sm font-medium transition',
+                  form.media === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {m === 'image' ? 'Изображение' : 'Видео (кат-сцена)'}
+              </button>
+            ))}
+          </div>
+          {form.media === 'video' && (
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Видео сохранится в библиотеку и его можно поставить в сцену урока как кат-сцену.
+            </p>
+          )}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -294,39 +329,61 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
           </div>
 
           <div className="space-y-4 rounded-xl border border-border bg-muted/40 p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Формат">
-                <select className={selectClass} value={form.aspectRatio} onChange={(event) => setForm((current) => ({ ...current, aspectRatio: event.target.value as FormState['aspectRatio'] }))}>
-                  {ACADEMY_GENERATION_ASPECT_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
-                </select>
-              </Field>
-              <Field label="Количество">
-                <select className={selectClass} value={form.count} onChange={(event) => setForm((current) => ({ ...current, count: Number(event.target.value) }))}>
-                  {[1, 2, 3, 4].map((count) => <option key={count} value={count}>{count}</option>)}
-                </select>
-              </Field>
-              <Field label="Качество">
-                <select className={selectClass} value={form.quality} onChange={(event) => setForm((current) => ({ ...current, quality: event.target.value as FormState['quality'] }))}>
-                  <option value="low">Черновое</option><option value="medium">Стандарт</option><option value="high">Высокое</option>
-                </select>
-              </Field>
-              <Field label="Разрешение">
-                <select className={selectClass} value={form.resolution} onChange={(event) => setForm((current) => ({ ...current, resolution: event.target.value as FormState['resolution'] }))}>
-                  <option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option>
-                </select>
-              </Field>
-            </div>
-            {!['background', 'scene', 'cutscene'].includes(form.kind) && (
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.transparentBackground || form.operation === 'transparent-background'}
-                  disabled={form.operation === 'transparent-background'}
-                  onChange={(event) => setForm((current) => ({ ...current, transparentBackground: event.target.checked }))}
-                  className="h-4 w-4 accent-orange-500"
-                />
-                Удалить фон (alpha PNG)
-              </label>
+            {form.media === 'video' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Видео-модель">
+                  <select className={cn(selectClass, 'col-span-2')} value={form.videoModel} onChange={(event) => setForm((current) => ({ ...current, videoModel: event.target.value as AcademyVideoModelSlug }))}>
+                    {ACADEMY_VIDEO_MODELS.map((m) => <option key={m.slug} value={m.slug}>{m.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Длительность, сек">
+                  <select className={selectClass} value={form.durationSec} onChange={(event) => setForm((current) => ({ ...current, durationSec: Number(event.target.value) }))}>
+                    {ACADEMY_VIDEO_DURATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </Field>
+                <Field label="Формат">
+                  <select className={selectClass} value={form.aspectRatio} onChange={(event) => setForm((current) => ({ ...current, aspectRatio: event.target.value as FormState['aspectRatio'] }))}>
+                    {ACADEMY_GENERATION_ASPECT_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
+                  </select>
+                </Field>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Формат">
+                    <select className={selectClass} value={form.aspectRatio} onChange={(event) => setForm((current) => ({ ...current, aspectRatio: event.target.value as FormState['aspectRatio'] }))}>
+                      {ACADEMY_GENERATION_ASPECT_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Количество">
+                    <select className={selectClass} value={form.count} onChange={(event) => setForm((current) => ({ ...current, count: Number(event.target.value) }))}>
+                      {[1, 2, 3, 4].map((count) => <option key={count} value={count}>{count}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Качество">
+                    <select className={selectClass} value={form.quality} onChange={(event) => setForm((current) => ({ ...current, quality: event.target.value as FormState['quality'] }))}>
+                      <option value="low">Черновое</option><option value="medium">Стандарт</option><option value="high">Высокое</option>
+                    </select>
+                  </Field>
+                  <Field label="Разрешение">
+                    <select className={selectClass} value={form.resolution} onChange={(event) => setForm((current) => ({ ...current, resolution: event.target.value as FormState['resolution'] }))}>
+                      <option value="1K">1K</option><option value="2K">2K</option><option value="4K">4K</option>
+                    </select>
+                  </Field>
+                </div>
+                {!['background', 'scene', 'cutscene'].includes(form.kind) && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.transparentBackground || form.operation === 'transparent-background'}
+                      disabled={form.operation === 'transparent-background'}
+                      onChange={(event) => setForm((current) => ({ ...current, transparentBackground: event.target.checked }))}
+                      className="h-4 w-4 accent-orange-500"
+                    />
+                    Удалить фон (alpha PNG)
+                  </label>
+                )}
+              </>
             )}
             <Field label="Допустимая стоимость, $">
               <Input type="number" min="0.01" max="50" step="0.01" value={form.maxCostUsd} onChange={(event) => setForm((current) => ({ ...current, maxCostUsd: Number(event.target.value) || 0 }))} />
@@ -394,6 +451,7 @@ function AssetCard({ asset }: { asset: AcademyAssetDto }) {
   const [update] = useUpdateAcademyAssetMutation();
   const [promote, promoting] = usePromoteAcademyAssetMutation();
   const isImage = asset.mimeType.startsWith('image/');
+  const isVideo = asset.mimeType.startsWith('video/');
 
   const startDrag = (event: React.DragEvent) => {
     event.dataTransfer.effectAllowed = 'copy';
@@ -407,6 +465,8 @@ function AssetCard({ asset }: { asset: AcademyAssetDto }) {
         {isImage ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={asset.thumbnailUrl ?? asset.fileUrl} alt={asset.title} className="h-full w-full object-cover" />
+        ) : isVideo ? (
+          <video src={asset.fileUrl} className="h-full w-full object-cover" muted loop playsInline preload="metadata" onMouseEnter={(e) => e.currentTarget.play().catch(() => undefined)} onMouseLeave={(e) => e.currentTarget.pause()} />
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground"><ImageIcon className="h-8 w-8" /></div>
         )}

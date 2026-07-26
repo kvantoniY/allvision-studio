@@ -91,14 +91,56 @@ academyBookingRouter.get('/teachers', requireAuth, requireParent, async (req: Re
         },
       },
     });
-    const dto: AvailableTeacherDto[] = teachers.map((t) => ({
+    // Курсы для выбора при записи: у преподавателя courseIds (пусто = все активные курсы).
+    const allCourses = await prisma.course.findMany({
+      where: { isActive: true },
+      orderBy: [{ subject: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+      select: { id: true, title: true, subject: { select: { title: true } } },
+    });
+    const courseById = new Map(allCourses.map((c) => [c.id, { id: c.id, title: c.title, subjectTitle: c.subject.title }]));
+    const completedByTeacher = new Map(
+      (await prisma.lesson.groupBy({ by: ['teacherId'], where: { status: { in: ['COMPLETED', 'REPORT_SENT'] } }, _count: { _all: true } }))
+        .map((r) => [r.teacherId, r._count._all]),
+    );
+
+    const dto: AvailableTeacherDto[] = teachers.map((t) => {
+      const courses = t.courseIds.length > 0
+        ? t.courseIds.map((id) => courseById.get(id)).filter((c): c is { id: string; title: string; subjectTitle: string } => Boolean(c))
+        : allCourses.map((c) => ({ id: c.id, title: c.title, subjectTitle: c.subject.title }));
+      return {
+        teacherId: t.id,
+        name: t.user.name ?? t.user.email,
+        bio: t.bio,
+        photoUrl: t.photoUrl,
+        lessonsCount: t.lessonsManual ?? completedByTeacher.get(t.id) ?? 0,
+        subjects: t.subjects,
+        courses,
+        slots: t.slots.map((s) => ({ id: s.id, startsAt: s.startsAt.toISOString(), durationMin: s.durationMin, isBooked: s.isBooked })),
+      };
+    });
+    res.json({ teachers: dto });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Публичный профиль преподавателя (для карточки занятия) ===
+academyBookingRouter.get('/teachers/:teacherId/profile', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const t = await prisma.teacherProfile.findUnique({
+      where: { id: req.params.teacherId },
+      include: { user: { select: { name: true, email: true } } },
+    });
+    if (!t) throw new HttpError(404, 'TEACHER_NOT_FOUND', 'Преподаватель не найден');
+    const completed = await prisma.lesson.count({ where: { teacherId: t.id, status: { in: ['COMPLETED', 'REPORT_SENT'] } } });
+    res.json({
       teacherId: t.id,
       name: t.user.name ?? t.user.email,
       bio: t.bio,
+      photoUrl: t.photoUrl,
+      lessonsCount: t.lessonsManual ?? completed,
       subjects: t.subjects,
-      slots: t.slots.map((s) => ({ id: s.id, startsAt: s.startsAt.toISOString(), durationMin: s.durationMin, isBooked: s.isBooked })),
-    }));
-    res.json({ teachers: dto });
+    });
   } catch (err) {
     next(err);
   }

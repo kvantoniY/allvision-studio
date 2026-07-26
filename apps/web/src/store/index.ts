@@ -20,6 +20,7 @@ import { adminDiagnosticsApi } from './api/admin-diagnostics-api';
 import { adminMonitoringApi } from './api/admin-monitoring-api';
 import { adminSettingsApi } from './api/admin-settings-api';
 import { adminUsersApi } from './api/admin-users-api';
+import { adminTeachersApi } from './api/admin-teachers-api';
 import { adminProjectsApi } from './api/admin-projects-api';
 import { adminPaymentsApi } from './api/admin-payments-api';
 import { adminSupportApi } from './api/admin-support-api';
@@ -62,6 +63,7 @@ export const store = configureStore({
     [adminMonitoringApi.reducerPath]: adminMonitoringApi.reducer,
     [adminSettingsApi.reducerPath]: adminSettingsApi.reducer,
     [adminUsersApi.reducerPath]: adminUsersApi.reducer,
+    [adminTeachersApi.reducerPath]: adminTeachersApi.reducer,
     [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
     [adminPaymentsApi.reducerPath]: adminPaymentsApi.reducer,
     [adminSupportApi.reducerPath]: adminSupportApi.reducer,
@@ -102,6 +104,7 @@ export const store = configureStore({
       adminMonitoringApi.middleware,
       adminSettingsApi.middleware,
       adminUsersApi.middleware,
+      adminTeachersApi.middleware,
       adminProjectsApi.middleware,
       adminPaymentsApi.middleware,
       adminSupportApi.middleware,

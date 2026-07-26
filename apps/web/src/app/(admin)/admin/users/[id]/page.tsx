@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import { useGetAdminSettingsQuery } from '@/store/api/admin-settings-api';
+import { TeacherProfileSection } from './TeacherProfileSection';
 import {
   type AdminUser,
   useGetAdminUserQuery,
@@ -335,6 +336,8 @@ export default function AdminUserDetailPage() {
           <p className="mt-2 text-xs text-yellow-300">Нельзя снять роль ADMIN с собственного аккаунта.</p>
         ) : null}
       </section>
+
+      {item.role === 'TEACHER' && <TeacherProfileSection userId={item.id} />}
 
       <section className="rounded-lg border border-zinc-800 bg-zinc-950 p-5">
         <h2 className="font-semibold text-white">Последние проекты</h2>

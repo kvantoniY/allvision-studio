@@ -13,6 +13,7 @@ import {
   canPromoteAcademyAsset,
   canReadAcademyLibraryAsset,
   estimateAcademyGenerationCostUsd,
+  estimateAcademyCostUsd,
   generationKindToAsset,
   hasAllPhotoConsents,
   promoteAcademyAssetSchema,
@@ -295,7 +296,7 @@ academyMaterialsRouter.post('/estimate', (req: Request, res: Response, next: Nex
     const normalized = input.operation === 'transparent-background'
       ? { ...input, transparentBackground: true }
       : input;
-    res.json({ estimatedCostUsd: estimateAcademyGenerationCostUsd(normalized) });
+    res.json({ estimatedCostUsd: estimateAcademyCostUsd(normalized) });
   } catch (error) {
     next(error);
   }
@@ -309,7 +310,7 @@ academyMaterialsRouter.post('/generate', async (req: Request, res: Response, nex
     const input: AcademyGenerationInput = parsed.operation === 'transparent-background'
       ? { ...parsed, transparentBackground: true }
       : parsed;
-    const estimatedCostUsd = estimateAcademyGenerationCostUsd(input);
+    const estimatedCostUsd = estimateAcademyCostUsd(input);
     if (estimatedCostUsd > input.maxCostUsd) {
       throw new HttpError(
         400,

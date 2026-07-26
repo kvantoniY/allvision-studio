@@ -69,6 +69,9 @@ export const academyBookingApi = createApi({
       query: (body) => ({ url: '/booking', method: 'POST', body }),
       invalidatesTags: ['Balance', 'Lessons', 'Teachers'],
     }),
+    getTeacherProfile: build.query<{ teacherId: string; name: string; bio: string | null; photoUrl: string | null; lessonsCount: number; subjects: string[] }, string>({
+      query: (teacherId) => ({ url: `/teachers/${teacherId}/profile` }),
+    }),
     getLessons: build.query<{ lessons: LessonDto[] }, void>({
       query: () => ({ url: '/lessons' }),
       providesTags: ['Lessons'],
@@ -150,6 +153,7 @@ export const {
   usePurchasePackageMutation,
   useGetBalanceQuery,
   useGetTeachersQuery,
+  useGetTeacherProfileQuery,
   useBookLessonMutation,
   useGetLessonsQuery,
   useCancelLessonMutation,

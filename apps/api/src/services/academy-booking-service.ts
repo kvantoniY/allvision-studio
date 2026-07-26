@@ -45,6 +45,7 @@ export async function consumeCredit(
 type LessonWithRelations = {
   id: string;
   childId: string;
+  teacherId: string;
   durationMin: number;
   startsAt: Date;
   status: string;
@@ -65,6 +66,7 @@ export function toLessonDto(lesson: LessonWithRelations, titles: Map<string, str
   return {
     id: lesson.id,
     childId: lesson.childId,
+    teacherId: lesson.teacherId,
     childName: lesson.child.name,
     teacherName: lesson.teacher.user.name ?? lesson.teacher.user.email,
     durationMin: lesson.durationMin,

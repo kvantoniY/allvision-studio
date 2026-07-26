@@ -7,6 +7,7 @@ import {
   ACADEMY_BACKGROUND_REMOVAL_ENDPOINT,
   ACADEMY_BACKGROUND_REMOVAL_ESTIMATED_USD,
   academyGenerationSchema,
+  academyVideoModel,
   buildAcademyGenerationPrompt,
   generationKindToAsset,
   type AcademyGenerationJobData,
@@ -177,6 +178,134 @@ async function loadReferences(input: AcademyGenerationInput) {
   };
 }
 
+/** Кат-сцена как видео: оживляет референс (image-to-video) или генерирует по промпту (text-to-video). */
+async function generateAcademyVideo(params: {
+  input: AcademyGenerationInput;
+  projectId: string;
+  requestedById: string;
+  refs: Awaited<ReturnType<typeof loadReferences>>;
+  target: ReturnType<typeof generationKindToAsset>;
+  prompt: string;
+  createdAssets: Array<{ type: string; assetId: string; url?: string }>;
+}): Promise<number> {
+  const { input, projectId, requestedById, refs, target, prompt, createdAssets } = params;
+  const meta = academyVideoModel(input.videoModel);
+  if (!meta) throw new Error('VIDEO_MODEL_UNKNOWN');
+  const provider = getAIProvider(meta.block);
+  if (target.scope === 'child' && provider.name === 'piapi') throw new Error('PERSONAL_GENERATION_REQUIRES_FAL');
+
+  const stepId = `${input.kind}-video`;
+  const context = {
+    projectId,
+    userId: requestedById,
+    blockSlug: 'academy-generation',
+    stepId,
+    privateOutput: target.scope === 'child',
+    reportProgress: async (percent: number) => {
+      await updateProgress(projectId, Math.round(percent * 0.9)).catch(() => undefined);
+    },
+  };
+
+  let result: ProviderResult;
+  if (meta.source === 'image') {
+    const imageUrl = refs.urls[0];
+    if (!imageUrl) throw new Error('VIDEO_REFERENCE_REQUIRED');
+    result = await provider.imageToVideo({
+      imageUrl,
+      prompt,
+      durationSec: input.durationSec,
+      model: meta.slug,
+      params: { aspect_ratio: input.aspectRatio, image_urls: refs.urls.slice(1) },
+      context,
+    });
+  } else {
+    result = await provider.textToVideo({
+      prompt,
+      durationSec: input.durationSec,
+      model: meta.slug,
+      params: { aspect_ratio: input.aspectRatio },
+      context,
+    });
+  }
+  await logLocalProviderCall({
+    provider,
+    result,
+    projectId,
+    userId: requestedById,
+    model: meta.slug,
+    stepId,
+    request: { kind: input.kind, media: 'video', durationSec: input.durationSec },
+  });
+
+  const cost = result.costUsd;
+  if (cost > input.maxCostUsd) throw new Error('ACADEMY_GENERATION_BUDGET_EXCEEDED');
+
+  const output = await readOutputBytes(result.outputUrl);
+  const buffer = output.buffer;
+  const tags = unique([...input.tags, 'academy', 'generated', 'video', `project:${projectId}`, `operation:${input.operation}`]);
+
+  if (target.scope === 'child' && refs.child) {
+    const storageKey = path.posix.join(refs.child.parentId, refs.child.id, `${crypto.randomUUID()}.mp4`);
+    await writeChildAsset(storageKey, buffer);
+    const asset = await prisma.childAsset.create({
+      data: {
+        childId: refs.child.id,
+        createdById: requestedById,
+        kind: target.assetKind,
+        title: input.title,
+        description: input.prompt,
+        tags,
+        storageKey,
+        mimeType: 'video/mp4',
+        fileSize: buffer.length,
+        width: null,
+        height: null,
+        generationModel: meta.slug,
+        generationPrompt: prompt,
+        generationCostUsd: cost,
+        generationParams: safeJson(input),
+        sourceRefIds: refs.sourceRefIds,
+        generationProjectId: projectId,
+      },
+    });
+    createdAssets.push({ type: 'academy-child-asset', assetId: asset.id });
+  } else {
+    const storageKey = path.posix.join('academy', 'library', requestedById, `${crypto.randomUUID()}.mp4`);
+    const uploaded = await getStorageProvider().upload({ key: storageKey, body: buffer, contentType: 'video/mp4' });
+    const publicSort = await prisma.mediaAsset.aggregate({
+      where: { ownerUserId: requestedById, kind: target.assetKind },
+      _max: { sortOrder: true },
+    });
+    const asset = await prisma.mediaAsset.create({
+      data: {
+        kind: target.assetKind,
+        groupCode: 'academy',
+        title: input.title,
+        description: input.prompt,
+        tags,
+        ownerUserId: requestedById,
+        storageKey: uploaded.key,
+        publicUrl: uploaded.url,
+        thumbnailKey: null,
+        width: null,
+        height: null,
+        fileSize: buffer.length,
+        mimeType: 'video/mp4',
+        isActive: true,
+        sortOrder: (publicSort._max.sortOrder ?? 0) + 10,
+        generationModel: meta.slug,
+        generationPrompt: prompt,
+        generationCostUsd: cost,
+        generationParams: safeJson(input),
+      },
+    });
+    createdAssets.push({ type: 'academy-media-asset', assetId: asset.id, url: asset.publicUrl });
+  }
+  await output.cleanup?.();
+  await updateProgress(projectId, 100);
+  return cost;
+}
+
 export async function processAcademyGeneration(job: Job<AcademyGenerationJobData>) {
   const parsed = academyGenerationSchema.parse(job.data.input);
   const input: AcademyGenerationInput = parsed.operation === 'transparent-background'
@@ -201,6 +330,25 @@ export async function processAcademyGeneration(job: Job<AcademyGenerationJobData
     const refs = await loadReferences(input);
     if (target.scope === 'child' && !refs.child) throw new Error('CHILD_REQUIRED');
     const prompt = buildAcademyGenerationPrompt(input);
+    let totalCostUsd = 0;
+
+    if (input.media === 'video') {
+      totalCostUsd = await generateAcademyVideo({ input, projectId: project.id, requestedById: job.data.requestedById, refs, target, prompt, createdAssets });
+      await prisma.project.update({
+        where: { id: project.id },
+        data: {
+          status: 'COMPLETED',
+          progress: 100,
+          completedAt: new Date(),
+          resultVideo: target.scope === 'teacher' ? createdAssets[0]?.url ?? null : null,
+          resultAssets: safeJson(createdAssets),
+          aiProviderLogs: safeJson({ estimatedCostUsd: job.data.estimatedCostUsd, actualCostUsd: totalCostUsd }),
+        },
+      });
+      logger.info(`[academy-generation] project ${project.id} completed video, $${totalCostUsd.toFixed(4)}`);
+      return;
+    }
+
     const provider = getAIProvider('image-edit');
     if (target.scope === 'child' && provider.name === 'piapi') {
       // PiAPI image-edit публикует входные refs во временный public R2 и сохраняет output
@@ -214,7 +362,6 @@ export async function processAcademyGeneration(job: Job<AcademyGenerationJobData
           _max: { sortOrder: true },
         })
       : null;
-    let totalCostUsd = 0;
 
     for (let index = 0; index < input.count; index += 1) {
       const stepId = `${input.kind}-${index + 1}`;

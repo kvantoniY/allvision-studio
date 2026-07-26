@@ -178,6 +178,7 @@ export interface LessonBalanceDto {
 export interface LessonDto {
   id: string;
   childId: string;
+  teacherId: string;
   childName: string;
   teacherName: string;
   durationMin: number;
@@ -199,6 +200,9 @@ export interface AvailableTeacherDto {
   teacherId: string;
   name: string;
   bio: string | null;
+  photoUrl: string | null;
+  lessonsCount: number;
   subjects: string[];
+  courses: Array<{ id: string; title: string; subjectTitle: string }>;
   slots: TeacherSlotDto[];
 }
