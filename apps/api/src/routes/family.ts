@@ -31,6 +31,7 @@ import {
 } from '../services/child-photo-storage';
 import { addCharacterProfileJob } from '../queues';
 import { buildChildProgress } from '../services/academy-progress-service';
+import { buildChildLessonHistory } from '../services/academy-teacher-students-service';
 import { getDeletionLog, requestChildDeletion } from '../services/academy-deletion-service';
 
 export const familyRouter = Router();
@@ -573,6 +574,16 @@ familyRouter.get('/children/:childId/progress', async (req: Request, res: Respon
   try {
     await findOwnedChild(req.user!.id, req.params.childId);
     res.json({ progress: await buildChildProgress(req.params.childId) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// История уроков ребёнка для родителя (с кем, когда, тема, статус, есть ли отчёт).
+familyRouter.get('/children/:childId/lessons', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await findOwnedChild(req.user!.id, req.params.childId);
+    res.json({ lessons: await buildChildLessonHistory(req.params.childId) });
   } catch (err) {
     next(err);
   }

@@ -25,10 +25,12 @@ import {
   CHILD_PHOTOS_MAX,
   CONSENT_CURRENT_VERSION,
   CONSENT_DEFINITIONS,
+  LESSON_STATUS_LABELS,
   TOPIC_PROGRESS_LABELS,
   type ChildProfileDto,
   type ConsentTypeValue,
   type EnrollmentProgressDto,
+  type LessonStatusValue,
 } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -49,6 +51,7 @@ import {
   useEnrollChildMutation,
   useGenerateCharacterMutation,
   useGetCharacterQuery,
+  useGetChildLessonsQuery,
   useGetChildProgressQuery,
   useListChildPhotosQuery,
   useListChildrenQuery,
@@ -660,6 +663,31 @@ function ProgressBlock({ child }: { child: ChildProfileDto }) {
           </div>
         </div>
       )}
+
+      <LessonHistoryBlock childId={child.id} />
+    </div>
+  );
+}
+
+function LessonHistoryBlock({ childId }: { childId: string }) {
+  const { data, isLoading } = useGetChildLessonsQuery(childId);
+  const lessons = data?.lessons ?? [];
+  if (isLoading) return <div className="h-12 animate-pulse rounded-xl bg-muted" />;
+  if (lessons.length === 0) return null;
+  return (
+    <div>
+      <p className="mb-2 text-sm font-medium">История занятий</p>
+      <div className="space-y-1.5">
+        {lessons.slice(0, 12).map((l) => (
+          <div key={l.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs">
+            <span className="w-24 shrink-0 text-muted-foreground">{new Date(l.startsAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}</span>
+            <span className="min-w-0 flex-1 truncate">{l.topicTitle ?? '—'} · {l.teacherName}</span>
+            <span className={['COMPLETED', 'REPORT_SENT'].includes(l.status) ? 'shrink-0 text-emerald-700' : 'shrink-0 text-muted-foreground'}>
+              {LESSON_STATUS_LABELS[l.status as LessonStatusValue] ?? l.status}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

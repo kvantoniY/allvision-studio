@@ -10,6 +10,7 @@ import {
 } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { LessonPrepare } from '@/components/academy/LessonPrepare';
+import { TeacherStudents } from '@/components/academy/TeacherStudents';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -479,6 +480,7 @@ export default function TeacherPage() {
           </div>
           <SlotsPanel />
           <LessonsPanel />
+          <TeacherStudents />
           <EarningsPanel />
         </div>
       </div>

@@ -28,6 +28,12 @@ import {
 } from '../services/academy-booking-service';
 import { awardLessonCompletion } from '../services/academy-gamification-service';
 import { completeLessonTopic } from '../services/academy-lesson-topic-service';
+import {
+  buildTeacherStudents,
+  buildTeacherStudentDetail,
+  saveTeacherStudentNote,
+  teacherTaughtChild,
+} from '../services/academy-teacher-students-service';
 import { createLessonVideoToken } from '../services/lesson-video-service';
 import { addLessonSystemMessage } from '../services/academy-operations-service';
 
@@ -481,6 +487,42 @@ academyBookingRouter.get('/teacher/earnings', requireAuth, requireRole('TEACHER'
       _count: { _all: true },
     });
     res.json({ earnings: earnings.map((e) => ({ status: e.status, amountRub: e._sum.amountRub ?? 0, count: e._count._all })) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Мои ученики (преподаватель): список, профиль, история, заметки ===
+academyBookingRouter.get('/teacher/students', requireAuth, requireRole('TEACHER'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await ensureTeacherProfile(req.user!.id);
+    res.json({ students: await buildTeacherStudents(profile.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+academyBookingRouter.get('/teacher/students/:childId', requireAuth, requireRole('TEACHER'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const profile = await ensureTeacherProfile(req.user!.id);
+    if (!(await teacherTaughtChild(profile.id, req.params.childId))) {
+      throw new HttpError(403, 'FORBIDDEN', 'Вы не вели этого ученика');
+    }
+    res.json(await buildTeacherStudentDetail(profile.id, req.params.childId));
+  } catch (err) {
+    next(err);
+  }
+});
+
+const studentNoteSchema = z.object({ note: z.string().max(4000) });
+academyBookingRouter.put('/teacher/students/:childId/note', requireAuth, requireRole('TEACHER'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { note } = studentNoteSchema.parse(req.body ?? {});
+    const profile = await ensureTeacherProfile(req.user!.id);
+    if (!(await teacherTaughtChild(profile.id, req.params.childId))) {
+      throw new HttpError(403, 'FORBIDDEN', 'Вы не вели этого ученика');
+    }
+    res.json({ ok: true, note: await saveTeacherStudentNote(profile.id, req.params.childId, note) });
   } catch (err) {
     next(err);
   }

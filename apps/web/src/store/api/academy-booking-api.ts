@@ -15,10 +15,40 @@ export type PaymentCreateResult = {
 
 export type TeacherEarningSummary = { status: string; amountRub: number; count: number };
 
+export type TeacherStudent = {
+  childId: string;
+  name: string;
+  lastLessonAt: string;
+  lastStatus: string;
+  total: number;
+  completed: number;
+  note: string | null;
+};
+
+export type ChildLessonHistoryItem = {
+  id: string;
+  startsAt: string;
+  durationMin: number;
+  status: string;
+  topicTitle: string | null;
+  teacherName: string;
+  hasReport: boolean;
+};
+
+export type TeacherStudentDetail = {
+  childId: string;
+  name: string;
+  birthDate: string | null;
+  progress: { enrollments: Array<{ enrollmentId: string; courseTitle: string; subjectTitle: string; totalTopics: number; completedTopics: number; nextTopicId: string | null; topics: Array<{ topicId: string; title: string; status: string; completedAt: string | null; isNextRecommended: boolean }> }>; skills: Array<{ skillId: string; title: string; level: number; levelLabel: string }> };
+  history: ChildLessonHistoryItem[];
+  note: string | null;
+  noteUpdatedAt: string | null;
+};
+
 export const academyBookingApi = createApi({
   reducerPath: 'academyBookingApi',
   baseQuery: createBaseQueryWithReauth('/api/academy'),
-  tagTypes: ['Balance', 'Lessons', 'Teachers', 'Slots', 'Earnings'],
+  tagTypes: ['Balance', 'Lessons', 'Teachers', 'Slots', 'Earnings', 'Students'],
   refetchOnFocus: true,
   endpoints: (build) => ({
     getPackages: build.query<{ packages: LessonPackageOption[] }, void>({
@@ -85,6 +115,18 @@ export const academyBookingApi = createApi({
       query: () => ({ url: '/teacher/earnings' }),
       providesTags: ['Earnings'],
     }),
+    getTeacherStudents: build.query<{ students: TeacherStudent[] }, void>({
+      query: () => ({ url: '/teacher/students' }),
+      providesTags: ['Students'],
+    }),
+    getTeacherStudentDetail: build.query<TeacherStudentDetail, string>({
+      query: (childId) => ({ url: `/teacher/students/${childId}` }),
+      providesTags: (_r, _e, childId) => [{ type: 'Students', id: childId }],
+    }),
+    saveTeacherStudentNote: build.mutation<{ ok: true }, { childId: string; note: string }>({
+      query: ({ childId, note }) => ({ url: `/teacher/students/${childId}/note`, method: 'PUT', body: { note } }),
+      invalidatesTags: (_r, _e, { childId }) => ['Students', { type: 'Students', id: childId }],
+    }),
   }),
 });
 
@@ -105,4 +147,7 @@ export const {
   useGetTeacherLessonsQuery,
   useSetLessonStatusMutation,
   useGetTeacherEarningsQuery,
+  useGetTeacherStudentsQuery,
+  useGetTeacherStudentDetailQuery,
+  useSaveTeacherStudentNoteMutation,
 } = academyBookingApi;

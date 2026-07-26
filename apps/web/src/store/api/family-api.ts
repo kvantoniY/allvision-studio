@@ -122,6 +122,9 @@ export const familyApi = createApi({
       query: (childId) => ({ url: `/children/${childId}/progress` }),
       providesTags: (_r, _e, childId) => [{ type: 'Progress', id: childId }],
     }),
+    getChildLessons: build.query<{ lessons: Array<{ id: string; startsAt: string; durationMin: number; status: string; topicTitle: string | null; teacherName: string; hasReport: boolean }> }, string>({
+      query: (childId) => ({ url: `/children/${childId}/lessons` }),
+    }),
     enrollChild: build.mutation<{ enrollmentId: string }, { childId: string; courseId: string }>({
       query: ({ childId, courseId }) => ({ url: `/children/${childId}/enrollments`, method: 'POST', body: { courseId } }),
       invalidatesTags: (_r, _e, { childId }) => [{ type: 'Progress', id: childId }],
@@ -150,6 +153,7 @@ export const {
   useRegenerateCharacterRefMutation,
   useListCoursesQuery,
   useGetChildProgressQuery,
+  useGetChildLessonsQuery,
   useEnrollChildMutation,
   useUnenrollChildMutation,
 } = familyApi;

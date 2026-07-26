@@ -100,6 +100,7 @@ model ChildProfile {
   rewardItems      ChildRewardItem[]
   threads          Thread[]
   accessLogs       AccessLog[]
+  teacherNotes     TeacherStudentNote[]
 
   @@index([parentId])
 }
@@ -427,12 +428,13 @@ model TeacherProfile {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  slots    TeacherSlot[]
-  lessons  Lesson[]
-  earnings TeacherEarning[]
-  threads  Thread[]
-  payouts  TeacherPayout[]
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  slots        TeacherSlot[]
+  lessons      Lesson[]
+  earnings     TeacherEarning[]
+  threads      Thread[]
+  payouts      TeacherPayout[]
+  studentNotes TeacherStudentNote[]
 }
 
 // Конкретный доступный слот преподавателя (UTC). Recurring-генерация — позже.
@@ -509,6 +511,22 @@ enum LessonStatus {
   CANCELLED_PARENT
   CANCELLED_TEACHER
   NO_SHOW
+}
+
+// Рабочая заметка преподавателя по ученику (наблюдения, что повторить и т.п.).
+model TeacherStudentNote {
+  id        String   @id @default(cuid())
+  teacherId String
+  childId   String
+  note      String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  child   ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, childId])
+  @@index([teacherId])
 }
 
 model TeacherEarning {
