@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Coins, Loader2, Sparkles } from 'lucide-react';
+import { Coins, Download, Loader2, Maximize2, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,7 @@ export function LessonLab({ lessonId }: { lessonId: string }) {
 
   const [modelSlug, setModelSlug] = useState('');
   const [prompt, setPrompt] = useState('');
+  const [lightbox, setLightbox] = useState<{ url: string; isVideo: boolean } | null>(null);
 
   const videoAllowed = lab.data?.videoAllowed ?? true;
   const available = useMemo(
@@ -102,14 +103,24 @@ export function LessonLab({ lessonId }: { lessonId: string }) {
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {history.data!.items.map((it) => (
                   <div key={it.id} className="overflow-hidden rounded-xl border border-border bg-card">
-                    <div className="flex aspect-square items-center justify-center bg-muted">
+                    <button
+                      type="button"
+                      onClick={() => it.status === 'COMPLETED' && it.resultUrl && setLightbox({ url: it.resultUrl!, isVideo: it.isVideo })}
+                      disabled={!(it.status === 'COMPLETED' && it.resultUrl)}
+                      className="group relative flex aspect-square w-full items-center justify-center bg-muted"
+                    >
                       {it.status === 'COMPLETED' && it.resultUrl ? (
-                        it.isVideo ? (
-                          <video src={it.resultUrl} controls className="h-full w-full object-cover" />
-                        ) : (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={it.resultUrl} alt={it.prompt ?? ''} className="h-full w-full object-cover" />
-                        )
+                        <>
+                          {it.isVideo ? (
+                            <video src={it.resultUrl} muted className="h-full w-full object-cover" />
+                          ) : (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={it.resultUrl} alt={it.prompt ?? ''} className="h-full w-full object-cover" />
+                          )}
+                          <span className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
+                            <Maximize2 className="h-6 w-6" />
+                          </span>
+                        </>
                       ) : it.status === 'FAILED' ? (
                         <span className="px-2 text-center text-[11px] text-destructive">Не получилось</span>
                       ) : (
@@ -118,7 +129,7 @@ export function LessonLab({ lessonId }: { lessonId: string }) {
                           {it.progress}%
                         </div>
                       )}
-                    </div>
+                    </button>
                     {it.prompt && <p className={cn('truncate px-2 py-1 text-[11px] text-muted-foreground')}>{it.prompt}</p>}
                   </div>
                 ))}
@@ -126,6 +137,34 @@ export function LessonLab({ lessonId }: { lessonId: string }) {
             )}
           </div>
         </>
+      )}
+
+      {lightbox && (
+        <div className="fixed inset-0 z-[60] flex flex-col bg-black/90 p-4" onClick={() => setLightbox(null)}>
+          <div className="flex items-center justify-end gap-2">
+            <a
+              href={lightbox.url}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white/90 px-3 py-1.5 text-sm font-medium text-black hover:bg-white"
+            >
+              <Download className="h-4 w-4" /> Скачать
+            </a>
+            <button type="button" onClick={() => setLightbox(null)} aria-label="Закрыть" className="rounded-lg bg-white/20 p-2 text-white hover:bg-white/30">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            {lightbox.isVideo ? (
+              <video src={lightbox.url} controls autoPlay className="max-h-full max-w-full rounded-lg" />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lightbox.url} alt="" className="max-h-full max-w-full rounded-lg object-contain" />
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

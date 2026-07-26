@@ -22,7 +22,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
 import { useGetInstanceByLessonQuery, useGetInstanceScenesQuery } from '@/store/api/academy-lesson-instances-api';
-import { useSetLessonStatusMutation, useSetMeetingLinkMutation } from '@/store/api/academy-booking-api';
+import { useGetLessonChildOverviewQuery, useSetLessonStatusMutation, useSetMeetingLinkMutation } from '@/store/api/academy-booking-api';
 import { toast } from '@/hooks/use-toast';
 
 /**
@@ -214,6 +214,9 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
         </div>
       </div>
 
+      {/* Профиль ребёнка: прогресс урока, уровень, достижения этого урока */}
+      <ChildOverviewBar lessonId={lessonId} sceneIndex={sceneIndex} sceneCount={sceneCount} />
+
       {/* Тело: инструмент урока во всю ширину */}
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-muted/40">
@@ -275,6 +278,53 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Шапка с профилем ребёнка: прогресс по сценам, уровень (XP-бар) и достижения этого урока. */
+function ChildOverviewBar({ lessonId, sceneIndex, sceneCount }: { lessonId: string; sceneIndex: number; sceneCount: number }) {
+  const { data } = useGetLessonChildOverviewQuery(lessonId, { pollingInterval: 15000 });
+  if (!data) return null;
+  const scenePercent = sceneCount ? Math.round(((sceneIndex + 1) / sceneCount) * 100) : 0;
+  return (
+    <div className="flex flex-wrap items-center gap-4 border-b border-border bg-card px-4 py-2">
+      <div className="flex items-center gap-2">
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary">
+          {data.name.slice(0, 1).toUpperCase()}
+        </span>
+        <div className="leading-tight">
+          <p className="text-sm font-semibold">{data.name}</p>
+          <p className="text-[11px] text-muted-foreground">Уровень {data.level} · 🔥 {data.streakCount}</p>
+        </div>
+      </div>
+
+      <div className="min-w-[140px] flex-1">
+        <div className="mb-0.5 flex justify-between text-[11px] text-muted-foreground">
+          <span>Урок</span><span>{sceneCount ? sceneIndex + 1 : 0}/{sceneCount}</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full bg-emerald-500 transition-[width]" style={{ width: `${scenePercent}%` }} />
+        </div>
+      </div>
+
+      <div className="min-w-[140px] flex-1">
+        <div className="mb-0.5 flex justify-between text-[11px] text-muted-foreground">
+          <span>До уровня {data.level + 1}</span><span>{data.xpIntoLevel}/{data.xpIntoLevel + data.xpNeeded} XP</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-muted">
+          <div className="h-full bg-primary transition-[width]" style={{ width: `${data.percent}%` }} />
+        </div>
+      </div>
+
+      {data.achievements.length > 0 && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-muted-foreground">Награды:</span>
+          {data.achievements.map((a, i) => (
+            <span key={i} className="text-lg" title={a.title}>{a.icon}</span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

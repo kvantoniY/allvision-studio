@@ -85,6 +85,9 @@ export const academyBookingApi = createApi({
       query: ({ id, url }) => ({ url: `/lessons/${id}/meeting-link`, method: 'POST', body: { url } }),
       invalidatesTags: ['Lessons'],
     }),
+    getLessonChildOverview: build.query<{ name: string; avatar: string | null; streakCount: number; level: number; xp: number; xpIntoLevel: number; xpNeeded: number; percent: number; achievements: Array<{ title: string; icon: string }> }, string>({
+      query: (lessonId) => ({ url: `/lessons/${lessonId}/child-overview` }),
+    }),
     getLessonLab: build.query<{ hasLab: boolean; granted: number | null; spent: number; remaining: number; videoAllowed: boolean }, string>({
       query: (lessonId) => ({ url: `/lessons/${lessonId}/lab` }),
       providesTags: (_r, _e, lessonId) => [{ type: 'Lab', id: lessonId }],
@@ -165,4 +168,5 @@ export const {
   useGetLessonLabQuery,
   useGetLessonLabHistoryQuery,
   useGenerateLessonLabMutation,
+  useGetLessonChildOverviewQuery,
 } = academyBookingApi;

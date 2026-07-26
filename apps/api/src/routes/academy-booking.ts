@@ -8,6 +8,7 @@ import {
   createSlotSchema,
   hasAllPhotoConsents,
   LESSON_BASE_PRICE_RUB,
+  levelProgressFromXp,
   purchaseLessonPackageSchema,
   resolveCancellation,
   teacherEarningRub,
@@ -335,6 +336,36 @@ academyBookingRouter.post('/lessons/:id/meeting-link', requireAuth, async (req: 
       }
     });
     res.json({ ok: true, meetingUrl: trimmed || null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Обзор ребёнка в уроке: прогресс уровня + достижения этого урока ===
+academyBookingRouter.get('/lessons/:id/child-overview', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { lesson } = await loadLessonForActor(req.params.id, req.user!.id);
+    const child = await prisma.childProfile.findUnique({
+      where: { id: lesson.childId },
+      select: { name: true, avatar: true, xp: true, level: true, streakCount: true },
+    });
+    if (!child) throw new HttpError(404, 'CHILD_NOT_FOUND', 'Ребёнок не найден');
+    const achievements = await prisma.childAchievement.findMany({
+      where: { childId: lesson.childId, sourceLessonId: lesson.id },
+      include: { achievement: { select: { title: true, icon: true } } },
+    });
+    const progress = levelProgressFromXp(child.xp);
+    res.json({
+      name: child.name,
+      avatar: child.avatar,
+      streakCount: child.streakCount,
+      level: progress.level,
+      xp: child.xp,
+      xpIntoLevel: progress.xpIntoLevel,
+      xpNeeded: progress.xpNeeded,
+      percent: progress.percent,
+      achievements: achievements.map((a) => ({ title: a.achievement.title, icon: a.achievement.icon })),
+    });
   } catch (err) {
     next(err);
   }
