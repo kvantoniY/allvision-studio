@@ -23,6 +23,7 @@ export type LessonInstanceByLesson = {
   instance: LessonInstanceSummary | null;
   viewerRole: 'teacher' | 'student';
   lessonStatus: string;
+  meetingUrl: string | null;
 };
 
 export type FullSceneGenerationStatus = {

@@ -480,6 +480,7 @@ model Lesson {
   creditId     String?
   cancelledBy  String? // parent | teacher | system
   cancelReason String?      @db.Text
+  meetingUrl   String? // ссылка на видеозвонок (Яндекс Телемост), учитель ставит вручную
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 

@@ -33,7 +33,14 @@ function isAdmin(req: Request) {
 async function loadLessonParticipants(lessonId: string) {
   return prisma.lesson.findUnique({
     where: { id: lessonId },
-    include: { teacher: { select: { userId: true } }, child: { select: { id: true, parentId: true } } },
+    select: {
+      id: true,
+      status: true,
+      teacherId: true,
+      meetingUrl: true,
+      teacher: { select: { userId: true } },
+      child: { select: { id: true, parentId: true } },
+    },
   });
 }
 
@@ -148,10 +155,11 @@ academyLessonInstancesRouter.get('/by-lesson/:lessonId', async (req: Request, re
       where: { lessonId: req.params.lessonId },
       include: { version: { include: { template: { select: { title: true } } } } },
     });
-    if (!instance) return res.json({ instance: null, viewerRole: role, lessonStatus: lesson.status });
+    if (!instance) return res.json({ instance: null, viewerRole: role, lessonStatus: lesson.status, meetingUrl: lesson.meetingUrl });
     res.json({
       viewerRole: role,
       lessonStatus: lesson.status,
+      meetingUrl: lesson.meetingUrl,
       instance: {
         id: instance.id,
         title: instance.version.template.title,

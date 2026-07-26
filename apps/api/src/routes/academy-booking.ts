@@ -301,6 +301,36 @@ academyBookingRouter.post('/lessons/:id/reschedule', requireAuth, async (req: Re
   }
 });
 
+// === Ссылка на видеозвонок (Яндекс Телемост) — учитель ставит вручную ===
+const meetingLinkSchema = z.object({ url: z.string().trim().max(2000) });
+
+academyBookingRouter.post('/lessons/:id/meeting-link', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { url } = meetingLinkSchema.parse(req.body ?? {});
+    const trimmed = url.trim();
+    if (trimmed && !/^https?:\/\//i.test(trimmed)) {
+      throw new HttpError(400, 'INVALID_MEETING_URL', 'Ссылка должна начинаться с http:// или https://');
+    }
+    const { lesson, by } = await loadLessonForActor(req.params.id, req.user!.id);
+    if (by !== 'teacher') throw new HttpError(403, 'FORBIDDEN', 'Ссылку добавляет преподаватель');
+
+    await prisma.$transaction(async (tx) => {
+      await tx.lesson.update({ where: { id: lesson.id }, data: { meetingUrl: trimmed || null } });
+      if (trimmed) {
+        await addLessonSystemMessage(tx, {
+          parentId: lesson.child.parentId,
+          teacherId: lesson.teacherId,
+          childId: lesson.childId,
+          body: 'Преподаватель добавил ссылку на видеозвонок к уроку.',
+        });
+      }
+    });
+    res.json({ ok: true, meetingUrl: trimmed || null });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // === Преподаватель ===
 
 academyBookingRouter.get('/teacher/me', requireAuth, requireRole('TEACHER'), async (req: Request, res: Response, next: NextFunction) => {

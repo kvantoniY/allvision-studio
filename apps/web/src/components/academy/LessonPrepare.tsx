@@ -15,6 +15,7 @@ import {
   useGetPublishedTemplatesQuery,
   useLazyGetInstanceSceneQuery,
 } from '@/store/api/academy-lesson-instances-api';
+import { useSetMeetingLinkMutation } from '@/store/api/academy-booking-api';
 
 function apiErr(err: unknown): string {
   const d = (err as { data?: { error?: { message?: string } } })?.data;
@@ -118,6 +119,34 @@ function PreviewModal({ instanceId, onClose }: { instanceId: string; onClose: ()
   );
 }
 
+function MeetingLinkField({ lessonId, meetingUrl }: { lessonId: string; meetingUrl: string | null }) {
+  const [setMeetingLink, { isLoading }] = useSetMeetingLinkMutation();
+  const [draft, setDraft] = useState(meetingUrl ?? '');
+  const save = async () => {
+    try {
+      await setMeetingLink({ id: lessonId, url: draft.trim() }).unwrap();
+      toast({ title: 'Ссылка на видеозвонок сохранена' });
+    } catch (err) {
+      toast({ title: 'Не удалось сохранить', description: apiErr(err), variant: 'destructive' });
+    }
+  };
+  return (
+    <div className="flex w-full flex-wrap items-center gap-1.5">
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground"><Video className="h-3.5 w-3.5" /> Видеозвонок:</span>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder="https://telemost.yandex.ru/… (обязательно перед уроком)"
+        className="h-8 min-w-[220px] flex-1 rounded-lg border border-border bg-background px-2 text-sm"
+      />
+      <Button size="sm" className="h-8" onClick={save} disabled={isLoading || draft.trim() === (meetingUrl ?? '')}>
+        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Сохранить'}
+      </Button>
+      {meetingUrl && <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" /> добавлена</span>}
+    </div>
+  );
+}
+
 export function LessonPrepare({ lessonId }: { lessonId: string }) {
   const { data } = useGetInstanceByLessonQuery(lessonId);
   const [prepareOpen, setPrepareOpen] = useState(false);
@@ -135,6 +164,7 @@ export function LessonPrepare({ lessonId }: { lessonId: string }) {
           <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}><Eye className="mr-1 h-3.5 w-3.5" /> Предпросмотр</Button>
           <Button size="sm" variant="ghost" onClick={() => setPrepareOpen(true)}>Сменить шаблон</Button>
           <SceneGenerationsPanel key={`${instance.id}:${instance.version}`} instanceId={instance.id} />
+          <MeetingLinkField lessonId={lessonId} meetingUrl={data?.meetingUrl ?? null} />
         </>
       ) : (
         <Button size="sm" variant="outline" onClick={() => setPrepareOpen(true)}><Wand2 className="mr-1 h-3.5 w-3.5" /> Подготовить урок</Button>
