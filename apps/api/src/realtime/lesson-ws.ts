@@ -16,6 +16,7 @@ import {
 import { verifyAccessToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
 import { loadRoom, saveRoom } from './room-store';
+import { grantLessonLabTokens } from '../services/academy-lesson-lab-service';
 
 interface Member {
   ws: WebSocket;
@@ -122,6 +123,8 @@ async function markLessonStarted(lessonId: string, currentStatus: string) {
       where: { id: lessonId, status: { in: [...LESSON_STARTABLE] as never } },
       data: { status: 'IN_PROGRESS' },
     });
+    // Начисляем бюджет нейролаборатории один раз при старте (идемпотентно).
+    await grantLessonLabTokens(lessonId);
   } catch (err) {
     logger.warn(`[lesson-ws] не удалось отметить старт урока: ${(err as Error).message}`);
   }

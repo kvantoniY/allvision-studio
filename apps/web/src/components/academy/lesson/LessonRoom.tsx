@@ -17,6 +17,7 @@ import {
 } from '@allvision/shared';
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
+import { LessonLab } from '@/components/academy/lesson/LessonLab';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
@@ -216,7 +217,9 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
       {/* Тело: инструмент урока во всю ширину */}
       <div className="flex min-h-0 flex-1 flex-col p-3">
         <div className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-border bg-muted/40">
-          {scene ? (
+          {(scene as { lab?: unknown })?.lab ? (
+            <LessonLab lessonId={lessonId} />
+          ) : scene ? (
             <div className="absolute inset-0">
               <AcademyScenePlayer
                 ref={playerRef}

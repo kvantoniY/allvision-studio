@@ -48,7 +48,7 @@ export type TeacherStudentDetail = {
 export const academyBookingApi = createApi({
   reducerPath: 'academyBookingApi',
   baseQuery: createBaseQueryWithReauth('/api/academy'),
-  tagTypes: ['Balance', 'Lessons', 'Teachers', 'Slots', 'Earnings', 'Students'],
+  tagTypes: ['Balance', 'Lessons', 'Teachers', 'Slots', 'Earnings', 'Students', 'Lab'],
   refetchOnFocus: true,
   endpoints: (build) => ({
     getPackages: build.query<{ packages: LessonPackageOption[] }, void>({
@@ -84,6 +84,18 @@ export const academyBookingApi = createApi({
     setMeetingLink: build.mutation<{ ok: true; meetingUrl: string | null }, { id: string; url: string }>({
       query: ({ id, url }) => ({ url: `/lessons/${id}/meeting-link`, method: 'POST', body: { url } }),
       invalidatesTags: ['Lessons'],
+    }),
+    getLessonLab: build.query<{ hasLab: boolean; granted: number | null; spent: number; remaining: number; videoAllowed: boolean }, string>({
+      query: (lessonId) => ({ url: `/lessons/${lessonId}/lab` }),
+      providesTags: (_r, _e, lessonId) => [{ type: 'Lab', id: lessonId }],
+    }),
+    getLessonLabHistory: build.query<{ items: Array<{ id: string; status: string; progress: number; resultUrl: string | null; isVideo: boolean; prompt: string | null; createdAt: string }> }, string>({
+      query: (lessonId) => ({ url: `/lessons/${lessonId}/lab/history` }),
+      providesTags: (_r, _e, lessonId) => [{ type: 'Lab', id: `${lessonId}:history` }],
+    }),
+    generateLessonLab: build.mutation<{ generation: unknown; lab: { remaining: number; spent: number; granted: number | null } }, { lessonId: string; body: Record<string, unknown> }>({
+      query: ({ lessonId, body }) => ({ url: `/lessons/${lessonId}/lab/generate`, method: 'POST', body }),
+      invalidatesTags: (_r, _e, { lessonId }) => [{ type: 'Lab', id: lessonId }, { type: 'Lab', id: `${lessonId}:history` }],
     }),
     // Teacher
     getTeacherSlots: build.query<{ slots: TeacherSlotDto[] }, void>({
@@ -150,4 +162,7 @@ export const {
   useGetTeacherStudentsQuery,
   useGetTeacherStudentDetailQuery,
   useSaveTeacherStudentNoteMutation,
+  useGetLessonLabQuery,
+  useGetLessonLabHistoryQuery,
+  useGenerateLessonLabMutation,
 } = academyBookingApi;

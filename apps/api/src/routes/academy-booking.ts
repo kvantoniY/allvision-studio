@@ -28,6 +28,8 @@ import {
 } from '../services/academy-booking-service';
 import { awardLessonCompletion } from '../services/academy-gamification-service';
 import { completeLessonTopic } from '../services/academy-lesson-topic-service';
+import { lessonLabState } from '../services/academy-lesson-lab-service';
+import { createFreeChatProject } from '../services/free-chat-generation';
 import {
   buildTeacherStudents,
   buildTeacherStudentDetail,
@@ -333,6 +335,53 @@ academyBookingRouter.post('/lessons/:id/meeting-link', requireAuth, async (req: 
       }
     });
     res.json({ ok: true, meetingUrl: trimmed || null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Нейролаборатория урока (изолированный бюджет токенов) ===
+academyBookingRouter.get('/lessons/:id/lab', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await loadLessonForActor(req.params.id, req.user!.id); // гейт участника
+    res.json(await lessonLabState(req.params.id));
+  } catch (err) {
+    next(err);
+  }
+});
+
+academyBookingRouter.post('/lessons/:id/lab/generate', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { lesson } = await loadLessonForActor(req.params.id, req.user!.id);
+    const state = await lessonLabState(lesson.id);
+    if (!state.hasLab) throw new HttpError(400, 'NO_LAB', 'В этом уроке нет лаборатории');
+    if (state.granted === null) throw new HttpError(409, 'LAB_NOT_STARTED', 'Лаборатория откроется, когда преподаватель начнёт урок');
+    const generation = await createFreeChatProject(req.user!.id, req.body, {
+      kind: 'lesson-lab',
+      lessonId: lesson.id,
+      videoAllowed: state.videoAllowed,
+    });
+    res.status(201).json({ generation, lab: await lessonLabState(lesson.id) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+academyBookingRouter.get('/lessons/:id/lab/history', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await loadLessonForActor(req.params.id, req.user!.id);
+    const projects = await prisma.project.findMany({
+      where: { mode: 'lesson-lab', userInputs: { path: ['labLessonId'], equals: req.params.id } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      select: { id: true, status: true, progress: true, resultImage: true, resultVideo: true, inputText: true, createdAt: true },
+    });
+    res.json({ items: projects.map((p) => ({
+      id: p.id, status: p.status, progress: p.progress,
+      resultUrl: p.resultVideo ?? p.resultImage ?? null,
+      isVideo: Boolean(p.resultVideo),
+      prompt: p.inputText, createdAt: p.createdAt.toISOString(),
+    })) });
   } catch (err) {
     next(err);
   }

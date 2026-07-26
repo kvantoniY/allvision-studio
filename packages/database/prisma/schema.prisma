@@ -483,6 +483,10 @@ model Lesson {
   cancelledBy  String? // parent | teacher | system
   cancelReason String?      @db.Text
   meetingUrl   String? // ссылка на видеозвонок (Яндекс Телемост), учитель ставит вручную
+  // Изолированный бюджет нейролаборатории на этот урок: начисляется один раз при старте
+  // урока (labTokensGranted != null = уже начислено), тратится только внутри урока.
+  labTokensGranted Int? // null = ещё не начисляли; число = выданный лимит
+  labTokensSpent   Int  @default(0)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 

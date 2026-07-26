@@ -391,6 +391,13 @@ export const academySceneSchema = z.object({
     mode: z.enum(['layered', 'full-ai']).default('layered'),
     prompt: z.string().trim().max(2000).optional(),
   }).strict().default({ mode: 'layered' }),
+  // Сцена-лаборатория: вместо интерактивной сцены в уроке показывается нейролаборатория
+  // (AI-чат). `tokens` — сколько токенов даётся ребёнку на эту лабораторию в рамках урока.
+  // Токены начисляются один раз при старте урока и тратятся только внутри урока.
+  lab: z.object({
+    tokens: z.number().int().min(0).max(1000).default(20),
+    videoAllowed: z.boolean().default(true),
+  }).strict().optional(),
   metadata: z.object({
     educationalGoal: z.string().trim().max(1000).optional(),
     estimatedDurationSec: z.number().int().positive().max(86_400).optional(),

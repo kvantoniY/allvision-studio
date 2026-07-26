@@ -1093,12 +1093,48 @@ function SceneInspector({ scene, onChange, onGenerateBg, onPickBg }: {
   const hasBackground = scene.layers.some((l) => l.elements.some((e) => e.type === 'background' && e.asset));
   const gen = (scene as { generation?: { mode?: string; prompt?: string } }).generation ?? { mode: 'layered' };
   const fullAi = gen.mode === 'full-ai';
+  const lab = (scene as { lab?: { tokens: number; videoAllowed: boolean } }).lab;
+  const isLab = Boolean(lab);
   return (
     <div className="space-y-3">
       <span className="text-sm font-semibold">Сцена</span>
       <div className="space-y-1.5">
         <Label className="text-xs">Название сцены</Label>
         <Input value={scene.title} onChange={(e) => onChange({ ...scene, title: e.target.value })} className="h-8" />
+      </div>
+
+      {/* Сцена-лаборатория: вместо интерактивной сцены — нейролаборатория */}
+      <div className="space-y-1.5 rounded-lg border border-violet-300 bg-violet-50/60 p-2.5">
+        <label className="flex items-center gap-2 text-xs font-medium">
+          <input
+            type="checkbox"
+            checked={isLab}
+            onChange={(e) => {
+              const next = { ...scene } as AcademyScene & { lab?: { tokens: number; videoAllowed: boolean } };
+              if (e.target.checked) next.lab = { tokens: 20, videoAllowed: true };
+              else delete next.lab;
+              onChange(next);
+            }}
+          />
+          Сцена-лаборатория (нейролаборатория вместо сцены)
+        </label>
+        {isLab && lab && (
+          <div className="space-y-1.5 pl-5">
+            <label className="flex items-center gap-2 text-[11px]">
+              Токенов ребёнку на урок:
+              <input
+                type="number" min={0} max={1000} value={lab.tokens}
+                onChange={(e) => onChange({ ...scene, lab: { ...lab, tokens: Math.max(0, Number(e.target.value)) } } as AcademyScene)}
+                className="h-7 w-20 rounded border border-border bg-background px-2 text-xs"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-[11px]">
+              <input type="checkbox" checked={lab.videoAllowed} onChange={(e) => onChange({ ...scene, lab: { ...lab, videoAllowed: e.target.checked } } as AcademyScene)} />
+              разрешить видео-модели
+            </label>
+            <p className="text-[11px] text-muted-foreground">Токены начисляются один раз при старте урока, тратятся только в уроке, кошелёк семьи не трогается.</p>
+          </div>
+        )}
       </div>
 
       {/* Режим генерации сцены (A6.6) */}
