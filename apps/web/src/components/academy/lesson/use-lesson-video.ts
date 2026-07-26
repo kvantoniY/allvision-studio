@@ -167,6 +167,9 @@ export function useLessonVideo(lessonId: string) {
       const options: RoomOptions = {
         adaptiveStream: true,
         dynacast: true,
+        // Не рвать сессию при кратком уходе вкладки в фон (мобильные браузеры часто
+        // шлют pagehide/visibilitychange — например при системном промпте доступа).
+        disconnectOnPageLeave: false,
         videoCaptureDefaults: prefs.cameraId ? { deviceId: prefs.cameraId } : undefined,
         audioCaptureDefaults: prefs.micId ? { deviceId: prefs.micId } : undefined,
       };
