@@ -26,6 +26,23 @@ export type LessonInstanceByLesson = {
   meetingUrl: string | null;
 };
 
+export type LessonTopicOption = {
+  topicId: string;
+  title: string;
+  moduleTitle: string;
+  status: string;
+  isNextRecommended: boolean;
+};
+
+export type LessonTopicOptions = {
+  enrollmentId: string | null;
+  courseTitle: string | null;
+  subjectTitle: string | null;
+  recommendedTopicId: string | null;
+  currentTopicId: string | null;
+  topics: LessonTopicOption[];
+};
+
 export type FullSceneGenerationStatus = {
   sceneId: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
@@ -74,7 +91,11 @@ export const academyLessonInstancesApi = createApi({
       query: (lessonId) => ({ url: `/by-lesson/${lessonId}` }),
       providesTags: (_r, _e, lessonId) => [{ type: 'Instance', id: lessonId }],
     }),
-    createInstance: build.mutation<{ instanceId: string }, { lessonId: string; templateVersionId: string; overrides?: { hiddenElementIds?: string[] } }>({
+    getLessonTopicOptions: build.query<LessonTopicOptions, string>({
+      query: (lessonId) => ({ url: `/lesson/${lessonId}/topic-options` }),
+      providesTags: (_r, _e, lessonId) => [{ type: 'Instance', id: lessonId }],
+    }),
+    createInstance: build.mutation<{ instanceId: string }, { lessonId: string; templateVersionId: string; topicId?: string | null; overrides?: { hiddenElementIds?: string[] } }>({
       query: (body) => ({ url: '/', method: 'POST', body }),
       invalidatesTags: (result, _e, { lessonId }) => [
         { type: 'Instance', id: lessonId },
@@ -109,6 +130,7 @@ export const academyLessonInstancesApi = createApi({
 export const {
   useGetPublishedTemplatesQuery,
   useGetInstanceByLessonQuery,
+  useGetLessonTopicOptionsQuery,
   useCreateInstanceMutation,
   useLazyGetInstanceSceneQuery,
   useGetInstanceScenesQuery,

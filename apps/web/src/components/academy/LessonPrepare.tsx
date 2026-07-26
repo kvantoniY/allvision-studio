@@ -12,6 +12,7 @@ import { SceneGenerationsPanel } from '@/components/academy/SceneGenerationsPane
 import {
   useCreateInstanceMutation,
   useGetInstanceByLessonQuery,
+  useGetLessonTopicOptionsQuery,
   useGetPublishedTemplatesQuery,
   useLazyGetInstanceSceneQuery,
 } from '@/store/api/academy-lesson-instances-api';
@@ -22,16 +23,35 @@ function apiErr(err: unknown): string {
   return d?.error?.message ?? 'Ошибка';
 }
 
+const TOPIC_STATUS_LABEL: Record<string, string> = {
+  COMPLETED: 'пройдена', IN_PROGRESS: 'идёт', RECOMMENDED: 'следующая', LOCKED: '',
+};
+
 function PrepareModal({ lessonId, onClose }: { lessonId: string; onClose: () => void }) {
+  const topicOptions = useGetLessonTopicOptionsQuery(lessonId);
+  const [selectedTopic, setSelectedTopic] = useState<string | null | undefined>(undefined);
   const { data, isLoading } = useGetPublishedTemplatesQuery({ lessonId });
   const [createInstance, { isLoading: creating }] = useCreateInstanceMutation();
   const items = data?.items ?? [];
-  const hasTopic = Boolean(data?.lessonTopicId);
+
+  // Тема по умолчанию — рекомендованная следующая по программе.
+  const topics = topicOptions.data?.topics ?? [];
+  const recommended = topicOptions.data?.recommendedTopicId ?? topicOptions.data?.currentTopicId ?? null;
+  const effectiveTopic = selectedTopic === undefined ? recommended : selectedTopic;
+  const hasProgram = topics.length > 0;
+
+  // Шаблоны выбранной темы — вперёд; если тема выбрана, показываем сперва её уроки.
+  const sorted = [...items].sort((a, b) => {
+    const am = a.topicId === effectiveTopic ? 1 : 0;
+    const bm = b.topicId === effectiveTopic ? 1 : 0;
+    return bm - am;
+  });
 
   const pick = async (templateVersionId: string) => {
     try {
-      await createInstance({ lessonId, templateVersionId }).unwrap();
-      toast({ title: 'Урок подготовлен', description: 'Персонаж ребёнка подставится автоматически.' });
+      await createInstance({ lessonId, templateVersionId, topicId: effectiveTopic }).unwrap();
+      const t = topics.find((x) => x.topicId === effectiveTopic);
+      toast({ title: 'Урок подготовлен', description: t ? `Тема: ${t.title}` : 'Персонаж ребёнка подставится автоматически.' });
       onClose();
     } catch (err) {
       toast({ title: 'Не удалось', description: apiErr(err), variant: 'destructive' });
@@ -42,36 +62,60 @@ function PrepareModal({ lessonId, onClose }: { lessonId: string; onClose: () => 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
       <div className="academy-theme w-full max-w-md rounded-2xl bg-card p-5 text-foreground" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Выбрать шаблон урока</h2>
+          <h2 className="text-lg font-semibold">Подготовить урок</h2>
           <button type="button" onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
         </div>
+
+        {/* Тема программы (по умолчанию — следующая по порядку) */}
+        {hasProgram && (
+          <div className="mb-4 space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Тема ({topicOptions.data?.courseTitle})</label>
+            <select
+              value={effectiveTopic ?? ''}
+              onChange={(e) => setSelectedTopic(e.target.value || null)}
+              className="h-9 w-full rounded-lg border border-border bg-background px-2 text-sm"
+            >
+              {topics.map((t) => (
+                <option key={t.topicId} value={t.topicId}>
+                  {t.moduleTitle ? `${t.moduleTitle} · ` : ''}{t.title}
+                  {t.isNextRecommended ? ' — следующая' : TOPIC_STATUS_LABEL[t.status] ? ` — ${TOPIC_STATUS_LABEL[t.status]}` : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">
+              По умолчанию — следующая тема по программе. Можно пропустить вперёд (тема зачтётся пройденной) или вернуться к пройденной (перепрохождение, очки повторно не начисляются).
+            </p>
+          </div>
+        )}
+
+        <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Шаблон урока</label>
         {isLoading ? (
           <div className="h-24 animate-pulse rounded-xl bg-muted" />
         ) : items.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">Нет опубликованных шаблонов. Методист публикует их в конструкторе.</p>
         ) : (
           <div className="space-y-2">
-            {hasTopic && (
-              <p className="text-xs text-muted-foreground">Уроки темы этого занятия показаны первыми и отмечены.</p>
-            )}
-            {items.map((t) => (
+            {sorted.map((t) => {
+              const matchesTopic = Boolean(effectiveTopic && t.topicId === effectiveTopic);
+              return (
               <button
                 key={t.versionId}
                 type="button"
                 disabled={creating}
                 onClick={() => pick(t.versionId)}
-                className={cn('flex w-full items-center justify-between gap-2 rounded-xl border p-3 text-left transition hover:border-primary', t.matchesLessonTopic ? 'border-primary/50 bg-accent/40' : 'border-border')}
+                className={cn('flex w-full items-center justify-between gap-2 rounded-xl border p-3 text-left transition hover:border-primary', matchesTopic ? 'border-primary/50 bg-accent/40' : 'border-border')}
               >
                 <span className="min-w-0">
                   <span className="block truncate font-medium">{t.title}</span>
                   {t.topicTitle && <span className="block truncate text-[11px] text-muted-foreground">Тема: {t.topicTitle}</span>}
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-                  {t.matchesLessonTopic && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">тема урока</span>}
+                  {matchesTopic && <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] text-primary-foreground">эта тема</span>}
                   v{t.version}
                 </span>
               </button>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

@@ -27,6 +27,7 @@ import {
   topicTitles,
 } from '../services/academy-booking-service';
 import { awardLessonCompletion } from '../services/academy-gamification-service';
+import { completeLessonTopic } from '../services/academy-lesson-topic-service';
 import { createLessonVideoToken } from '../services/lesson-video-service';
 import { addLessonSystemMessage } from '../services/academy-operations-service';
 
@@ -457,7 +458,9 @@ academyBookingRouter.post('/teacher/lessons/:id/status', requireAuth, requireRol
       // Завершённый урок делает начисление доступным к выплате; неявка — списание без начисления.
       if (status === 'COMPLETED') {
         await tx.teacherEarning.updateMany({ where: { lessonId: lesson.id, status: 'PENDING' }, data: { status: 'AVAILABLE' } });
-        await awardLessonCompletion(tx, lesson);
+        // Тема урока помечается пройденной. Перепрохождение (тема уже пройдена) очков не даёт.
+        const { newlyCompleted } = await completeLessonTopic(tx, lesson);
+        if (newlyCompleted) await awardLessonCompletion(tx, lesson);
       } else if (status === 'NO_SHOW') {
         await tx.teacherEarning.updateMany({ where: { lessonId: lesson.id }, data: { status: 'REJECTED' } });
       }

@@ -14,6 +14,7 @@ import { requireRole } from '../middleware/require-role';
 import { HttpError } from '../utils/http-error';
 import { readCharacterRef, readChildAsset } from '../services/child-photo-storage';
 import { ensureFullAiSceneGenerations, fullSceneStatuses, regenerateFullAiScene } from '../services/academy-full-scene-service';
+import { defaultLessonTopicId, lessonTopicOptions } from '../services/academy-lesson-topic-service';
 import { addLessonSystemMessage } from '../services/academy-operations-service';
 
 export const academyLessonInstancesRouter = Router();
@@ -22,6 +23,8 @@ academyLessonInstancesRouter.use(requireAuth);
 const createSchema = z.object({
   lessonId: z.string().min(1),
   templateVersionId: z.string().min(1),
+  // Тема урока: по умолчанию рекомендованная следующая, преподаватель может выбрать другую.
+  topicId: z.string().min(1).nullable().optional(),
   overrides: z.object({ hiddenElementIds: z.array(z.string()).max(500).optional() }).optional(),
 });
 
@@ -37,6 +40,7 @@ async function loadLessonParticipants(lessonId: string) {
       id: true,
       status: true,
       teacherId: true,
+      topicId: true,
       meetingUrl: true,
       teacher: { select: { userId: true } },
       child: { select: { id: true, parentId: true } },
@@ -99,6 +103,21 @@ academyLessonInstancesRouter.get('/published-templates', requireRole('TEACHER', 
   }
 });
 
+// === Опции тем для подготовки урока (последовательность программы) ===
+academyLessonInstancesRouter.get('/lesson/:lessonId/topic-options', requireRole('TEACHER', 'METHODIST'), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: req.params.lessonId },
+      select: { childId: true, teacherId: true, topicId: true, teacher: { select: { userId: true } } },
+    });
+    if (!lesson) throw new HttpError(404, 'LESSON_NOT_FOUND', 'Урок не найден');
+    if (!isAdmin(req) && lesson.teacher.userId !== req.user!.id) throw new HttpError(403, 'FORBIDDEN', 'Это не ваш урок');
+    res.json(await lessonTopicOptions(lesson));
+  } catch (err) {
+    next(err);
+  }
+});
+
 // === Создать/обновить экземпляр урока (преподаватель урока или админ) ===
 academyLessonInstancesRouter.post('/', requireRole('TEACHER', 'METHODIST'), async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -110,6 +129,11 @@ academyLessonInstancesRouter.post('/', requireRole('TEACHER', 'METHODIST'), asyn
     }
     const version = await prisma.lessonTemplateVersion.findUnique({ where: { id: data.templateVersionId } });
     if (!version) throw new HttpError(404, 'VERSION_NOT_FOUND', 'Версия шаблона не найдена');
+
+    // Тема урока: явно выбранная преподавателем, иначе рекомендованная следующая по программе.
+    const topicId = data.topicId !== undefined
+      ? data.topicId
+      : (lesson.topicId ?? await defaultLessonTopicId({ childId: lesson.child.id, teacherId: lesson.teacherId }));
 
     const instance = await prisma.$transaction(async (tx) => {
       const created = await tx.lessonInstance.upsert({
@@ -123,8 +147,8 @@ academyLessonInstancesRouter.post('/', requireRole('TEACHER', 'METHODIST'), asyn
         },
         update: { templateVersionId: version.id, overrides: (data.overrides ?? {}) as Prisma.InputJsonValue },
       });
-      // Урок подготовлен → READY.
-      await tx.lesson.update({ where: { id: lesson.id }, data: { status: 'READY' } });
+      // Урок подготовлен → READY, тема зафиксирована.
+      await tx.lesson.update({ where: { id: lesson.id }, data: { status: 'READY', topicId: topicId ?? null } });
       if (lesson.status !== 'READY') {
         await addLessonSystemMessage(tx, {
           parentId: lesson.child.parentId,
