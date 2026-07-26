@@ -16,6 +16,7 @@ import {
   updateRule,
   patchElementTransform,
   pruneDanglingRefs,
+  withSceneDefaults,
   removeElement,
   removeLayer,
   reorderElement,
@@ -76,8 +77,10 @@ const TEXT_TYPES = ['text', 'dialogue', 'button', 'card'];
 function documentFrom(raw: unknown, title: string): AcademyScene[] {
   if (raw && typeof raw === 'object') {
     const r = raw as { scenes?: unknown; layers?: unknown };
-    if (Array.isArray(r.scenes) && r.scenes.length > 0) return (r.scenes as AcademyScene[]).map(pruneDanglingRefs);
-    if (Array.isArray(r.layers)) return [pruneDanglingRefs(raw as AcademyScene)];
+    // withSceneDefaults — заполняет visible/transform у «сырых» сцен (импорт JSON), иначе
+    // слои без visible скрываются и холст пустой. pruneDanglingRefs чистит битые правила.
+    if (Array.isArray(r.scenes) && r.scenes.length > 0) return (r.scenes as AcademyScene[]).map((s) => pruneDanglingRefs(withSceneDefaults(s)));
+    if (Array.isArray(r.layers)) return [pruneDanglingRefs(withSceneDefaults(raw))];
   }
   return [createEmptyScene({ title })];
 }
@@ -568,7 +571,7 @@ function EditCanvas({
         // всплывал сюда и тут же сбрасывал только что выбранный элемент.
         onClick={(e) => { if (e.target === e.currentTarget) onSelect(''); }}
       >
-        {layers.filter((l) => l.visible).map((layer) =>
+        {layers.filter((l) => l.visible !== false).map((layer) =>
           layer.elements.map((el) => (
             <div
               key={el.id}

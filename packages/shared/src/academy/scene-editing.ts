@@ -161,6 +161,39 @@ export function setSceneBackground(scene: AcademyScene, drag: AcademyAssetDragDa
  * оставляет битое правило, которое нельзя ни увидеть, ни починить в редакторе, —
  * публикация падает на «Связанный элемент не найден».
  */
+const TRANSFORM_DEFAULTS = { x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1, scaleX: 1, scaleY: 1, anchorX: 0, anchorY: 0 };
+
+/**
+ * Заполняет структурные дефолты слоёв/элементов у сцены из внешнего JSON (импорт, авторинг):
+ * редактор рассчитан на элементы из makeElement (с полными полями), а «сырой» JSON может не
+ * иметь visible/transform-полей → слой/элемент не рисуется. Нормализация чинит рендер, не
+ * трогая строгую валидацию (её делает публикация).
+ */
+export function withSceneDefaults(raw: unknown): AcademyScene {
+  const scene = raw as AcademyScene & { layers?: AcademySceneLayer[] };
+  const layers = (scene.layers ?? []).map((layer) => ({
+    ...layer,
+    visible: layer.visible ?? true,
+    locked: layer.locked ?? false,
+    zIndex: layer.zIndex ?? 0,
+    elements: (layer.elements ?? []).map((el) => ({
+      ...el,
+      zIndex: el.zIndex ?? 0,
+      visible: el.visible ?? true,
+      locked: el.locked ?? false,
+      interactive: el.interactive ?? false,
+      studentInteractive: el.studentInteractive ?? true,
+      teacherVisible: el.teacherVisible ?? true,
+      transform: { ...TRANSFORM_DEFAULTS, ...(el.transform ?? {}) },
+      content: el.content ?? {},
+      style: el.style ?? {},
+      states: el.states ?? [],
+      animations: el.animations ?? {},
+    })),
+  }));
+  return { ...scene, layers, rules: scene.rules ?? [] } as AcademyScene;
+}
+
 export function pruneDanglingRefs(scene: AcademyScene): AcademyScene {
   const alive = new Set(scene.layers.flatMap((layer) => layer.elements.map((el) => el.id)));
   const missing = (id: string | undefined) => Boolean(id) && !alive.has(id as string);
