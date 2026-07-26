@@ -65,6 +65,16 @@ export const academyMaterialsApi = createApi({
       query: (body) => ({ url: '/promote', method: 'POST', body }),
       invalidatesTags: ['Library'],
     }),
+    uploadAcademyImage: build.mutation<{ asset: AcademyAssetDto }, { file: File; kind: string; title?: string }>({
+      query: ({ file, kind, title }) => {
+        const form = new FormData();
+        form.append('file', file);
+        form.append('kind', kind);
+        if (title) form.append('title', title);
+        return { url: '/upload', method: 'POST', body: form };
+      },
+      invalidatesTags: ['Library'],
+    }),
   }),
 });
 
@@ -78,4 +88,5 @@ export const {
   useUpdateAcademyAssetMutation,
   useDeleteAcademyAssetMutation,
   usePromoteAcademyAssetMutation,
+  useUploadAcademyImageMutation,
 } = academyMaterialsApi;

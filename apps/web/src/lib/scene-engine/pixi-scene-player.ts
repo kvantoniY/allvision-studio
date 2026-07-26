@@ -391,8 +391,14 @@ export class PixiScenePlayer {
     wrapper.alpha = transform.opacity;
     wrapper.scale.set(transform.scaleX, transform.scaleY);
 
-    if (IMAGE_ELEMENT_TYPES.has(element.type)) await this.addImage(wrapper, element);
-    else if (element.type !== 'audio') this.addGraphic(wrapper, element);
+    // Фон с картинкой рисуется как изображение (иначе показывалась только заливка —
+    // фон был виден в конструкторе, но не в уроке). Пустой фон — заливка цветом вьюпорта.
+    const hasSource = Boolean(element.asset?.fileUrl ?? element.content.sourceUrl);
+    if (IMAGE_ELEMENT_TYPES.has(element.type) || (element.type === 'background' && hasSource)) {
+      await this.addImage(wrapper, element);
+    } else if (element.type !== 'audio') {
+      this.addGraphic(wrapper, element);
+    }
 
     const interactive = element.interactive && (this.role === 'teacher' || element.studentInteractive);
     if (interactive) {

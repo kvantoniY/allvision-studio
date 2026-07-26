@@ -5,7 +5,6 @@ import {
   ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Copy, Eye, Image as ImageIcon, Layers, Loader2, Pencil, Plus, Redo2, Trash2, Undo2, Volume2, Zap,
 } from 'lucide-react';
 import {
-  ACADEMY_SCENE_ELEMENT_TYPES,
   ACADEMY_SCENE_ELEMENT_TYPE_LABELS,
   ACADEMY_SCENE_ACTION_TYPES,
   ACADEMY_SCENE_LAYER_KINDS,
@@ -42,6 +41,7 @@ import { useGetTemplateQuery, usePublishTemplateMutation, useUpdateTemplateMutat
 import { AssetPickerDialog } from './AssetPickerDialog';
 import { BackgroundGenerator } from './BackgroundGenerator';
 import { RulesEditor } from './RulesEditor';
+import { ElementPalette } from './ElementPalette';
 
 const IMAGE_TYPES = ['background', 'animated-background', 'foreground', 'image', 'character', 'npc', 'prop', 'video'];
 
@@ -270,6 +270,11 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
     () => scene?.layers.find((l) => l.elements.some((e) => e.id === selectedId))?.id ?? null,
     [scene, selectedId],
   );
+  // Слой, в который палитра добавляет новые элементы (слой выбранного элемента, иначе первый).
+  const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
+  const targetLayerId = activeLayerId && scene?.layers.some((l) => l.id === activeLayerId)
+    ? activeLayerId
+    : (selectedLayerId ?? scene?.layers[0]?.id ?? null);
 
   const validateDoc = (): { ok: boolean; issue?: string } => {
     if (!scenes) return { ok: false };
@@ -350,55 +355,67 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
       </div>
 
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)_260px]">
-        {/* Слои и элементы */}
-        <div className="flex min-h-0 flex-col overflow-y-auto rounded-xl border border-border bg-card p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-sm font-semibold"><Layers className="h-4 w-4" /> Слои</span>
-            <select
-              onChange={(e) => { if (e.target.value) { apply(addLayer(scene, e.target.value as typeof ACADEMY_SCENE_LAYER_KINDS[number]).scene); e.target.value = ''; } }}
-              className="rounded-md border border-border bg-background px-1 py-1 text-xs"
-              value=""
-            >
-              <option value="">+ слой</option>
-              {ACADEMY_SCENE_LAYER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-            </select>
+        {/* Палитра элементов + слои */}
+        <div className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-xl border border-border bg-card p-3">
+          <div>
+            <p className="mb-1.5 text-sm font-semibold">Добавить элемент</p>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              В слой: <span className="font-medium text-foreground">{scene.layers.find((l) => l.id === targetLayerId)?.name ?? '—'}</span>
+            </p>
+            <ElementPalette onAdd={(type) => {
+              if (!targetLayerId) return;
+              const res = addElement(scene, targetLayerId, type);
+              apply(res.scene);
+              setSelectedId(res.elementId);
+            }} />
           </div>
-          {scene.layers.map((layer) => (
-            <div key={layer.id} className="mb-2">
-              <div className="flex items-center justify-between gap-1">
-                <span className="truncate text-xs font-medium text-muted-foreground">{layer.name}</span>
-                <div className="flex items-center gap-1">
-                  <select
-                    onChange={(e) => { if (e.target.value) { apply(addElement(scene, layer.id, e.target.value as AcademySceneElement['type']).scene); e.target.value = ''; } }}
-                    className="rounded border border-border bg-background px-1 text-[11px]"
-                    value=""
+
+          <div className="border-t border-border pt-2">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-sm font-semibold"><Layers className="h-4 w-4" /> Слои</span>
+              <select
+                onChange={(e) => { if (e.target.value) { apply(addLayer(scene, e.target.value as typeof ACADEMY_SCENE_LAYER_KINDS[number]).scene); e.target.value = ''; } }}
+                className="rounded-md border border-border bg-background px-1 py-1 text-xs"
+                value=""
+              >
+                <option value="">+ слой</option>
+                {ACADEMY_SCENE_LAYER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </div>
+            {scene.layers.map((layer) => (
+              <div key={layer.id} className="mb-2">
+                <div className="flex items-center justify-between gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveLayerId(layer.id)}
+                    className={cn('flex-1 truncate rounded px-1.5 py-0.5 text-left text-xs font-medium', layer.id === targetLayerId ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-muted')}
+                    title="Сделать активным слоем для добавления"
                   >
-                    <option value="">+ элемент</option>
-                    {ACADEMY_SCENE_ELEMENT_TYPES.map((t) => <option key={t} value={t}>{ACADEMY_SCENE_ELEMENT_TYPE_LABELS[t]}</option>)}
-                  </select>
+                    {layer.name}
+                  </button>
                   {scene.layers.length > 1 && (
                     <button type="button" aria-label="Удалить слой" className="text-muted-foreground hover:text-destructive" onClick={() => apply(removeLayer(scene, layer.id))}>
                       <Trash2 className="h-3 w-3" />
                     </button>
                   )}
                 </div>
+                <div className="mt-1 space-y-0.5">
+                  {layer.elements.map((el) => (
+                    <button
+                      key={el.id}
+                      type="button"
+                      onClick={() => { setSelectedId(el.id); setActiveLayerId(layer.id); }}
+                      className={cn('flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs', el.id === selectedId ? 'bg-accent text-accent-foreground' : 'hover:bg-muted')}
+                    >
+                      <span className="truncate">{el.name}</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">{ACADEMY_SCENE_ELEMENT_TYPE_LABELS[el.type]}</span>
+                    </button>
+                  ))}
+                  {layer.elements.length === 0 && <p className="px-2 text-[11px] text-muted-foreground">пусто</p>}
+                </div>
               </div>
-              <div className="mt-1 space-y-0.5">
-                {layer.elements.map((el) => (
-                  <button
-                    key={el.id}
-                    type="button"
-                    onClick={() => setSelectedId(el.id)}
-                    className={cn('flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs', el.id === selectedId ? 'bg-accent text-accent-foreground' : 'hover:bg-muted')}
-                  >
-                    <span className="truncate">{el.name}</span>
-                    <span className="ml-auto text-[10px] text-muted-foreground">{ACADEMY_SCENE_ELEMENT_TYPE_LABELS[el.type]}</span>
-                  </button>
-                ))}
-                {layer.elements.length === 0 && <p className="px-2 text-[11px] text-muted-foreground">пусто</p>}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
 
         {/* Канвас / предпросмотр */}
@@ -750,6 +767,7 @@ function ElementInspector({
   const ownRules = scene.rules.filter((r) => r.event.sourceElementId === element.id);
   const otherElements = scene.layers.flatMap((l) => l.elements).filter((e) => e.id !== element.id);
   const inputElements = scene.layers.flatMap((l) => l.elements).filter((e) => e.type === 'input');
+  const [withSound, setWithSound] = useState(true);
 
   const addClickRule = () => {
     const created = addRule(scene);
@@ -761,38 +779,61 @@ function ElementInspector({
   };
 
   // Кнопка проверяет поле ввода: два правила «клик → верно / неверно».
-  const addCheckRules = (inputId: string) => {
+  // Добавляет два встроенных тона (верно/неверно) и возвращает их id — звук без загрузки файлов.
+  const ensureTones = (sceneIn: AcademyScene): { scene: AcademyScene; okId: string; noId: string } => {
+    const layerId = sceneIn.layers[0]?.id;
+    const existingOk = sceneIn.layers.flatMap((l) => l.elements).find((e) => e.type === 'audio' && e.content.sourceUrl === 'tone:success');
+    const existingNo = sceneIn.layers.flatMap((l) => l.elements).find((e) => e.type === 'audio' && e.content.sourceUrl === 'tone:wrong');
+    let s = sceneIn;
+    let okId = existingOk?.id ?? '';
+    let noId = existingNo?.id ?? '';
+    if (!okId && layerId) {
+      const a = addElement(s, layerId, 'audio');
+      s = updateElement(a.scene, a.elementId, { name: 'Звук: верно', content: { sourceUrl: 'tone:success', volume: 1 } });
+      okId = a.elementId;
+    }
+    if (!noId && layerId) {
+      const b = addElement(s, layerId, 'audio');
+      s = updateElement(b.scene, b.elementId, { name: 'Звук: неверно', content: { sourceUrl: 'tone:wrong', volume: 1 } });
+      noId = b.elementId;
+    }
+    return { scene: s, okId, noId };
+  };
+
+  const addCheckRules = (inputId: string, withSound: boolean) => {
     onChange({ interactive: true, studentInteractive: true });
-    const a = addRule(scene);
+    const base = withSound ? ensureTones(scene) : { scene, okId: '', noId: '' };
+    const a = addRule(base.scene);
     const s1 = updateRule(a.scene, a.ruleId, {
       name: `Проверка: верно (${element.name})`,
       event: { type: 'element-click', sourceElementId: element.id },
       conditions: [{ type: 'input-correct', elementId: inputId }],
-      actions: [{ type: 'add-score', value: 10 }, { type: 'show-hint', value: 'Верно!' }],
+      actions: [{ type: 'add-score', value: 10 }, { type: 'show-hint', value: 'Верно!' }, ...(base.okId ? [{ type: 'play-sound' as const, elementId: base.okId }] : [])],
     });
     const b = addRule(s1);
     const s2 = updateRule(b.scene, b.ruleId, {
       name: `Проверка: неверно (${element.name})`,
       event: { type: 'element-click', sourceElementId: element.id },
       conditions: [{ type: 'input-incorrect', elementId: inputId }],
-      actions: [{ type: 'show-hint', value: 'Попробуй ещё раз' }],
+      actions: [{ type: 'show-hint', value: 'Попробуй ещё раз' }, ...(base.noId ? [{ type: 'play-sound' as const, elementId: base.noId }] : [])],
     });
     onSceneChange(s2);
   };
 
   // Реакция сцены на выбор варианта ответа (любой правильной/неправильной кнопки).
-  const addAnswerReactionRules = () => {
-    const a = addRule(scene);
+  const addAnswerReactionRules = (withSound: boolean) => {
+    const base = withSound ? ensureTones(scene) : { scene, okId: '', noId: '' };
+    const a = addRule(base.scene);
     const s1 = updateRule(a.scene, a.ruleId, {
       name: 'Верный ответ',
       event: { type: 'answer-correct' },
-      actions: [{ type: 'add-score', value: 10 }, { type: 'show-hint', value: 'Верно!' }],
+      actions: [{ type: 'add-score', value: 10 }, { type: 'show-hint', value: 'Верно!' }, ...(base.okId ? [{ type: 'play-sound' as const, elementId: base.okId }] : [])],
     });
     const b = addRule(s1);
     const s2 = updateRule(b.scene, b.ruleId, {
       name: 'Неверный ответ',
       event: { type: 'answer-incorrect' },
-      actions: [{ type: 'show-hint', value: 'Неверно, попробуй ещё' }],
+      actions: [{ type: 'show-hint', value: 'Неверно, попробуй ещё' }, ...(base.noId ? [{ type: 'play-sound' as const, elementId: base.noId }] : [])],
     });
     onSceneChange(s2);
   };
@@ -908,9 +949,12 @@ function ElementInspector({
 
           <div className="space-y-1.5">
             <span className="text-[11px] text-muted-foreground">Проверять поле ввода</span>
+            <label className="flex items-center gap-1.5 text-[11px]">
+              <input type="checkbox" checked={withSound} onChange={(e) => setWithSound(e.target.checked)} /> со звуком (тон верно/неверно)
+            </label>
             <select
               value=""
-              onChange={(e) => { if (e.target.value) addCheckRules(e.target.value); }}
+              onChange={(e) => { if (e.target.value) addCheckRules(e.target.value, withSound); }}
               className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm"
             >
               <option value="">+ добавить проверку поля…</option>
@@ -943,7 +987,10 @@ function ElementInspector({
               </button>
             )}
             <p className="mt-1 text-[11px] text-muted-foreground">Отметьте варианты; реакцию на верный/неверный ответ добавьте кнопкой ниже.</p>
-            <Button variant="outline" size="sm" className="mt-1 h-7 w-full text-xs" onClick={addAnswerReactionRules}>
+            <label className="mt-1 flex items-center gap-1.5 text-[11px]">
+              <input type="checkbox" checked={withSound} onChange={(e) => setWithSound(e.target.checked)} /> со звуком (тон верно/неверно)
+            </label>
+            <Button variant="outline" size="sm" className="mt-1 h-7 w-full text-xs" onClick={() => addAnswerReactionRules(withSound)}>
               + реакция на верный/неверный ответ
             </Button>
           </div>

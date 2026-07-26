@@ -27,6 +27,7 @@ import {
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/require-role';
+import { uploadAcademyImage } from '../middleware/upload';
 import { addAcademyGenerationJob } from '../queues';
 import { getStorageProvider } from '../providers';
 import { deleteChildAssetFile, readChildAsset } from '../services/child-photo-storage';
@@ -623,6 +624,43 @@ function extensionForMime(mimeType: string): string {
   if (mimeType === 'audio/wav') return 'wav';
   return 'jpg';
 }
+
+// === Загрузка своей картинки в библиотеку (без AI) ===
+const uploadKindSchema = z.enum([...ACADEMY_MEDIA_ASSET_KINDS] as [string, ...string[]]);
+
+academyMaterialsRouter.post('/upload', uploadAcademyImage, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const file = req.file;
+    if (!file) throw new HttpError(400, 'FILE_REQUIRED', 'Прикрепите изображение');
+    const kind = uploadKindSchema.parse((req.body?.kind as string) || 'academy-background');
+    const title = String(req.body?.title || file.originalname || 'Загруженное изображение').slice(0, 160);
+
+    const key = path.posix.join('academy', 'library', req.user!.id, `${crypto.randomUUID()}.${extensionForMime(file.mimetype)}`);
+    const uploaded = await getStorageProvider().upload({ key, body: file.buffer, contentType: file.mimetype });
+
+    const asset = await prisma.mediaAsset.create({
+      data: {
+        kind,
+        groupCode: 'academy',
+        title,
+        tags: ['uploaded'],
+        ownerUserId: req.user!.id,
+        storageKey: uploaded.key,
+        publicUrl: uploaded.url,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        isActive: true,
+        generationModel: null,
+        generationPrompt: null,
+        generationCostUsd: 0,
+      },
+      include: { owner: { select: { name: true, email: true } } },
+    });
+    res.status(201).json({ asset: toMediaDto(req, asset) });
+  } catch (err) {
+    next(err);
+  }
+});
 
 academyMaterialsRouter.post('/promote', async (req: Request, res: Response, next: NextFunction) => {
   try {
