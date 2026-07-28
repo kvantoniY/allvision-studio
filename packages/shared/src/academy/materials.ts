@@ -137,12 +137,31 @@ export const ACADEMY_GENERATION_STYLE_LABELS: Record<(typeof ACADEMY_GENERATION_
 export const ACADEMY_BACKGROUND_REMOVAL_ENDPOINT = 'fal-ai/birefnet/v2';
 export const ACADEMY_BACKGROUND_REMOVAL_ESTIMATED_USD = 0.02;
 
-// Видео для кат-сцен: image-to-video (оживляет референс/персонажа) и text-to-video (по промпту).
+/**
+ * Видео для кат-сцен. Сначала выбирается СПОСОБ (что вообще делаем), потом модель:
+ * «оживить картинку» — это image-to-video (нужен кадр-референс), «по описанию» —
+ * text-to-video. Раньше оба способа лежали в одном списке моделей, и было непонятно,
+ * почему одни модели «оживляют», а другие «по промпту» — выбор способа это объясняет.
+ */
+export const ACADEMY_VIDEO_SOURCES = [
+  {
+    id: 'image',
+    label: 'Оживить картинку',
+    description: 'Готовый кадр приходит в движение. Нужен исходный кадр: референс из библиотеки, а для материалов с ребёнком — его утверждённый портрет.',
+  },
+  {
+    id: 'text',
+    label: 'Сгенерировать по описанию',
+    description: 'Модель снимает ролик с нуля по вашему описанию. Исходный кадр не нужен, но и точного контроля над кадром меньше.',
+  },
+] as const;
+export type AcademyVideoSource = (typeof ACADEMY_VIDEO_SOURCES)[number]['id'];
+
 export const ACADEMY_VIDEO_MODELS = [
-  { slug: 'kling-3-std', block: 'image-to-video', label: 'Kling 3.0 — оживить картинку', source: 'image' },
-  { slug: 'kling-3-pro', block: 'image-to-video', label: 'Kling 3.0 Pro — оживить картинку', source: 'image' },
-  { slug: 'seedance-2', block: 'text-to-video', label: 'Seedance 2.0 — по промпту', source: 'text' },
-  { slug: 'veo-3.1', block: 'text-to-video', label: 'Veo 3.1 — по промпту', source: 'text' },
+  { slug: 'kling-3-std', block: 'image-to-video', label: 'Kling 3.0', hint: 'Базовое качество, дешевле', source: 'image' },
+  { slug: 'kling-3-pro', block: 'image-to-video', label: 'Kling 3.0 Pro', hint: 'Лучше держит детали и движение', source: 'image' },
+  { slug: 'seedance-2', block: 'text-to-video', label: 'Seedance 2.0', hint: 'Живая динамика, кинематографично', source: 'text' },
+  { slug: 'veo-3.1', block: 'text-to-video', label: 'Veo 3.1', hint: 'Максимальное качество, дороже', source: 'text' },
 ] as const;
 export type AcademyVideoModelSlug = (typeof ACADEMY_VIDEO_MODELS)[number]['slug'];
 export const ACADEMY_VIDEO_MODEL_SLUGS = ACADEMY_VIDEO_MODELS.map((m) => m.slug) as [AcademyVideoModelSlug, ...AcademyVideoModelSlug[]];
@@ -150,7 +169,30 @@ export const ACADEMY_VIDEO_MODEL_SLUGS = ACADEMY_VIDEO_MODELS.map((m) => m.slug)
 export function academyVideoModel(slug: string) {
   return ACADEMY_VIDEO_MODELS.find((m) => m.slug === slug);
 }
+
+/** Модели выбранного способа. Первая — модель по умолчанию при переключении способа. */
+export function academyVideoModelsBySource(source: AcademyVideoSource) {
+  return ACADEMY_VIDEO_MODELS.filter((model) => model.source === source);
+}
+
 export const ACADEMY_VIDEO_DURATIONS = [5, 10, 15] as const;
+
+/**
+ * Что нужно докинуть, чтобы видео-генерация поехала. Пусто — можно запускать.
+ * Та же проверка живёт в схеме (superRefine), но панель должна сказать об этом ДО запуска.
+ */
+export function academyVideoRequirement(params: {
+  videoModel: string;
+  scope: 'teacher' | 'child';
+  referenceCount: number;
+}): string | null {
+  const model = academyVideoModel(params.videoModel);
+  if (!model || model.source !== 'image') return null;
+  if (params.scope === 'child') return null; // оживляем утверждённый портрет ребёнка
+  return params.referenceCount > 0
+    ? null
+    : 'Выберите кадр-референс: в библиотеке ниже нажмите «В референсы» на нужном изображении.';
+}
 
 export function isChildAssetKind(kind: string): kind is ChildAssetKind {
   return (CHILD_ASSET_KINDS as readonly string[]).includes(kind);

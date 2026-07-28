@@ -334,20 +334,34 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
       {/* Лента сцен урока (сцена за сценой) */}
       <div className="flex items-center gap-2 overflow-x-auto rounded-xl border border-border bg-card px-2 py-2">
         <span className="shrink-0 text-xs font-semibold text-muted-foreground">Сцены:</span>
-        {scenes.map((s, i) => (
-          <button
-            key={s.id + i}
-            type="button"
-            onClick={() => { setActiveIndex(i); setSelectedId(null); setPreview(false); }}
-            className={cn(
-              'shrink-0 rounded-lg border px-3 py-1.5 text-xs',
-              i === activeIndex ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:border-primary/40',
-            )}
-            title={s.title}
-          >
-            <span className="font-semibold">{i + 1}.</span> {s.title.length > 18 ? `${s.title.slice(0, 18)}…` : s.title}
-          </button>
-        ))}
+        {scenes.map((s, i) => {
+          // Тип сцены виден прямо в ленте: иначе понять структуру урока можно было
+          // только кликая по каждой сцене и заглядывая в инспектор.
+          const meta = s as AcademyScene & { lab?: unknown; generation?: { mode?: string } };
+          const badge = meta.lab ? 'ЛАБ' : meta.generation?.mode === 'full-ai' ? 'AI' : null;
+          return (
+            <button
+              key={s.id + i}
+              type="button"
+              onClick={() => { setActiveIndex(i); setSelectedId(null); setPreview(false); }}
+              className={cn(
+                'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs',
+                i === activeIndex ? 'border-primary bg-accent text-accent-foreground' : 'border-border text-muted-foreground hover:border-primary/40',
+              )}
+              title={s.title}
+            >
+              <span className="font-semibold">{i + 1}.</span> {s.title.length > 18 ? `${s.title.slice(0, 18)}…` : s.title}
+              {badge && (
+                <span className={cn(
+                  'rounded px-1 py-0.5 text-[9px] font-bold',
+                  badge === 'ЛАБ' ? 'bg-violet-100 text-violet-700' : 'bg-primary/15 text-primary',
+                )}>
+                  {badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
         <div className="ml-1 flex shrink-0 items-center gap-1">
           <Button variant="ghost" size="icon" onClick={() => moveScene(-1)} disabled={activeIndex <= 0} aria-label="Левее"><ChevronLeft className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon" onClick={() => moveScene(1)} disabled={activeIndex >= scenes.length - 1} aria-label="Правее"><ChevronRight className="h-4 w-4" /></Button>
@@ -423,6 +437,17 @@ export function SceneEditor({ templateId, onBack }: { templateId: string; onBack
 
         {/* Канвас / предпросмотр */}
         <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-muted/40">
+          {/* Для сцен-лабораторий и цельных AI-сцен холст не отражает то, что увидит ученик —
+              честно предупреждаем, иначе методист правит элементы, которых в уроке не будет. */}
+          {(scene as { lab?: unknown }).lab ? (
+            <div className="border-b border-border bg-violet-50 px-3 py-1.5 text-[11px] text-violet-800">
+              Сцена-нейролаборатория: в уроке вместо холста откроется генерация для ребёнка.
+            </div>
+          ) : (scene as { generation?: { mode?: string } }).generation?.mode === 'full-ai' ? (
+            <div className="border-b border-border bg-accent px-3 py-1.5 text-[11px] text-accent-foreground">
+              Цельная AI-сцена: фон сгенерируется под ученика при подготовке урока. Здесь виден абстрактный макет.
+            </div>
+          ) : null}
           {preview ? (
             <div className="flex min-h-0 flex-1 flex-col p-3">
               <div className="mb-2 flex items-center gap-2">
@@ -1106,23 +1131,67 @@ function SceneInspector({ scene, onChange, onGenerateBg, onPickBg }: {
         <Input value={scene.title} onChange={(e) => onChange({ ...scene, title: e.target.value })} className="h-8" />
       </div>
 
-      {/* Сцена-лаборатория: вместо интерактивной сцены — нейролаборатория */}
-      <div className="space-y-1.5 rounded-lg border border-violet-300 bg-violet-50/60 p-2.5">
-        <label className="flex items-center gap-2 text-xs font-medium">
-          <input
-            type="checkbox"
-            checked={isLab}
-            onChange={(e) => {
-              const next = { ...scene } as AcademyScene & { lab?: { tokens: number; videoAllowed: boolean } };
-              if (e.target.checked) next.lab = { tokens: 20, videoAllowed: true };
-              else delete next.lab;
-              onChange(next);
-            }}
-          />
-          Сцена-лаборатория (нейролаборатория вместо сцены)
-        </label>
+      {/* Один взаимоисключающий выбор типа сцены. Раньше «лаборатория» была отдельной
+          галочкой над переключателем «Послойная / Цельная AI-сцена», и сцену можно было
+          пометить и лабораторией, и AI-сценой одновременно — в уроке лаборатория всё равно
+          побеждала, а оплаченная AI-иллюстрация просто не показывалась. */}
+      <div className="space-y-1.5 rounded-lg border border-primary/30 bg-accent/40 p-2.5">
+        <Label className="text-xs font-medium">Тип сцены</Label>
+        <div className="grid gap-1.5">
+          {([
+            { id: 'layered', title: 'Послойная', desc: 'Вы сами собираете сцену из элементов: фон, персонаж, кнопки, правила.' },
+            { id: 'full-ai', title: 'Цельная AI-сцена', desc: 'Иллюстрация генерируется целиком под конкретного ученика при подготовке урока.' },
+            { id: 'lab', title: 'Нейролаборатория', desc: 'Вместо сцены ребёнок сам генерирует картинки и видео на выданные токены.' },
+          ] as const).map((option) => {
+            const active = isLab ? option.id === 'lab' : fullAi ? option.id === 'full-ai' : option.id === 'layered';
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => {
+                  const next = { ...scene } as AcademyScene & {
+                    lab?: { tokens: number; videoAllowed: boolean };
+                    generation?: { mode: string; prompt?: string };
+                  };
+                  delete next.lab;
+                  if (option.id === 'lab') {
+                    next.lab = lab ?? { tokens: 20, videoAllowed: true };
+                    next.generation = { mode: 'layered', prompt: gen.prompt };
+                  } else {
+                    next.generation = { mode: option.id, prompt: gen.prompt };
+                  }
+                  onChange(next as AcademyScene);
+                }}
+                className={cn(
+                  'rounded-md border px-2.5 py-2 text-left transition',
+                  active ? 'border-primary bg-card shadow-sm' : 'border-border bg-background/60 hover:border-primary/40',
+                )}
+              >
+                <span className={cn('block text-xs font-medium', active && 'text-primary')}>{option.title}</span>
+                <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">{option.desc}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {fullAi && (
+          <div className="space-y-1.5 pt-1">
+            <Textarea
+              value={gen.prompt ?? ''}
+              onChange={(e) => onChange({ ...scene, generation: { mode: 'full-ai', prompt: e.target.value } } as AcademyScene)}
+              rows={3}
+              placeholder="Опиши сцену целиком: где ребёнок, что делает, окружение, стиль…"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {(gen.prompt ?? '').trim().length < 8
+                ? 'Без описания (от 8 символов) иллюстрация не сгенерируется — ученик увидит сцену как есть.'
+                : 'В шаблоне — абстрактный вид. При подготовке урока иллюстрация сгенерируется по референсу ученика и станет фоном; элементы поверх останутся.'}
+            </p>
+          </div>
+        )}
+
         {isLab && lab && (
-          <div className="space-y-1.5 pl-5">
+          <div className="space-y-1.5 pt-1">
             <label className="flex items-center gap-2 text-[11px]">
               Токенов ребёнку на урок:
               <input
@@ -1135,38 +1204,15 @@ function SceneInspector({ scene, onChange, onGenerateBg, onPickBg }: {
               <input type="checkbox" checked={lab.videoAllowed} onChange={(e) => onChange({ ...scene, lab: { ...lab, videoAllowed: e.target.checked } } as AcademyScene)} />
               разрешить видео-модели
             </label>
-            <p className="text-[11px] text-muted-foreground">Токены начисляются один раз при старте урока, тратятся только в уроке, кошелёк семьи не трогается.</p>
+            <p className="text-[11px] text-muted-foreground">
+              Токены начисляются один раз при старте урока, тратятся только в уроке, кошелёк семьи не трогается.
+              Элементы и правила этой сцены в уроке не показываются.
+            </p>
           </div>
         )}
       </div>
 
-      {/* Режим генерации сцены (A6.6) */}
-      <div className="space-y-1.5 rounded-lg border border-primary/30 bg-accent/40 p-2.5">
-        <Label className="text-xs font-medium">Режим сцены</Label>
-        <div className="flex gap-1">
-          <button type="button" onClick={() => onChange({ ...scene, generation: { mode: 'layered', prompt: gen.prompt } } as AcademyScene)}
-            className={cn('flex-1 rounded-md border px-2 py-1.5 text-xs', !fullAi ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground')}>
-            Послойная
-          </button>
-          <button type="button" onClick={() => onChange({ ...scene, generation: { mode: 'full-ai', prompt: gen.prompt } } as AcademyScene)}
-            className={cn('flex-1 rounded-md border px-2 py-1.5 text-xs', fullAi ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground')}>
-            Цельная AI-сцена
-          </button>
-        </div>
-        {fullAi && (
-          <>
-            <Textarea
-              value={gen.prompt ?? ''}
-              onChange={(e) => onChange({ ...scene, generation: { mode: 'full-ai', prompt: e.target.value } } as AcademyScene)}
-              rows={3}
-              placeholder="Опиши сцену целиком: где ребёнок, что делает, окружение, стиль…"
-            />
-            <p className="text-[11px] text-muted-foreground">В шаблоне — абстрактный вид. При подготовке урока для ученика вся иллюстрация сгенерируется по его референсу.</p>
-          </>
-        )}
-      </div>
-
-      {!fullAi && (
+      {!fullAi && !isLab && (
         <div className="space-y-1.5 rounded-lg border border-border p-2.5">
           <Label className="text-xs font-medium">Фон-иллюстрация {hasBackground && <span className="text-primary">✓</span>}</Label>
           <Button variant="default" size="sm" className="w-full" onClick={onGenerateBg}>
@@ -1175,20 +1221,25 @@ function SceneInspector({ scene, onChange, onGenerateBg, onPickBg }: {
           <Button variant="outline" size="sm" className="w-full" onClick={onPickBg}>Выбрать из библиотеки</Button>
         </div>
       )}
-      <div className="space-y-1.5">
-        <Label className="text-xs">Цвет фона (если нет иллюстрации)</Label>
-        <input type="color" value={scene.viewport.backgroundColor} onChange={(e) => onChange({ ...scene, viewport: { ...scene.viewport, backgroundColor: e.target.value } })} className="h-8 w-full rounded border border-border" />
-      </div>
+      {!isLab && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Цвет фона (если нет иллюстрации)</Label>
+          <input type="color" value={scene.viewport.backgroundColor} onChange={(e) => onChange({ ...scene, viewport: { ...scene.viewport, backgroundColor: e.target.value } })} className="h-8 w-full rounded border border-border" />
+        </div>
+      )}
       <div className="space-y-1.5">
         <Label className="text-xs">Образовательная цель</Label>
         <Input
           value={scene.metadata?.educationalGoal ?? ''}
           onChange={(e) => onChange({ ...scene, metadata: { ...scene.metadata, tags: scene.metadata?.tags ?? [], educationalGoal: e.target.value } })}
           className="h-8"
+          placeholder="Что ребёнок должен понять в этой сцене"
         />
       </div>
       <p className="rounded-lg bg-muted p-2 text-[11px] text-muted-foreground">
-        Выберите элемент слева, чтобы редактировать его свойства. Двигайте элементы мышью на холсте.
+        {isLab
+          ? 'В уроке эта сцена показывает нейролабораторию — элементы и правила здесь не нужны.'
+          : 'Выберите элемент слева, чтобы редактировать его свойства. Двигайте и растягивайте элементы мышью на холсте.'}
       </p>
     </div>
   );

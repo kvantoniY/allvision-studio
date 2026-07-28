@@ -7,6 +7,7 @@ import { useDispatch } from 'react-redux';
 import {
   ArrowDown,
   ArrowUp,
+  CalendarClock,
   Camera,
   CheckCircle2,
   CreditCard,
@@ -62,6 +63,7 @@ import {
   useTopupMutation,
 } from '@/store/api/payments-api';
 import { useGetTokenPackagesQuery } from '@/store/api/public-api';
+import { useGetBalanceQuery } from '@/store/api/academy-booking-api';
 import {
   type UserMediaAsset,
   useListUserMediaAssetsQuery,
@@ -334,7 +336,7 @@ function ProfileContent() {
             Профиль
           </div>
           <h1 className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">Профиль и баланс</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Данные аккаунта, пополнение и история операций.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Данные аккаунта, оплаченные занятия, токены Нейролаборатории и история операций.</p>
         </div>
         <Button
           type="button"
@@ -700,23 +702,54 @@ function EmailVerificationPanel({
 function BillingSection() {
   const { user } = useAuth();
   const packages = useGetTokenPackagesQuery();
+  const isParent = user?.role === 'PARENT' || user?.role === 'USER';
+  // Занятия и токены — разные вещи: занятия оплачивают уроки с преподавателем,
+  // токены нужны только Нейролаборатории. Раньше в профиле был один «Ваш баланс».
+  const lessonBalance = useGetBalanceQuery(undefined, { skip: !isParent });
 
   if (!user) return null;
 
+  const lessons = lessonBalance.data?.balance ?? [];
+  const lessonsTotal = lessons.reduce((sum, item) => sum + item.available, 0);
+
   return (
     <div className="min-w-0 space-y-5">
-      <Card className="min-w-0 overflow-hidden border-primary/30 bg-accent">
+      {isParent && (
+        <Card className="min-w-0 overflow-hidden border-primary/30 bg-accent">
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6">
+            <div className="flex items-center gap-4">
+              <span className="grid h-12 w-12 place-items-center rounded-md bg-background text-primary">
+                <CalendarClock className="h-6 w-6" />
+              </span>
+              <div>
+                <div className="text-sm text-muted-foreground">Баланс занятий с преподавателем</div>
+                <div className="text-2xl font-bold text-primary sm:text-3xl">
+                  {lessonsTotal > 0
+                    ? lessons.map((item) => `${item.available} × ${item.durationMin} мин`).join(' · ')
+                    : 'Нет оплаченных занятий'}
+                </div>
+              </div>
+            </div>
+            <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Link href="/lessons">Купить абонемент</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="min-w-0 overflow-hidden border-border">
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4 sm:p-6">
           <div className="flex items-center gap-4">
-            <span className="grid h-12 w-12 place-items-center rounded-md bg-accent text-primary">
+            <span className="grid h-12 w-12 place-items-center rounded-md bg-secondary text-primary">
               <TokenIcon className="h-6 w-6" />
             </span>
             <div>
-              <div className="text-sm text-muted-foreground">Ваш баланс</div>
-              <div className="text-2xl font-bold text-primary sm:text-3xl">{user.tokenBalance} <span className="text-base font-normal text-muted-foreground">{pluralizeTokens(user.tokenBalance)}</span></div>
+              <div className="text-sm text-muted-foreground">Токены Нейролаборатории</div>
+              <div className="text-2xl font-bold text-foreground sm:text-3xl">{user.tokenBalance} <span className="text-base font-normal text-muted-foreground">{pluralizeTokens(user.tokenBalance)}</span></div>
+              <div className="mt-1 text-xs text-muted-foreground">Нужны только для генераций в Нейролаборатории. На уроки не тратятся.</div>
             </div>
           </div>
-          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button asChild variant="outline">
             <Link href="#packages">Пополнить</Link>
           </Button>
         </CardContent>
@@ -1017,10 +1050,16 @@ function PaymentListItem({
   isResuming?: boolean;
   isRechecking?: boolean;
 }) {
-  const purpose = payment.purpose === 'TOPUP' ? 'Пополнение баланса' : `Заказ #${payment.id.slice(0, 6)}`;
   const metadata = payment.metadata && typeof payment.metadata === 'object' && !Array.isArray(payment.metadata)
     ? payment.metadata as Record<string, unknown>
     : {};
+  // Абонемент занятий — основная покупка Академии; раньше он показывался как «Заказ #ab12cd».
+  const packageTitle = typeof metadata.packageTitle === 'string' ? metadata.packageTitle : null;
+  const purpose = payment.purpose === 'LESSON_PACKAGE'
+    ? `Абонемент занятий${packageTitle ? ` · ${packageTitle}` : ''}`
+    : payment.purpose === 'TOPUP'
+      ? 'Пополнение баланса Нейролаборатории'
+      : `Заказ #${payment.id.slice(0, 6)}`;
   const confirmationUrl =
     'confirmationUrl' in metadata
       ? String(metadata.confirmationUrl)

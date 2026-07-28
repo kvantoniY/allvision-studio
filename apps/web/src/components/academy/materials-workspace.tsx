@@ -24,8 +24,11 @@ import {
   ACADEMY_GENERATION_OPERATIONS,
   ACADEMY_GENERATION_STYLE_LABELS,
   ACADEMY_GENERATION_STYLES,
-  ACADEMY_VIDEO_MODELS,
   ACADEMY_VIDEO_DURATIONS,
+  ACADEMY_VIDEO_SOURCES,
+  academyVideoModel,
+  academyVideoModelsBySource,
+  academyVideoRequirement,
   estimateAcademyCostUsd,
   generationKindToAsset,
   type AcademyAssetDto,
@@ -110,10 +113,13 @@ const initialForm: FormState = {
 
 function buildInput(form: FormState, referenceAssetIds: string[]): AcademyGenerationInput {
   const childTarget = generationKindToAsset(form.kind).scope === 'child';
+  const video = form.media === 'video';
   const transparentBackground = form.transparentBackground || form.operation === 'transparent-background';
   return {
     kind: form.kind,
-    operation: form.operation,
+    // У видео нет операций над изображением (прозрачный фон, апскейл и т.п.) — воркер их
+    // не применяет, поэтому не отправляем «залипшую» операцию из режима картинок.
+    operation: video ? 'generate' : form.operation,
     title: form.title.trim(),
     prompt: form.prompt.trim(),
     systemPrompt: form.systemPrompt.trim() || undefined,
@@ -155,6 +161,28 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
   const estimate = useMemo(() => estimateAcademyCostUsd(input), [input]);
   const childTarget = generationKindToAsset(form.kind).scope === 'child';
   const childOptions = useMemo(() => children.data?.items ?? [], [children.data?.items]);
+  const videoSource = academyVideoModel(form.videoModel)?.source ?? 'image';
+  const videoRequirement = form.media === 'video'
+    ? academyVideoRequirement({
+        videoModel: form.videoModel,
+        scope: childTarget ? 'child' : 'teacher',
+        referenceCount: referenceAssetIds.length,
+      })
+    : null;
+
+  // Единая причина, почему запуск невозможен: раньше об этом узнавали из тоста после клика
+  // (или вовсе из ошибки воркера — например про обязательный референс).
+  const blockedReason = (() => {
+    if (!form.title.trim()) return 'Укажите название материала';
+    if (form.prompt.trim().length < 8) return 'Опишите результат подробнее (минимум 8 символов)';
+    if (childTarget && !form.childId) return 'Выберите ученика';
+    if (videoRequirement) return videoRequirement;
+    if (form.media === 'image' && ['variation', 'inpaint', 'upscale'].includes(form.operation) && !childTarget && referenceAssetIds.length === 0) {
+      return 'Для этой операции выберите референс из библиотеки ниже';
+    }
+    if (estimate > form.maxCostUsd) return `Поднимите допустимую стоимость до $${estimate.toFixed(2)}`;
+    return null;
+  })();
 
   useEffect(() => {
     const status = generation.data?.generation.status;
@@ -170,20 +198,8 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
   }, [childOptions, childTarget, form.childId, onChildSelected]);
 
   const launch = async () => {
-    if (!input.title || input.prompt.length < 8) {
-      toast({ title: 'Заполните название и подробное описание', variant: 'destructive' });
-      return;
-    }
-    if (childTarget && !input.childId) {
-      toast({ title: 'Выберите ребёнка', variant: 'destructive' });
-      return;
-    }
-    if (estimate > input.maxCostUsd) {
-      toast({
-        title: 'Лимит ниже оценки',
-        description: `Поднимите допустимую стоимость минимум до $${estimate.toFixed(2)}`,
-        variant: 'destructive',
-      });
+    if (blockedReason) {
+      toast({ title: 'Нельзя запустить', description: blockedReason, variant: 'destructive' });
       return;
     }
     try {
@@ -216,30 +232,32 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
           </div>
         </div>
 
+        {/* Шаг 1 — что создаём. От этого зависит весь остальной набор полей. */}
         <div>
-          <div className="inline-flex rounded-xl border border-border bg-muted/40 p-1">
-            {(['image', 'video'] as const).map((m) => (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {([
+              ['image', 'Изображение', 'Фон, предмет, NPC, поза или сцена — картинка для урока.'],
+              ['video', 'Видео (кат-сцена)', 'Короткий ролик: вступление к уроку, награда, оживший кадр.'],
+            ] as const).map(([value, label, description]) => (
               <button
-                key={m}
+                key={value}
                 type="button"
-                onClick={() => setForm((current) => ({ ...current, media: m }))}
+                onClick={() => setForm((current) => ({ ...current, media: value }))}
                 className={cn(
-                  'rounded-lg px-4 py-1.5 text-sm font-medium transition',
-                  form.media === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground',
+                  'rounded-xl border p-3 text-left transition',
+                  form.media === value ? 'border-primary bg-accent/60' : 'border-border hover:border-primary/40',
                 )}
               >
-                {m === 'image' ? 'Изображение' : 'Видео (кат-сцена)'}
+                <span className="block text-sm font-semibold">{label}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{description}</span>
               </button>
             ))}
           </div>
-          {form.media === 'video' && (
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              Видео сохранится в библиотеку и его можно поставить в сцену урока как кат-сцену.
-            </p>
-          )}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {/* Шаг 2 — тип материала и оформление. Операция и модель картинок относятся только
+            к изображениям: для видео воркер их не использует, поэтому и не показываем. */}
+        <div className={cn('grid gap-4 md:grid-cols-2', form.media === 'image' ? 'xl:grid-cols-4' : 'xl:grid-cols-2')}>
           <Field label="Тип материала">
             <select
               className={selectClass}
@@ -257,22 +275,35 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
             >
               {ACADEMY_GENERATION_KINDS.map((kind) => <option key={kind} value={kind}>{ACADEMY_GENERATION_KIND_LABELS[kind]}</option>)}
             </select>
+            <p className="text-xs text-muted-foreground">
+              {childTarget
+                ? 'Сохранится в закрытую библиотеку ученика — только вы и родитель.'
+                : 'Сохранится в вашу личную библиотеку, её можно переиспользовать в любом уроке.'}
+            </p>
           </Field>
-          <Field label="Операция">
-            <select className={selectClass} value={form.operation} onChange={(event) => setForm((current) => ({ ...current, operation: event.target.value as AcademyGenerationOperation }))}>
-              {ACADEMY_GENERATION_OPERATIONS.map((operation) => <option key={operation} value={operation}>{ACADEMY_GENERATION_OPERATION_LABELS[operation]}</option>)}
-            </select>
-          </Field>
-          <Field label="Модель">
-            <select className={selectClass} value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value as FormState['model'] }))}>
-              <option value="nano-banana">Nano Banana Pro</option>
-              <option value="gpt-image-2">GPT Image 2</option>
-            </select>
-          </Field>
+          {form.media === 'image' && (
+            <>
+              <Field label="Операция">
+                <select className={selectClass} value={form.operation} onChange={(event) => setForm((current) => ({ ...current, operation: event.target.value as AcademyGenerationOperation }))}>
+                  {ACADEMY_GENERATION_OPERATIONS.map((operation) => <option key={operation} value={operation}>{ACADEMY_GENERATION_OPERATION_LABELS[operation]}</option>)}
+                </select>
+                {['variation', 'inpaint', 'upscale'].includes(form.operation) && (
+                  <p className="text-xs text-muted-foreground">Нужен референс из библиотеки — кнопка «В референсы» на карточке.</p>
+                )}
+              </Field>
+              <Field label="Модель изображения">
+                <select className={selectClass} value={form.model} onChange={(event) => setForm((current) => ({ ...current, model: event.target.value as FormState['model'] }))}>
+                  <option value="nano-banana">Nano Banana Pro</option>
+                  <option value="gpt-image-2">GPT Image 2</option>
+                </select>
+              </Field>
+            </>
+          )}
           <Field label="Стиль">
             <select className={selectClass} value={form.style} onChange={(event) => setForm((current) => ({ ...current, style: event.target.value as FormState['style'] }))}>
               {ACADEMY_GENERATION_STYLES.map((style) => <option key={style} value={style}>{ACADEMY_GENERATION_STYLE_LABELS[style]}</option>)}
             </select>
+            <p className="text-xs text-muted-foreground">Общая манера картинки или ролика.</p>
           </Field>
         </div>
 
@@ -330,22 +361,61 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
 
           <div className="space-y-4 rounded-xl border border-border bg-muted/40 p-4">
             {form.media === 'video' ? (
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Видео-модель">
-                  <select className={cn(selectClass, 'col-span-2')} value={form.videoModel} onChange={(event) => setForm((current) => ({ ...current, videoModel: event.target.value as AcademyVideoModelSlug }))}>
-                    {ACADEMY_VIDEO_MODELS.map((m) => <option key={m.slug} value={m.slug}>{m.label}</option>)}
+              <div className="space-y-3">
+                {/* Способ вперёд модели: он объясняет, почему одни модели оживляют кадр,
+                    а другие снимают по описанию, и что для этого нужно на входе. */}
+                <Field label="Как делаем видео">
+                  <div className="grid gap-1.5">
+                    {ACADEMY_VIDEO_SOURCES.map((source) => {
+                      const active = videoSource === source.id;
+                      return (
+                        <button
+                          key={source.id}
+                          type="button"
+                          onClick={() => {
+                            const first = academyVideoModelsBySource(source.id)[0];
+                            if (first) setForm((current) => ({ ...current, videoModel: first.slug }));
+                          }}
+                          className={cn(
+                            'rounded-lg border px-3 py-2 text-left transition',
+                            active ? 'border-primary bg-accent/70' : 'border-border bg-background hover:border-primary/40',
+                          )}
+                        >
+                          <span className="block text-sm font-medium">{source.label}</span>
+                          <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">{source.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+
+                <Field label="Модель">
+                  <select className={selectClass} value={form.videoModel} onChange={(event) => setForm((current) => ({ ...current, videoModel: event.target.value as AcademyVideoModelSlug }))}>
+                    {academyVideoModelsBySource(videoSource).map((m) => <option key={m.slug} value={m.slug}>{m.label} — {m.hint}</option>)}
                   </select>
                 </Field>
-                <Field label="Длительность, сек">
-                  <select className={selectClass} value={form.durationSec} onChange={(event) => setForm((current) => ({ ...current, durationSec: Number(event.target.value) }))}>
-                    {ACADEMY_VIDEO_DURATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </Field>
-                <Field label="Формат">
-                  <select className={selectClass} value={form.aspectRatio} onChange={(event) => setForm((current) => ({ ...current, aspectRatio: event.target.value as FormState['aspectRatio'] }))}>
-                    {ACADEMY_GENERATION_ASPECT_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
-                  </select>
-                </Field>
+
+                {videoSource === 'image' && (
+                  <p className={cn('rounded-lg px-3 py-2 text-xs', videoRequirement ? 'bg-amber-50 text-amber-900' : 'bg-background text-muted-foreground')}>
+                    {videoRequirement
+                      ?? (childTarget
+                        ? 'Оживим утверждённый портрет ученика из его AI-персонажа.'
+                        : `Исходный кадр выбран: референсов ${referenceAssetIds.length}.`)}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Длительность, сек">
+                    <select className={selectClass} value={form.durationSec} onChange={(event) => setForm((current) => ({ ...current, durationSec: Number(event.target.value) }))}>
+                      {ACADEMY_VIDEO_DURATIONS.map((d) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Формат">
+                    <select className={selectClass} value={form.aspectRatio} onChange={(event) => setForm((current) => ({ ...current, aspectRatio: event.target.value as FormState['aspectRatio'] }))}>
+                      {ACADEMY_GENERATION_ASPECT_RATIOS.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
+                    </select>
+                  </Field>
+                </div>
               </div>
             ) : (
               <>
@@ -385,16 +455,25 @@ function GenerationPanel({ onChildSelected }: { onChildSelected: (id: string) =>
                 )}
               </>
             )}
-            <Field label="Допустимая стоимость, $">
+            <Field label="Потолок стоимости, $">
               <Input type="number" min="0.01" max="50" step="0.01" value={form.maxCostUsd} onChange={(event) => setForm((current) => ({ ...current, maxCostUsd: Number(event.target.value) || 0 }))} />
+              <p className="text-xs text-muted-foreground">
+                Страховка от дорогой генерации: если фактическая цена окажется выше, запуск отменится.
+                Сейчас оценка ${estimate.toFixed(2)}.
+              </p>
             </Field>
-            {referenceAssetIds.length > 0 && (
-              <div className="flex items-center justify-between rounded-lg bg-background px-3 py-2 text-xs">
-                <span>Референсов из библиотеки: {referenceAssetIds.length}</span>
+            <div className="flex items-center justify-between rounded-lg bg-background px-3 py-2 text-xs">
+              <span className={cn(referenceAssetIds.length === 0 && 'text-muted-foreground')}>
+                Референсов из библиотеки: {referenceAssetIds.length}
+              </span>
+              {referenceAssetIds.length > 0 && (
                 <button type="button" className="text-primary" onClick={() => setReferenceAssetIds([])}>Очистить</button>
-              </div>
+              )}
+            </div>
+            {blockedReason && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{blockedReason}</p>
             )}
-            <Button className="w-full" onClick={launch} disabled={generationMutation.isLoading || polling}>
+            <Button className="w-full" onClick={launch} disabled={Boolean(blockedReason) || generationMutation.isLoading || polling}>
               {(generationMutation.isLoading || polling) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
               Запустить · ${estimate.toFixed(2)}
             </Button>

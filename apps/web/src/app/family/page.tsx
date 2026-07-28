@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   BookOpen,
   Camera,
@@ -33,6 +33,7 @@ import {
   type LessonStatusValue,
 } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
+import { ParentOnboarding } from '@/components/academy/ParentOnboarding';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -692,10 +693,19 @@ function LessonHistoryBlock({ childId }: { childId: string }) {
   );
 }
 
-function ChildCard({ child }: { child: ChildProfileDto }) {
-  const [open, setOpen] = useState(false);
+function ChildCard({ child, forceOpen }: { child: ChildProfileDto; forceOpen?: boolean }) {
+  // Пока ребёнок не готов к урокам, карточка раскрыта: именно в ней лежат согласия,
+  // фото и персонаж — в свёрнутом виде родитель их просто не находил.
+  const [open, setOpen] = useState(!child.readyForLessons);
   const [deleteChild, { isLoading: deleting }] = useDeleteChildMutation();
   const age = ageLabel(child.birthDate);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!forceOpen) return;
+    setOpen(true);
+    cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [forceOpen]);
 
   const onDelete = async () => {
     const confirmed = window.confirm(
@@ -713,7 +723,7 @@ function ChildCard({ child }: { child: ChildProfileDto }) {
   };
 
   return (
-    <Card className="animate-academy-in overflow-hidden border-border bg-card shadow-sm">
+    <Card ref={cardRef} className="animate-academy-in overflow-hidden border-border bg-card shadow-sm">
       <CardContent className="p-0">
         <button
           type="button"
@@ -794,7 +804,21 @@ function LessonReportsBlock() {
 export default function FamilyPage() {
   const { data, isLoading } = useListChildrenQuery();
   const [adding, setAdding] = useState(false);
+  const [focusChildId, setFocusChildId] = useState<string | null>(null);
+  const addFormRef = useRef<HTMLDivElement>(null);
   const children = data?.items ?? [];
+
+  const startAdding = () => {
+    setAdding(true);
+    // Форма внизу списка — без прокрутки клик по кнопке чеклиста выглядел бы «ничего не произошло».
+    window.setTimeout(() => addFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+  };
+
+  const focusChild = (childId: string) => {
+    // Сбрасываем в null, чтобы повторный клик по тому же ребёнку снова сработал.
+    setFocusChildId(null);
+    window.setTimeout(() => setFocusChildId(childId), 0);
+  };
 
   return (
     <AuthGuard>
@@ -810,6 +834,8 @@ export default function FamilyPage() {
               своих уроков-приключений.
             </p>
           </div>
+
+          <ParentOnboarding className="mb-7" onAddChild={startAdding} onFocusChild={focusChild} />
 
           <LessonReportsBlock />
 
@@ -837,18 +863,18 @@ export default function FamilyPage() {
               )}
 
               {children.map((child) => (
-                <ChildCard key={child.id} child={child} />
+                <ChildCard key={child.id} child={child} forceOpen={focusChildId === child.id} />
               ))}
 
               {adding ? (
-                <Card className="border-border bg-card shadow-sm">
+                <Card ref={addFormRef} className="border-border bg-card shadow-sm">
                   <CardContent className="px-5 py-5">
                     <p className="mb-4 font-semibold">Новый профиль ребёнка</p>
                     <AddChildForm onDone={() => setAdding(false)} />
                   </CardContent>
                 </Card>
               ) : (
-                <Button type="button" onClick={() => setAdding(true)} className="w-full sm:w-auto">
+                <Button type="button" onClick={startAdding} className="w-full sm:w-auto">
                   <Plus className="mr-2 h-4 w-4" /> Добавить ребёнка
                 </Button>
               )}

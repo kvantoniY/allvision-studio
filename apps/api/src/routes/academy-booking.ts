@@ -191,6 +191,21 @@ academyBookingRouter.post('/booking', requireAuth, requireParent, async (req: Re
         },
       });
 
+      // Родитель выбрал курс при записи — сразу оформляем запись на программу, иначе
+      // преподаватель на подготовке не увидит рекомендованную тему (раньше это была
+      // отдельная ручная операция в «Семье», о которой родитель не догадывался).
+      if (data.courseId) {
+        const course = await tx.course.findFirst({ where: { id: data.courseId, isActive: true }, select: { id: true } });
+        if (course) {
+          const existing = await tx.enrollment.findFirst({ where: { childId: child.id, courseId: course.id } });
+          if (!existing) {
+            await tx.enrollment.create({ data: { childId: child.id, courseId: course.id, status: 'ACTIVE' } });
+          } else if (existing.status === 'PAUSED') {
+            await tx.enrollment.update({ where: { id: existing.id }, data: { status: 'ACTIVE' } });
+          }
+        }
+      }
+
       const creditId = await consumeCredit(tx, req.user!.id, slot.durationMin, created.id);
       if (!creditId) {
         throw new HttpError(402, 'INSUFFICIENT_CREDITS', `Нет оплаченных занятий на ${slot.durationMin} мин — купите абонемент`);

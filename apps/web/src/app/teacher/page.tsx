@@ -169,12 +169,22 @@ function LessonReportPanel({ lessonId, childId }: { lessonId: string; childId: s
   );
 }
 
-const NEXT_STATUS: { value: LessonStatusValue; label: string }[] = [
-  { value: 'READY', label: 'Готов' },
-  { value: 'IN_PROGRESS', label: 'Идёт' },
-  { value: 'COMPLETED', label: 'Завершён' },
-  { value: 'NO_SHOW', label: 'Неявка' },
-];
+/** Человеческая дата занятия для преподавателя: «сегодня в 17:00 · через 2 ч». */
+function humanTime(iso: string): string {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round((startOfDay(date) - startOfDay(new Date())) / 86_400_000);
+  const day = dayDiff === 0 ? 'сегодня' : dayDiff === 1 ? 'завтра' : dayDiff === -1 ? 'вчера'
+    : date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  const diffMs = date.getTime() - Date.now();
+  if (diffMs > 0 && diffMs < 86_400_000) {
+    const minutes = Math.round(diffMs / 60_000);
+    const rest = minutes < 60 ? `через ${minutes} мин` : `через ${Math.round(minutes / 60)} ч`;
+    return `${day} в ${time} · ${rest}`;
+  }
+  return `${day} в ${time}`;
+}
 
 /** Время приёма: 08:00–21:30 с шагом 30 минут. */
 const SLOT_TIMES = Array.from({ length: 28 }, (_, i) => {
@@ -311,18 +321,38 @@ function SlotsPanel() {
         ) : slots.length === 0 ? (
           <p className="text-sm text-muted-foreground">Добавьте свободное время, чтобы родители могли записаться.</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {slots.map((s) => (
-              <span key={s.id} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${s.isBooked ? 'border-primary/40 bg-accent text-accent-foreground' : 'border-border'}`}>
-                {fmt(s.startsAt)} · {s.durationMin}м
-                {s.isBooked ? (
-                  <Badge variant="outline" className="ml-1 border-primary/40 text-primary">занят</Badge>
-                ) : (
-                  <button type="button" aria-label="Удалить" className="text-muted-foreground hover:text-destructive" onClick={() => deleteSlot(s.id)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
-              </span>
+          // Слоты сгруппированы по дням: плоская стена чипов на 2–8 недель вперёд
+          // была нечитаемой, а занятые слоты терялись среди свободных.
+          <div className="space-y-3">
+            {[...slots.reduce((map, slot) => {
+              const key = new Date(slot.startsAt).toLocaleDateString('sv-SE');
+              const bucket = map.get(key) ?? [];
+              bucket.push(slot);
+              map.set(key, bucket);
+              return map;
+            }, new Map<string, typeof slots>())].map(([day, daySlots]) => (
+              <div key={day}>
+                <p className="mb-1.5 text-xs font-medium capitalize text-muted-foreground">
+                  {new Date(`${day}T00:00:00`).toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric', month: 'long' })}
+                  <span className="ml-2 font-normal">
+                    свободно {daySlots.filter((s) => !s.isBooked).length} из {daySlots.length}
+                  </span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {daySlots.map((s) => (
+                    <span key={s.id} className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${s.isBooked ? 'border-primary/40 bg-accent text-accent-foreground' : 'border-border'}`}>
+                      {new Date(s.startsAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })} · {s.durationMin}м
+                      {s.isBooked ? (
+                        <Badge variant="outline" className="ml-1 border-primary/40 text-primary">занят</Badge>
+                      ) : (
+                        <button type="button" aria-label="Удалить" className="text-muted-foreground hover:text-destructive" onClick={() => deleteSlot(s.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -381,56 +411,131 @@ function LessonManage({ lessonId, startsAt }: { lessonId: string; startsAt: stri
   );
 }
 
+const UPCOMING_STATUSES = ['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY'];
+const FINISHED_STATUSES = ['COMPLETED', 'REPORT_SENT', 'CANCELLED_PARENT', 'CANCELLED_TEACHER', 'NO_SHOW'];
+
+/**
+ * Карточка урока преподавателя. Раньше здесь стоял ряд сырых кнопок состояния
+ * («Готов / Идёт / Завершён / Неявка») — это внутренняя машина статусов, а не задача
+ * преподавателя: «Готов» ставится подготовкой урока, «Идёт» — входом в комнату.
+ * Оставлены только осмысленные действия для текущего момента.
+ */
+function TeacherLessonCard({ lesson }: { lesson: { id: string; childId: string; childName: string; topicTitle: string | null; startsAt: string; durationMin: number; status: LessonStatusValue } }) {
+  const [setStatus, { isLoading: settingStatus }] = useSetLessonStatusMutation();
+  const live = lesson.status === 'IN_PROGRESS';
+  const started = new Date(lesson.startsAt).getTime() <= Date.now();
+  const finished = FINISHED_STATUSES.includes(lesson.status);
+
+  const mark = async (status: LessonStatusValue, confirmText?: string) => {
+    if (confirmText && !window.confirm(confirmText)) return;
+    try {
+      await setStatus({ id: lesson.id, status }).unwrap();
+      toast({ title: status === 'COMPLETED' ? 'Урок завершён' : 'Отмечена неявка ученика' });
+    } catch (err) {
+      toast({ title: 'Не удалось', description: apiErr(err), variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className={`rounded-xl border p-3 ${live ? 'border-primary bg-accent/40' : 'border-border'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">
+            {lesson.childName}{lesson.topicTitle ? ` · ${lesson.topicTitle}` : ''}
+          </p>
+          <p className="text-xs text-muted-foreground">{humanTime(lesson.startsAt)} · {lesson.durationMin} мин</p>
+        </div>
+        {live ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-primary-foreground">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary-foreground" /> Идёт
+          </span>
+        ) : (
+          <Badge variant="outline">{LESSON_STATUS_LABELS[lesson.status]}</Badge>
+        )}
+      </div>
+
+      {UPCOMING_STATUSES.includes(lesson.status) && <LessonPrepare lessonId={lesson.id} />}
+
+      {(live || (started && UPCOMING_STATUSES.includes(lesson.status))) && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {live && (
+            <Button size="sm" className="h-7 text-xs" disabled={settingStatus}
+              onClick={() => void mark('COMPLETED', 'Завершить урок? Занятие будет отмечено проведённым.')}>
+              Завершить урок
+            </Button>
+          )}
+          <Button size="sm" variant="outline" className="h-7 text-xs" disabled={settingStatus}
+            onClick={() => void mark('NO_SHOW', 'Отметить неявку ученика? Занятие не будет оплачено.')}>
+            Ученик не пришёл
+          </Button>
+        </div>
+      )}
+
+      {RESCHEDULABLE_STATUSES.includes(lesson.status) && <LessonManage lessonId={lesson.id} startsAt={lesson.startsAt} />}
+      {['COMPLETED', 'REPORT_SENT'].includes(lesson.status) && (
+        <>
+          <LessonReportPanel lessonId={lesson.id} childId={lesson.childId} />
+          <div className="mt-2"><TeacherRewardPanel childId={lesson.childId} childName={lesson.childName} /></div>
+        </>
+      )}
+      {live && <div className="mt-2"><TeacherRewardPanel childId={lesson.childId} childName={lesson.childName} /></div>}
+    </div>
+  );
+}
+
 function LessonsPanel() {
-  const { data, isLoading } = useGetTeacherLessonsQuery();
-  const [setStatus] = useSetLessonStatusMutation();
+  const { data, isLoading } = useGetTeacherLessonsQuery(undefined, { pollingInterval: 30000 });
+  const [showPast, setShowPast] = useState(false);
   const lessons = data?.lessons ?? [];
-  const children = [...new Map(lessons.map((lesson) => [lesson.childId, lesson.childName])).entries()];
 
   if (isLoading) return <div className="h-20 animate-pulse rounded-xl bg-muted" />;
+
+  const live = lessons.filter((l) => l.status === 'IN_PROGRESS');
+  const upcoming = lessons
+    .filter((l) => UPCOMING_STATUSES.includes(l.status))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const today = upcoming.filter((l) => new Date(l.startsAt).toDateString() === new Date().toDateString());
+  const later = upcoming.filter((l) => !today.includes(l));
+  const past = lessons.filter((l) => FINISHED_STATUSES.includes(l.status));
+  const needsReport = past.filter((l) => l.status === 'COMPLETED');
+
+  const group = (title: string, items: typeof lessons, hint?: string) => items.length > 0 && (
+    <div className="space-y-2">
+      <div className="flex items-baseline gap-2">
+        <p className="text-sm font-semibold">{title}</p>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{items.length}</span>
+        {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+      </div>
+      {items.map((l) => <TeacherLessonCard key={l.id} lesson={l} />)}
+    </div>
+  );
 
   return (
     <Card className="border-border bg-card shadow-sm">
       <CardContent className="p-5">
         <h2 className="mb-3 font-semibold">Уроки</h2>
         {lessons.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Пока нет записей на уроки.</p>
+          <p className="text-sm text-muted-foreground">
+            Пока нет записей. Добавьте свободные слоты выше — родители запишутся на них.
+          </p>
         ) : (
           <div className="space-y-5">
-            <div className="space-y-2">{lessons.map((l) => (
-              <div key={l.id} className="rounded-xl border border-border p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{l.childName}{l.topicTitle ? ` · ${l.topicTitle}` : ''}</p>
-                    <p className="text-xs text-muted-foreground">{fmt(l.startsAt)} · {l.durationMin} мин</p>
-                  </div>
-                  <Badge variant="outline">{LESSON_STATUS_LABELS[l.status]}</Badge>
-                </div>
-                {['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY'].includes(l.status) && <LessonPrepare lessonId={l.id} />}
-                {['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY', 'IN_PROGRESS'].includes(l.status) && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {NEXT_STATUS.map((s) => (
-                      <button
-                        key={s.value}
-                        type="button"
-                        onClick={async () => {
-                          await setStatus({ id: l.id, status: s.value }).unwrap().catch((err) => toast({ title: 'Ошибка', description: apiErr(err), variant: 'destructive' }));
-                        }}
-                        className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:border-primary/50 hover:text-primary"
-                      >
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {RESCHEDULABLE_STATUSES.includes(l.status) && <LessonManage lessonId={l.id} startsAt={l.startsAt} />}
-                {['COMPLETED', 'REPORT_SENT'].includes(l.status) && <LessonReportPanel lessonId={l.id} childId={l.childId} />}
+            {needsReport.length > 0 && (
+              <div className="rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-900">
+                Ждут отчёта родителю: {needsReport.length}. Отчёт открывается в карточке проведённого урока.
               </div>
-            ))}</div>
-            <div className="space-y-2 border-t border-border pt-4">
-              <p className="text-sm font-semibold">Мотивация учеников</p>
-              {children.map(([childId, childName]) => <TeacherRewardPanel key={childId} childId={childId} childName={childName} />)}
-            </div>
+            )}
+            {group('Идёт сейчас', live)}
+            {group('Сегодня', today, 'подготовьте урок и добавьте ссылку на видеозвонок')}
+            {group('Предстоящие', later)}
+            {past.length > 0 && (
+              <div className="space-y-2 border-t border-border pt-4">
+                <button type="button" className="text-sm font-semibold text-muted-foreground hover:text-foreground" onClick={() => setShowPast((v) => !v)}>
+                  Прошедшие занятия ({past.length}) {showPast ? '▲' : '▼'}
+                </button>
+                {showPast && past.map((l) => <TeacherLessonCard key={l.id} lesson={l} />)}
+              </div>
+            )}
           </div>
         )}
       </CardContent>

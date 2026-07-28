@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import { markThreadSeen } from '@/hooks/use-academy-badges';
 import { cn } from '@/lib/utils';
 import {
   useListThreadMessagesQuery,
@@ -41,6 +42,13 @@ export default function MessagesPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
   }, [messagesQuery.data?.messages.length]);
+
+  // Открытый диалог считается прочитанным — бейдж в навигации гаснет.
+  const shownMessages = messagesQuery.data?.messages;
+  useEffect(() => {
+    const last = shownMessages?.[shownMessages.length - 1];
+    if (threadId && last) markThreadSeen(threadId, last.createdAt);
+  }, [threadId, shownMessages]);
 
   const active = threads.find((thread) => thread.id === threadId);
   const submit = async () => {

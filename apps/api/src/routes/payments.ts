@@ -72,6 +72,28 @@ function getInvId(req: Request): string {
   return typeof fromBody === 'string' ? fromBody : '';
 }
 
+/**
+ * Куда вернуть пользователя после оплаты. Абонемент занятий — это Академия, а не
+ * баланс токенов: возврат на страницу «Занятия», где сразу видно баланс и запись.
+ */
+function paymentReturnUrl(
+  payment: { purpose?: string | null; id?: string; tokensAdded?: number | null } | null,
+  urlStatus: string,
+  fallbackPaymentId?: string,
+): string {
+  const web = process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000';
+  const paymentId = payment?.id ?? fallbackPaymentId;
+  const query = new URLSearchParams({ payment: urlStatus });
+  if (payment?.purpose === 'LESSON_PACKAGE') {
+    if (paymentId) query.set('paymentId', paymentId);
+    return `${web}/lessons?${query.toString()}`;
+  }
+  if (urlStatus === 'success' && payment?.tokensAdded) query.set('tokens', String(payment.tokensAdded));
+  if (paymentId) query.set('paymentId', paymentId);
+  query.set('tab', 'billing');
+  return `${web}/profile?${query.toString()}`;
+}
+
 function getOutSum(req: Request): string {
   const fromQuery = typeof req.query.OutSum === 'string' ? req.query.OutSum : '';
   if (fromQuery) return fromQuery;
@@ -163,12 +185,9 @@ paymentsRouter.all('/robokassa/success', async (req: Request, res: Response, nex
     else if (finalStatus === 'FAILED') urlStatus = 'failed';
     else urlStatus = 'pending';
 
-    const tokens = urlStatus === 'success' && payment?.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';
-    const paymentId = payment ? `&paymentId=${payment.id}` : '';
-
     logger.info(`[payments] robokassa success redirect resolved invId=${invId} dbStatus=${finalStatus ?? 'unknown'} urlStatus=${urlStatus}`);
 
-    res.redirect(302, `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=${urlStatus}${tokens}${paymentId}`);
+    res.redirect(302, paymentReturnUrl(payment, urlStatus));
   } catch (e) {
     next(e);
   }
@@ -197,12 +216,7 @@ paymentsRouter.all('/robokassa/fail', async (req: Request, res: Response, next: 
     else if (finalStatus === 'CANCELLED' || finalStatus === 'FAILED') urlStatus = 'failed';
     else urlStatus = 'pending';
 
-    const tokens = urlStatus === 'success' && payment?.tokensAdded ? `&tokens=${payment.tokensAdded}` : '';
-    const paymentId = payment ? `&paymentId=${payment.id}` : invId ? `&paymentId=${invId}` : '';
-    res.redirect(
-      302,
-      `${process.env.PUBLIC_WEB_URL ?? 'http://localhost:3000'}/profile?tab=billing&payment=${urlStatus}${tokens}${paymentId}`,
-    );
+    res.redirect(302, paymentReturnUrl(payment, urlStatus, invId || undefined));
   } catch (e) {
     next(e);
   }

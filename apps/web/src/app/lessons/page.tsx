@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { BookOpen, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, GraduationCap, Loader2, Sparkles, Video, Wallet, X } from 'lucide-react';
 import { LESSON_STATUS_LABELS, type LessonDto, type LessonPackageOption } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
@@ -37,6 +38,30 @@ function apiErr(err: unknown): string {
 
 function formatSlot(iso: string): string {
   return new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * Человеческая дата занятия: «сегодня в 17:00 · через 2 ч». Абсолютная дата без
+ * привязки к «сейчас» заставляла родителя считать в уме, успевает ли он к уроку.
+ */
+function humanLessonTime(iso: string): string {
+  const date = new Date(iso);
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDiff = Math.round((startOfDay(date) - startOfDay(new Date())) / 86_400_000);
+  const day = dayDiff === 0 ? 'сегодня' : dayDiff === 1 ? 'завтра' : dayDiff === -1 ? 'вчера'
+    : date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  const base = `${day} в ${time}`;
+
+  const diffMs = date.getTime() - Date.now();
+  if (diffMs < 0 || diffMs > 7 * 86_400_000) return base;
+  const minutes = Math.round(diffMs / 60_000);
+  if (minutes < 1) return `${base} · вот-вот`;
+  if (minutes < 60) return `${base} · через ${minutes} мин`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${base} · через ${hours} ч`;
+  const days = Math.round(hours / 24);
+  return `${base} · через ${days} ${days === 1 ? 'день' : days < 5 ? 'дня' : 'дней'}`;
 }
 
 const ACTIVE_STATUSES = new Set(['BOOKED', 'AWAITING_PREP', 'GENERATING', 'READY', 'IN_PROGRESS']);
@@ -168,7 +193,7 @@ function TeacherAvatar({ name, photoUrl, size = 40 }: { name: string; photoUrl: 
   );
 }
 
-function BookingSection({ onBuy }: { onBuy: () => void }) {
+function BookingSection({ onBuy, onBooked }: { onBuy: () => void; onBooked?: () => void }) {
   const children = useListChildrenQuery();
   const teachers = useGetTeachersQuery();
   const balance = useGetBalanceQuery();
@@ -205,12 +230,15 @@ function BookingSection({ onBuy }: { onBuy: () => void }) {
       return;
     }
     try {
-      await book({ childId: activeChild, slotId }).unwrap();
+      // Курс уходит на сервер: ребёнок автоматически записывается на программу,
+      // и преподаватель на подготовке видит рекомендованную следующую тему.
+      await book({ childId: activeChild, slotId, courseId: activeCourse?.id }).unwrap();
       toast({
         title: 'Урок забронирован',
         description: activeCourse ? `Курс «${activeCourse.title}». Найдите урок во вкладке «Мои занятия».` : 'Найдите его во вкладке «Мои занятия».',
       });
       setSelectedDay('');
+      onBooked?.();
     } catch (err) {
       toast({
         title: availableByDuration.get(durationMin) ? 'Не удалось записать' : `Нет оплаченных занятий на ${durationMin} мин`,
@@ -250,7 +278,6 @@ function BookingSection({ onBuy }: { onBuy: () => void }) {
 
   return (
     <div className="space-y-4">
-      <BalanceCard onBuy={onBuy} />
       <Card className="border-border bg-card shadow-sm">
         <CardContent className="space-y-6 p-5">
           {kids.length > 1 && (
@@ -343,6 +370,9 @@ function BookingSection({ onBuy }: { onBuy: () => void }) {
           {courses.length > 0 && (
             <div className={cn(blocked && 'pointer-events-none opacity-50')}>
               <StepLabel n={nextStep()} text="Курс" />
+              <p className="mb-2 text-xs text-muted-foreground">
+                Ребёнок запишется на выбранный курс, а преподаватель начнёт со следующей темы программы.
+              </p>
               <div className="flex flex-wrap gap-1.5">
                 {courses.map((c) => (
                   <button
@@ -510,16 +540,22 @@ function LessonRow({ lesson, ordinal, onCancel, expandable }: { lesson: LessonDt
             )}
           </p>
           <p className="text-xs text-muted-foreground">
-            {formatSlot(lesson.startsAt)} · {lesson.durationMin} мин · {lesson.teacherName}
+            {done || cancelled ? formatSlot(lesson.startsAt) : humanLessonTime(lesson.startsAt)} · {lesson.durationMin} мин · {lesson.teacherName}
             {lesson.topicTitle ? ` · ${lesson.topicTitle}` : ''}
           </p>
         </div>
 
         {done ? (
-          <span className="inline-flex items-center gap-1 text-sm text-primary">
-            <Check className="h-4 w-4" />
-            {lesson.status === 'REPORT_SENT' ? 'Отчёт готов' : 'Проведён'}
-          </span>
+          lesson.status === 'REPORT_SENT' ? (
+            // Отчёт лежит в «Семье» — без ссылки родитель не догадывался, где его читать.
+            <Link href="/family" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+              <Check className="h-4 w-4" /> Смотреть отчёт
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-sm text-primary">
+              <Check className="h-4 w-4" /> Проведён
+            </span>
+          )
         ) : cancelled ? (
           <span className="text-sm text-muted-foreground">{LESSON_STATUS_LABELS[lesson.status]}</span>
         ) : (
@@ -661,11 +697,39 @@ function MyLessons({ onBook }: { onBook: () => void }) {
 type Tab = 'lessons' | 'book';
 
 export default function LessonsPage() {
+  return (
+    <AuthGuard>
+      <Suspense fallback={null}>
+        <LessonsContent />
+      </Suspense>
+    </AuthGuard>
+  );
+}
+
+function LessonsContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [buyOpen, setBuyOpen] = useState(false);
   const [tab, setTab] = useState<Tab>('lessons');
 
+  // Deep-link из чеклиста онбординга и возврата с оплаты: ?tab=book, ?buy=1, ?payment=success.
+  useEffect(() => {
+    if (searchParams.get('tab') === 'book') setTab('book');
+    if (searchParams.get('buy') === '1') { setTab('book'); setBuyOpen(true); }
+    const payment = searchParams.get('payment');
+    if (payment === 'success') {
+      toast({ title: 'Абонемент оплачен', description: 'Занятия зачислены на баланс — выберите время.' });
+      setTab('book');
+    } else if (payment === 'failed' || payment === 'cancelled') {
+      toast({ title: 'Оплата не прошла', description: 'Занятия не списаны. Попробуйте оформить абонемент ещё раз.', variant: 'destructive' });
+    }
+    if (payment || searchParams.get('buy') || searchParams.get('tab')) {
+      router.replace('/lessons', { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- разбираем query один раз при входе
+  }, []);
+
   return (
-    <AuthGuard>
       <div className="academy-theme min-h-screen">
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -681,6 +745,10 @@ export default function LessonsPage() {
               </Button>
             )}
           </div>
+
+          {/* Баланс занятий виден на обеих вкладках: на «Моих занятиях» родитель раньше
+              не понимал, оплачено ли что-то ещё. */}
+          <BalanceCard onBuy={() => setBuyOpen(true)} />
 
           <div className="inline-flex rounded-xl border border-border bg-card p-1">
             {([['lessons', 'Мои занятия'], ['book', 'Записаться']] as Array<[Tab, string]>).map(([value, label]) => (
@@ -698,10 +766,11 @@ export default function LessonsPage() {
             ))}
           </div>
 
-          {tab === 'lessons' ? <MyLessons onBook={() => setTab('book')} /> : <BookingSection onBuy={() => setBuyOpen(true)} />}
+          {tab === 'lessons'
+            ? <MyLessons onBook={() => setTab('book')} />
+            : <BookingSection onBuy={() => setBuyOpen(true)} onBooked={() => setTab('lessons')} />}
         </div>
         {buyOpen && <PackagesModal onClose={() => setBuyOpen(false)} />}
       </div>
-    </AuthGuard>
   );
 }

@@ -1,5 +1,7 @@
 import {
   academyGenerationSchema,
+  academyVideoModelsBySource,
+  academyVideoRequirement,
   buildAcademyGenerationPrompt,
   canMutateAcademyLibraryAsset,
   canPromoteAcademyAsset,
@@ -83,6 +85,29 @@ describe('academy generation contract', () => {
     });
     expect(normal).toBe(0.24);
     expect(transparent).toBe(0.28);
+  });
+
+  it('splits video models by what the teacher actually wants to do', () => {
+    expect(academyVideoModelsBySource('image').map((m) => m.slug)).toEqual(['kling-3-std', 'kling-3-pro']);
+    expect(academyVideoModelsBySource('text').map((m) => m.slug)).toEqual(['seedance-2', 'veo-3.1']);
+  });
+
+  it('tells the panel a reference frame is missing before launch, mirroring the schema', () => {
+    const missing = academyVideoRequirement({ videoModel: 'kling-3-std', scope: 'teacher', referenceCount: 0 });
+    expect(missing).toBeTruthy();
+    expect(academyVideoRequirement({ videoModel: 'kling-3-std', scope: 'teacher', referenceCount: 1 })).toBeNull();
+    // Для ребёнка кадром служит утверждённый портрет персонажа, референс не нужен.
+    expect(academyVideoRequirement({ videoModel: 'kling-3-std', scope: 'child', referenceCount: 0 })).toBeNull();
+    // Генерация по описанию исходного кадра не требует вовсе.
+    expect(academyVideoRequirement({ videoModel: 'seedance-2', scope: 'teacher', referenceCount: 0 })).toBeNull();
+
+    // Схема отклоняет ровно тот же случай, что и подсказка панели.
+    expect(academyGenerationSchema.safeParse({
+      ...base, kind: 'background', media: 'video', videoModel: 'kling-3-std',
+    }).success).toBe(false);
+    expect(academyGenerationSchema.safeParse({
+      ...base, kind: 'background', media: 'video', videoModel: 'seedance-2',
+    }).success).toBe(true);
   });
 
   it('builds a prompt with identity and pose details', () => {

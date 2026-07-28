@@ -25,6 +25,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
+import { ParentOnboarding } from '@/components/academy/ParentOnboarding';
 import { ACADEMY_FAQS } from '@/lib/academy-landing-content';
 
 type Direction = { icon: LucideIcon; title: string; desc: string };
@@ -55,7 +56,9 @@ const STEPS = [
 ];
 
 const PACKAGES = buildLessonPackages();
-const TRIAL_HREF = '/register?redirect=/family&intent=trial';
+// После регистрации ведём в «Семью»: там чеклист «Путь к первому уроку» ведёт родителя
+// по шагам до пробного занятия. Параметра intent больше нет — его никто не обрабатывал.
+const TRIAL_HREF = '/register?redirect=/family';
 
 function GuestLanding() {
   return (
@@ -278,6 +281,7 @@ ROLE_ACTIONS.PARENT = ROLE_ACTIONS.USER;
 
 function AuthedHub({ name, role }: { name: string; role: UserRole }) {
   const quickActions = ROLE_ACTIONS[role] ?? ROLE_ACTIONS.USER;
+  const isParent = role === 'PARENT' || role === 'USER';
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
       <div className="mb-8">
@@ -286,9 +290,13 @@ function AuthedHub({ name, role }: { name: string; role: UserRole }) {
         </div>
         <h1 className="text-3xl font-bold tracking-tight">Привет, {name}!</h1>
         <p className="mt-2 text-muted-foreground">
-          Все разделы Allvision Academy собраны в вашем ролевом кабинете.
+          {isParent
+            ? 'Здесь виден весь путь: профиль ребёнка, оплата и запись на занятия.'
+            : 'Все разделы Allvision Academy собраны в вашем ролевом кабинете.'}
         </p>
       </div>
+
+      {isParent && <ParentOnboarding className="mb-6" />}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {quickActions.map((a) => (

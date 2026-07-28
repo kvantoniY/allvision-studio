@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { useAcademyBadges } from '@/hooks/use-academy-badges';
 import { ADMIN_SIDEBAR_SECTIONS, METHODIST_SIDEBAR_SECTIONS, SIDEBAR_SECTIONS, TEACHER_SIDEBAR_SECTIONS, isActive } from './sidebar-nav';
 
 function initialsOf(name: string | null | undefined, email: string) {
@@ -20,8 +21,13 @@ function initialsOf(name: string | null | undefined, email: string) {
 export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const badges = useAcademyBadges({ role: user?.role, skip: !user });
 
   if (!user) return null;
+
+  // Бейджи показываем там, где лежит новое: отчёты — в «Семье», сообщения — в «Сообщениях».
+  const badgeFor = (href: string) =>
+    href === '/messages' ? badges.messages : href === '/family' ? badges.reports : 0;
 
   const baseSections = user.role === 'TEACHER'
     ? TEACHER_SIDEBAR_SECTIONS
@@ -53,6 +59,7 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
               {section.items.map((item) => {
                 const active = isActive(item.href, pathname);
                 const Icon = item.icon;
+                const count = badgeFor(item.href);
                 return (
                   <Link
                     key={item.href}
@@ -66,7 +73,18 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
                     )}
                   >
                     <Icon className="h-4 w-4" />
-                    {item.label}
+                    <span className="flex-1">{item.label}</span>
+                    {count > 0 && (
+                      <span
+                        aria-label={`Новых: ${count}`}
+                        className={cn(
+                          'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold',
+                          active ? 'bg-primary-foreground text-primary' : 'bg-primary text-primary-foreground',
+                        )}
+                      >
+                        {count}
+                      </span>
+                    )}
                   </Link>
                 );
               })}

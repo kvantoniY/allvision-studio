@@ -158,6 +158,9 @@ export const bookLessonSchema = z.object({
   childId: z.string().min(1),
   slotId: z.string().min(1),
   topicId: z.string().min(1).optional(),
+  // Курс, выбранный родителем при записи: ребёнок автоматически записывается на него,
+  // чтобы преподаватель на подготовке увидел рекомендованную следующую тему программы.
+  courseId: z.string().min(1).optional(),
 });
 
 export const cancelLessonSchema = z.object({

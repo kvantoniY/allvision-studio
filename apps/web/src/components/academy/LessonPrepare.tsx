@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { CheckCircle2, Eye, Loader2, Video, Wand2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Eye, Loader2, Video, Wand2, X } from 'lucide-react';
 import type { AcademyScene } from '@allvision/shared';
 import { AcademyScenePlayer } from '@/components/academy/scene-player';
 import { Button } from '@/components/ui/button';
@@ -196,9 +196,22 @@ export function LessonPrepare({ lessonId }: { lessonId: string }) {
   const [prepareOpen, setPrepareOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const instance = data?.instance ?? null;
+  const meetingUrl = data?.meetingUrl ?? null;
 
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
+      {/* Два условия готовности к уроку: выбран шаблон и есть ссылка на видеозвонок.
+          Раньше отсутствие ссылки было видно только по пустому полю ввода. */}
+      {!instance && (
+        <span className="inline-flex w-full items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Урок не подготовлен: ученик увидит экран ожидания и не сможет войти.
+        </span>
+      )}
+      {instance && !meetingUrl && (
+        <span className="inline-flex w-full items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> Нет ссылки на видеозвонок — добавьте её до начала занятия.
+        </span>
+      )}
       {instance ? (
         <>
           <span className="inline-flex items-center gap-1 text-xs text-emerald-700">

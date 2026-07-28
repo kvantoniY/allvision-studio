@@ -65,7 +65,7 @@ export const academyBookingApi = createApi({
       query: (subject) => ({ url: subject ? `/teachers?subject=${subject}` : '/teachers' }),
       providesTags: ['Teachers'],
     }),
-    bookLesson: build.mutation<{ lessonId: string }, { childId: string; slotId: string; topicId?: string }>({
+    bookLesson: build.mutation<{ lessonId: string }, { childId: string; slotId: string; topicId?: string; courseId?: string }>({
       query: (body) => ({ url: '/booking', method: 'POST', body }),
       invalidatesTags: ['Balance', 'Lessons', 'Teachers'],
     }),
