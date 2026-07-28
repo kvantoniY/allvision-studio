@@ -7,6 +7,7 @@ import type {
   AcademySceneRuntimeEffect,
   AcademySceneRuntimeEvent,
   AcademySceneRuntimeState,
+  MiniGameState,
 } from '@allvision/shared';
 import type { PixiScenePlayer } from '@/lib/scene-engine';
 import { cn } from '@/lib/utils';
@@ -15,6 +16,8 @@ export interface AcademyScenePlayerHandle {
   reset: () => void;
   focus: () => void;
   send: (event: Omit<AcademySceneRuntimeEvent, 'role'> & { role?: AcademyScenePlayerRole }) => void;
+  /** Применить снимок мини-игры от второго участника урока или из состояния комнаты. */
+  setGameState: (elementId: string, state: MiniGameState) => void;
 }
 
 interface AcademyScenePlayerProps {
@@ -26,6 +29,8 @@ interface AcademyScenePlayerProps {
   onStateChange?: (state: AcademySceneRuntimeState) => void;
   onEffect?: (effect: AcademySceneRuntimeEffect) => void;
   onEvent?: (event: AcademySceneRuntimeEvent) => void;
+  /** Локальный ход ученика/учителя в мини-игре — комната рассылает его второму участнику. */
+  onGameState?: (elementId: string, state: MiniGameState) => void;
   onError?: (error: Error) => void;
 }
 
@@ -39,19 +44,21 @@ export const AcademyScenePlayer = forwardRef<AcademyScenePlayerHandle, AcademySc
     onStateChange,
     onEffect,
     onEvent,
+    onGameState,
     onError,
   }, forwardedRef) {
     const hostRef = useRef<HTMLDivElement>(null);
     const playerRef = useRef<PixiScenePlayer | null>(null);
-    const callbacksRef = useRef({ onReady, onStateChange, onEffect, onEvent, onError });
+    const callbacksRef = useRef({ onReady, onStateChange, onEffect, onEvent, onGameState, onError });
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    callbacksRef.current = { onReady, onStateChange, onEffect, onEvent, onError };
+    callbacksRef.current = { onReady, onStateChange, onEffect, onEvent, onGameState, onError };
 
     useImperativeHandle(forwardedRef, () => ({
       reset: () => playerRef.current?.reset(),
       focus: () => hostRef.current?.querySelector('canvas')?.focus(),
       send: (event) => playerRef.current?.send(event),
+      setGameState: (elementId, state) => playerRef.current?.setGameState(elementId, state),
     }), []);
 
     useEffect(() => {
@@ -76,6 +83,7 @@ export const AcademyScenePlayer = forwardRef<AcademyScenePlayerHandle, AcademySc
             onStateChange: (state) => callbacksRef.current.onStateChange?.(state),
             onEffect: (effect) => callbacksRef.current.onEffect?.(effect),
             onEvent: (event) => callbacksRef.current.onEvent?.(event),
+            onGameState: (elementId, state) => callbacksRef.current.onGameState?.(elementId, state),
             onError: (caught) => {
               setError(caught.message);
               callbacksRef.current.onError?.(caught);

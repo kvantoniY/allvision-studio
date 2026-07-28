@@ -623,6 +623,9 @@ function extensionForMime(mimeType: string): string {
   if (mimeType === 'image/webp') return 'webp';
   if (mimeType === 'audio/mpeg') return 'mp3';
   if (mimeType === 'audio/wav') return 'wav';
+  if (mimeType === 'video/mp4') return 'mp4';
+  if (mimeType === 'video/webm') return 'webm';
+  if (mimeType === 'video/quicktime') return 'mov';
   return 'jpg';
 }
 
@@ -632,9 +635,9 @@ const uploadKindSchema = z.enum([...ACADEMY_MEDIA_ASSET_KINDS] as [string, ...st
 academyMaterialsRouter.post('/upload', uploadAcademyImage, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const file = req.file;
-    if (!file) throw new HttpError(400, 'FILE_REQUIRED', 'Прикрепите изображение');
+    if (!file) throw new HttpError(400, 'FILE_REQUIRED', 'Прикрепите файл');
     const kind = uploadKindSchema.parse((req.body?.kind as string) || 'academy-background');
-    const title = String(req.body?.title || file.originalname || 'Загруженное изображение').slice(0, 160);
+    const title = String(req.body?.title || file.originalname || 'Загруженный материал').slice(0, 160);
 
     const key = path.posix.join('academy', 'library', req.user!.id, `${crypto.randomUUID()}.${extensionForMime(file.mimetype)}`);
     const uploaded = await getStorageProvider().upload({ key, body: file.buffer, contentType: file.mimetype });

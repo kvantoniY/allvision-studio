@@ -3,6 +3,7 @@
 // чтобы масштабироваться на любой размер окна/полноэкранный режим.
 
 import type { AcademySceneRuntimeEvent } from './scene-runtime';
+import type { MiniGameState } from './mini-games';
 
 export type LessonRole = 'teacher' | 'student';
 
@@ -61,6 +62,11 @@ export interface LessonRoomState {
   presence: LessonPresence;
   /** Штрихи рисования учителя для ТЕКУЩЕЙ сцены. */
   strokes: LessonStroke[];
+  /**
+   * Прогресс мини-игр ТЕКУЩЕЙ сцены (elementId → снимок). Хранится в комнате, поэтому
+   * ход ученика виден учителю, а перезагрузка страницы не сбрасывает игру.
+   */
+  games: Record<string, MiniGameState>;
 }
 
 /**
@@ -79,6 +85,9 @@ export type LessonClientMessage =
   | { t: 'draw-clear' } // teacher
   | { t: 'reward' } // teacher
   | { t: 'scene-event'; event: LessonSceneEvent } // interaction
+  // Ход в мини-игре: шлётся снимок состояния, а не дельта — так проще пережить
+  // перезагрузку и разъезд состояний между ролями.
+  | { t: 'game'; elementId: string; state: MiniGameState }
   // Индикаторы участника: активность вкладки, открытый чат, микрофон и речь.
   | { t: 'status'; focused?: boolean; inChat?: boolean; micOn?: boolean; speaking?: boolean }
   | { t: 'chat'; body: string }
@@ -87,7 +96,7 @@ export type LessonClientMessage =
 // --- Сервер → клиент ---
 export type LessonServerMessage =
   | { t: 'state'; role: LessonRole; state: LessonRoomState; chat: LessonChatEntry[] }
-  | { t: 'nav'; sceneIndex: number; strokes: LessonStroke[] }
+  | { t: 'nav'; sceneIndex: number; strokes: LessonStroke[]; games: Record<string, MiniGameState> }
   | { t: 'unlock'; value: boolean }
   | { t: 'draw-start'; id: string; color: string; size: number; point: LessonPoint }
   | { t: 'draw-append'; id: string; points: LessonPoint[] }
@@ -95,6 +104,7 @@ export type LessonServerMessage =
   | { t: 'draw-clear' }
   | { t: 'reward' }
   | { t: 'scene-event'; event: LessonSceneEvent; from: LessonRole }
+  | { t: 'game'; elementId: string; state: MiniGameState; from: LessonRole }
   | { t: 'chat'; entry: LessonChatEntry }
   | { t: 'presence'; presence: LessonPresence }
   | { t: 'error'; message: string }

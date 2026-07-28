@@ -187,7 +187,9 @@ const supportAttachmentMulter = multer({
 
 export const uploadSinglePhoto = baseMulter.single('image');
 export const uploadProfileAvatar = baseMulter.single('file');
-export const uploadAcademyImage = baseMulter.single('file');
+// Academy-библиотека принимает и картинки, и готовые ролики (кат-сцены, заставки):
+// раньше был image-only фильтр, поэтому своё видео в урок загрузить было нельзя.
+export const uploadAcademyImage = mediaAssetMulter.single('file');
 export const uploadMultiplePhotos = baseMulter.array('images', 5);
 export const uploadSingleVideo = videoMulter.single('video');
 export const uploadTrendAssets = trendAssetsMulter.fields([

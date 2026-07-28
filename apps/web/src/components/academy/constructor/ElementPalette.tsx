@@ -8,11 +8,11 @@ import { cn } from '@/lib/utils';
 type ElType = AcademySceneElement['type'];
 
 const CATEGORIES: { title: string; types: ElType[] }[] = [
+  { title: 'Игры и задания', types: ['mini-game', 'input'] },
   { title: 'Текст и кнопки', types: ['text', 'button', 'card', 'dialogue'] },
-  { title: 'Ответы и ввод', types: ['input'] },
-  { title: 'Картинки и фон', types: ['background', 'image', 'foreground', 'video', 'animated-background'] },
+  { title: 'Картинки, фон и видео', types: ['background', 'image', 'foreground', 'video', 'animated-background'] },
   { title: 'Персонажи и предметы', types: ['character', 'npc', 'prop'] },
-  { title: 'Игровые', types: ['timer', 'progress', 'indicator', 'particles', 'hotspot', 'collision', 'platform'] },
+  { title: 'Игровые механики', types: ['timer', 'progress', 'indicator', 'particles', 'hotspot', 'collision', 'platform'] },
   { title: 'Звук', types: ['audio'] },
 ];
 
@@ -20,7 +20,8 @@ const LABELS: Record<ElType, string> = {
   background: 'Фон', 'animated-background': 'Аним. фон', video: 'Видео', foreground: 'Передний план',
   image: 'Картинка', character: 'Персонаж', npc: 'NPC', prop: 'Предмет', text: 'Текст', dialogue: 'Диалог',
   button: 'Кнопка', card: 'Карточка', input: 'Поле ввода', indicator: 'Индикатор', timer: 'Таймер',
-  progress: 'Прогресс', particles: 'Частицы', audio: 'Звук', hotspot: 'Зона', collision: 'Столкновение', platform: 'Платформа',
+  progress: 'Прогресс', particles: 'Частицы', audio: 'Звук', hotspot: 'Зона', collision: 'Столкновение',
+  platform: 'Платформа', 'mini-game': 'Мини-игра',
 };
 
 /** Иллюстративное мини-превью элемента — сразу видно, что добавляешь. */
@@ -57,6 +58,23 @@ function Preview({ type }: { type: ElType }) {
       return <div className={cn(box, 'items-end')}><span className="h-3 w-full rounded-md border-b-4 border-emerald-700/60 bg-emerald-500/50" /></div>;
     case 'audio':
       return <div className={cn(box, 'bg-violet-50')}><Volume2 className="h-5 w-5 text-violet-500" /></div>;
+    case 'mini-game':
+      // Четыре карточки: две «рубашкой вверх», две открытые — сразу читается механика.
+      return (
+        <div className={cn(box, 'gap-1 bg-orange-50 px-1')}>
+          {['?', '🍎', '?', '🍎'].map((face, i) => (
+            <span
+              key={i}
+              className={cn(
+                'flex h-7 w-5 items-center justify-center rounded text-[11px] font-bold',
+                face === '?' ? 'bg-gradient-to-br from-orange-400 to-orange-500 text-white' : 'border border-orange-200 bg-white',
+              )}
+            >
+              {face}
+            </span>
+          ))}
+        </div>
+      );
     default: // картинки/фон/видео
       return <div className={cn(box, 'border-2 border-dashed border-primary/40 bg-primary/5')}><ImageIcon className="h-5 w-5 text-primary/60" /></div>;
   }

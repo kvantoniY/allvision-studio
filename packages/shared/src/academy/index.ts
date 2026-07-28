@@ -5,6 +5,7 @@ export * from './character';
 export * from './progress';
 export * from './booking';
 export * from './materials';
+export * from './mini-games';
 export * from './scene-format';
 export * from './scene-runtime';
 export * from './scene-editing';

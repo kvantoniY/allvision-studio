@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Copy, Eye, Image as ImageIcon, Layers, Loader2, Pencil, Plus, Redo2, Trash2, Undo2, Volume2, Zap,
+  ArrowLeft, Check, ChevronLeft, ChevronRight, Clock, Copy, Eye, Film, Image as ImageIcon, Layers, Loader2, Pencil, Plus, Redo2, Trash2, Undo2, Volume2, Zap,
 } from 'lucide-react';
 import {
   ACADEMY_SCENE_ELEMENT_TYPE_LABELS,
@@ -12,6 +12,9 @@ import {
   addElement,
   addLayer,
   addRule,
+  buildMiniGameBoard,
+  MINI_GAME_DEFAULT_SETS,
+  type AcademyAssetDragData,
   removeRule,
   updateRule,
   patchElementTransform,
@@ -40,6 +43,7 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useGetTemplateQuery, usePublishTemplateMutation, useUpdateTemplateMutation } from '@/store/api/academy-lesson-templates-api';
 import { AssetPickerDialog } from './AssetPickerDialog';
+import { MiniGameEditor, VideoSourceEditor } from './MiniGameEditor';
 import { BackgroundGenerator } from './BackgroundGenerator';
 import { RulesEditor } from './RulesEditor';
 import { ElementPalette } from './ElementPalette';
@@ -68,6 +72,15 @@ const HANDLE_CURSOR: Record<ResizeHandle, string> = {
   se: 'nwse-resize', s: 'ns-resize', sw: 'nesw-resize', w: 'ew-resize',
 };
 const TEXT_TYPES = ['text', 'dialogue', 'button', 'card'];
+
+/** Запасной конфиг игры: элемент создаётся уже с ним, но старые сцены могут быть без него. */
+const DEFAULT_GAME_CONFIG = {
+  kind: 'memory' as const,
+  items: MINI_GAME_DEFAULT_SETS.fruits.items.slice(0, 4),
+  count: 4,
+  seed: 1,
+  showMistakes: true,
+};
 
 /**
  * Читает документ урока: массив сцен из `{scenes:[]}` или обёртка одиночной сцены.
@@ -639,8 +652,54 @@ function assetUrl(src: string): string {
 }
 
 function ElementVisual({ element }: { element: AcademySceneElement }) {
+  // Мини-игра: показываем реальную раскладку из конфига — методист видит поле,
+  // а не серый прямоугольник, и сразу понимает, влезает ли игра в отведённое место.
+  if (element.type === 'mini-game') {
+    const config = element.content.game;
+    if (!config) {
+      return <div className="flex h-full w-full items-center justify-center rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 text-[10px] text-primary/70">Мини-игра не настроена</div>;
+    }
+    const board = buildMiniGameBoard(config);
+    const faceDown = board.kind === 'memory';
+    return (
+      <div className="flex h-full w-full flex-col gap-1 overflow-hidden rounded-xl bg-white/60 p-1">
+        <div className="shrink-0 truncate text-[9px] font-semibold text-muted-foreground">{board.instruction}</div>
+        <div className="grid min-h-0 flex-1 gap-1" style={{ gridTemplateColumns: `repeat(${board.columns}, minmax(0,1fr))` }}>
+          {board.cells.slice(0, 12).map((cell) => (
+            <div
+              key={cell.index}
+              className={cn(
+                'flex items-center justify-center overflow-hidden rounded text-[10px] font-bold',
+                faceDown ? 'bg-gradient-to-br from-orange-400 to-orange-500 text-white' : 'border border-orange-200 bg-white text-foreground',
+              )}
+            >
+              {faceDown ? '?' : cell.imageUrl
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={assetUrl(cell.imageUrl)} alt="" className="h-full w-full object-contain" draggable={false} />
+                : <span className="truncate px-0.5">{cell.emoji ?? cell.label}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Видео с генерацией под ученика: материала ещё нет, показываем «плёнку» с промптом.
+  if (element.type === 'video' && !element.asset?.fileUrl && element.content.generation?.prompt) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-primary/50 bg-primary/5 p-2 text-center">
+        <Film className="h-[28%] w-auto text-primary/60" />
+        <span className="text-[9px] font-semibold text-primary/80">Кат-сцена с учеником</span>
+        <span className="line-clamp-2 text-[8px] leading-tight text-muted-foreground">{element.content.generation.prompt}</span>
+      </div>
+    );
+  }
+
   // Реальная картинка, если материал уже привязан — вписываем так же, как в уроке (Pixi).
   if (IMAGE_TYPES.includes(element.type) && element.asset?.fileUrl) {
+    if (element.asset.mimeType?.startsWith('video/')) {
+      return <video src={assetUrl(element.asset.fileUrl)} className="h-full w-full" style={{ objectFit: elementObjectFit(element) }} muted playsInline preload="metadata" />;
+    }
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={assetUrl(element.asset.fileUrl)} alt={element.name} className="h-full w-full" style={{ objectFit: elementObjectFit(element) }} draggable={false} />;
   }
@@ -884,7 +943,21 @@ function ElementInspector({
         <NumberField label="Поворот°" value={t.rotation} onChange={(v) => setT({ rotation: v })} />
         <NumberField label="Прозрачн." value={t.opacity} step={0.1} onChange={(v) => setT({ opacity: Math.min(1, Math.max(0, v)) })} />
       </div>
-      {IMAGE_TYPES.includes(element.type) && (
+      {element.type === 'mini-game' && (
+        <MiniGameEditor
+          config={element.content.game ?? DEFAULT_GAME_CONFIG}
+          onChange={(game) => setContent({ game })}
+        />
+      )}
+      {element.type === 'video' && (
+        <VideoSourceEditor
+          element={element}
+          onPickAsset={onPickAsset}
+          onContentChange={(patch) => setContent(patch as Partial<AcademySceneElement['content']>)}
+          onAttachAsset={(drag) => onSceneChange(attachAsset(scene, element.id, drag as AcademyAssetDragData))}
+        />
+      )}
+      {IMAGE_TYPES.includes(element.type) && element.type !== 'video' && (
         <div className="space-y-1.5">
           <Label className="text-xs">Материал</Label>
           <Button variant="outline" size="sm" className="w-full" onClick={onPickAsset}>

@@ -5,6 +5,7 @@ import {
   EMPTY_PARTICIPANT_STATE,
   LESSON_CHAT_MAX_LENGTH,
   LESSON_WS_PATH,
+  normalizeMiniGameState,
   readSceneDocument,
   type LessonChatEntry,
   type LessonClientMessage,
@@ -12,6 +13,7 @@ import {
   type LessonRole,
   type LessonServerMessage,
   type LessonStroke,
+  type MiniGameState,
 } from '@allvision/shared';
 import { verifyAccessToken } from '../utils/jwt';
 import { logger } from '../utils/logger';
@@ -34,6 +36,8 @@ interface Room {
   sceneIndex: number;
   unlocked: boolean;
   strokesByScene: Map<number, LessonStroke[]>;
+  /** Прогресс мини-игр по сценам: сцена → элемент → снимок состояния. */
+  gamesByScene: Map<number, Record<string, MiniGameState>>;
   members: Set<Member>;
   persistTimer?: ReturnType<typeof setTimeout>;
 }
@@ -47,6 +51,7 @@ function schedulePersist(room: Room) {
       sceneIndex: room.sceneIndex,
       unlocked: room.unlocked,
       strokesByScene: Object.fromEntries(room.strokesByScene),
+      gamesByScene: Object.fromEntries(room.gamesByScene),
     });
   }, 600);
 }
@@ -133,7 +138,7 @@ async function markLessonStarted(lessonId: string, currentStatus: string) {
 async function getOrCreateRoom(lessonId: string, sceneCount: number): Promise<Room> {
   let room = rooms.get(lessonId);
   if (!room) {
-    room = { lessonId, sceneCount, sceneIndex: 0, unlocked: false, strokesByScene: new Map(), members: new Set() };
+    room = { lessonId, sceneCount, sceneIndex: 0, unlocked: false, strokesByScene: new Map(), gamesByScene: new Map(), members: new Set() };
     // Восстановление позиции/штрихов после рестарта API или при перезаходе.
     const persisted = await loadRoom(lessonId);
     if (persisted) {
@@ -141,6 +146,9 @@ async function getOrCreateRoom(lessonId: string, sceneCount: number): Promise<Ro
       room.unlocked = persisted.unlocked;
       for (const [idx, strokes] of Object.entries(persisted.strokesByScene)) {
         room.strokesByScene.set(Number(idx), strokes);
+      }
+      for (const [idx, games] of Object.entries(persisted.gamesByScene ?? {})) {
+        room.gamesByScene.set(Number(idx), games);
       }
     }
     rooms.set(lessonId, room);
@@ -167,6 +175,10 @@ async function chatHistory(lessonId: string): Promise<LessonChatEntry[]> {
 
 function currentStrokes(room: Room): LessonStroke[] {
   return room.strokesByScene.get(room.sceneIndex) ?? [];
+}
+
+function currentGames(room: Room): Record<string, MiniGameState> {
+  return room.gamesByScene.get(room.sceneIndex) ?? {};
 }
 
 async function handleMessage(room: Room, member: Member, raw: string) {
@@ -196,6 +208,18 @@ async function handleMessage(room: Room, member: Member, raw: string) {
       // Проксируем взаимодействие ДРУГИМ участникам (плеер-инициатор применил локально).
       broadcast(room, { t: 'scene-event', event: msg.event, from: member.role }, member);
       return;
+    case 'game': {
+      // Ход в мини-игре доступен обеим ролям: ученик играет, учитель может помочь.
+      // Храним снимок в комнате — второй участник видит ход, а перезагрузка не сбрасывает игру.
+      const elementId = String(msg.elementId ?? '').slice(0, 120);
+      if (!elementId) return;
+      const state = normalizeMiniGameState(msg.state);
+      const games = { ...currentGames(room), [elementId]: state };
+      room.gamesByScene.set(room.sceneIndex, games);
+      broadcast(room, { t: 'game', elementId, state, from: member.role }, member);
+      schedulePersist(room);
+      return;
+    }
     case 'status': {
       // Индикаторы участника. `speaking` шлётся часто, поэтому рассылаем только
       // при фактическом изменении состояния комнаты.
@@ -221,7 +245,7 @@ async function handleMessage(room: Room, member: Member, raw: string) {
       const idx = Math.max(0, Math.min(room.sceneCount - 1, Math.floor(msg.sceneIndex)));
       room.sceneIndex = idx;
       room.unlocked = false;
-      broadcast(room, { t: 'nav', sceneIndex: idx, strokes: currentStrokes(room) });
+      broadcast(room, { t: 'nav', sceneIndex: idx, strokes: currentStrokes(room), games: currentGames(room) });
       broadcast(room, { t: 'unlock', value: false });
       schedulePersist(room);
       return;
@@ -310,6 +334,7 @@ export function initLessonWebSocket(server: Server) {
           unlocked: room.unlocked,
           presence: presenceOf(room),
           strokes: currentStrokes(room),
+          games: currentGames(room),
         },
         chat: await chatHistory(lessonId),
       });

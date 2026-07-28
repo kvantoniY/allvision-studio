@@ -13,7 +13,13 @@ import { requireAuth } from '../middleware/auth';
 import { requireRole } from '../middleware/require-role';
 import { HttpError } from '../utils/http-error';
 import { readCharacterRef, readChildAsset } from '../services/child-photo-storage';
-import { ensureFullAiSceneGenerations, fullSceneStatuses, regenerateFullAiScene } from '../services/academy-full-scene-service';
+import {
+  elementVideoStatuses,
+  ensureElementVideoGenerations,
+  ensureFullAiSceneGenerations,
+  fullSceneStatuses,
+  regenerateFullAiScene,
+} from '../services/academy-full-scene-service';
 import { defaultLessonTopicId, lessonTopicOptions } from '../services/academy-lesson-topic-service';
 import { addLessonSystemMessage } from '../services/academy-operations-service';
 
@@ -159,9 +165,11 @@ academyLessonInstancesRouter.post('/', requireRole('TEACHER', 'METHODIST'), asyn
       }
       return created;
     });
-    // Запускаем генерацию цельных AI-сцен по референсу ученика (fire-and-forget, не блокирует ответ).
-    void ensureFullAiSceneGenerations({ id: instance.id, childId: lesson.child.id, version: { scene: version.scene } }, req.user!.id)
-      .catch(() => undefined);
+    // Генерация персональных материалов по референсу ученика (fire-and-forget, не блокирует ответ):
+    // цельные AI-сцены и кат-сцены (видео-элементы с промптом).
+    const target = { id: instance.id, childId: lesson.child.id, version: { scene: version.scene } };
+    void ensureFullAiSceneGenerations(target, req.user!.id).catch(() => undefined);
+    void ensureElementVideoGenerations(target, req.user!.id).catch(() => undefined);
     res.status(201).json({ instanceId: instance.id });
   } catch (err) {
     next(err);
@@ -247,8 +255,33 @@ academyLessonInstancesRouter.get('/:id/scenes', async (req: Request, res: Respon
     const character = await characterForInstance(instance.id, instance.childId);
     const overrides = (instance.overrides ?? {}) as InstanceOverrides;
     const statuses = await fullSceneStatuses(instance.id);
+    const cutscenes = await elementVideoStatuses(instance.id);
     const scenes = readSceneDocument(instance.version.scene).map((s) => {
       let resolved = resolveInstanceScene(s, { character, overrides });
+      // Персональная кат-сцена: готовый ролик подставляется в свой видео-элемент.
+      if (cutscenes.size > 0) {
+        resolved = {
+          ...resolved,
+          layers: resolved.layers.map((layer) => ({
+            ...layer,
+            elements: layer.elements.map((element) => {
+              const cutscene = cutscenes.get(`${s.id}::${element.id}`);
+              if (!cutscene || cutscene.status !== 'COMPLETED' || !cutscene.childAssetId) return element;
+              return {
+                ...element,
+                asset: {
+                  type: 'academy-asset' as const,
+                  assetId: cutscene.childAssetId,
+                  scope: 'child' as const,
+                  kind: 'cutscene',
+                  fileUrl: `/api/academy/lesson-instances/${instance.id}/scene-file/${cutscene.childAssetId}`,
+                  mimeType: 'video/mp4',
+                },
+              };
+            }),
+          })),
+        };
+      }
       // Цельная AI-сцена: если генерация по референсу ученика готова — ставим её фоном.
       const st = statuses.get(s.id);
       if (s.generation?.mode === 'full-ai' && st?.status === 'COMPLETED' && st.childAssetId) {
@@ -267,6 +300,7 @@ academyLessonInstancesRouter.get('/:id/scenes', async (req: Request, res: Respon
       scenes,
       hasCharacter: Boolean(character),
       sceneStatuses: [...statuses.values()],
+      cutsceneStatuses: [...cutscenes.values()],
     });
   } catch (err) {
     next(err);

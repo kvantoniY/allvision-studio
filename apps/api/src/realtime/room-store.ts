@@ -1,5 +1,5 @@
 import IORedis, { type Redis } from 'ioredis';
-import type { LessonStroke } from '@allvision/shared';
+import type { LessonStroke, MiniGameState } from '@allvision/shared';
 import { logger } from '../utils/logger';
 
 /**
@@ -13,6 +13,11 @@ export interface PersistedRoom {
   sceneIndex: number;
   unlocked: boolean;
   strokesByScene: Record<number, LessonStroke[]>;
+  /**
+   * Прогресс мини-игр: сцена → элемент → снимок. Без этого перезагрузка страницы
+   * (или переход по сценам туда-обратно) сбрасывала бы уже открытые карточки.
+   */
+  gamesByScene?: Record<number, Record<string, MiniGameState>>;
 }
 
 const ROOM_TTL_SECONDS = 24 * 60 * 60;
@@ -67,6 +72,7 @@ export function saveRoom(lessonId: string, data: PersistedRoom): void {
     sceneIndex: data.sceneIndex,
     unlocked: data.unlocked,
     strokesByScene: {},
+    gamesByScene: data.gamesByScene,
   };
   for (const [idx, strokes] of Object.entries(data.strokesByScene)) {
     trimmed.strokesByScene[Number(idx)] = strokes.slice(-400);

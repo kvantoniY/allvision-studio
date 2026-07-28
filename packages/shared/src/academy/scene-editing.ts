@@ -8,6 +8,7 @@ import {
   type AcademySceneRule,
 } from './scene-format';
 import type { AcademyAssetDragData } from './materials';
+import { MINI_GAME_DEFAULT_SETS } from './mini-games';
 
 // === Чистые хелперы редактора сцен (A6.2) ===
 // Возвращают НОВЫЙ объект сцены (иммутабельно) — под undo-стек редактора.
@@ -88,6 +89,22 @@ export function makeElement(scene: AcademyScene, type: AcademySceneElement['type
   }
   if (type === 'timer') base.content = { durationMs: 5000 };
   if (['progress', 'indicator'].includes(type)) base.content = { min: 0, max: 100, value: 0 };
+  if (type === 'mini-game') {
+    // Игра создаётся сразу играбельной на дефолтном наборе: методист может открыть
+    // предпросмотр и проверить механику, ещё ничего не настраивая.
+    base.name = 'Мини-игра';
+    base.transform = { ...base.transform, x: 80, y: 80, width: 800, height: 420 };
+    base.content = {
+      game: {
+        kind: 'memory',
+        items: MINI_GAME_DEFAULT_SETS.fruits.items.slice(0, 4),
+        count: 4,
+        // Seed фиксируется при создании: раскладка стабильна у обеих ролей и после перезагрузки.
+        seed: Math.floor(Math.random() * 100000) + 1,
+        showMistakes: true,
+      },
+    };
+  }
   // Намеренно НЕ гоняем строгую схему: source-типы (image/character/npc/…) валидны
   // только после прикрепления ассета. Редактор допускает промежуточное состояние,
   // строгая валидация — через validateScene (кнопка «Проверить»/сохранение).

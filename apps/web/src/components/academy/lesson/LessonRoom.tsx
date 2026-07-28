@@ -14,6 +14,7 @@ import {
   type LessonRole,
   type LessonServerMessage,
   type LessonStroke,
+  type MiniGameState,
 } from '@allvision/shared';
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
@@ -63,6 +64,8 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
 
   const socketRef = useRef<LessonSocket | null>(null);
   const playerRef = useRef<AcademyScenePlayerHandle | null>(null);
+  // Снимки игр приходят раньше, чем плеер новой сцены готов их принять.
+  const pendingGamesRef = useRef<Record<string, MiniGameState>>({});
   const rootRef = useRef<HTMLDivElement>(null);
 
   const scenes = useMemo(() => scenesQuery.data?.scenes ?? [], [scenesQuery.data]);
@@ -89,14 +92,21 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
             setSceneCount(msg.state.sceneCount);
             setUnlocked(msg.state.unlocked);
             setStrokes(msg.state.strokes);
+            pendingGamesRef.current = msg.state.games;
             break;
-          case 'nav': setSceneIndex(msg.sceneIndex); setStrokes(msg.strokes); break;
+          case 'nav':
+            setSceneIndex(msg.sceneIndex);
+            setStrokes(msg.strokes);
+            // Игры новой сцены применяем после перерисовки плеера.
+            pendingGamesRef.current = msg.games;
+            break;
           case 'unlock': setUnlocked(msg.value); break;
           case 'draw-start': applyStart({ id: msg.id, color: msg.color, size: msg.size, points: [msg.point] }); break;
           case 'draw-append': applyAppend(msg.id, msg.points); break;
           case 'draw-clear': setStrokes([]); break;
           case 'reward': setReward(true); setTimeout(() => setReward(false), 2600); break;
           case 'scene-event': playerRef.current?.send({ ...msg.event, role: msg.from }); break;
+          case 'game': playerRef.current?.setGameState(msg.elementId, msg.state); break;
           default: break;
         }
       },
@@ -226,6 +236,15 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
             <div className="absolute inset-0">
               <AcademyScenePlayer
                 ref={playerRef}
+                onReady={() => {
+                  for (const [id, state] of Object.entries(pendingGamesRef.current)) {
+                    playerRef.current?.setGameState(id, state);
+                  }
+                }}
+                onGameState={(elementId, state) => {
+                  pendingGamesRef.current = { ...pendingGamesRef.current, [elementId]: state };
+                  send({ t: 'game', elementId, state });
+                }}
                 scene={scene}
                 role={role ?? 'student'}
                 className="h-full"

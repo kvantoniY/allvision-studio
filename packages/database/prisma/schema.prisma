@@ -759,12 +759,17 @@ model LessonInstanceSceneAsset {
   id         String   @id @default(cuid())
   instanceId String
   sceneId    String
+  /// Элемент сцены для персональной генерации (кат-сцена с ребёнком).
+  /// Пустая строка = генерация всей сцены целиком (full-ai), как было до A13.
+  /// Именно пустая строка, а не NULL: в Postgres NULL'ы в уникальном индексе
+  /// различны, и upsert по сцене перестал бы быть идемпотентным.
+  elementId  String   @default("")
   projectId  String
   createdAt  DateTime @default(now())
 
   instance LessonInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
-  @@unique([instanceId, sceneId])
+  @@unique([instanceId, sceneId, elementId])
   @@index([instanceId])
 }
 

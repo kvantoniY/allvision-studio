@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { miniGameConfigSchema } from './mini-games';
 
 // === Формат интерактивной сцены Academy (A6.1) ===
 
@@ -35,6 +36,7 @@ export const ACADEMY_SCENE_ELEMENT_TYPES = [
   'hotspot',
   'collision',
   'platform',
+  'mini-game',
 ] as const;
 
 export const ACADEMY_SCENE_EVENT_TYPES = [
@@ -118,6 +120,7 @@ export const ACADEMY_SCENE_ELEMENT_TYPE_LABELS: Record<(typeof ACADEMY_SCENE_ELE
   hotspot: 'Зона нажатия',
   collision: 'Зона столкновения',
   platform: 'Платформа',
+  'mini-game': 'Мини-игра',
 };
 
 const sceneIdSchema = z.string()
@@ -190,6 +193,19 @@ export const sceneElementContentSchema = z.object({
   pose: z.string().max(120).optional(),
   correctAnswer: sceneScalarSchema.optional(),
   acceptedValues: z.array(sceneScalarSchema).max(100).optional(),
+  /** Настройка мини-игры (тип `mini-game`): карточки, число пар, seed раскладки. */
+  game: miniGameConfigSchema.optional(),
+  /**
+   * Персональная генерация элемента при подготовке урока (A13). Работает для видео и
+   * картинок: в шаблоне лежит промпт, а на экземпляре урока по нему создаётся материал
+   * с внешностью конкретного ученика (кат-сцена) и подставляется в этот элемент.
+   */
+  generation: z.object({
+    prompt: z.string().trim().min(8, 'Опишите кат-сцену подробнее').max(2000),
+    /** Оживить утверждённый портрет ученика или снять ролик по описанию. */
+    source: z.enum(['image', 'text']).default('image'),
+    durationSec: z.number().int().min(3).max(15).default(5),
+  }).strict().optional(),
 }).strict();
 
 export const sceneAnimationSchema = z.object({
@@ -243,12 +259,18 @@ export const academySceneElementSchema = z.object({
   // абстрактный, конкретный ребёнок подставляется при подготовке урока
   // (resolveInstanceScene). Требовать у него ассет на публикации нельзя.
   const sourceTypes = ['animated-background', 'video', 'foreground', 'image', 'npc', 'prop', 'audio'];
-  if (sourceTypes.includes(element.type) && !element.asset && !element.content.sourceUrl) {
+  // Материал может быть не выбран, если элемент генерируется под ученика при подготовке
+  // урока (кат-сцена с ребёнком): тогда источником служит промпт.
+  const generated = Boolean(element.content.generation?.prompt);
+  if (sourceTypes.includes(element.type) && !element.asset && !element.content.sourceUrl && !generated) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['asset'],
-      message: 'Для этого элемента нужен материал из библиотеки или sourceUrl',
+      message: 'Выберите материал из библиотеки, загрузите файл или опишите генерацию под ученика',
     });
+  }
+  if (element.type === 'mini-game' && !element.content.game) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['content', 'game'], message: 'Настройте мини-игру: тип и карточки' });
   }
   if (['text', 'dialogue', 'button', 'card'].includes(element.type) && !element.content.text?.trim()) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['content', 'text'], message: 'Добавьте текст элемента' });

@@ -1,9 +1,13 @@
 import {
+  applyMiniGameMove,
+  buildMiniGameBoard,
   createAcademySceneRuntimeState,
+  createMiniGameState,
   elementBorderRadius,
   elementFillColor,
   elementObjectFit,
   elementTextColor,
+  normalizeMiniGameState,
   parseAcademyScene,
   resolveAcademySceneElement,
   setSceneInputValue,
@@ -14,6 +18,8 @@ import {
   type AcademySceneRuntimeEvent,
   type AcademySceneRuntimeState,
   type AcademyScenePlayerRole,
+  type MiniGameBoard,
+  type MiniGameState,
 } from '@allvision/shared';
 import {
   Application,
@@ -35,12 +41,17 @@ export interface PixiScenePlayerOptions {
   onEffect?: (effect: AcademySceneRuntimeEffect) => void;
   /** Локальный пользовательский ввод; programmatic send() сюда не попадает. */
   onEvent?: (event: AcademySceneRuntimeEvent) => void;
+  /** Локальный ход в мини-игре: комната урока рассылает снимок второму участнику. */
+  onGameState?: (elementId: string, state: MiniGameState) => void;
   onError?: (error: Error) => void;
 }
 
 const IMAGE_ELEMENT_TYPES = new Set([
-  'animated-background', 'video', 'foreground', 'image', 'character', 'npc', 'prop',
+  'animated-background', 'foreground', 'image', 'character', 'npc', 'prop',
 ]);
+
+/** Пауза, на которую неверная пара остаётся открытой, прежде чем закрыться. */
+const MINI_GAME_FLIP_BACK_MS = 900;
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL
   ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -80,6 +91,16 @@ export class PixiScenePlayer {
   // чтобы в уроке они выглядели и работали как поле ввода.
   private overlay: HTMLDivElement | null = null;
   private inputElements = new Map<string, HTMLInputElement>();
+  // Видео и мини-игры тоже живут в HTML-оверлее: в WebGL нет ни плеера с управлением,
+  // ни удобной анимации переворота карточек, а позиционирование общее с инпутами.
+  private videoElements = new Map<string, HTMLVideoElement>();
+  private videoObjectUrls = new Map<string, string>();
+  private gameElements = new Map<string, HTMLDivElement>();
+  private gameBoards = new Map<string, MiniGameBoard>();
+  private gameStates = new Map<string, MiniGameState>();
+  /** Карточки, временно показанные открытыми (неверная пара до закрытия). */
+  private gameRevealed = new Map<string, number[]>();
+  private gameTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private resizeObserver: ResizeObserver | null = null;
 
   constructor(options: PixiScenePlayerOptions) {
@@ -174,6 +195,18 @@ export class PixiScenePlayer {
     this.resizeObserver = null;
     this.inputElements.forEach((el) => el.remove());
     this.inputElements.clear();
+    // Видео нужно явно остановить и отпустить: иначе поток продолжает грузиться,
+    // а blob детской кат-сцены остаётся в памяти вкладки.
+    this.videoElements.forEach((el) => { el.pause(); el.removeAttribute('src'); el.load(); el.remove(); });
+    this.videoElements.clear();
+    this.videoObjectUrls.forEach((url) => URL.revokeObjectURL(url));
+    this.videoObjectUrls.clear();
+    this.gameTimers.forEach((timer) => clearTimeout(timer));
+    this.gameTimers.clear();
+    this.gameElements.forEach((el) => el.remove());
+    this.gameElements.clear();
+    this.gameBoards.clear();
+    this.gameRevealed.clear();
     this.overlay = null;
     this.displayObjects.clear();
     this.root = null;
@@ -276,11 +309,30 @@ export class PixiScenePlayer {
     this.app.ticker.add(tick);
   }
 
+  /** Применяет снимок игры, пришедший от второго участника или из состояния комнаты. */
+  setGameState(elementId: string, state: MiniGameState): void {
+    const clearTimer = this.gameTimers.get(elementId);
+    if (clearTimer) {
+      clearTimeout(clearTimer);
+      this.gameTimers.delete(elementId);
+    }
+    this.gameStates.set(elementId, normalizeMiniGameState(state));
+    this.gameRevealed.delete(elementId);
+    this.renderGame(elementId);
+  }
+
+  /** Текущее состояние всех мини-игр сцены — комната сохраняет его при навигации. */
+  gameSnapshot(): Record<string, MiniGameState> {
+    return Object.fromEntries(this.gameStates);
+  }
+
   private async draw(): Promise<void> {
     const revision = ++this.drawRevision;
     const nextRoot = new Container({ sortableChildren: true, label: `scene:${this.scene.id}` });
     const nextObjects = new Map<string, Container>();
     const visibleInputs: AcademySceneElement[] = [];
+    const visibleVideos: AcademySceneElement[] = [];
+    const visibleGames: AcademySceneElement[] = [];
 
     const layers = [...this.scene.layers].sort((left, right) => left.zIndex - right.zIndex);
     for (const layer of layers) {
@@ -291,8 +343,10 @@ export class PixiScenePlayer {
       const rendered = await Promise.all(elements.map(async (base) => {
         const element = resolveAcademySceneElement(base, this.runtime);
         if (!element.visible || (this.role === 'teacher' && !element.teacherVisible)) return null;
-        // Поля ввода — HTML-оверлей, а не Pixi (в WebGL нет ввода).
+        // Поля ввода, видео и мини-игры — HTML-оверлей, а не Pixi.
         if (element.type === 'input') { visibleInputs.push(element); return null; }
+        if (element.type === 'video') { visibleVideos.push(element); return null; }
+        if (element.type === 'mini-game') { visibleGames.push(element); return null; }
         const display = await this.createElement(element);
         display.zIndex = element.zIndex;
         nextObjects.set(element.id, display);
@@ -316,6 +370,237 @@ export class PixiScenePlayer {
     this.root = nextRoot;
     this.displayObjects = nextObjects;
     this.syncInputs(visibleInputs);
+    this.syncVideos(visibleVideos);
+    this.syncGames(visibleGames);
+  }
+
+  // === Видео: настоящий <video> поверх канваса ===
+
+  private syncVideos(videos: AcademySceneElement[]): void {
+    if (!this.overlay) return;
+    const wanted = new Set(videos.map((el) => el.id));
+    for (const [id, el] of this.videoElements) {
+      if (!wanted.has(id)) {
+        el.remove();
+        this.videoElements.delete(id);
+        const objectUrl = this.videoObjectUrls.get(id);
+        if (objectUrl) { URL.revokeObjectURL(objectUrl); this.videoObjectUrls.delete(id); }
+      }
+    }
+    for (const element of videos) {
+      let video = this.videoElements.get(element.id);
+      if (!video) {
+        video = document.createElement('video');
+        video.style.position = 'absolute';
+        video.style.pointerEvents = 'auto';
+        video.playsInline = true;
+        video.preload = 'metadata';
+        video.addEventListener('ended', () => {
+          this.enqueueLocalEvent({ type: 'video-ended', sourceElementId: element.id, role: this.role });
+        });
+        this.overlay.appendChild(video);
+        this.videoElements.set(element.id, video);
+        void this.loadVideoSource(element, video);
+      }
+      video.controls = element.content.autoplay !== true || this.role === 'teacher';
+      video.loop = element.content.loop === true;
+      video.muted = element.content.autoplay === true; // автозапуск браузер разрешает только без звука
+      video.volume = element.content.volume ?? 1;
+      video.style.objectFit = elementObjectFit(element);
+      video.style.borderRadius = `${elementBorderRadius(element)}px`;
+      video.style.background = '#000000';
+    }
+    this.positionOverlays();
+  }
+
+  /** Закрытые детские материалы качаем с cookie и отдаём как blob: cross-origin <video src> их не увидит. */
+  private async loadVideoSource(element: AcademySceneElement, video: HTMLVideoElement): Promise<void> {
+    const source = elementSource(element);
+    if (!source) return;
+    const url = withApiOrigin(source);
+    if (element.asset?.scope !== 'child') {
+      video.src = url;
+      if (element.content.autoplay) void video.play().catch(() => undefined);
+      return;
+    }
+    try {
+      const response = await fetch(url, { credentials: 'include', cache: 'no-store' });
+      if (!response.ok) throw new Error(String(response.status));
+      const objectUrl = URL.createObjectURL(await response.blob());
+      if (this.destroyed) { URL.revokeObjectURL(objectUrl); return; }
+      this.videoObjectUrls.set(element.id, objectUrl);
+      video.src = objectUrl;
+      if (element.content.autoplay) void video.play().catch(() => undefined);
+    } catch {
+      video.replaceWith(this.overlayNotice('Видео недоступно'));
+      this.videoElements.delete(element.id);
+    }
+  }
+
+  private overlayNotice(text: string): HTMLDivElement {
+    const notice = document.createElement('div');
+    notice.textContent = text;
+    notice.style.cssText = 'position:absolute;display:flex;align-items:center;justify-content:center;background:#e7e5e4;color:#57534e;font:600 14px Inter,Arial,sans-serif;border-radius:12px;';
+    return notice;
+  }
+
+  // === Мини-игры ===
+
+  private syncGames(games: AcademySceneElement[]): void {
+    if (!this.overlay) return;
+    const wanted = new Set(games.map((el) => el.id));
+    for (const [id, el] of this.gameElements) {
+      if (!wanted.has(id)) {
+        el.remove();
+        this.gameElements.delete(id);
+        this.gameBoards.delete(id);
+        const timer = this.gameTimers.get(id);
+        if (timer) { clearTimeout(timer); this.gameTimers.delete(id); }
+      }
+    }
+    for (const element of games) {
+      const config = element.content.game;
+      if (!config) continue;
+      this.gameBoards.set(element.id, buildMiniGameBoard(config));
+      if (!this.gameStates.has(element.id)) this.gameStates.set(element.id, createMiniGameState());
+      let host = this.gameElements.get(element.id);
+      if (!host) {
+        host = document.createElement('div');
+        host.style.position = 'absolute';
+        host.style.pointerEvents = 'auto';
+        host.dataset.elementId = element.id;
+        this.overlay.appendChild(host);
+        this.gameElements.set(element.id, host);
+      }
+      this.renderGame(element.id);
+    }
+    this.positionOverlays();
+  }
+
+  private gameElementById(elementId: string): AcademySceneElement | undefined {
+    return this.scene.layers.flatMap((layer) => layer.elements).find((el) => el.id === elementId);
+  }
+
+  private renderGame(elementId: string): void {
+    const host = this.gameElements.get(elementId);
+    const board = this.gameBoards.get(elementId);
+    const element = this.gameElementById(elementId);
+    if (!host || !board || !element) return;
+    const state = this.gameStates.get(elementId) ?? createMiniGameState();
+    const revealed = new Set([...state.picked, ...(this.gameRevealed.get(elementId) ?? [])]);
+    const solved = new Set(state.solved);
+    const scale = this.overlayScale();
+    // Рубашкой вниз лежат только карточки памяти; в «соедини» и «выбери» всё видно сразу.
+    const alwaysOpen = board.kind !== 'memory';
+    const showMistakes = element.content.game?.showMistakes !== false;
+    const progress = board.kind === 'quiz' ? solved.size : Math.floor(solved.size / 2);
+    // Игру двигает ученик; учитель может помочь (у него интерактив не отключаем).
+    const playable = !state.done && (this.role === 'teacher' || element.studentInteractive);
+
+    host.replaceChildren();
+    host.style.display = 'flex';
+    host.style.flexDirection = 'column';
+    host.style.gap = `${10 * scale}px`;
+    host.style.fontFamily = 'Inter, Arial, sans-serif';
+
+    const bar = document.createElement('div');
+    bar.style.cssText = `display:flex;align-items:center;justify-content:space-between;gap:${8 * scale}px;color:#57534e;font-size:${Math.max(11, 15 * scale)}px;font-weight:600;`;
+    const instruction = document.createElement('span');
+    instruction.textContent = board.instruction;
+    const counter = document.createElement('span');
+    counter.textContent = `${progress} из ${board.target}`
+      + (showMistakes && state.mistakes > 0 ? ` · ошибок ${state.mistakes}` : '');
+    bar.append(instruction, counter);
+    host.appendChild(bar);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = `flex:1;display:grid;grid-template-columns:repeat(${board.columns},minmax(0,1fr));gap:${10 * scale}px;min-height:0;`;
+    host.appendChild(grid);
+
+    board.cells.forEach((cell) => {
+      const open = revealed.has(cell.index) || solved.has(cell.index) || alwaysOpen;
+      const isSolved = solved.has(cell.index);
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.disabled = !playable || isSolved;
+      card.style.cssText = [
+        'display:flex;align-items:center;justify-content:center;text-align:center;',
+        `border-radius:${14 * scale}px;`,
+        `border:${Math.max(2, 3 * scale)}px solid ${isSolved ? '#22c55e' : open ? '#f97316' : 'transparent'};`,
+        `background:${open ? '#ffffff' : 'linear-gradient(140deg,#fb923c,#f97316)'};`,
+        `color:${open ? '#292524' : '#ffffff'};`,
+        `font-size:${Math.max(14, 26 * scale)}px;font-weight:700;`,
+        `padding:${6 * scale}px;overflow:hidden;`,
+        'transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;',
+        isSolved ? 'box-shadow:0 0 0 3px rgba(34,197,94,.25);opacity:.85;' : 'box-shadow:0 2px 8px rgba(0,0,0,.08);',
+        playable && !isSolved ? 'cursor:pointer;' : 'cursor:default;',
+      ].join('');
+
+      if (open) {
+        if (cell.imageUrl) {
+          const img = document.createElement('img');
+          img.src = withApiOrigin(cell.imageUrl);
+          img.alt = cell.label ?? '';
+          img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;';
+          card.appendChild(img);
+        } else {
+          const span = document.createElement('span');
+          span.textContent = cell.emoji ? `${cell.emoji}${cell.label ? `\n${cell.label}` : ''}` : (cell.label ?? '');
+          span.style.whiteSpace = 'pre-line';
+          span.style.lineHeight = '1.15';
+          card.appendChild(span);
+        }
+      } else {
+        card.textContent = '?';
+      }
+
+      if (playable && !isSolved) {
+        card.addEventListener('pointerenter', () => { card.style.transform = 'translateY(-2px)'; });
+        card.addEventListener('pointerleave', () => { card.style.transform = 'none'; });
+        card.addEventListener('click', () => this.playGameMove(elementId, cell.index));
+      }
+      grid.appendChild(card);
+    });
+
+    if (state.done) {
+      const done = document.createElement('div');
+      done.style.cssText = `display:flex;align-items:center;justify-content:center;gap:${8 * scale}px;border-radius:${12 * scale}px;background:#dcfce7;color:#166534;font-weight:700;font-size:${Math.max(12, 18 * scale)}px;padding:${8 * scale}px;`;
+      done.textContent = `🎉 Готово!${state.mistakes > 0 ? ` Ошибок: ${state.mistakes}` : ' Без ошибок!'}`;
+      host.appendChild(done);
+    }
+  }
+
+  private playGameMove(elementId: string, index: number): void {
+    const board = this.gameBoards.get(elementId);
+    if (!board) return;
+    const current = this.gameStates.get(elementId) ?? createMiniGameState();
+    const result = applyMiniGameMove(board, current, index);
+    if (result.outcome === 'ignored') return;
+
+    // Неверную пару сначала показываем обеим сторонам, потом закрываем — иначе
+    // учитель не видит, что именно выбрал ребёнок.
+    if (result.outcome === 'incorrect' && result.resetCells.length > 0) {
+      this.gameRevealed.set(elementId, result.resetCells);
+      const timer = setTimeout(() => {
+        this.gameRevealed.delete(elementId);
+        this.gameTimers.delete(elementId);
+        this.renderGame(elementId);
+      }, MINI_GAME_FLIP_BACK_MS);
+      this.gameTimers.set(elementId, timer);
+    }
+
+    this.gameStates.set(elementId, result.state);
+    this.renderGame(elementId);
+    this.options.onGameState?.(elementId, result.state);
+
+    if (result.outcome === 'correct' || result.outcome === 'complete') {
+      this.enqueueLocalEvent({ type: 'answer-correct', sourceElementId: elementId, correct: true, role: this.role });
+    } else if (result.outcome === 'incorrect') {
+      this.enqueueLocalEvent({ type: 'answer-incorrect', sourceElementId: elementId, correct: false, role: this.role });
+    }
+    if (result.outcome === 'complete') {
+      this.enqueueLocalEvent({ type: 'custom', customName: 'game-complete', sourceElementId: elementId, role: this.role });
+    }
   }
 
   /** Создаёт/обновляет/удаляет HTML-инпуты поверх канваса по видимым input-элементам. */
@@ -361,24 +646,45 @@ export class PixiScenePlayer {
     this.positionInputs();
   }
 
-  /** Пересчёт пиксельных позиций инпутов относительно текущего размера канваса. */
-  private positionInputs(): void {
-    if (!this.overlay || this.inputElements.size === 0) return;
+  /** Масштаб «логические координаты сцены → пиксели на экране». */
+  private overlayScale(): number {
     const scale = this.app.canvas.clientWidth / this.scene.viewport.width;
-    if (!Number.isFinite(scale) || scale <= 0) return;
+    return Number.isFinite(scale) && scale > 0 ? scale : 1;
+  }
+
+  private positionInputs(): void {
+    this.positionOverlays();
+  }
+
+  /** Пересчёт пиксельных позиций всех HTML-оверлеев (инпуты, видео, игры). */
+  private positionOverlays(): void {
+    if (!this.overlay) return;
+    const scale = this.overlayScale();
     const byId = new Map(this.scene.layers.flatMap((l) => l.elements).map((e) => [e.id, e]));
-    for (const [id, input] of this.inputElements) {
+    const place = (id: string, node: HTMLElement) => {
       const base = byId.get(id);
-      if (!base) continue;
+      if (!base) return null;
       const element = resolveAcademySceneElement(base, this.runtime);
       const t = element.transform;
-      input.style.left = `${t.x * scale}px`;
-      input.style.top = `${t.y * scale}px`;
-      input.style.width = `${t.width * scale}px`;
-      input.style.height = `${t.height * scale}px`;
+      node.style.left = `${t.x * scale}px`;
+      node.style.top = `${t.y * scale}px`;
+      node.style.width = `${t.width * scale}px`;
+      node.style.height = `${t.height * scale}px`;
+      return element;
+    };
+
+    for (const [id, input] of this.inputElements) {
+      const element = place(id, input);
+      if (!element) continue;
       input.style.paddingLeft = `${(element.style.padding ?? 12) * scale}px`;
       input.style.paddingRight = `${(element.style.padding ?? 12) * scale}px`;
       input.style.fontSize = `${(element.style.fontSize ?? 22) * scale}px`;
+    }
+    for (const [id, video] of this.videoElements) place(id, video);
+    for (const [id, host] of this.gameElements) {
+      place(id, host);
+      // Размеры карточек и шрифтов внутри игры зависят от масштаба — перерисовываем.
+      this.renderGame(id);
     }
   }
 
