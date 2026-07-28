@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AcademyHome } from '@/components/academy/AcademyHome';
+import { ProgramsSection, TeachersSection } from '@/components/academy/LandingShowcase';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { ACADEMY_FAQS } from '@/lib/academy-landing-content';
@@ -24,7 +25,9 @@ export default function HomePage() {
   return (
     <>
       <JsonLd data={[organizationSchema(), websiteSchema(), faqSchema([...ACADEMY_FAQS])]} />
-      <AcademyHome />
+      {/* Преподаватели и программы читаются из БД на сервере и передаются в клиентский
+          лендинг слотами: серверные компоненты нельзя импортировать внутрь 'use client'. */}
+      <AcademyHome teachersSlot={<TeachersSection />} programsSlot={<ProgramsSection />} />
     </>
   );
 }

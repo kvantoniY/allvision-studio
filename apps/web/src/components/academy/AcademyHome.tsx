@@ -19,6 +19,7 @@ import {
   Users,
   Wand2,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { buildLessonPackages } from '@allvision/shared';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -29,6 +30,9 @@ import { ParentOnboarding } from '@/components/academy/ParentOnboarding';
 import { ACADEMY_FAQS } from '@/lib/academy-landing-content';
 
 type Direction = { icon: LucideIcon; title: string; desc: string };
+
+/** Секции с живыми данными из БД приезжают с сервера (см. app/page.tsx). */
+type LandingSlots = { teachersSlot?: ReactNode; programsSlot?: ReactNode };
 
 const DIRECTIONS: Direction[] = [
   {
@@ -60,7 +64,7 @@ const PACKAGES = buildLessonPackages();
 // по шагам до пробного занятия. Параметра intent больше нет — его никто не обрабатывал.
 const TRIAL_HREF = '/register?redirect=/family';
 
-function GuestLanding() {
+function GuestLanding({ teachersSlot, programsSlot }: LandingSlots) {
   return (
     <div className="academy-theme min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-xl">
@@ -73,7 +77,8 @@ function GuestLanding() {
           </Link>
           <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
             <a href="#directions" className="transition hover:text-foreground">Направления</a>
-            <a href="#lesson" className="transition hover:text-foreground">Как проходит урок</a>
+            <a href="#programs" className="transition hover:text-foreground">Программы</a>
+            <a href="#teachers" className="transition hover:text-foreground">Преподаватели</a>
             <a href="#prices" className="transition hover:text-foreground">Цены</a>
             <a href="#faq" className="transition hover:text-foreground">Вопросы</a>
           </nav>
@@ -139,6 +144,8 @@ function GuestLanding() {
         </div>
       </section>
 
+      {programsSlot}
+
       <section id="lesson" className="scroll-mt-20 bg-secondary/55 py-16">
         <div className="mx-auto max-w-6xl px-4">
         <div className="mx-auto mb-8 max-w-2xl text-center">
@@ -170,6 +177,8 @@ function GuestLanding() {
         </div>
         </div>
       </section>
+
+      {teachersSlot}
 
       <section id="prices" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-16">
         <div className="mx-auto mb-9 max-w-2xl text-center">
@@ -326,7 +335,7 @@ function AuthedHub({ name, role }: { name: string; role: UserRole }) {
   );
 }
 
-export function AcademyHome() {
+export function AcademyHome({ teachersSlot, programsSlot }: LandingSlots = {}) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -339,6 +348,6 @@ export function AcademyHome() {
     );
   }
 
-  if (!user) return <GuestLanding />;
+  if (!user) return <GuestLanding teachersSlot={teachersSlot} programsSlot={programsSlot} />;
   return <AuthedHub name={user.name?.split(' ')[0] ?? user.email.split('@')[0]} role={user.role as UserRole} />;
 }

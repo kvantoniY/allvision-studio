@@ -361,6 +361,16 @@ function BookingSection({ onBuy, onBooked }: { onBuy: () => void; onBooked?: () 
                         ))}
                       </div>
                     )}
+                    {/* Полный профиль — отдельной страницей: био целиком, курсы, опыт. */}
+                    <span
+                      role="link"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); window.open(`/teachers/${t.teacherId}`, '_blank'); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); window.open(`/teachers/${t.teacherId}`, '_blank'); } }}
+                      className="mt-2 inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                    >
+                      Подробнее о преподавателе →
+                    </span>
                   </button>
                 );
               })}
@@ -511,7 +521,10 @@ function TeacherProfilePanel({ teacherId }: { teacherId: string }) {
             ))}
           </div>
         )}
-        {data.bio && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{data.bio}</p>}
+        {data.bio && <p className="mt-2 line-clamp-4 whitespace-pre-line text-xs text-muted-foreground">{data.bio}</p>}
+        <Link href={`/teachers/${teacherId}`} className="mt-2 inline-block text-xs font-medium text-primary hover:underline">
+          Открыть профиль преподавателя →
+        </Link>
       </div>
     </div>
   );

@@ -105,6 +105,7 @@ export function toThreadDto(
     childId: thread.child.id,
     childName: thread.child.deletedAt ? 'Удалённый профиль' : thread.child.name,
     parentName: thread.parent.name ?? thread.parent.email,
+    teacherId: thread.teacher.id,
     teacherName: thread.teacher.user.name ?? thread.teacher.user.email,
     updatedAt: thread.updatedAt.toISOString(),
     lastMessage,

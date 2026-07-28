@@ -67,6 +67,8 @@ export interface ThreadDto {
   childId: string;
   childName: string;
   parentName: string;
+  /** Нужен для перехода в публичный профиль преподавателя прямо из диалога. */
+  teacherId: string;
   teacherName: string;
   updatedAt: string;
   lastMessage: ThreadMessageDto | null;

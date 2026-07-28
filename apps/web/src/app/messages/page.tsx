@@ -3,7 +3,8 @@
 /* eslint-disable @next/next/no-img-element -- private attachments require the browser auth cookie. */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ImagePlus, Loader2, MessageCircle, Send, ShieldCheck } from 'lucide-react';
+import Link from 'next/link';
+import { GraduationCap, ImagePlus, Loader2, MessageCircle, Send, ShieldCheck } from 'lucide-react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -41,10 +42,13 @@ export default function MessagesPage() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messagesQuery.data?.messages.length]);
+  }, [messagesQuery.currentData?.messages.length]);
 
   // Открытый диалог считается прочитанным — бейдж в навигации гаснет.
-  const shownMessages = messagesQuery.data?.messages;
+  // ВАЖНО: currentData, а не data. RTK Query держит в `data` результат ПРЕДЫДУЩЕГО
+  // аргумента, пока грузится новый, поэтому при переключении диалога на экране
+  // на мгновение показывались чужие сообщения — отсюда ощущение «переписки смешиваются».
+  const shownMessages = messagesQuery.currentData?.messages;
   useEffect(() => {
     const last = shownMessages?.[shownMessages.length - 1];
     if (threadId && last) markThreadSeen(threadId, last.createdAt);
@@ -90,9 +94,23 @@ export default function MessagesPage() {
             <section className="flex min-h-0 flex-col">
               {active ? (
                 <>
-                  <header className="border-b border-border px-5 py-4"><p className="font-bold">{active.childName}</p><p className="text-xs text-muted-foreground">{active.parentName} · {active.teacherName}</p></header>
+                  <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4">
+                    <div className="min-w-0">
+                      <p className="font-bold">{active.childName}</p>
+                      <p className="text-xs text-muted-foreground">{active.parentName} · {active.teacherName}</p>
+                    </div>
+                    {/* Родитель может открыть профиль преподавателя прямо из переписки. */}
+                    {user?.role !== 'TEACHER' && active.teacherId && (
+                      <Link
+                        href={`/teachers/${active.teacherId}`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-accent"
+                      >
+                        <GraduationCap className="h-3.5 w-3.5" /> Профиль преподавателя
+                      </Link>
+                    )}
+                  </header>
                   <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-5">
-                    {messagesQuery.isLoading ? <Loader2 className="mx-auto mt-10 h-6 w-6 animate-spin" /> : messagesQuery.data?.messages.map((message) => {
+                    {!shownMessages ? <Loader2 className="mx-auto mt-10 h-6 w-6 animate-spin" /> : shownMessages.map((message) => {
                       const mine = message.role === (user?.role === 'TEACHER' ? 'TEACHER' : user?.role === 'ADMIN' ? 'ADMIN' : 'PARENT');
                       if (message.role === 'SYSTEM') return <div key={message.id} className="mx-auto max-w-md rounded-full bg-muted px-4 py-2 text-center text-xs text-muted-foreground">{message.body}</div>;
                       return (
