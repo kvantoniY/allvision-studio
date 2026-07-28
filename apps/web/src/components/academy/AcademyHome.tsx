@@ -288,7 +288,7 @@ const ROLE_ACTIONS: Record<UserRole, Array<{ href: string; icon: LucideIcon; tit
 };
 ROLE_ACTIONS.PARENT = ROLE_ACTIONS.USER;
 
-function AuthedHub({ name, role }: { name: string; role: UserRole }) {
+function AuthedHub({ name, role, teachersSlot, programsSlot }: { name: string; role: UserRole } & LandingSlots) {
   const quickActions = ROLE_ACTIONS[role] ?? ROLE_ACTIONS.USER;
   const isParent = role === 'PARENT' || role === 'USER';
   return (
@@ -331,6 +331,13 @@ function AuthedHub({ name, role }: { name: string; role: UserRole }) {
       <Link href={role === 'TEACHER' ? '/teacher' : role === 'METHODIST' ? '/constructor' : role === 'ADMIN' ? '/admin' : '/lessons'} className="mt-5 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
         Перейти к основной работе <ChevronRight className="h-4 w-4" />
       </Link>
+
+      {/* Витрина школы нужна и залогиненным: родитель выбирает преподавателя и смотрит
+          программы, не выходя из аккаунта (раньше эти секции были только у гостя). */}
+      <div className="mt-4 [&_section]:!bg-transparent [&_section]:!px-0 [&_section]:!py-10">
+        {programsSlot}
+        {teachersSlot}
+      </div>
     </div>
   );
 }
@@ -349,5 +356,12 @@ export function AcademyHome({ teachersSlot, programsSlot }: LandingSlots = {}) {
   }
 
   if (!user) return <GuestLanding teachersSlot={teachersSlot} programsSlot={programsSlot} />;
-  return <AuthedHub name={user.name?.split(' ')[0] ?? user.email.split('@')[0]} role={user.role as UserRole} />;
+  return (
+    <AuthedHub
+      name={user.name?.split(' ')[0] ?? user.email.split('@')[0]}
+      role={user.role as UserRole}
+      teachersSlot={teachersSlot}
+      programsSlot={programsSlot}
+    />
+  );
 }
