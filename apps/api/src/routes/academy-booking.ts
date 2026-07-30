@@ -412,7 +412,14 @@ academyBookingRouter.get('/lessons/:id/child-overview', requireAuth, async (req:
       include: { achievement: { select: { title: true, icon: true } } },
     });
     const progress = levelProgressFromXp(child.xp);
+    // Сколько опыта принёс именно этот урок — для экрана результата ребёнку.
+    const lessonXp = await prisma.xpEvent.aggregate({
+      where: { childId: lesson.childId, lessonId: lesson.id },
+      _sum: { amount: true },
+    });
     res.json({
+      childId: lesson.childId,
+      lessonXp: lessonXp._sum.amount ?? 0,
       name: child.name,
       avatar: child.avatar,
       streakCount: child.streakCount,

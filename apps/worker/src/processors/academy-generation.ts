@@ -520,12 +520,23 @@ export async function processAcademyGeneration(job: Job<AcademyGenerationJobData
     logger.info(`[academy-generation] project ${project.id} completed, ${createdAssets.length} asset(s), $${totalCostUsd.toFixed(4)}`);
   } catch (error) {
     const code = error instanceof Error ? error.message : String(error);
+    // У сетевых сбоев Node прячет причину в error.cause: без неё в БД оседало голое
+    // «fetch failed», по которому нельзя понять, где именно оборвалось.
+    const cause = (error as { cause?: unknown })?.cause;
+    const causeText = cause instanceof Error
+      ? `${(cause as { code?: string }).code ?? cause.name}: ${cause.message}`
+      : cause
+        ? String(cause)
+        : '';
+    const networkFailure = /fetch failed|ECONNRESET|ETIMEDOUT|ENOTFOUND|UND_ERR|socket hang up/i.test(`${code} ${causeText}`);
     const publicMessage = code === 'ACADEMY_GENERATION_BUDGET_EXCEEDED'
       ? 'Фактическая стоимость превысила заданный лимит'
       : code === 'CHARACTER_NOT_APPROVED'
         ? 'Сначала утвердите AI-персонажа ребёнка'
         : code === 'PERSONAL_GENERATION_REQUIRES_FAL'
           ? 'Персональная генерация временно доступна только через защищённый fal-режим'
+          : networkFailure
+            ? 'Связь с AI-провайдером оборвалась — запустите генерацию заново'
         : 'Не удалось создать материал — попробуйте ещё раз';
     await prisma.project.update({
       where: { id: project.id },
@@ -536,7 +547,7 @@ export async function processAcademyGeneration(job: Job<AcademyGenerationJobData
         resultAssets: createdAssets.length > 0 ? safeJson(createdAssets) : undefined,
       },
     }).catch(() => undefined);
-    logger.error(`[academy-generation] project ${project.id} failed: ${code}`);
+    logger.error(`[academy-generation] project ${project.id} failed: ${code}${causeText ? ` (cause: ${causeText})` : ''}`);
     throw error;
   }
 }

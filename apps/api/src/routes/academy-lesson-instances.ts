@@ -17,6 +17,7 @@ import {
   elementVideoStatuses,
   ensureElementVideoGenerations,
   ensureFullAiSceneGenerations,
+  regenerateElementVideo,
   fullSceneStatuses,
   regenerateFullAiScene,
 } from '../services/academy-full-scene-service';
@@ -334,13 +335,39 @@ academyLessonInstancesRouter.get('/:id/generations', async (req: Request, res: R
       };
     });
 
+    // Кат-сцены отдельных видео-элементов: без них провал генерации ролика был
+    // виден только как чёрный прямоугольник в уроке.
+    const cutsceneStatuses = await elementVideoStatuses(instance.id);
+    const cutscenes = readSceneDocument(instance.version.scene).flatMap((scene, index) =>
+      scene.layers.flatMap((layer) => layer.elements
+        .filter((element) => element.type === 'video' && (element.content.generation?.prompt ?? '').trim().length >= 8)
+        .map((element) => {
+          const state = cutsceneStatuses.get(`${scene.id}::${element.id}`);
+          return {
+            sceneId: scene.id,
+            sceneIndex: index,
+            sceneTitle: scene.title,
+            elementId: element.id,
+            name: element.name,
+            prompt: (element.content.generation?.prompt ?? '').trim(),
+            status: state?.status ?? (hasCharacter ? 'NOT_STARTED' : 'BLOCKED'),
+            errorMessage: state?.errorMessage ?? null,
+            previewUrl: state?.childAssetId
+              ? `/api/academy/lesson-instances/${instance.id}/scene-file/${state.childAssetId}`
+              : null,
+          };
+        })),
+    );
+
+    const running = (s: { status: string }) => s.status === 'PENDING' || s.status === 'PROCESSING';
     res.json({
       hasCharacter,
       scenes,
-      total: scenes.filter((s) => s.needsGeneration).length,
-      ready: scenes.filter((s) => s.status === 'COMPLETED').length,
-      running: scenes.filter((s) => s.status === 'PENDING' || s.status === 'PROCESSING').length,
-      failed: scenes.filter((s) => s.status === 'FAILED').length,
+      cutscenes,
+      total: scenes.filter((s) => s.needsGeneration).length + cutscenes.length,
+      ready: scenes.filter((s) => s.status === 'COMPLETED').length + cutscenes.filter((c) => c.status === 'COMPLETED').length,
+      running: scenes.filter(running).length + cutscenes.filter(running).length,
+      failed: scenes.filter((s) => s.status === 'FAILED').length + cutscenes.filter((c) => c.status === 'FAILED').length,
     });
   } catch (err) {
     next(err);
@@ -362,6 +389,34 @@ academyLessonInstancesRouter.post('/:id/generations/:sceneId/regenerate', async 
     if (!result.ok) {
       if (result.reason === 'SCENE_NOT_AI') {
         throw new HttpError(400, 'SCENE_NOT_AI', 'Эта сцена собрана из готовых материалов — генерировать в ней нечего');
+      }
+      if (result.reason === 'CHARACTER_NOT_READY') {
+        throw new HttpError(409, 'CHARACTER_NOT_READY', 'У ребёнка нет утверждённого AI-персонажа');
+      }
+      throw new HttpError(500, 'REGENERATE_FAILED', 'Не удалось запустить генерацию');
+    }
+    res.status(202).json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// === Перегенерация персональной кат-сцены видео-элемента (преподаватель урока или админ) ===
+academyLessonInstancesRouter.post('/:id/cutscenes/:sceneId/:elementId/regenerate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const instance = await loadInstanceForParticipant(req);
+    if (!isAdmin(req) && instance.lesson.teacher.userId !== req.user!.id) {
+      throw new HttpError(403, 'FORBIDDEN', 'Перегенерацию запускает преподаватель урока');
+    }
+    const result = await regenerateElementVideo(
+      { id: instance.id, childId: instance.childId, version: { scene: instance.version.scene } },
+      req.params.sceneId,
+      req.params.elementId,
+      req.user!.id,
+    );
+    if (!result.ok) {
+      if (result.reason === 'ELEMENT_NOT_GENERATED') {
+        throw new HttpError(400, 'ELEMENT_NOT_GENERATED', 'У этого видео нет описания кат-сцены — генерировать нечего');
       }
       if (result.reason === 'CHARACTER_NOT_READY') {
         throw new HttpError(409, 'CHARACTER_NOT_READY', 'У ребёнка нет утверждённого AI-персонажа');

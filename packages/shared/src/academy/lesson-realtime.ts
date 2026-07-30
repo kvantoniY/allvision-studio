@@ -91,6 +91,8 @@ export type LessonClientMessage =
   // Индикаторы участника: активность вкладки, открытый чат, микрофон и речь.
   | { t: 'status'; focused?: boolean; inChat?: boolean; micOn?: boolean; speaking?: boolean }
   | { t: 'chat'; body: string }
+  // Учитель завершил урок: ученик сразу видит экран результата, не дожидаясь поллинга.
+  | { t: 'finish' }
   | { t: 'ping' };
 
 // --- Сервер → клиент ---
@@ -107,6 +109,7 @@ export type LessonServerMessage =
   | { t: 'game'; elementId: string; state: MiniGameState; from: LessonRole }
   | { t: 'chat'; entry: LessonChatEntry }
   | { t: 'presence'; presence: LessonPresence }
+  | { t: 'finished' }
   | { t: 'error'; message: string }
   | { t: 'pong' };
 

@@ -222,6 +222,42 @@ export async function regenerateFullAiScene(
   return projectId ? { ok: true } : { ok: false, reason: 'FAILED' };
 }
 
+/**
+ * Перезапуск персональной кат-сцены отдельного элемента. Нужен после сбоя провайдера:
+ * без него упавшая генерация оставалась упавшей навсегда, а в уроке зиял чёрный кадр.
+ * startSceneGeneration делает upsert связки, поэтому прошлый провалившийся проект
+ * просто заменяется новым.
+ */
+export async function regenerateElementVideo(
+  instance: { id: string; childId: string; version: { scene: unknown } },
+  sceneId: string,
+  elementId: string,
+  requestedById: string,
+): Promise<{ ok: boolean; reason?: 'ELEMENT_NOT_GENERATED' | 'CHARACTER_NOT_READY' | 'FAILED' }> {
+  const target = generatedVideoElements(instance.version.scene)
+    .find((item) => item.scene.id === sceneId && item.element.id === elementId);
+  if (!target) return { ok: false, reason: 'ELEMENT_NOT_GENERATED' };
+
+  const characterReferenceIds = await approvedCharacterRefs(instance.childId);
+  if (!characterReferenceIds) return { ok: false, reason: 'CHARACTER_NOT_READY' };
+
+  const projectId = await startSceneGeneration({
+    instanceId: instance.id,
+    childId: instance.childId,
+    sceneId: target.scene.id,
+    elementId: target.element.id,
+    sceneTitle: target.element.name || target.scene.title,
+    prompt: (target.element.content.generation?.prompt ?? '').trim(),
+    characterReferenceIds,
+    requestedById,
+    video: {
+      source: target.element.content.generation?.source ?? 'image',
+      durationSec: target.element.content.generation?.durationSec ?? 5,
+    },
+  });
+  return projectId ? { ok: true } : { ok: false, reason: 'FAILED' };
+}
+
 export interface FullSceneStatus {
   sceneId: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
@@ -235,6 +271,8 @@ export interface ElementVideoStatus {
   elementId: string;
   status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
   childAssetId: string | null;
+  /** Причина отказа — иначе провал генерации виден только в БД. */
+  errorMessage: string | null;
 }
 
 /**
@@ -248,7 +286,7 @@ export async function elementVideoStatuses(instanceId: string): Promise<Map<stri
   if (rows.length === 0) return new Map();
   const projects = await prisma.project.findMany({
     where: { id: { in: rows.map((r) => r.projectId) } },
-    select: { id: true, status: true, resultAssets: true },
+    select: { id: true, status: true, resultAssets: true, errorMessage: true },
   });
   const byId = new Map(projects.map((p) => [p.id, p]));
   const result = new Map<string, ElementVideoStatus>();
@@ -259,6 +297,7 @@ export async function elementVideoStatuses(instanceId: string): Promise<Map<stri
       elementId: row.elementId,
       status: (project?.status as ElementVideoStatus['status']) ?? 'PENDING',
       childAssetId: parseAssetIds(project?.resultAssets)[0] ?? null,
+      errorMessage: project?.errorMessage ?? null,
     });
   }
   return result;

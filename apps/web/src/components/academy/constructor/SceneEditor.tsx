@@ -28,6 +28,7 @@ import {
   setSceneBackground,
   validateScene,
   elementFillColor,
+  elementHasFill,
   elementTextColor,
   elementObjectFit,
   elementBorderRadius,
@@ -804,7 +805,7 @@ function ElementVisual({ element }: { element: AcademySceneElement }) {
     );
   }
   if (TEXT_TYPES.includes(element.type)) {
-    const hasBg = element.type === 'button' || element.type === 'card' || element.type === 'dialogue';
+    const hasBg = elementHasFill(element);
     const align = element.style.textAlign ?? 'center';
     return (
       <div

@@ -514,6 +514,17 @@ export function parseAcademyScene(input: unknown): AcademyScene {
 const TEXT_ELEMENT_TYPES = ['text', 'dialogue', 'button', 'card'] as const;
 const IMAGE_COVER_TYPES = ['background', 'animated-background', 'foreground', 'video'] as const;
 
+/**
+ * Нужна ли элементу заливка-подложка. Текст по умолчанию рисуется БЕЗ плашки:
+ * раньше он заливался светло-серым и закрывал фон-иллюстрацию — на сцене было видно
+ * прямоугольник вместо картинки под надписью. Плашка появляется только если её
+ * задали явно (style.fill) или это фигура, которой подложка нужна по смыслу.
+ */
+export function elementHasFill(element: Pick<AcademySceneElement, 'type' | 'style'>): boolean {
+  if (element.style.fill) return true;
+  return element.type !== 'text';
+}
+
 /** Фон/заливка фигуры (кнопка, карточка, диалог, прогресс…). */
 export function elementFillColor(element: Pick<AcademySceneElement, 'type' | 'style'>): string {
   if (element.style.fill) return element.style.fill;

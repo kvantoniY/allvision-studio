@@ -113,9 +113,19 @@ export const AcademyScenePlayer = forwardRef<AcademyScenePlayerHandle, AcademySc
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [scene, debugBoundaries]);
 
+    // Пропорции берём из самой сцены, а не из захардкоженного 16:9: сцена может быть
+    // и 4:3. Плюс max-height не даёт содержимому вылезти за контейнер урока — раньше
+    // низ сцены обрезался, и урок отличался от конструктора.
+    const viewport = (scene as { viewport?: { width?: number; height?: number } } | null)?.viewport;
+    const ratioW = Number(viewport?.width) > 0 ? Number(viewport?.width) : 1280;
+    const ratioH = Number(viewport?.height) > 0 ? Number(viewport?.height) : 720;
+
     return (
-      <div className={cn('relative overflow-hidden rounded-2xl border border-orange-200 bg-orange-50 shadow-inner', className)}>
-        <div ref={hostRef} className="aspect-video w-full" />
+      <div
+        className={cn('relative mx-auto overflow-hidden rounded-2xl border border-orange-200 bg-orange-50 shadow-inner', className)}
+        style={{ aspectRatio: `${ratioW} / ${ratioH}`, maxWidth: '100%', maxHeight: '100%' }}
+      >
+        <div ref={hostRef} className="h-full w-full" />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-orange-50/90 text-sm font-medium text-orange-900">
             <Loader2 className="mr-2 h-5 w-5 animate-spin text-orange-500" />

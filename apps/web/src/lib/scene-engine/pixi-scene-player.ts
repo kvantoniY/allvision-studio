@@ -5,6 +5,7 @@ import {
   createMiniGameState,
   elementBorderRadius,
   elementFillColor,
+  elementHasFill,
   elementObjectFit,
   elementTextColor,
   normalizeMiniGameState,
@@ -95,6 +96,8 @@ export class PixiScenePlayer {
   // ни удобной анимации переворота карточек, а позиционирование общее с инпутами.
   private videoElements = new Map<string, HTMLVideoElement>();
   private videoObjectUrls = new Map<string, string>();
+  /** Заглушки для видео-элементов без готового ролика (кат-сцена ещё не сгенерирована). */
+  private videoNotices = new Map<string, HTMLDivElement>();
   private gameElements = new Map<string, HTMLDivElement>();
   private gameBoards = new Map<string, MiniGameBoard>();
   private gameStates = new Map<string, MiniGameState>();
@@ -132,10 +135,12 @@ export class PixiScenePlayer {
     }
 
     const canvas = this.app.canvas;
+    // Канвас заполняет обёртку целиком; пропорции держит обёртка (aspect-ratio).
+    // Раньше канвас тянулся по ширине с height:auto — в невысоком окне урока низ сцены
+    // уезжал за границу контейнера и обрезался, а в конструкторе выглядел иначе.
     canvas.style.display = 'block';
     canvas.style.width = '100%';
-    canvas.style.height = 'auto';
-    canvas.style.aspectRatio = `${this.scene.viewport.width} / ${this.scene.viewport.height}`;
+    canvas.style.height = '100%';
     canvas.tabIndex = 0;
     canvas.setAttribute('role', 'application');
     canvas.setAttribute('aria-label', `Интерактивная сцена: ${this.scene.title}`);
@@ -144,6 +149,7 @@ export class PixiScenePlayer {
     const wrap = document.createElement('div');
     wrap.style.position = 'relative';
     wrap.style.width = '100%';
+    wrap.style.height = '100%';
     wrap.style.lineHeight = '0';
     wrap.appendChild(canvas);
     this.overlay = document.createElement('div');
@@ -201,6 +207,8 @@ export class PixiScenePlayer {
     this.videoElements.clear();
     this.videoObjectUrls.forEach((url) => URL.revokeObjectURL(url));
     this.videoObjectUrls.clear();
+    this.videoNotices.forEach((el) => el.remove());
+    this.videoNotices.clear();
     this.gameTimers.forEach((timer) => clearTimeout(timer));
     this.gameTimers.clear();
     this.gameElements.forEach((el) => el.remove());
@@ -388,6 +396,26 @@ export class PixiScenePlayer {
       }
     }
     for (const element of videos) {
+      // Ролика ещё нет: у элемента либо не выбран материал, либо кат-сцена не сгенерирована.
+      // Раньше в этом случае оставался чёрный прямоугольник без единого слова — теперь
+      // видно, чего ждать и что делать.
+      if (!elementSource(element)) {
+        const existing = this.videoElements.get(element.id);
+        if (existing) { existing.remove(); this.videoElements.delete(element.id); }
+        let notice = this.videoNotices.get(element.id);
+        if (!notice) {
+          notice = this.overlayNotice('');
+          this.overlay.appendChild(notice);
+          this.videoNotices.set(element.id, notice);
+        }
+        notice.textContent = element.content.generation?.prompt
+          ? 'Кат-сцена с учеником ещё не готова — она создаётся при подготовке урока'
+          : 'Видео не выбрано';
+        continue;
+      }
+      const staleNotice = this.videoNotices.get(element.id);
+      if (staleNotice) { staleNotice.remove(); this.videoNotices.delete(element.id); }
+
       let video = this.videoElements.get(element.id);
       if (!video) {
         video = document.createElement('video');
@@ -830,7 +858,7 @@ export class PixiScenePlayer {
       const progress = Math.max(0, Math.min(1, (value - min) / Math.max(1, max - min)));
       graphic.roundRect(0, 0, width, height, radius || height / 2).fill({ color: '#e7e5e4' });
       graphic.roundRect(0, 0, width * progress, height, radius || height / 2).fill({ color: fill });
-    } else {
+    } else if (elementHasFill(element)) {
       const boundaryType = ['hotspot', 'collision', 'platform'].includes(element.type);
       const alpha = boundaryType && !this.options.debugBoundaries ? 0.001 : 1;
       graphic.roundRect(0, 0, width, height, radius).fill({ color: fill, alpha });

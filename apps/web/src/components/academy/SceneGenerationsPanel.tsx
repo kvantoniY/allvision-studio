@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import {
   useGetInstanceGenerationsQuery,
   useRegenerateSceneMutation,
+  useRegenerateCutsceneMutation,
   type SceneGenerationItem,
 } from '@/store/api/academy-lesson-instances-api';
 
@@ -16,7 +17,7 @@ function apiErr(err: unknown): string {
   return d?.error?.message ?? 'Ошибка';
 }
 
-const STATUS_LABEL: Record<SceneGenerationItem['status'], string> = {
+const STATUS_LABEL: Record<SceneGenerationItem['status'] | 'NOT_STARTED', string> = {
   NOT_NEEDED: 'по шаблону',
   BLOCKED: 'нужен AI-персонаж',
   NOT_STARTED: 'не запускалась',
@@ -48,10 +49,12 @@ export function SceneGenerationsPanel({ instanceId }: { instanceId: string }) {
   });
   const [regenerate, { isLoading: regenerating }] = useRegenerateSceneMutation();
   const [pendingScene, setPendingScene] = useState<string | null>(null);
+  const [regenerateCutscene, { isLoading: regeneratingCutscene }] = useRegenerateCutsceneMutation();
+  const [pendingCutscene, setPendingCutscene] = useState<string | null>(null);
 
   if (isLoading || !data) return null;
 
-  const { total, ready, running, failed, scenes, hasCharacter } = data;
+  const { total, ready, running, failed, scenes, cutscenes, hasCharacter } = data;
   const progress = total > 0 ? Math.round((ready / total) * 100) : 100;
 
   const doRegenerate = async (sceneId: string) => {
@@ -63,6 +66,18 @@ export function SceneGenerationsPanel({ instanceId }: { instanceId: string }) {
       toast({ title: 'Не удалось перегенерировать', description: apiErr(err), variant: 'destructive' });
     } finally {
       setPendingScene(null);
+    }
+  };
+
+  const doRegenerateCutscene = async (sceneId: string, elementId: string) => {
+    setPendingCutscene(`${sceneId}:${elementId}`);
+    try {
+      await regenerateCutscene({ instanceId, sceneId, elementId }).unwrap();
+      toast({ title: 'Генерация ролика запущена', description: 'Кат-сцена появится в уроке, когда будет готова.' });
+    } catch (err) {
+      toast({ title: 'Не удалось перегенерировать', description: apiErr(err), variant: 'destructive' });
+    } finally {
+      setPendingCutscene(null);
     }
   };
 
@@ -143,8 +158,58 @@ export function SceneGenerationsPanel({ instanceId }: { instanceId: string }) {
               )}
             </div>
           ))}
+          {/* Кат-сцены с учеником: видеоролики отдельных элементов. Раньше их статус
+              нигде не показывался — упавшая генерация превращалась в чёрный кадр в уроке. */}
+          {cutscenes.length > 0 && (
+            <div className="mt-2 space-y-1.5 border-t border-border pt-2">
+              <p className="text-[11px] font-medium text-muted-foreground">Видео с учеником (кат-сцены)</p>
+              {cutscenes.map((cutscene) => (
+                <div key={`${cutscene.sceneId}:${cutscene.elementId}`} className="rounded-lg bg-background/60 px-2 py-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 shrink-0 text-xs text-muted-foreground">{cutscene.sceneIndex + 1}.</span>
+                    <span className="flex h-8 w-12 shrink-0 items-center justify-center rounded bg-muted">
+                      {cutscene.previewUrl
+                        ? <video src={cutscene.previewUrl} className="h-8 w-12 rounded object-cover" muted preload="metadata" />
+                        : <StatusIcon status={cutscene.status} />}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm">{cutscene.name}</span>
+                    <span
+                      className={cn(
+                        'shrink-0 text-xs',
+                        cutscene.status === 'COMPLETED' ? 'text-emerald-700'
+                          : cutscene.status === 'FAILED' || cutscene.status === 'BLOCKED' ? 'text-destructive'
+                            : cutscene.status === 'PENDING' || cutscene.status === 'PROCESSING' ? 'text-amber-700'
+                              : 'text-muted-foreground',
+                      )}
+                    >
+                      {STATUS_LABEL[cutscene.status]}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="shrink-0"
+                      disabled={regeneratingCutscene || !hasCharacter || cutscene.status === 'PENDING' || cutscene.status === 'PROCESSING'}
+                      onClick={() => void doRegenerateCutscene(cutscene.sceneId, cutscene.elementId)}
+                      aria-label="Перегенерировать кат-сцену"
+                      title="Сгенерировать ролик заново"
+                    >
+                      {pendingCutscene === `${cutscene.sceneId}:${cutscene.elementId}`
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <RefreshCw className="h-3.5 w-3.5" />}
+                    </Button>
+                  </div>
+                  {cutscene.status === 'FAILED' && (
+                    <p className="mt-1 pl-8 text-[11px] text-destructive">
+                      {cutscene.errorMessage ?? 'Генерация не удалась'} — нажмите обновление, чтобы запустить заново.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           <p className="pt-1 text-[11px] text-muted-foreground">
-            Переделываются только сцены, где участвует AI-персонаж ученика. Остальные собраны по шаблону урока.
+            Переделываются только материалы с AI-персонажем ученика. Остальные собраны по шаблону урока.
           </p>
         </div>
       )}

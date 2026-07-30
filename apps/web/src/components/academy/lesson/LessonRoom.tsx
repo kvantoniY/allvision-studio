@@ -19,6 +19,7 @@ import {
 import { AcademyScenePlayer, type AcademyScenePlayerHandle } from '@/components/academy/scene-player';
 import { DrawingCanvas } from '@/components/academy/lesson/DrawingCanvas';
 import { LessonLab } from '@/components/academy/lesson/LessonLab';
+import { LessonFinish } from '@/components/academy/lesson/LessonFinish';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { connectLessonSocket, type LessonSocket } from '@/lib/lesson-socket';
@@ -35,8 +36,12 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   // Пока урок не подготовлен — опрашиваем, чтобы ученик автоматически вошёл, как только
   // преподаватель всё подготовит. Как только экземпляр появился — поллинг выключаем.
   const instanceReadyRef = useRef(false);
+  // Пока урок не подготовлен — частый поллинг (ученик войдёт автоматически).
+  // Дальше у ученика остаётся редкий поллинг: если WS-событие о завершении не дошло
+  // (обрыв связи), экран результата всё равно появится максимум через 20 секунд.
+  const roleRef = useRef<LessonRole | null>(null);
   const instanceQuery = useGetInstanceByLessonQuery(lessonId, {
-    pollingInterval: instanceReadyRef.current ? 0 : 5000,
+    pollingInterval: instanceReadyRef.current ? (roleRef.current === 'teacher' ? 0 : 20000) : 5000,
     skipPollingIfUnfocused: true,
   });
   instanceReadyRef.current = Boolean(instanceQuery.data?.instance);
@@ -61,6 +66,8 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   const [penColor, setPenColor] = useState<string>(LESSON_DRAW_COLORS[0]);
   const [linkDraft, setLinkDraft] = useState('');
   const [editingLink, setEditingLink] = useState(false);
+  // Урок завершён учителем: ученик видит экран результата (WS-событие или статус урока).
+  const [finished, setFinished] = useState(false);
 
   const socketRef = useRef<LessonSocket | null>(null);
   const playerRef = useRef<AcademyScenePlayerHandle | null>(null);
@@ -107,6 +114,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
           case 'reward': setReward(true); setTimeout(() => setReward(false), 2600); break;
           case 'scene-event': playerRef.current?.send({ ...msg.event, role: msg.from }); break;
           case 'game': playerRef.current?.setGameState(msg.elementId, msg.state); break;
+          case 'finished': setFinished(true); break;
           default: break;
         }
       },
@@ -122,6 +130,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   }, []);
 
   const isTeacher = role === 'teacher';
+  roleRef.current = role;
   const send = useCallback((m: Parameters<LessonSocket['send']>[0]) => socketRef.current?.send(m), []);
 
   const nav = (idx: number) => { if (isTeacher) send({ t: 'nav', sceneIndex: idx }); };
@@ -145,6 +154,8 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
     setEnding(true);
     try {
       await setLessonStatus({ id: lessonId, status: 'COMPLETED' }).unwrap();
+      // Ученику показываем финал сразу, не дожидаясь его поллинга.
+      send({ t: 'finish' });
       toast({ title: 'Урок завершён' });
       router.push('/teacher');
     } catch {
@@ -166,6 +177,12 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
 
   if (instanceQuery.isLoading) {
     return <div className="flex h-dvh items-center justify-center bg-background"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
+  }
+  // Финал урока для ученика: по WS-событию от учителя либо по статусу занятия
+  // (если ученик перезагрузил страницу уже после завершения).
+  const lessonDone = ['COMPLETED', 'REPORT_SENT'].includes(instanceQuery.data?.lessonStatus ?? '');
+  if (!isTeacher && (finished || lessonDone)) {
+    return <LessonFinish lessonId={lessonId} />;
   }
   // Урок не подготовлен: ученик ждёт (автовход при готовности), преподаватель идёт готовить.
   if (!instanceQuery.data?.instance) {
@@ -191,6 +208,12 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
   }
 
   const scene = scenes[sceneIndex] ?? null;
+  // Пропорции кадра сцены: по ним вписываем сцену и накладываем рисование.
+  const sceneVp = (scene as { viewport?: { width?: number; height?: number } } | null)?.viewport;
+  const sceneRatio = {
+    w: Number(sceneVp?.width) > 0 ? Number(sceneVp?.width) : 1280,
+    h: Number(sceneVp?.height) > 0 ? Number(sceneVp?.height) : 720,
+  };
 
   return (
     <div ref={rootRef} className="academy-theme flex h-dvh flex-col bg-background text-foreground">
@@ -233,7 +256,13 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
           {(scene as { lab?: unknown })?.lab ? (
             <LessonLab lessonId={lessonId} />
           ) : scene ? (
-            <div className="absolute inset-0">
+            <div className="absolute inset-0 flex items-center justify-center">
+              {/* Кадр сцены: рисование учителя и «Молодец!» привязаны именно к нему,
+                  иначе после вписывания сцены штрихи уезжали относительно картинки. */}
+              <div
+                className="relative"
+                style={{ aspectRatio: `${sceneRatio.w} / ${sceneRatio.h}`, width: '100%', maxWidth: '100%', maxHeight: '100%' }}
+              >
               <AcademyScenePlayer
                 ref={playerRef}
                 onReady={() => {
@@ -247,7 +276,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
                 }}
                 scene={scene}
                 role={role ?? 'student'}
-                className="h-full"
+                className="h-full w-full"
                 onEvent={mirrorSceneEvent}
               />
               <DrawingCanvas
@@ -267,6 +296,7 @@ export function LessonRoom({ lessonId }: { lessonId: string }) {
                   </div>
                 </div>
               )}
+              </div>
             </div>
           ) : (
             <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

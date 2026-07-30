@@ -70,9 +70,23 @@ export type SceneGenerationItem = {
   previewUrl: string | null;
 };
 
+/** Персональная кат-сцена видео-элемента: генерируется при подготовке урока. */
+export type CutsceneGenerationItem = {
+  sceneId: string;
+  sceneIndex: number;
+  sceneTitle: string;
+  elementId: string;
+  name: string;
+  prompt: string;
+  status: 'NOT_STARTED' | 'BLOCKED' | 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  errorMessage: string | null;
+  previewUrl: string | null;
+};
+
 export type SceneGenerationsReport = {
   hasCharacter: boolean;
   scenes: SceneGenerationItem[];
+  cutscenes: CutsceneGenerationItem[];
   total: number;
   ready: number;
   running: number;
@@ -117,6 +131,16 @@ export const academyLessonInstancesApi = createApi({
       query: (id) => ({ url: `/${id}/generations` }),
       providesTags: (_r, _e, id) => [{ type: 'InstanceGenerations', id }],
     }),
+    regenerateCutscene: build.mutation<{ ok: true }, { instanceId: string; sceneId: string; elementId: string }>({
+      query: ({ instanceId, sceneId, elementId }) => ({
+        url: `/${instanceId}/cutscenes/${sceneId}/${elementId}/regenerate`,
+        method: 'POST',
+      }),
+      invalidatesTags: (_r, _e, { instanceId }) => [
+        { type: 'InstanceGenerations', id: instanceId },
+        { type: 'InstanceScenes', id: instanceId },
+      ],
+    }),
     regenerateScene: build.mutation<{ ok: true }, { instanceId: string; sceneId: string }>({
       query: ({ instanceId, sceneId }) => ({ url: `/${instanceId}/generations/${sceneId}/regenerate`, method: 'POST' }),
       invalidatesTags: (_r, _e, { instanceId }) => [
@@ -136,4 +160,5 @@ export const {
   useGetInstanceScenesQuery,
   useGetInstanceGenerationsQuery,
   useRegenerateSceneMutation,
+  useRegenerateCutsceneMutation,
 } = academyLessonInstancesApi;

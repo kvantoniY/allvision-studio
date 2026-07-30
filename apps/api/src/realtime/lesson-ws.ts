@@ -258,6 +258,11 @@ async function handleMessage(room: Room, member: Member, raw: string) {
     case 'reward':
       broadcast(room, { t: 'reward' });
       return;
+    // Учитель завершил урок: рассылаем всем, чтобы ученик увидел экран результата
+    // сразу, а не через поллинг статуса. Сам статус меняет REST-эндпоинт.
+    case 'finish':
+      broadcast(room, { t: 'finished' });
+      return;
     case 'draw-clear':
       room.strokesByScene.set(room.sceneIndex, []);
       broadcast(room, { t: 'draw-clear' });
