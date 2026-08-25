@@ -33,7 +33,7 @@ export interface FalProviderOptions {
   logger: Logger;
 }
 
-type FalModelKind = 'image' | 'text-to-video' | 'image-to-video';
+type FalModelKind = 'image' | 'text-to-video' | 'image-to-video' | 'audio';
 
 interface FalModelConfig {
   /** fal endpoint для основного режима. */
@@ -64,6 +64,13 @@ interface FalModelConfig {
  * Источник наших slug'ов -> apps/worker/src/providers/piapi-provider.ts и blocks registry.
  */
 const FAL_MODELS: Record<string, FalModelConfig> = {
+  // ---- речь (text-to-speech блок) ----
+  // MiniMax Speech 02 HD — дефолт для русских поздравлений: есть явный language_boost=Russian
+  // и эмоции. ВАЖНО: output_format по умолчанию hex, url нужно просить явно.
+  'minimax-speech': { endpoint: 'fal-ai/minimax/speech-02-hd', kind: 'audio', estimatedCostUsd: 0.06 },
+  // ElevenLabs Multilingual v2 — ровнее интонация, но голоса англоязычные и на русском
+  // слышен акцент. Оставлен как альтернатива.
+  'elevenlabs-tts': { endpoint: 'fal-ai/elevenlabs/tts/multilingual-v2', kind: 'audio', estimatedCostUsd: 0.1 },
   // ---- image (image-edit блок) ----
   // Nano Banana Pro (Gemini 3 Pro image) — флагман по консистентности лица и рендеру текста.
   'nano-banana': { endpoint: 'fal-ai/nano-banana-pro', editEndpoint: 'fal-ai/nano-banana-pro/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.14 },
@@ -722,6 +729,62 @@ export class FalProvider implements AIProvider {
     });
   }
 
+  /**
+   * Синтез речи. У двух движков разные контракты, поэтому input собирается под каждый:
+   * MiniMax принимает вложенный voice_setting и требует output_format=url (по умолчанию он
+   * отдаёт аудио шестнадцатеричной строкой), ElevenLabs — плоские поля.
+   */
+  async textToSpeech(input: {
+    text: string;
+    model: string;
+    voice?: string;
+    speed?: number;
+    emotion?: string;
+    language?: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    const text = (input.text ?? '').trim();
+    if (!text) {
+      throw new ProviderError('TTS_TEXT_REQUIRED', 'Для синтеза речи нужен текст');
+    }
+    const config = this.requireModel(input.model, 'audio');
+    const isMiniMax = config.endpoint.includes('minimax');
+    const falInput: Record<string, unknown> = isMiniMax
+      ? {
+          text,
+          output_format: 'url',
+          voice_setting: {
+            voice_id: input.voice ?? 'Wise_Woman',
+            speed: clampNumber(input.speed, 0.5, 2, 1),
+            ...(input.emotion ? { emotion: input.emotion } : {}),
+          },
+          language_boost: input.language ?? 'Russian',
+        }
+      : {
+          text,
+          voice: input.voice ?? 'Charlotte',
+          speed: clampNumber(input.speed, 0.7, 1.2, 1),
+          ...(input.language ? { language_code: input.language } : {}),
+        };
+    mergePassthrough(falInput, input.params);
+
+    // Цена речи зависит от длины текста, поэтому оценка масштабируется по символам;
+    // фактическую стоимость всё равно перебьёт то, что вернёт fal.
+    const estimatedCost = config.estimatedCostUsd * Math.max(1, Math.ceil(text.length / 1000));
+    return this.run({
+      endpoint: config.endpoint,
+      falInput,
+      model: input.model,
+      kind: 'audio',
+      ext: 'mp3',
+      estimatedCost,
+      context: input.context,
+      timeoutMs: IMAGE_TIMEOUT_MS,
+      expectedDurationMs: 30 * 1000,
+    });
+  }
+
   // ---- нишевые блоки пока остаются на PiAPI (гибридный роутинг в providers/index.ts) ----
   async imageRestore(): Promise<ProviderResult> {
     throw new ProviderError('FAL_NOT_IMPLEMENTED', 'image-restore not implemented on fal yet');
@@ -854,6 +917,12 @@ export class FalProvider implements AIProvider {
 // ---------- helpers ----------
 
 function extractOutputUrl(output: Record<string, unknown>, kind: FalModelKind): string | undefined {
+  if (kind === 'audio') {
+    const audio = readUrlLike(output.audio);
+    if (audio) return audio;
+    const audioFile = readUrlLike(output.audio_file);
+    if (audioFile) return audioFile;
+  }
   if (kind === 'image') {
     const images = output.images;
     if (Array.isArray(images) && images.length > 0) {
@@ -874,6 +943,12 @@ function extractOutputUrl(output: Record<string, unknown>, kind: FalModelKind): 
   // Общий фолбэк: output.url или output.{image,video} как строка.
   const direct = readUrlLike(output.url) ?? readUrlLike(output.output);
   return direct;
+}
+
+/** Число в допустимых границах модели; мусор и пропуск уводим в значение по умолчанию. */
+function clampNumber(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
 }
 
 function readUrlLike(value: unknown): string | undefined {

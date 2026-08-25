@@ -898,6 +898,48 @@ const TREND_MODE_LABELS: Record<string, string> = {
   seedance_omni: 'Seedance 2.0 Omni (референс)',
 };
 
+const speechModels: ModelOption[] = [
+  {
+    slug: 'minimax-speech',
+    title: 'MiniMax Speech 02 HD',
+    tierHint: 'both',
+    estimatedCostCoins: coins(0.06),
+    estimatedCostUsd: 0.06,
+    provider: 'fal',
+    providerModel: 'fal-ai/minimax/speech-02-hd',
+    description: 'Дефолт для русских поздравлений: явная поддержка русского языка и эмоции голоса. Цена зависит от длины текста.',
+    docsUrl: 'https://fal.ai/models/fal-ai/minimax/speech-02-hd',
+    requiredParams: ['text'],
+    optionalParams: ['voice', 'speed', 'emotion', 'language'],
+  },
+  {
+    slug: 'elevenlabs-tts',
+    title: 'ElevenLabs Multilingual v2',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.1),
+    estimatedCostUsd: 0.1,
+    provider: 'fal',
+    providerModel: 'fal-ai/elevenlabs/tts/multilingual-v2',
+    description: 'Ровнее интонация, но голоса англоязычные — на русском слышен акцент. Берите, если нужен английский текст.',
+    docsUrl: 'https://fal.ai/models/fal-ai/elevenlabs/tts/multilingual-v2',
+    requiredParams: ['text'],
+    optionalParams: ['voice', 'speed', 'language'],
+  },
+];
+
+const timelineRenderModels: ModelOption[] = [
+  {
+    slug: 'ffmpeg-timeline',
+    title: 'Локальная сборка (FFmpeg)',
+    tierHint: 'both',
+    estimatedCostCoins: 0,
+    estimatedCostUsd: 0,
+    provider: 'local',
+    description: 'Склейка сцен, переходы, титры и музыка на нашем сервере. Внешних вызовов и расходов нет.',
+    requiredParams: ['timeline'],
+  },
+];
+
 export const BLOCK_CATALOG: BlockCatalogItem[] = [
   {
     slug: 'fal-generic',
@@ -1659,6 +1701,106 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
     // Модель фото выбирается админом из полного списка image-edit моделей (worker читает params.model,
     // дефолт gpt-image-2). Раньше был единственный фиктивный router -> нельзя было сменить модель.
     supportedModels: imageEditModels,
+  },
+  {
+    slug: 'timeline-render',
+    title: 'Сборка ролика из сцен',
+    description: 'Собирает готовый ролик из нескольких сцен: приводит кадры к общему формату, ставит переходы, выжигает титры и подмешивает музыку с озвучкой. Работает локальным ffmpeg, платных вызовов нет. Используется и шаблонами видео-поздравлений, и редактором.',
+    category: 'compose',
+    useWhen: 'Последним шагом услуги, которая собирает несколько сгенерированных клипов в один ролик.',
+    compatibleInputs: ['video output from image-to-video', 'text-to-video output', 'user photos', 'background music'],
+    examples: [
+      'Десять шагов оживления фото -> timeline-render склеивает их в поздравление с музыкой.',
+      'Редактор сцен -> timeline-render экспортирует итоговый файл.',
+    ],
+    paramsSchema: objectSchema(
+      {
+        timeline: {
+          type: 'string',
+          title: 'Таймлайн (JSON)',
+          description: 'Описание ролика: сцены, переходы, титры, музыка. Ссылки на клипы подставляются плейсхолдерами вида {{step_1.output.url}} — обязательно с .url, иначе в JSON попадёт объект целиком.',
+        },
+        photo_motion: {
+          type: 'boolean',
+          title: 'Лёгкий наезд на фото',
+          default: true,
+          description: 'Медленный зум на фото-сценах. Без него статичное фото на несколько секунд выглядит как зависшая картинка.',
+        },
+        quality: {
+          type: 'string',
+          title: 'Качество сжатия',
+          enum: ['fast', 'balanced', 'high'],
+          default: 'balanced',
+          description: 'fast — быстрее и легче файл, high — заметно дольше рендер. Для подарков обычно достаточно balanced.',
+        },
+        max_scenes: {
+          type: 'number',
+          title: 'Максимум сцен',
+          minimum: 1,
+          maximum: 30,
+          description: 'Защита от случайно раздутого шаблона. По умолчанию действует общий лимит в 30 сцен.',
+        },
+      },
+      ['timeline'],
+    ),
+    supportedModels: timelineRenderModels,
+  },
+  {
+    slug: 'text-to-speech',
+    title: 'Озвучка текста (синтез речи)',
+    description: 'Превращает текст в аудиофайл с человеческим голосом. Нужен видео-поздравлениям: пользователь пишет текст, а произносит его диктор или персонаж. Результат идёт в дорожку озвучки при сборке ролика или в блок говорящего персонажа.',
+    category: 'audio',
+    useWhen: 'Когда в услуге есть текст поздравления, который должен прозвучать голосом.',
+    compatibleInputs: ['text from user form', 'text output of a previous step'],
+    examples: [
+      'Текст поздравления -> озвучка -> timeline-render кладёт её в дорожку голоса.',
+      'Текст -> озвучка -> talking-avatar синхронизирует губы персонажа.',
+    ],
+    paramsSchema: objectSchema(
+      {
+        model: {
+          type: 'string',
+          title: 'Модель',
+          enum: ['minimax-speech', 'elevenlabs-tts'],
+          enumLabels: { 'minimax-speech': 'MiniMax (русский)', 'elevenlabs-tts': 'ElevenLabs (английский)' },
+          default: 'minimax-speech',
+          description: 'Для русских поздравлений берите MiniMax: у ElevenLabs на русском слышен акцент.',
+        },
+        text: {
+          type: 'string',
+          title: 'Текст',
+          description: 'Что произнести. Обычно {{user.greeting_text}}. Если оставить пустым, текст берётся из результата предыдущего шага.',
+        },
+        voice: {
+          type: 'string',
+          title: 'Голос',
+          description: 'Идентификатор голоса выбранной модели. MiniMax: Wise_Woman, Calm_Woman, Deep_Voice_Man, Lively_Girl и другие. Пусто — голос по умолчанию.',
+        },
+        speed: {
+          type: 'number',
+          title: 'Скорость речи',
+          minimum: 0.5,
+          maximum: 2,
+          default: 1,
+          description: '1 — обычный темп. Медленнее звучит торжественнее, быстрее — бодрее.',
+        },
+        emotion: {
+          type: 'string',
+          title: 'Эмоция (MiniMax)',
+          enum: ['neutral', 'happy', 'sad', 'surprised'],
+          enumLabels: { neutral: 'Нейтрально', happy: 'Радостно', sad: 'Грустно', surprised: 'Удивлённо' },
+          description: 'Окраска голоса. Для поздравлений обычно радостно.',
+        },
+        language: {
+          type: 'string',
+          title: 'Язык',
+          default: 'Russian',
+          description: 'Подсказка модели о языке текста. Для MiniMax — Russian, English и т.д.',
+        },
+      },
+      [],
+    ),
+    supportedModels: speechModels,
   },
   {
     slug: 'video-compose',

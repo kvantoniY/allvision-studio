@@ -202,6 +202,10 @@ export class PiAPIProvider implements AIProvider {
     throw new ProviderError('IMAGE_RESTORE_NOT_REAL', 'image-restore is mock-only in P6');
   }
 
+  async textToSpeech(): Promise<ProviderResult> {
+    throw new ProviderError('TTS_FAL_ONLY', 'Синтез речи доступен только при PROVIDER_MODE=fal');
+  }
+
   async falRaw(): Promise<ProviderResult> {
     throw new ProviderError('FAL_ONLY_BLOCK', 'fal-generic доступен только при PROVIDER_MODE=fal');
   }

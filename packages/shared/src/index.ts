@@ -6,6 +6,7 @@ export * from './events/project-events';
 export * from './utils';
 export * from './blocks';
 export * from './catalog';
+export * from './timeline';
 export * from './chat';
 export * from './piapi';
 export * from './style-presets';

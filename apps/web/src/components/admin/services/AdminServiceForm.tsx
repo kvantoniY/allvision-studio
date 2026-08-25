@@ -605,6 +605,7 @@ function schemaWithModelOptions(key: string, schema: JsonSchemaObject, models: M
 
 function providerLabel(provider: ModelOption['provider']) {
   if (provider === 'piapi') return 'PiAPI';
+  if (provider === 'fal') return 'fal.ai';
   if (provider === 'local') return 'Local';
   return 'Mock';
 }

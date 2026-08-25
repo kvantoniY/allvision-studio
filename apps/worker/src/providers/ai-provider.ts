@@ -109,6 +109,22 @@ export interface AIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult>;
 
+  /**
+   * Синтез речи. Нужен видео-поздравлениям: пользователь пишет текст поздравления,
+   * а озвучивает его диктор или персонаж. Возвращает аудиофайл, поэтому не укладывается
+   * ни в image-, ни в video-методы.
+   */
+  textToSpeech(input: {
+    text: string;
+    model: string;
+    voice?: string;
+    speed?: number;
+    emotion?: string;
+    language?: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult>;
+
   // Обобщённый вызов ЛЮБОГО fal-endpoint'а: админ/юзер задаёт endpoint + функцию (image|video)
   // + готовый input. Используется блоком fal-generic (выбор любой модели fal без хардкода).
   falRaw(input: {

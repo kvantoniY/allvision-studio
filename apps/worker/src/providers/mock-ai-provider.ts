@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import * as childProcess from 'node:child_process';
 import type {
@@ -268,6 +269,52 @@ export class MockAIProvider implements LegacyAIProvider, WorkerAIProvider {
     context: ProviderRunContext;
   }): Promise<ProviderResult> {
     return this.createImmediateResult('trend', params.context);
+  }
+
+  /**
+   * Мок озвучки: генерируем тишину примерно той длины, какой была бы речь
+   * (~14 символов в секунду). Это позволяет проверять монтаж целиком — сцены,
+   * микс и длительность ролика — не тратя деньги на провайдера.
+   */
+  async textToSpeech(params: {
+    text: string;
+    model: string;
+    voice?: string;
+    speed?: number;
+    emotion?: string;
+    language?: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    const startedAt = Date.now();
+    const seconds = Math.min(60, Math.max(1, Math.round((params.text?.length ?? 0) / 14)));
+    const dir = path.join(os.tmpdir(), `allvision-mock-tts-${crypto.randomUUID()}`);
+    fs.mkdirSync(dir, { recursive: true });
+    const filePath = path.join(dir, `silence-${seconds}s.mp3`);
+    try {
+      const result = childProcess.spawnSync(
+        'ffmpeg',
+        ['-y', '-f', 'lavfi', '-t', String(seconds), '-i', 'anullsrc=r=44100:cl=stereo', '-c:a', 'libmp3lame', '-b:a', '128k', filePath],
+        { stdio: 'ignore' },
+      );
+      if (result.status !== 0 || !fs.existsSync(filePath)) {
+        throw new Error('MOCK_TTS_FAILED: ffmpeg не смог создать тишину');
+      }
+      const buffer = await fs.promises.readFile(filePath);
+      const context = params.context;
+      const key = context
+        ? `outputs/${context.userId ?? 'mock'}/${context.projectId}/${context.stepId}/speech.mp3`
+        : `results/mock/${crypto.randomUUID()}.mp3`;
+      const { url } = await this.storage.upload({ key, body: buffer, contentType: 'audio/mpeg' });
+      return {
+        outputUrl: url,
+        costUsd: 0,
+        durationMs: Date.now() - startedAt,
+        meta: { provider: 'mock', resultType: 'audio', service: 'text-to-speech', seconds },
+      };
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   async falRaw(params: {

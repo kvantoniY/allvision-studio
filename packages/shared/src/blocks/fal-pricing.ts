@@ -5,6 +5,9 @@
  * синхронизировать здесь (это display-only для цены; на исполнение не влияет).
  */
 export const FAL_PRICING_ENDPOINTS: Record<string, string> = {
+  // speech
+  'minimax-speech': 'fal-ai/minimax/speech-02-hd',
+  'elevenlabs-tts': 'fal-ai/elevenlabs/tts/multilingual-v2',
   // image
   'nano-banana': 'fal-ai/nano-banana-pro',
   'gpt-image-2': 'openai/gpt-image-2',

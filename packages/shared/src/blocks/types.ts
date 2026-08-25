@@ -8,7 +8,7 @@ export interface ModelOption {
   tierHint: ModelTierHint;
   estimatedCostCoins: number;
   estimatedCostUsd?: number;
-  provider: 'piapi' | 'mock' | 'local';
+  provider: 'piapi' | 'fal' | 'mock' | 'local';
   providerModel?: string;
   taskType?: string;
   description?: string;

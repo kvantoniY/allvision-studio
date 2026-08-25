@@ -45,6 +45,19 @@ export class StubAIProvider implements AIProvider {
     return result('stub://result.mp4', { type: 'video' });
   }
 
+  async textToSpeech(_input: {
+    text: string;
+    model: string;
+    voice?: string;
+    speed?: number;
+    emotion?: string;
+    language?: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    return result('stub://speech.mp3', { type: 'audio' });
+  }
+
   async falRaw(input: {
     endpoint: string;
     kind: 'image' | 'video';
