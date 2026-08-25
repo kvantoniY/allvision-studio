@@ -1592,7 +1592,7 @@ UI «подвисание» при нажатии «Создать»: multipart-
 
 **Операционное (вне миграции, делается на ВМ):**
 - **Дамп БД снимается ДО деплоя** — миграция необратима:
-  `docker exec allvision-studio-postgres pg_dump -U allvision allvision | gzip > /opt/allvision-studio/shared/backup-before-academy-drop-$(date +%F).sql.gz`
+  `docker exec allvision-studio-postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"' | gzip > /opt/allvision-studio/shared/backup-before-academy-drop-$(date +%F).sql.gz`
 - После успешного деплоя удаляется закрытое хранилище детских данных:
   `sudo rm -rf /opt/allvision-studio/shared/private-uploads` (фото детей, референсы персонажей,
   детские генерации, вложения диалогов, подтверждения выплат — записи БД уже удалены миграцией).
