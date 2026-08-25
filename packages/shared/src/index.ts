@@ -8,7 +8,6 @@ export * from './blocks';
 export * from './chat';
 export * from './piapi';
 export * from './style-presets';
-export * from './academy';
 export * from './providers/ai-provider';
 export * from './providers/payment-provider';
 export * from './providers/provider-mode';

@@ -187,9 +187,6 @@ const supportAttachmentMulter = multer({
 
 export const uploadSinglePhoto = baseMulter.single('image');
 export const uploadProfileAvatar = baseMulter.single('file');
-// Academy-библиотека принимает и картинки, и готовые ролики (кат-сцены, заставки):
-// раньше был image-only фильтр, поэтому своё видео в урок загрузить было нельзя.
-export const uploadAcademyImage = mediaAssetMulter.single('file');
 export const uploadMultiplePhotos = baseMulter.array('images', 5);
 export const uploadSingleVideo = videoMulter.single('video');
 export const uploadTrendAssets = trendAssetsMulter.fields([
@@ -210,38 +207,3 @@ export const uploadMediaAsset = mediaAssetMulter.single('file');
 export const uploadChatInput = chatInputMulter.single('file');
 export const uploadSupportAttachments = supportAttachmentMulter.array('files', 5);
 export const uploadServiceLaunchInputs = serviceLaunchMulter.any();
-
-// Academy: фотографии ребёнка (только изображения, 15 MB, до 10 за запрос)
-const childPhotoMulter = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
-  fileFilter: imageFileFilter,
-});
-export const uploadChildPhotos = childPhotoMulter.array('photos', 10);
-
-// Academy A10: изображения в диалоге хранятся только в private-uploads.
-const academyMessageMulter = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: imageFileFilter,
-});
-export const uploadAcademyMessageImage = academyMessageMulter.single('image');
-
-function payoutProofFilter(
-  _req: Express.Request,
-  file: Express.Multer.File,
-  cb: multer.FileFilterCallback,
-) {
-  if (ALLOWED_IMAGE_MIME.has(file.mimetype) || file.mimetype === 'application/pdf') {
-    cb(null, true);
-    return;
-  }
-  cb(new Error(`INVALID_MIME: ${file.mimetype}`));
-}
-
-const payoutProofMulter = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: payoutProofFilter,
-});
-export const uploadPayoutProof = payoutProofMulter.single('proof');

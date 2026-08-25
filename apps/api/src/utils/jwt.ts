@@ -4,7 +4,7 @@ const ACCESS_TTL_DEFAULT = process.env.JWT_ACCESS_TTL
   ?? (process.env.ACCESS_TTL_MIN ? `${process.env.ACCESS_TTL_MIN}m` : '15m');
 const REFRESH_TTL = process.env.JWT_REFRESH_TTL
   ?? (process.env.REFRESH_TTL_DAYS ? `${process.env.REFRESH_TTL_DAYS}d` : '30d');
-export type JwtRole = 'USER' | 'ADMIN' | 'READONLY_ADMIN' | 'PARENT' | 'TEACHER' | 'METHODIST';
+export type JwtRole = 'USER' | 'ADMIN' | 'READONLY_ADMIN';
 
 function accessSecret(): string {
   const s = process.env.JWT_ACCESS_SECRET ?? process.env.JWT_SECRET;

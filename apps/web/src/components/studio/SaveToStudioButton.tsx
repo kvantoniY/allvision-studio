@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { Loader2, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,8 +47,8 @@ export function SaveToStudioButton({ projectId, defaultTitle, className }: SaveT
         description: description.trim() || undefined,
       }).unwrap();
       toast({
-        title: 'Сохранено в личную медиатеку',
-        description: 'Результат доступен среди ваших материалов и может использоваться как референс.',
+        title: 'Сохранено в Студию',
+        description: 'Откройте Студию, чтобы использовать результат как референс.',
       });
       setOpen(false);
     } catch (error) {
@@ -57,18 +58,18 @@ export function SaveToStudioButton({ projectId, defaultTitle, className }: SaveT
 
   return (
     <>
-      <Button type="button" variant="outline" className={cn('border-border bg-card', className)} onClick={() => setOpen(true)}>
+      <Button type="button" variant="outline" className={cn('border-slate-700 bg-slate-900', className)} onClick={() => setOpen(true)}>
         <Save className="h-4 w-4" />
-        Сохранить в мои материалы
+        Сохранить в Студию
       </Button>
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true">
-          <form onSubmit={submit} className="academy-theme w-full max-w-lg rounded-2xl border border-border bg-card p-5 text-foreground shadow-2xl">
+          <form onSubmit={submit} className="w-full max-w-lg rounded-lg border border-slate-800 bg-slate-900 p-5 shadow-2xl">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold">Сохранить в личную медиатеку</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Результат будет скопирован в ваши материалы.</p>
+                <h2 className="text-xl font-bold text-white">Сохранить в Студию</h2>
+                <p className="mt-1 text-sm text-slate-400">Результат будет скопирован в вашу личную библиотеку.</p>
               </div>
               <Button type="button" variant="ghost" size="icon" onClick={() => setOpen(false)}>
                 <X className="h-4 w-4" />
@@ -86,7 +87,7 @@ export function SaveToStudioButton({ projectId, defaultTitle, className }: SaveT
                     type="button"
                     variant={kind === item.value ? 'default' : 'outline'}
                     onClick={() => setKind(item.value)}
-                    className={cn(kind === item.value && 'bg-primary hover:bg-primary/90')}
+                    className={cn(kind === item.value && 'bg-violet-600 hover:bg-violet-500')}
                   >
                     {item.label}
                   </Button>
@@ -108,7 +109,10 @@ export function SaveToStudioButton({ projectId, defaultTitle, className }: SaveT
             </div>
 
             <div className="mt-6 flex flex-wrap justify-end gap-2">
-              <Button type="submit" disabled={state.isLoading}>
+              <Button asChild variant="outline">
+                <Link href="/studio">Открыть Студию</Link>
+              </Button>
+              <Button type="submit" disabled={state.isLoading} className="bg-violet-600 hover:bg-violet-500">
                 {state.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Сохранить
               </Button>

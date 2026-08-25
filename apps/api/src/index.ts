@@ -3,7 +3,6 @@ import { app } from './app';
 import { logger } from './utils/logger';
 import { startPendingPaymentPoller, stopPendingPaymentPoller } from './services/payment-poller';
 import { startPiAPIReconciler, stopPiAPIReconciler } from './services/piapi-reconciler';
-import { initLessonWebSocket } from './realtime/lesson-ws';
 
 const port = Number(process.env.PORT ?? 4000);
 
@@ -12,9 +11,6 @@ const server = app.listen(port, () => {
   startPendingPaymentPoller();
   startPiAPIReconciler();
 });
-
-// Живой урок (A7): WebSocket-комнаты синхронизации сцены/рисования/чата.
-initLessonWebSocket(server);
 
 server.on('error', (err: NodeJS.ErrnoException) => {
   if (err.code === 'EADDRINUSE') {

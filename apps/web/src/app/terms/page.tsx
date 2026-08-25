@@ -1,19 +1,17 @@
 import type { Metadata } from 'next';
 import { LegalDocument } from '@/components/legal/LegalDocument';
 import { termsSections } from '@/lib/legal-docs';
-import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = pageMetadata({
+export const metadata: Metadata = {
   title: 'Пользовательское соглашение',
-  description: 'Пользовательское соглашение Allvision Academy: аккаунты, полномочия родителя, правила занятий и AI-материалов.',
-  path: '/terms',
-});
+  description: 'Пользовательское соглашение Allvision Studio: правила использования, аккаунт, ограничения контента и ответственность сторон.',
+};
 
 export default function TermsPage() {
   return (
     <LegalDocument
       title="Пользовательское соглашение"
-      description="Правила использования кабинета, участия ребёнка в занятиях, общения и работы с персональными AI-материалами."
+      description="Основные правила использования сайта, аккаунта, AI-генерации и заказных услуг Allvision Studio."
       sections={termsSections}
     />
   );

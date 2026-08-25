@@ -4,9 +4,9 @@ import { VerifyEmailForm } from '@/components/auth/VerifyEmailForm';
 
 export default function VerifyEmailPage() {
   return (
-    <Card className="border-border shadow-sm">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-2xl">Подтверждение email</CardTitle>
+        <CardTitle>Подтверждение email</CardTitle>
       </CardHeader>
       <CardContent>
         <Suspense>

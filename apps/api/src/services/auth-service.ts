@@ -68,13 +68,12 @@ function htmlEscape(value: string) {
 function emailLayout(title: string, body: string, ctaLabel: string, ctaUrl: string) {
   const safeUrl = htmlEscape(ctaUrl);
   return `
-    <div style="font-family:Arial,sans-serif;background:#fff7ed;padding:32px;color:#292524">
-      <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #fed7aa;border-radius:16px;padding:28px">
-        <p style="margin:0 0 18px;font-size:14px;font-weight:700;color:#ea580c">Allvision Academy</p>
-        <h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;color:#1c1917">${htmlEscape(title)}</h1>
-        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#57534e">${body}</p>
-        <a href="${safeUrl}" style="display:inline-block;background:#f97316;color:#ffffff;text-decoration:none;font-weight:700;border-radius:10px;padding:12px 18px">${htmlEscape(ctaLabel)}</a>
-        <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#78716c">Если кнопка не открывается, скопируйте ссылку:<br><span style="word-break:break-all">${safeUrl}</span></p>
+    <div style="font-family:Arial,sans-serif;background:#0f172a;padding:32px;color:#e2e8f0">
+      <div style="max-width:560px;margin:0 auto;background:#111827;border:1px solid #263244;border-radius:12px;padding:28px">
+        <h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;color:#ffffff">${htmlEscape(title)}</h1>
+        <p style="margin:0 0 24px;font-size:16px;line-height:1.6;color:#cbd5e1">${body}</p>
+        <a href="${safeUrl}" style="display:inline-block;background:#f59e0b;color:#0f172a;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px">${htmlEscape(ctaLabel)}</a>
+        <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#94a3b8">Если кнопка не открывается, скопируйте ссылку:<br><span style="word-break:break-all">${safeUrl}</span></p>
       </div>
     </div>
   `;
@@ -85,14 +84,14 @@ async function sendEmailVerification(user: Pick<User, 'email' | 'name'>, rawToke
   const name = user.name?.trim() || user.email;
   const result = await sendTransactionalEmail({
     to: user.email,
-    subject: 'Подтвердите email в Allvision Academy',
+    subject: 'Подтвердите email в Allvision Studio',
     html: emailLayout(
       'Подтвердите email',
       `Здравствуйте, ${htmlEscape(name)}. Подтвердите электронную почту, чтобы восстановить доступ к аккаунту при потере пароля.`,
       'Подтвердить email',
       verifyUrl,
     ),
-    text: `Подтвердите email в Allvision Academy: ${verifyUrl}`,
+    text: `Подтвердите email в Allvision Studio: ${verifyUrl}`,
   });
   if (!result.sent && process.env.NODE_ENV !== 'production') {
     logger.info(`[auth] email verification link: ${verifyUrl}`);
@@ -105,14 +104,14 @@ async function sendPasswordReset(user: Pick<User, 'email' | 'name'>, rawToken: s
   const name = user.name?.trim() || user.email;
   const result = await sendTransactionalEmail({
     to: user.email,
-    subject: 'Восстановление пароля Allvision Academy',
+    subject: 'Восстановление пароля Allvision Studio',
     html: emailLayout(
       'Восстановление пароля',
       `Здравствуйте, ${htmlEscape(name)}. Нажмите кнопку ниже, чтобы задать новый пароль. Ссылка действует 1 час.`,
       'Сбросить пароль',
       resetUrl,
     ),
-    text: `Сбросить пароль Allvision Academy: ${resetUrl}`,
+    text: `Сбросить пароль Allvision Studio: ${resetUrl}`,
   });
   if (!result.sent && process.env.NODE_ENV !== 'production') {
     logger.info(`[auth] password reset link: ${resetUrl}`);
@@ -136,8 +135,6 @@ export async function register(data: RegisterInput) {
         passwordHash,
         name: data.name,
         tokenBalance: welcomeBonus,
-        // Academy: новые регистрации — родительские аккаунты; legacy USER остаётся у старых.
-        role: 'PARENT',
       },
     });
 
@@ -186,10 +183,9 @@ export async function refreshTokens(refreshToken: string) {
     throw new HttpError(401, 'INVALID_REFRESH', 'Refresh токен невалиден');
   }
   const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user || user.deletedAt) {
-    const reason = user?.deletedAt ? 'ACCOUNT_DELETED' : 'USER_NOT_FOUND';
-    logger.warn(`[auth] refresh rejected reason=${reason} userId=${payload.sub} refresh=${tokenFingerprint(refreshToken)}`);
-    throw new HttpError(401, reason, user?.deletedAt ? 'Аккаунт удалён' : 'Пользователь не найден');
+  if (!user) {
+    logger.warn(`[auth] refresh rejected reason=USER_NOT_FOUND userId=${payload.sub} refresh=${tokenFingerprint(refreshToken)}`);
+    throw new HttpError(401, 'USER_NOT_FOUND', 'Пользователь не найден');
   }
   const tokens = makeTokens(user.id, user.role);
   logIssuedTokens('refresh', user, tokens);
@@ -203,14 +199,14 @@ export async function logout(_userId: string) {
 
 export async function getMe(userId: string): Promise<SafeUser> {
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (!user || user.deletedAt) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
+  if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
   return toSafe(user);
 }
 
 export async function requestPasswordReset(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   // Чтобы не раскрывать, зарегистрирован ли email, всегда возвращаем успех.
-  if (!user || user.deletedAt) return;
+  if (!user) return;
   if (!user.emailVerifiedAt) {
     logger.info(`[auth] password reset skipped for unverified email=${email}`);
     return;

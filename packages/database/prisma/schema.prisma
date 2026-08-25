@@ -27,884 +27,25 @@ model User {
   deletedAt              DateTime?
   createdAt              DateTime       @default(now())
 
-  projects               Project[]
-  payments               Payment[]
-  orders                 Order[]
-  tokenTxns              TokenTransaction[]
-  fairyTales             FairyTaleScriptRecord[]
-  characters             Character[]
-  scenes                 Scene[]
-  episodes               Episode[]
-  mediaAssets            MediaAsset[]
-  chats                  Chat[]
-  supportTickets         SupportTicket[]         @relation("SupportTicketOwner")
-  supportMessages        SupportMessage[]        @relation("SupportMessageAuthor")
-  resolvedSupportTickets SupportTicket[]         @relation("SupportTicketResolvedBy")
-  childProfiles          ChildProfile[]
-  givenConsents          Consent[]
-  teacherProfile         TeacherProfile?
-  lessonCredits          LessonCredit[]
-  createdChildAssets     ChildAsset[]            @relation("ChildAssetCreatedBy")
-  academyThreads         Thread[]                @relation("ThreadParent")
-  threadMessages         ThreadMessage[]         @relation("ThreadMessageAuthor")
-  lessonReportsCreated   LessonReport[]          @relation("LessonReportCreatedBy")
-  teacherPayoutsCreated  TeacherPayout[]         @relation("TeacherPayoutCreatedBy")
-  deletionLogsRequested  DeletionLog[]           @relation("DeletionLogRequestedBy")
-  academyAccessLogs      AccessLog[]             @relation("AccessLogActor")
+  projects   Project[]
+  payments   Payment[]
+  orders     Order[]
+  tokenTxns  TokenTransaction[]
+  fairyTales FairyTaleScriptRecord[]
+  characters Character[]
+  scenes     Scene[]
+  episodes   Episode[]
+  mediaAssets MediaAsset[]
+  chats     Chat[]
+  supportTickets SupportTicket[] @relation("SupportTicketOwner")
+  supportMessages SupportMessage[] @relation("SupportMessageAuthor")
+  resolvedSupportTickets SupportTicket[] @relation("SupportTicketResolvedBy")
 }
 
 enum Role {
   USER
   ADMIN
   READONLY_ADMIN
-  PARENT
-  TEACHER
-  METHODIST
-}
-
-// ============================================================
-// === Allvision Academy (реворк A1+) ===
-// ============================================================
-
-// === Профиль ребёнка (не User: доступ через аккаунт родителя) ===
-model ChildProfile {
-  id        String    @id @default(cuid())
-  parentId  String
-  name      String // имя или игровой псевдоним
-  birthDate DateTime?
-  avatar    String?
-  notes     String?   @db.Text
-
-  // Игровой профиль (наполняется в A9, поля заложены сразу)
-  level         Int       @default(1)
-  xp            Int       @default(0)
-  streakCount   Int       @default(0)
-  streakFreezes Int       @default(1)
-  anonymizedKey String?   @unique
-  anonymizedAt  DateTime?
-
-  deletedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-
-  parent           User               @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  consents         Consent[]
-  photos           ChildPhoto[]
-  characterProfile CharacterProfile?
-  enrollments      Enrollment[]
-  skillProgress    SkillProgress[]
-  lessons          Lesson[]
-  assets           ChildAsset[]
-  xpEvents         XpEvent[]
-  achievements     ChildAchievement[]
-  rewardItems      ChildRewardItem[]
-  threads          Thread[]
-  accessLogs       AccessLog[]
-  teacherNotes     TeacherStudentNote[]
-
-  @@index([parentId])
-}
-
-// === AI-профиль внешности ребёнка (A2): эталонный набор референсов ===
-model CharacterProfile {
-  id           String                 @id @default(cuid())
-  childId      String                 @unique
-  status       CharacterProfileStatus @default(DRAFT)
-  progress     Int                    @default(0)
-  errorMessage String?                @db.Text
-  approvedAt   DateTime?
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
-
-  child      ChildProfile         @relation(fields: [childId], references: [id], onDelete: Cascade)
-  references CharacterReference[]
-}
-
-enum CharacterProfileStatus {
-  DRAFT
-  GENERATING
-  READY
-  APPROVED
-  FAILED
-}
-
-// Референс в ЗАКРЫТОМ хранилище (CHARACTER_REFS_DIR), без publicUrl —
-// раздача только через авторизованный эндпоинт.
-model CharacterReference {
-  id         String   @id @default(cuid())
-  profileId  String
-  kind       String // portrait | profile_side | three_quarter | full_body | neutral_pose | expression_*
-  storageKey String
-  mimeType   String   @default("image/jpeg")
-  width      Int?
-  height     Int?
-  promptUsed String?  @db.Text
-  model      String?
-  costUsd    Float    @default(0)
-  createdAt  DateTime @default(now())
-
-  profile CharacterProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-
-  @@index([profileId, kind])
-}
-
-// Персональный учебный материал ребёнка (A5). Файл хранится только в
-// private-uploads/child-assets и не имеет публичного URL.
-model ChildAsset {
-  id                  String   @id @default(uuid())
-  childId             String
-  createdById         String?
-  kind                String // pose | scene | cutscene | project
-  title               String
-  description         String?  @db.Text
-  tags                String[]
-  storageKey          String
-  mimeType            String
-  fileSize            Int
-  width               Int?
-  height              Int?
-  durationSec         Float?
-  generationModel     String?
-  generationPrompt    String?  @db.Text
-  generationCostUsd   Float    @default(0)
-  generationParams    Json?
-  sourceRefIds        String[]
-  generationProjectId String?  @unique
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  child       ChildProfile      @relation(fields: [childId], references: [id], onDelete: Cascade)
-  createdBy   User?             @relation("ChildAssetCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  rewardItems ChildRewardItem[]
-
-  @@index([childId, kind, createdAt])
-  @@index([createdById])
-}
-
-// === Согласия родителя на обработку данных ребёнка ===
-model Consent {
-  id           String      @id @default(cuid())
-  parentId     String
-  childId      String
-  type         ConsentType
-  version      String      @default("v2")
-  textSnapshot String      @db.Text
-  acceptedAt   DateTime    @default(now())
-  revokedAt    DateTime?
-
-  parent User         @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  child  ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
-
-  @@unique([childId, type])
-  @@index([parentId])
-}
-
-enum ConsentType {
-  IMAGE_PROCESSING // обработка изображений ребёнка
-  AI_CHARACTER // создание синтетического AI-персонажа
-  AI_GENERATION // генерация иллюстраций и видео
-  EXTERNAL_PROVIDERS // передача данных внешним AI-сервисам через backend
-  DATA_RETENTION // правила хранения и удаления
-}
-
-// === Исходные фотографии ребёнка (закрытое хранилище, без publicUrl:
-// раздача только через авторизованный API-эндпоинт) ===
-model ChildPhoto {
-  id         String   @id @default(cuid())
-  childId    String
-  storageKey String
-  fileName   String
-  mimeType   String
-  fileSize   Int
-  width      Int?
-  height     Int?
-  createdAt  DateTime @default(now())
-
-  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
-
-  @@index([childId])
-}
-
-// === Учебная программа: Направление → Курс → Модуль → Тема → Навык ===
-model Subject {
-  id          String   @id @default(cuid())
-  slug        String   @unique
-  title       String
-  description String?  @db.Text
-  iconName    String?
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  courses Course[]
-  skills  SkillDef[]
-}
-
-model Course {
-  id          String   @id @default(cuid())
-  subjectId   String
-  slug        String   @unique
-  title       String
-  description String?  @db.Text
-  level       String? // A0/A1/beginner/...
-  ageMin      Int?
-  ageMax      Int?
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  subject     Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  modules     CourseModule[]
-  enrollments Enrollment[]
-
-  @@index([subjectId, sortOrder])
-}
-
-model CourseModule {
-  id          String   @id @default(cuid())
-  courseId    String
-  title       String
-  description String?  @db.Text
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  course Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  topics Topic[]
-
-  @@index([courseId, sortOrder])
-}
-
-model Topic {
-  id          String  @id @default(cuid())
-  moduleId    String
-  title       String
-  goal        String? @db.Text // образовательная цель
-  durationMin Int     @default(25) // 25 | 45
-  difficulty  Int     @default(1)
-  sortOrder   Int     @default(0)
-  isActive    Boolean @default(true)
-
-  // Гибкое содержимое темы: слова/правила/конструкции, сценарий, награды,
-  // домашнее задание, требования к генерациям, prerequisites (ids тем).
-  content     Json?
-  aiBudgetUsd Float @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  module   CourseModule    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  skills   TopicSkill[]
-  progress TopicProgress[]
-
-  @@index([moduleId, sortOrder])
-}
-
-// === Учебный навык (прогресс по навыкам — A3) ===
-model SkillDef {
-  id          String   @id @default(cuid())
-  subjectId   String
-  slug        String   @unique
-  title       String
-  description String?  @db.Text
-  createdAt   DateTime @default(now())
-
-  subject  Subject         @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  topics   TopicSkill[]
-  progress SkillProgress[]
-
-  @@index([subjectId])
-}
-
-model TopicSkill {
-  topicId String
-  skillId String
-
-  topic Topic    @relation(fields: [topicId], references: [id], onDelete: Cascade)
-  skill SkillDef @relation(fields: [skillId], references: [id], onDelete: Cascade)
-
-  @@id([topicId, skillId])
-}
-
-// === Прогресс обучения (A3): запись на курс, прогресс по темам и навыкам ===
-
-model Enrollment {
-  id        String           @id @default(cuid())
-  childId   String
-  courseId  String
-  status    EnrollmentStatus @default(ACTIVE)
-  startedAt DateTime         @default(now())
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-
-  child         ChildProfile     @relation(fields: [childId], references: [id], onDelete: Cascade)
-  course        Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  topicProgress TopicProgress[]
-  changeLog     TopicChangeLog[]
-
-  @@unique([childId, courseId])
-  @@index([childId])
-}
-
-enum EnrollmentStatus {
-  ACTIVE
-  PAUSED
-  COMPLETED
-}
-
-model TopicProgress {
-  id           String              @id @default(cuid())
-  enrollmentId String
-  topicId      String
-  status       TopicProgressStatus @default(LOCKED)
-  completedAt  DateTime?
-  teacherNote  String?             @db.Text
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-
-  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  topic      Topic      @relation(fields: [topicId], references: [id], onDelete: Cascade)
-
-  @@unique([enrollmentId, topicId])
-  @@index([enrollmentId])
-}
-
-enum TopicProgressStatus {
-  LOCKED
-  RECOMMENDED
-  IN_PROGRESS
-  COMPLETED
-}
-
-// Прогресс по отдельному навыку (level 0..3): «знает числа 1–10» и т.п.
-model SkillProgress {
-  id        String   @id @default(cuid())
-  childId   String
-  skillId   String
-  level     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  child ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
-  skill SkillDef     @relation(fields: [skillId], references: [id], onDelete: Cascade)
-
-  @@unique([childId, skillId])
-  @@index([childId])
-}
-
-// Журнал смены рекомендованной темы преподавателем (с обязательной причиной)
-model TopicChangeLog {
-  id           String            @id @default(cuid())
-  enrollmentId String
-  fromTopicId  String?
-  toTopicId    String
-  reason       TopicChangeReason
-  note         String?           @db.Text
-  changedById  String
-  createdAt    DateTime          @default(now())
-
-  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-
-  @@index([enrollmentId])
-}
-
-enum TopicChangeReason {
-  REPEAT // повторение
-  GAP // пробел в знаниях
-  PARENT_WISH // пожелание родителя
-  SPECIAL_PROJECT // специальный проект
-}
-
-// === Запись и деньги (A4): преподаватели, слоты, уроки, кредиты занятий, выплаты ===
-
-model TeacherProfile {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  bio           String?  @db.Text
-  photoUrl      String? // фото загружает ТОЛЬКО админ (защита от неподобающего контента)
-  lessonsManual Int? // ручное значение «проведено занятий» (админ); null = считать по факту
-  courseIds     String[] @default([]) // назначенные курсы; пустой массив = разрешены все
-  subjects      String[] // slug'и направлений, которые ведёт преподаватель
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  slots        TeacherSlot[]
-  lessons      Lesson[]
-  earnings     TeacherEarning[]
-  threads      Thread[]
-  payouts      TeacherPayout[]
-  studentNotes TeacherStudentNote[]
-}
-
-// Конкретный доступный слот преподавателя (UTC). Recurring-генерация — позже.
-model TeacherSlot {
-  id          String   @id @default(cuid())
-  teacherId   String
-  startsAt    DateTime
-  durationMin Int      @default(25)
-  isBooked    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-
-  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  lesson  Lesson?
-
-  @@index([teacherId, startsAt])
-  @@index([startsAt, isBooked])
-}
-
-// Кредит занятия (предоплаченный баланс): непереводим и невыводим.
-model LessonCredit {
-  id          String    @id @default(cuid())
-  parentId    String
-  durationMin Int // 25 | 45 — кредит на урок конкретной длины
-  source      String // purchase | refund | manual
-  paymentId   String?
-  lessonId    String?
-  consumedAt  DateTime?
-  createdAt   DateTime  @default(now())
-
-  parent User @relation(fields: [parentId], references: [id], onDelete: Cascade)
-
-  @@index([parentId, durationMin, consumedAt])
-}
-
-model Lesson {
-  id           String       @id @default(cuid())
-  childId      String
-  teacherId    String
-  slotId       String       @unique
-  topicId      String?
-  durationMin  Int
-  startsAt     DateTime
-  status       LessonStatus @default(BOOKED)
-  priceRub     Int
-  creditId     String?
-  cancelledBy  String? // parent | teacher | system
-  cancelReason String?      @db.Text
-  meetingUrl   String? // ссылка на видеозвонок (Яндекс Телемост), учитель ставит вручную
-  // Изолированный бюджет нейролаборатории на этот урок: начисляется один раз при старте
-  // урока (labTokensGranted != null = уже начислено), тратится только внутри урока.
-  labTokensGranted Int? // null = ещё не начисляли; число = выданный лимит
-  labTokensSpent   Int  @default(0)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-
-  child                ChildProfile        @relation(fields: [childId], references: [id], onDelete: Cascade)
-  teacher              TeacherProfile      @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  slot                 TeacherSlot         @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  earning              TeacherEarning?
-  instance             LessonInstance?
-  chatMessages         LessonChatMessage[]
-  xpEvents             XpEvent[]
-  unlockedAchievements ChildAchievement[]  @relation("AchievementSourceLesson")
-  report               LessonReport?
-
-  @@index([childId, startsAt])
-  @@index([teacherId, startsAt])
-}
-
-enum LessonStatus {
-  BOOKED
-  AWAITING_PREP
-  GENERATING
-  READY
-  IN_PROGRESS
-  COMPLETED
-  REPORT_SENT
-  CANCELLED_PARENT
-  CANCELLED_TEACHER
-  NO_SHOW
-}
-
-// Рабочая заметка преподавателя по ученику (наблюдения, что повторить и т.п.).
-model TeacherStudentNote {
-  id        String   @id @default(cuid())
-  teacherId String
-  childId   String
-  note      String   @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  child   ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
-
-  @@unique([teacherId, childId])
-  @@index([teacherId])
-}
-
-model TeacherEarning {
-  id        String        @id @default(cuid())
-  lessonId  String        @unique
-  teacherId String
-  amountRub Int
-  status    EarningStatus @default(PENDING)
-  payoutId  String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-
-  lesson  Lesson         @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  payout  TeacherPayout? @relation(fields: [payoutId], references: [id], onDelete: SetNull)
-
-  @@index([teacherId, status])
-  @@index([payoutId])
-}
-
-enum EarningStatus {
-  PENDING
-  AVAILABLE
-  PAID
-  REJECTED
-}
-
-// === Операционный контур Academy (A10): отчёты, сообщения, выплаты, аудит удаления ===
-
-model LessonReport {
-  id             String    @id @default(cuid())
-  lessonId       String    @unique
-  createdById    String?
-  summary        String    @db.Text
-  successes      String    @db.Text
-  recommendation String    @db.Text
-  resultAssetIds String[]  @default([])
-  parentReadAt   DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  lesson    Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  createdBy User?  @relation("LessonReportCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  @@index([createdAt])
-}
-
-model Thread {
-  id        String   @id @default(cuid())
-  parentId  String
-  teacherId String
-  childId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  parent   User            @relation("ThreadParent", fields: [parentId], references: [id], onDelete: Cascade)
-  teacher  TeacherProfile  @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  child    ChildProfile    @relation(fields: [childId], references: [id], onDelete: Cascade)
-  messages ThreadMessage[]
-
-  @@unique([parentId, teacherId, childId])
-  @@index([parentId, updatedAt])
-  @@index([teacherId, updatedAt])
-  @@index([childId])
-}
-
-model ThreadMessage {
-  id                   String            @id @default(cuid())
-  threadId             String
-  authorId             String?
-  role                 ThreadMessageRole
-  body                 String?           @db.Text
-  attachmentStorageKey String?
-  attachmentFileName   String?
-  attachmentMimeType   String?
-  attachmentFileSize   Int?
-  createdAt            DateTime          @default(now())
-
-  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  author User?  @relation("ThreadMessageAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-
-  @@index([threadId, createdAt])
-  @@index([authorId])
-}
-
-enum ThreadMessageRole {
-  PARENT
-  TEACHER
-  ADMIN
-  SYSTEM
-}
-
-model TeacherPayout {
-  id                     String        @id @default(cuid())
-  teacherId              String
-  periodStart            DateTime
-  periodEnd              DateTime
-  amountRub              Int
-  status                 EarningStatus @default(AVAILABLE)
-  confirmationStorageKey String?
-  confirmationFileName   String?
-  confirmationMimeType   String?
-  rejectionReason        String?       @db.Text
-  paidAt                 DateTime?
-  createdById            String?
-  createdAt              DateTime      @default(now())
-  updatedAt              DateTime      @updatedAt
-
-  teacher   TeacherProfile   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  earnings  TeacherEarning[]
-  createdBy User?            @relation("TeacherPayoutCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  @@unique([teacherId, periodStart, periodEnd])
-  @@index([status, periodEnd])
-}
-
-model DeletionLog {
-  id            String         @id @default(cuid())
-  requestedById String?
-  scope         DeletionScope
-  targetHash    String
-  status        DeletionStatus @default(PENDING)
-  summary       Json?
-  errorMessage  String?        @db.Text
-  createdAt     DateTime       @default(now())
-  startedAt     DateTime?
-  completedAt   DateTime?
-
-  requestedBy User? @relation("DeletionLogRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
-
-  @@index([requestedById, createdAt])
-  @@index([status, createdAt])
-  @@index([targetHash])
-}
-
-enum DeletionScope {
-  CHILD
-  ACCOUNT
-}
-
-enum DeletionStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-}
-
-model AccessLog {
-  id           String   @id @default(cuid())
-  actorId      String?
-  childId      String?
-  actorRole    String
-  action       String
-  resourceType String
-  resourceId   String
-  createdAt    DateTime @default(now())
-
-  actor User?         @relation("AccessLogActor", fields: [actorId], references: [id], onDelete: SetNull)
-  child ChildProfile? @relation(fields: [childId], references: [id], onDelete: SetNull)
-
-  @@index([childId, createdAt])
-  @@index([actorId, createdAt])
-  @@index([resourceType, resourceId])
-}
-
-// === Конструктор сцен (A6.2): шаблон урока с черновиком сцены ===
-// Immutable-версии и LessonInstance — этап A6.3.
-model LessonTemplate {
-  id            String   @id @default(cuid())
-  topicId       String?
-  title         String
-  status        String   @default("draft") // draft | published
-  scene         Json // AcademyScene (рабочий черновик)
-  latestVersion Int      @default(0)
-  createdById   String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  versions LessonTemplateVersion[]
-
-  @@index([topicId])
-  @@index([createdById])
-}
-
-// Immutable-снапшот сцены на момент публикации (A6.3).
-model LessonTemplateVersion {
-  id            String   @id @default(cuid())
-  templateId    String
-  version       Int
-  scene         Json
-  publishedById String
-  createdAt     DateTime @default(now())
-
-  template  LessonTemplate   @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  instances LessonInstance[]
-
-  @@unique([templateId, version])
-  @@index([templateId])
-}
-
-// Экземпляр урока: версия шаблона, привязанная к конкретному занятию и ребёнку,
-// с персонализированными оверрайдами и подставленным персонажем ребёнка.
-model LessonInstance {
-  id                String   @id @default(cuid())
-  lessonId          String   @unique
-  templateVersionId String
-  childId           String
-  overrides         Json? // { hiddenElementIds: string[], ... }
-  createdById       String
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  lesson      Lesson                     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  version     LessonTemplateVersion      @relation(fields: [templateVersionId], references: [id], onDelete: Cascade)
-  sceneAssets LessonInstanceSceneAsset[]
-
-  @@index([templateVersionId])
-}
-
-// Per-student генерация цельной AI-сцены (A6.6): на связке экземпляр+сцена хранится
-// academy-generation Project; готовый ChildAsset подставляется фоном в resolved-сцену.
-model LessonInstanceSceneAsset {
-  id         String   @id @default(cuid())
-  instanceId String
-  sceneId    String
-  /// Элемент сцены для персональной генерации (кат-сцена с ребёнком).
-  /// Пустая строка = генерация всей сцены целиком (full-ai), как было до A13.
-  /// Именно пустая строка, а не NULL: в Postgres NULL'ы в уникальном индексе
-  /// различны, и upsert по сцене перестал бы быть идемпотентным.
-  elementId  String   @default("")
-  projectId  String
-  createdAt  DateTime @default(now())
-
-  instance LessonInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-
-  @@unique([instanceId, sceneId, elementId])
-  @@index([instanceId])
-}
-
-// Чат живого урока (A7) — история переписки участников, переживает реконнект.
-model LessonChatMessage {
-  id        String   @id @default(cuid())
-  lessonId  String
-  authorId  String
-  role      String // teacher | student
-  body      String   @db.Text
-  createdAt DateTime @default(now())
-
-  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-
-  @@index([lessonId, createdAt])
-}
-
-// === Геймификация (A9): XP, уровни, серии, достижения и коллекция наград ===
-
-model XpEvent {
-  id             String        @id @default(cuid())
-  childId        String
-  lessonId       String?
-  amount         Int
-  reason         XpEventReason
-  idempotencyKey String        @unique
-  metadata       Json?
-  createdAt      DateTime      @default(now())
-
-  child  ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
-  lesson Lesson?      @relation(fields: [lessonId], references: [id], onDelete: SetNull)
-
-  @@index([childId, createdAt])
-  @@index([lessonId])
-}
-
-enum XpEventReason {
-  LESSON_COMPLETED
-  MISSION
-  INDEPENDENT_ANSWER
-  EFFORT
-  PROJECT
-  STREAK
-  HOMEWORK
-  ACHIEVEMENT
-  MANUAL
-}
-
-model AchievementDef {
-  id           String            @id @default(cuid())
-  slug         String            @unique
-  title        String
-  description  String            @db.Text
-  icon         String
-  metric       AchievementMetric
-  threshold    Int
-  rewardItemId String?
-  isActive     Boolean           @default(true)
-  sortOrder    Int               @default(0)
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-
-  rewardItem        RewardItem?        @relation("AchievementReward", fields: [rewardItemId], references: [id], onDelete: SetNull)
-  childAchievements ChildAchievement[]
-
-  @@index([isActive, sortOrder])
-}
-
-enum AchievementMetric {
-  LESSONS_COMPLETED
-  TOTAL_XP
-  STREAK
-}
-
-model ChildAchievement {
-  id             String   @id @default(cuid())
-  childId        String
-  achievementId  String
-  sourceLessonId String?
-  unlockedAt     DateTime @default(now())
-
-  child        ChildProfile   @relation(fields: [childId], references: [id], onDelete: Cascade)
-  achievement  AchievementDef @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-  sourceLesson Lesson?        @relation("AchievementSourceLesson", fields: [sourceLessonId], references: [id], onDelete: SetNull)
-
-  @@unique([childId, achievementId])
-  @@index([childId, unlockedAt])
-}
-
-model RewardItem {
-  id          String     @id @default(cuid())
-  slug        String     @unique
-  title       String
-  description String?    @db.Text
-  icon        String
-  kind        RewardKind
-  metadata    Json?
-  isActive    Boolean    @default(true)
-  sortOrder   Int        @default(0)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  achievementDefs AchievementDef[]  @relation("AchievementReward")
-  childRewards    ChildRewardItem[]
-
-  @@index([kind, isActive, sortOrder])
-}
-
-enum RewardKind {
-  BACKGROUND
-  FRAME
-  COSTUME
-  EFFECT
-  ROOM_ITEM
-  LOCATION
-  EMOTION
-  ARTIFACT
-}
-
-model ChildRewardItem {
-  id           String    @id @default(cuid())
-  childId      String
-  rewardItemId String
-  childAssetId String?
-  source       String    @default("achievement")
-  acquiredAt   DateTime  @default(now())
-  equippedAt   DateTime?
-
-  child      ChildProfile @relation(fields: [childId], references: [id], onDelete: Cascade)
-  rewardItem RewardItem   @relation(fields: [rewardItemId], references: [id], onDelete: Cascade)
-  childAsset ChildAsset?  @relation(fields: [childAssetId], references: [id], onDelete: SetNull)
-
-  @@unique([childId, rewardItemId])
-  @@index([childId, acquiredAt])
-  @@index([childAssetId])
 }
 
 enum MessengerType {
@@ -916,19 +57,19 @@ enum MessengerType {
 
 // === Каталог услуг ===
 model Service {
-  id             String         @id @default(cuid())
-  slug           String         @unique
+  id             String  @id @default(cuid())
+  slug           String  @unique
   title          String
-  description    String         @db.Text
+  description    String  @db.Text
   shortDesc      String
   category       String
   priceTokens    Int
   costUsd        Float
   coverImage     String?
   galleryImages  String[]
-  isActive       Boolean        @default(true)
-  isFeatured     Boolean        @default(false)
-  sortOrder      Int            @default(0)
+  isActive       Boolean         @default(true)
+  isFeatured     Boolean         @default(false)
+  sortOrder      Int             @default(0)
   aiProvider     String?
   aiModel        String?
   aiConfig       Json?
@@ -1036,10 +177,10 @@ model Project {
   completedAt DateTime?
   expiresAt   DateTime?
 
-  user         User          @relation(fields: [userId], references: [id])
-  service      Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  trend        Trend?        @relation(fields: [trendId], references: [id], onDelete: SetNull)
-  aiUsageLogs  AIUsageLog[]
+  user        User         @relation(fields: [userId], references: [id])
+  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  trend       Trend?       @relation(fields: [trendId], references: [id], onDelete: SetNull)
+  aiUsageLogs AIUsageLog[]
   chatMessages ChatMessage[]
 
   @@index([userId, mode])
@@ -1047,11 +188,11 @@ model Project {
 }
 
 model Chat {
-  id        String    @id @default(uuid())
+  id        String   @id @default(uuid())
   userId    String
   title     String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1066,7 +207,7 @@ model ChatMessage {
   chatId    String
   createdAt DateTime @default(now())
 
-  prompt      String  @db.Text
+  prompt      String @db.Text
   modelSlug   String
   aspectRatio String?
   duration    Int?
@@ -1089,8 +230,8 @@ model SupportTicket {
   resolvedAt   DateTime?
   resolvedById String?
 
-  user       User             @relation("SupportTicketOwner", fields: [userId], references: [id], onDelete: Cascade)
-  resolvedBy User?            @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  user       User                 @relation("SupportTicketOwner", fields: [userId], references: [id], onDelete: Cascade)
+  resolvedBy User?                @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
   messages   SupportMessage[]
 
   @@index([userId, updatedAt])
@@ -1259,7 +400,6 @@ enum PaymentStatus {
 enum PaymentPurpose {
   TOPUP
   ORDER
-  LESSON_PACKAGE
 }
 
 // === AI-персонажи ===
@@ -1526,12 +666,12 @@ model MediaAsset {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  kind          String
-  groupCode     String?
-  title         String
-  description   String?
-  tags          String[]
-  ownerUserId   String?
+  kind        String
+  groupCode   String?
+  title       String
+  description String?
+  tags        String[]
+  ownerUserId String?
   parentAssetId String?
 
   storageKey   String
@@ -1548,15 +688,9 @@ model MediaAsset {
   isActive  Boolean @default(true)
   sortOrder Int     @default(0)
 
-  // Метаданные генерации Academy A5 (null у legacy/ручных ассетов).
-  generationModel   String?
-  generationPrompt  String? @db.Text
-  generationCostUsd Float   @default(0)
-  generationParams  Json?
-
-  owner       User?        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  parentAsset MediaAsset?  @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)
-  variations  MediaAsset[] @relation("MediaAssetVariations")
+  owner User? @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  parentAsset MediaAsset? @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  variations MediaAsset[] @relation("MediaAssetVariations")
 
   @@index([kind])
   @@index([kind, groupCode])

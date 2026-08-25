@@ -35,7 +35,7 @@ export function LoginForm() {
     try {
       const { user } = await loginMutation({ ...values, captchaToken: captcha.token || undefined }).unwrap();
       dispatch(setUser(user));
-      router.push(params.get('redirect') ?? '/');
+      router.push(params.get('redirect') ?? '/dashboard');
     } catch {
       captcha.reset();
       // ошибка в apiError

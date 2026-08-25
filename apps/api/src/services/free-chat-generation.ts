@@ -311,20 +311,10 @@ async function refundQueuedProject(projectId: string, userId: string, tokensCost
   });
 }
 
-/** Списание из изолированного бюджета нейролаборатории урока (не из кошелька семьи). */
-export interface LabBilling {
-  kind: 'lesson-lab';
-  lessonId: string;
-  videoAllowed: boolean;
-}
-
-export async function createFreeChatProject(userId: string, rawBody: unknown, billing?: LabBilling) {
+export async function createFreeChatProject(userId: string, rawBody: unknown) {
   const body = chatMessageSchema.parse(rawBody);
   const model = getChatModel(body.modelSlug);
   if (!model) throw new HttpError(400, 'UNKNOWN_CHAT_MODEL', 'Модель недоступна в Allvision AI');
-  if (billing?.kind === 'lesson-lab' && !billing.videoAllowed && model.category === 'video') {
-    throw new HttpError(400, 'VIDEO_NOT_ALLOWED', 'В этой лаборатории доступны только модели картинок');
-  }
 
   const prompt = (body.prompt ?? '').trim();
   if (model.requiresPrompt && prompt.length === 0) {
@@ -438,27 +428,15 @@ export async function createFreeChatProject(userId: string, rawBody: unknown, bi
   let project;
   try {
     project = await prisma.$transaction(async (tx) => {
-      let balanceAfter = 0;
-      if (billing?.kind === 'lesson-lab') {
-        // Списываем из бюджета урока; кошелёк семьи не трогаем.
-        const lesson = await tx.lesson.findUnique({ where: { id: billing.lessonId }, select: { labTokensGranted: true, labTokensSpent: true } });
-        const remaining = (lesson?.labTokensGranted ?? 0) - (lesson?.labTokensSpent ?? 0);
-        if (!lesson?.labTokensGranted || remaining < tokensCost) {
-          throw new HttpError(402, 'INSUFFICIENT_LAB_TOKENS', 'В лаборатории урока не хватает токенов');
-        }
-        await tx.lesson.update({ where: { id: billing.lessonId }, data: { labTokensSpent: { increment: tokensCost } } });
-      } else {
-        const user = await tx.user.update({
-          where: { id: userId, tokenBalance: { gte: tokensCost } },
-          data: { tokenBalance: { decrement: tokensCost } },
-          select: { tokenBalance: true },
-        });
-        balanceAfter = user.tokenBalance;
-      }
+      const user = await tx.user.update({
+        where: { id: userId, tokenBalance: { gte: tokensCost } },
+        data: { tokenBalance: { decrement: tokensCost } },
+        select: { tokenBalance: true },
+      });
       const created = await tx.project.create({
         data: {
           userId,
-          mode: billing?.kind === 'lesson-lab' ? 'lesson-lab' : 'free-chat',
+          mode: 'free-chat',
           title: prompt ? titleFromPrompt(prompt) : `Чат: ${model.functionTitle}`,
           status: 'PENDING',
           progress: 0,
@@ -484,7 +462,6 @@ export async function createFreeChatProject(userId: string, rawBody: unknown, bi
               audioInputRef: audioInput?.ref,
               inputPreviewUrl: input?.publicUrl,
             }),
-            ...(billing?.kind === 'lesson-lab' ? { labLessonId: billing.lessonId } : {}),
           } as Prisma.InputJsonValue,
           stepProgress: stepProgress as Prisma.InputJsonValue,
         },
@@ -499,21 +476,18 @@ export async function createFreeChatProject(userId: string, rawBody: unknown, bi
           title: true,
         },
       });
-      if (billing?.kind !== 'lesson-lab') {
-        await tx.tokenTransaction.create({
-          data: {
-            reason: 'free_chat',
-            amount: -tokensCost,
-            balanceAfter,
-            refId: created.id,
-            userId,
-          },
-        });
-      }
+      await tx.tokenTransaction.create({
+        data: {
+          reason: 'free_chat',
+          amount: -tokensCost,
+          balanceAfter: user.tokenBalance,
+          refId: created.id,
+          userId,
+        },
+      });
       return created;
     });
   } catch (err) {
-    if (err instanceof HttpError) throw err;
     if (isPrismaNotFound(err)) {
       throw new HttpError(402, 'INSUFFICIENT_TOKENS', 'Недостаточно токенов');
     }
@@ -524,11 +498,7 @@ export async function createFreeChatProject(userId: string, rawBody: unknown, bi
     await queues.addServicePipelineJob({ projectId: project.id, userId, mode: 'production' });
   } catch (err) {
     logger.error(`Failed to enqueue free-chat project ${project.id}`, err);
-    if (billing?.kind === 'lesson-lab') {
-      await prisma.lesson.update({ where: { id: billing.lessonId }, data: { labTokensSpent: { decrement: tokensCost } } }).catch(() => undefined);
-    } else {
-      await refundQueuedProject(project.id, userId, tokensCost);
-    }
+    await refundQueuedProject(project.id, userId, tokensCost);
     throw new HttpError(503, 'QUEUE_UNAVAILABLE', 'Очередь задач недоступна');
   }
 

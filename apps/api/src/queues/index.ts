@@ -3,9 +3,6 @@ import IORedis, { type Redis } from 'ioredis';
 import {
   QUEUE_NAMES,
   type CharacterNsfwJobData,
-  type CharacterProfileJobData,
-  type AcademyGenerationJobData,
-  type AcademyDeletionJobData,
   type EpisodeJobData,
   type FairyTaleJobData,
   type ProjectJobData,
@@ -79,40 +76,6 @@ export async function addServicePipelineJob(data: ServicePipelineJobData, opts?:
     data,
     {
       attempts: 1,
-      ...opts,
-    },
-  );
-}
-
-export async function addCharacterProfileJob(data: CharacterProfileJobData, opts?: JobsOptions) {
-  return getQueue(QUEUE_NAMES.CHARACTER_PROFILE).add(
-    QUEUE_NAMES.CHARACTER_PROFILE,
-    data,
-    {
-      attempts: 1,
-      ...opts,
-    },
-  );
-}
-
-export async function addAcademyGenerationJob(data: AcademyGenerationJobData, opts?: JobsOptions) {
-  return getQueue(QUEUE_NAMES.ACADEMY_GENERATION).add(
-    QUEUE_NAMES.ACADEMY_GENERATION,
-    data,
-    {
-      attempts: 1,
-      ...opts,
-    },
-  );
-}
-
-export async function addAcademyDeletionJob(data: AcademyDeletionJobData, opts?: JobsOptions) {
-  return getQueue(QUEUE_NAMES.ACADEMY_DELETION).add(
-    QUEUE_NAMES.ACADEMY_DELETION,
-    data,
-    {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 3000 },
       ...opts,
     },
   );

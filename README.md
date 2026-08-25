@@ -1,4 +1,4 @@
-# Allvision Academy
+# Allvision Studio
 
 Веб-сервис для AI-генерации медиа. Монорепо: Next.js (web) + Express (api) + BullMQ (worker) + Prisma/Postgres + Redis.
 

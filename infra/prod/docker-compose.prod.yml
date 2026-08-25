@@ -42,8 +42,6 @@ services:
       GIT_SHA: ${GIT_SHA:-local}
     volumes:
       - /opt/allvision-studio/shared/uploads:/app/uploads
-      # Academy: закрытое хранилище фото детей — только api, nginx его НЕ раздаёт
-      - /opt/allvision-studio/shared/private-uploads:/app/private-uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4000/api/ready || exit 1"]
       interval: 30s
@@ -69,8 +67,6 @@ services:
       GIT_SHA: ${GIT_SHA:-local}
     volumes:
       - /opt/allvision-studio/shared/uploads:/app/uploads
-      # Academy: worker читает фото детей и пишет референсы персонажа (закрытое хранилище)
-      - /opt/allvision-studio/shared/private-uploads:/app/private-uploads
 
   web:
     image: allvision-studio-web:${IMAGE_TAG:-local}
@@ -104,24 +100,6 @@ services:
       interval: 30s
       timeout: 5s
       start_period: 30s
-      retries: 5
-
-  # Видеосвязь урока (A8). host-network: WebRTC-медиа идёт напрямую на публичный IP,
-  # сигналинг проксирует ХОСТОВЫЙ nginx по пути /livekit (см. docs/LIVEKIT.md).
-  livekit:
-    image: livekit/livekit-server:v1.8
-    container_name: allvision-studio-livekit
-    restart: unless-stopped
-    network_mode: host
-    command: --config /etc/livekit.yaml
-    environment:
-      LIVEKIT_KEYS: ${LIVEKIT_KEYS}
-    volumes:
-      - ./livekit.yaml:/etc/livekit.yaml:ro
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 5s
       retries: 5
 
   nginx:

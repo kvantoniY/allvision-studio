@@ -1,19 +1,17 @@
 import type { Metadata } from 'next';
 import { LegalDocument } from '@/components/legal/LegalDocument';
 import { offerSections } from '@/lib/legal-docs';
-import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = pageMetadata({
+export const metadata: Metadata = {
   title: 'Публичная оферта',
-  description: 'Публичная оферта Allvision Academy: индивидуальные онлайн-занятия, пакеты, запись, отмена и возвраты.',
-  path: '/offer',
-});
+  description: 'Публичная оферта Allvision Studio: предмет договора, оплата, доставка результата, возвраты и форс-мажор.',
+};
 
 export default function OfferPage() {
   return (
     <LegalDocument
       title="Публичная оферта"
-      description="Условия индивидуальных онлайн-занятий для детей, покупки пакетов, записи, отмены и возврата."
+      description="Условия оказания услуг по генерации, обработке и созданию цифрового медиа-контента."
       sections={offerSections}
     />
   );

@@ -16,15 +16,6 @@ import { userChatsRouter } from './user/chats';
 import { userEventsRouter } from './user/events';
 import { adminRouter } from './admin';
 import { adminReadonlyRouter } from './admin-readonly';
-import { familyRouter } from './family';
-import { academyCurriculumRouter } from './academy-curriculum';
-import { academyProgressRouter } from './academy-progress';
-import { academyBookingRouter } from './academy-booking';
-import { academyMaterialsRouter } from './academy-materials';
-import { academyLessonTemplatesRouter } from './academy-lesson-templates';
-import { academyLessonInstancesRouter } from './academy-lesson-instances';
-import { academyGamificationRouter } from './academy-gamification';
-import { academyOperationsRouter } from './academy-operations';
 
 export const router = Router();
 
@@ -46,13 +37,3 @@ router.use('/user/chats', userChatsRouter);
 router.use('/user/events', userEventsRouter);
 router.use('/admin', adminRouter);
 router.use('/admin-readonly', adminReadonlyRouter);
-// Academy (реворк A1+)
-router.use('/family', familyRouter);
-router.use('/academy/curriculum', academyCurriculumRouter);
-router.use('/academy/progress', academyProgressRouter);
-router.use('/academy', academyBookingRouter);
-router.use('/academy/materials', academyMaterialsRouter);
-router.use('/academy/lesson-templates', academyLessonTemplatesRouter);
-router.use('/academy/lesson-instances', academyLessonInstancesRouter);
-router.use('/academy/gamification', academyGamificationRouter);
-router.use('/academy/operations', academyOperationsRouter);

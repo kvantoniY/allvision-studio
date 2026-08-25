@@ -377,7 +377,7 @@ publicRouter.get('/settings/public', async (_req: Request, res: Response<PublicS
     const settings: PublicSettings = {
       supportTelegram: '@allvision_support',
       supportEmail: 'allvision_ai@internet.ru',
-      companyName: 'Allvision Academy',
+      companyName: 'Allvision Studio',
       fairyTaleTierBasicPrice: '4990',
       fairyTaleTierExtendedPrice: '7990',
       cartoonBaseRatePerMinute: '3000',
@@ -400,125 +400,6 @@ publicRouter.post('/contact', requireCaptcha(), async (req: Request, res: Respon
     const data = contactSchema.parse(req.body);
     logger.info('Public contact request received', data);
     res.status(202).json({ ok: true });
-  } catch (e) {
-    next(e);
-  }
-});
-
-// === Academy: витрина преподавателей и программ (для лендинга и карточки профиля) ===
-// Публично отдаём только то, что преподаватель сам показывает родителям:
-// имя, фото, био, предметы и число проведённых занятий. Почты и id пользователя нет.
-
-publicRouter.get('/academy/teachers', async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const teachers = await prisma.teacherProfile.findMany({
-      where: { isActive: true },
-      include: { user: { select: { name: true, email: true } } },
-      orderBy: { createdAt: 'asc' },
-      take: 24,
-    });
-    const completed = new Map(
-      (await prisma.lesson.groupBy({
-        by: ['teacherId'],
-        where: { status: { in: ['COMPLETED', 'REPORT_SENT'] } },
-        _count: { _all: true },
-      })).map((row) => [row.teacherId, row._count._all]),
-    );
-    const courseIds = [...new Set(teachers.flatMap((t) => t.courseIds))];
-    const courses = courseIds.length > 0
-      ? await prisma.course.findMany({
-        where: { id: { in: courseIds }, isActive: true },
-        select: { id: true, title: true, subject: { select: { title: true } } },
-      })
-      : [];
-    const courseById = new Map(courses.map((c) => [c.id, { id: c.id, title: c.title, subjectTitle: c.subject.title }]));
-
-    res.json({
-      teachers: teachers.map((t) => ({
-        teacherId: t.id,
-        name: t.user.name ?? t.user.email.split('@')[0],
-        bio: t.bio,
-        photoUrl: t.photoUrl,
-        subjects: t.subjects,
-        lessonsCount: t.lessonsManual ?? completed.get(t.id) ?? 0,
-        courses: t.courseIds.map((id) => courseById.get(id)).filter(Boolean),
-      })),
-    });
-  } catch (e) {
-    next(e);
-  }
-});
-
-publicRouter.get('/academy/teachers/:teacherId', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const teacher = await prisma.teacherProfile.findFirst({
-      where: { id: req.params.teacherId, isActive: true },
-      include: { user: { select: { name: true, email: true } } },
-    });
-    if (!teacher) throw new HttpError(404, 'TEACHER_NOT_FOUND', 'Преподаватель не найден');
-    const completed = await prisma.lesson.count({
-      where: { teacherId: teacher.id, status: { in: ['COMPLETED', 'REPORT_SENT'] } },
-    });
-    const courses = teacher.courseIds.length > 0
-      ? await prisma.course.findMany({
-        where: { id: { in: teacher.courseIds }, isActive: true },
-        select: { id: true, title: true, level: true, subject: { select: { title: true } } },
-      })
-      : [];
-    // Есть ли у преподавателя свободные слоты — от этого зависит CTA «Записаться».
-    const freeSlots = await prisma.teacherSlot.count({
-      where: { teacherId: teacher.id, isBooked: false, startsAt: { gt: new Date() } },
-    });
-
-    res.json({
-      teacherId: teacher.id,
-      name: teacher.user.name ?? teacher.user.email.split('@')[0],
-      bio: teacher.bio,
-      photoUrl: teacher.photoUrl,
-      subjects: teacher.subjects,
-      lessonsCount: teacher.lessonsManual ?? completed,
-      freeSlots,
-      courses: courses.map((c) => ({ id: c.id, title: c.title, level: c.level, subjectTitle: c.subject.title })),
-    });
-  } catch (e) {
-    next(e);
-  }
-});
-
-publicRouter.get('/academy/programs', async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const subjects = await prisma.subject.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      include: {
-        courses: {
-          where: { isActive: true },
-          orderBy: { sortOrder: 'asc' },
-          select: {
-            id: true, title: true, level: true, ageMin: true, ageMax: true, description: true,
-            _count: { select: { modules: true } },
-          },
-        },
-      },
-    });
-    res.json({
-      subjects: subjects
-        .filter((s) => s.courses.length > 0)
-        .map((s) => ({
-          id: s.id,
-          title: s.title,
-          description: s.description,
-          courses: s.courses.map((c) => ({
-            id: c.id,
-            title: c.title,
-            level: c.level,
-            ageMin: c.ageMin,
-            ageMax: c.ageMax,
-            description: c.description,
-            moduleCount: c._count.modules,
-          })),
-        })),
-    });
   } catch (e) {
     next(e);
   }

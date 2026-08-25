@@ -1,13 +1,12 @@
 import { Suspense } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ResetPasswordForm } from '@/components/auth/ResetPasswordForm';
 
 export default function ResetPasswordPage() {
   return (
-    <Card className="border-border shadow-sm">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-2xl">Новый пароль</CardTitle>
-        <CardDescription>Придумайте новый пароль для входа в кабинет.</CardDescription>
+        <CardTitle>Новый пароль</CardTitle>
       </CardHeader>
       <CardContent>
         <Suspense>

@@ -10,14 +10,12 @@ import { adminDiagnosticsRouter } from './diagnostics';
 import { adminMonitoringRouter } from './monitoring';
 import { adminSettingsRouter } from './settings';
 import { adminUsersRouter } from './users';
-import { adminTeachersRouter } from './teachers';
 import { adminProjectsRouter } from './projects';
 import { adminSupportRouter } from './support';
 import { adminStylePresetsRouter } from './style-presets';
 import { adminHomePageRouter } from './home-page';
 import { adminPaymentsRouter } from './payments';
 import { adminTokenPackagesRouter } from './token-packages';
-import { adminPayoutsRouter } from './payouts';
 
 export const adminRouter = Router();
 
@@ -26,11 +24,9 @@ adminRouter.use('/diagnostics', adminDiagnosticsRouter);
 adminRouter.use('/monitoring', adminMonitoringRouter);
 adminRouter.use('/settings', adminSettingsRouter);
 adminRouter.use('/users', adminUsersRouter);
-adminRouter.use('/teachers', adminTeachersRouter);
 adminRouter.use('/projects', adminProjectsRouter);
 adminRouter.use('/payments', adminPaymentsRouter);
 adminRouter.use('/token-packages', adminTokenPackagesRouter);
-adminRouter.use('/payouts', adminPayoutsRouter);
 adminRouter.use('/support', adminSupportRouter);
 adminRouter.use('/', adminUsageRouter);
 adminRouter.use('/services', adminServicesRouter);

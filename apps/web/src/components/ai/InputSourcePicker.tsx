@@ -130,7 +130,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
           type="button"
           variant="outline"
           size={iconOnly ? 'icon' : compact ? 'sm' : 'default'}
-          className={cn('border-border', iconOnly ? 'h-8 w-8 bg-background' : compact ? 'h-8 bg-background' : 'bg-card')}
+          className={cn('border-slate-700', iconOnly ? 'h-8 w-8 bg-slate-950' : compact ? 'h-8 bg-slate-950' : 'bg-slate-900')}
           onClick={() => setOpen(true)}
           title={buttonLabel}
           aria-label={buttonLabel}
@@ -140,20 +140,20 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
         </Button>
         )}
         {value && !compact && !hideTrigger && (
-          <div className="flex min-w-0 items-center gap-3 rounded-md border border-border bg-card p-2">
-            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-background">
+          <div className="flex min-w-0 items-center gap-3 rounded-md border border-slate-800 bg-slate-900 p-2">
+            <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded bg-slate-950">
               {value.mediaKind === 'image' ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={value.url} alt="" className="h-full w-full object-cover" />
               ) : value.mediaKind === 'video' ? (
                 <video src={value.url} className="h-full w-full object-cover" muted />
               ) : (
-                <div className="grid h-full w-full place-items-center text-[10px] text-muted-foreground">AUDIO</div>
+                <div className="grid h-full w-full place-items-center text-[10px] text-slate-400">AUDIO</div>
               )}
             </div>
             <div className="min-w-0">
-              <div className="truncate text-sm text-foreground">{value.title}</div>
-              <div className="text-xs text-muted-foreground">{value.origin === 'studio' ? 'Мои материалы' : value.origin === 'site' ? 'Библиотека Академии' : value.origin === 'result' ? 'Результат чата' : 'Загрузка'}</div>
+              <div className="truncate text-sm text-slate-100">{value.title}</div>
+              <div className="text-xs text-slate-500">{value.origin === 'studio' ? 'Студия' : value.origin === 'site' ? 'Библиотека сайта' : value.origin === 'result' ? 'Результат чата' : 'Загрузка'}</div>
             </div>
             <Button type="button" variant="ghost" size="icon" onClick={() => onChange(null)}>
               <X className="h-4 w-4" />
@@ -164,30 +164,30 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
 
       {open && typeof document !== 'undefined' && createPortal((
         <div className="fixed inset-0 z-[200] grid min-h-dvh place-items-center overflow-y-auto bg-black/75 p-4" role="dialog" aria-modal="true">
-          <Card className="max-h-[calc(100dvh-2rem)] w-full max-w-4xl overflow-hidden border-border bg-card">
+          <Card className="max-h-[calc(100dvh-2rem)] w-full max-w-4xl overflow-hidden border-slate-800 bg-slate-900">
             <CardContent className="p-0">
-              <div className="flex items-center justify-between border-b border-border p-4">
+              <div className="flex items-center justify-between border-b border-slate-800 p-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-foreground">{slotLabel ? `Референс: ${slotLabel}` : 'Выбор референса'}</h3>
-                  <p className="text-sm text-muted-foreground">{mediaKind === 'image' ? 'Изображение для модели' : mediaKind === 'video' ? 'Видео для модели' : 'Аудио для модели'}</p>
+                  <h3 className="text-lg font-semibold text-white">{slotLabel ? `Референс: ${slotLabel}` : 'Выбор референса'}</h3>
+                  <p className="text-sm text-slate-500">{mediaKind === 'image' ? 'Изображение для модели' : mediaKind === 'video' ? 'Видео для модели' : 'Аудио для модели'}</p>
                 </div>
                 <Button type="button" variant="ghost" size="icon" onClick={() => setOpen(false)}>
                   <X className="h-4 w-4" />
                 </Button>
               </div>
 
-              <div className="flex flex-wrap gap-2 border-b border-border p-4">
+              <div className="flex flex-wrap gap-2 border-b border-slate-800 p-4">
                 {[
                   { id: 'upload' as const, label: 'Загрузить с компьютера' },
-                  { id: 'studio' as const, label: 'Из моих материалов' },
-                  { id: 'site' as const, label: 'Из библиотеки Академии' },
+                  { id: 'studio' as const, label: 'Из моей Студии' },
+                  { id: 'site' as const, label: 'Из библиотеки сайта' },
                 ].map((item) => (
                   <Button
                     key={item.id}
                     type="button"
                     variant={tab === item.id ? 'default' : 'outline'}
                     onClick={() => setTab(item.id)}
-                    className={cn(tab === item.id && 'bg-primary hover:bg-primary')}
+                    className={cn(tab === item.id && 'bg-violet-600 hover:bg-violet-500')}
                   >
                     {item.label}
                   </Button>
@@ -196,10 +196,10 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
 
               <div className="max-h-[calc(100dvh-220px)] overflow-y-auto p-4">
                 {tab === 'upload' && (
-                  <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border bg-background p-8 text-center transition hover:border-primary">
-                    {uploadState.isLoading ? <Loader2 className="h-8 w-8 animate-spin text-primary" /> : <Upload className="h-8 w-8 text-primary" />}
-                    <span className="mt-3 font-medium text-foreground">Выберите файл</span>
-                    <span className="mt-1 text-sm text-muted-foreground">
+                  <label className="flex min-h-56 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-950 p-8 text-center transition hover:border-violet-500">
+                    {uploadState.isLoading ? <Loader2 className="h-8 w-8 animate-spin text-violet-300" /> : <Upload className="h-8 w-8 text-violet-300" />}
+                    <span className="mt-3 font-medium text-slate-100">Выберите файл</span>
+                    <span className="mt-1 text-sm text-slate-500">
                       {mediaKind === 'image' ? 'JPEG, PNG или WebP до 25 МБ' : mediaKind === 'video' ? 'MP4 или MOV до 25 МБ' : 'MP3, WAV или OGG до 25 МБ'}
                     </span>
                     <Input type="file" accept={fileAccept(mediaKind)} className="sr-only" onChange={changeFile} />
@@ -208,7 +208,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
 
                 {tab === 'studio' && (
                   <AssetGrid
-                    emptyText={mediaKind === 'image' ? 'В личной медиатеке пока нет аватаров или локаций.' : 'Личная медиатека пока хранит только изображения.'}
+                    emptyText={mediaKind === 'image' ? 'В Студии пока нет аватаров или локаций.' : 'Личная Студия пока хранит только изображения.'}
                     items={studioItems.map((asset) => ({
                       id: asset.id,
                       ref: `asset:${asset.id}`,
@@ -227,7 +227,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
 
                 {tab === 'site' && (
                   <AssetGrid
-                    emptyText="В библиотеке Академии нет подходящих файлов."
+                    emptyText="В библиотеке сайта нет подходящих файлов."
                     items={(publicAssets.data?.assets ?? []).map((asset) => ({
                       id: asset.id,
                       ref: `asset:${asset.id}`,
@@ -273,7 +273,7 @@ function AssetGrid({
 }) {
   if (items.length === 0) {
     return (
-      <div className="grid min-h-56 place-items-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+      <div className="grid min-h-56 place-items-center rounded-lg border border-dashed border-slate-800 text-sm text-slate-500">
         {emptyText}
       </div>
     );
@@ -286,22 +286,22 @@ function AssetGrid({
           key={item.id}
           type="button"
           onClick={() => onSelect(item)}
-          className="overflow-hidden rounded-md border border-border bg-background text-left transition hover:border-primary"
+          className="overflow-hidden rounded-md border border-slate-800 bg-slate-950 text-left transition hover:border-violet-500"
         >
-          <div className="relative aspect-square bg-card">
+          <div className="relative aspect-square bg-slate-900">
             {item.mediaKind === 'image' ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={item.url} alt="" className="h-full w-full object-cover" />
             ) : item.mediaKind === 'video' ? (
               <video src={item.fullUrl} className="h-full w-full object-cover" muted />
             ) : (
-              <div className="grid h-full w-full place-items-center text-xs text-muted-foreground">AUDIO</div>
+              <div className="grid h-full w-full place-items-center text-xs text-slate-400">AUDIO</div>
             )}
-            <Badge className="absolute left-2 top-2 bg-card text-foreground">{item.badge}</Badge>
+            <Badge className="absolute left-2 top-2 bg-slate-950/80 text-slate-100">{item.badge}</Badge>
           </div>
           <div className="flex items-center gap-2 p-3">
-            <ImageIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <div className="truncate text-sm text-foreground">{item.title}</div>
+            <ImageIcon className="h-4 w-4 shrink-0 text-slate-500" />
+            <div className="truncate text-sm text-slate-100">{item.title}</div>
           </div>
         </button>
       ))}

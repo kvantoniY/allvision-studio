@@ -16,9 +16,9 @@ export function DashboardSidebarMobile() {
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="academy-theme w-72 bg-card p-0 text-foreground">
-        <SheetHeader className="border-b border-border p-4">
-          <SheetTitle>Allvision Academy</SheetTitle>
+      <SheetContent side="left" className="w-72 p-0">
+        <SheetHeader className="border-b border-slate-800 p-4">
+          <SheetTitle>Allvision Studio</SheetTitle>
         </SheetHeader>
         <DashboardSidebarContent onNavigate={() => setOpen(false)} />
       </SheetContent>

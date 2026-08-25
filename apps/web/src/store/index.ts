@@ -20,7 +20,6 @@ import { adminDiagnosticsApi } from './api/admin-diagnostics-api';
 import { adminMonitoringApi } from './api/admin-monitoring-api';
 import { adminSettingsApi } from './api/admin-settings-api';
 import { adminUsersApi } from './api/admin-users-api';
-import { adminTeachersApi } from './api/admin-teachers-api';
 import { adminProjectsApi } from './api/admin-projects-api';
 import { adminPaymentsApi } from './api/admin-payments-api';
 import { adminSupportApi } from './api/admin-support-api';
@@ -29,15 +28,6 @@ import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
 import { userChatApi } from './api/user-chat-api';
 import { supportApi } from './api/support-api';
-import { familyApi } from './api/family-api';
-import { adminCurriculumApi } from './api/admin-curriculum-api';
-import { academyBookingApi } from './api/academy-booking-api';
-import { academyMaterialsApi } from './api/academy-materials-api';
-import { academyLessonTemplatesApi } from './api/academy-lesson-templates-api';
-import { academyLessonInstancesApi } from './api/academy-lesson-instances-api';
-import { academyGamificationApi } from './api/academy-gamification-api';
-import { academyOperationsApi } from './api/academy-operations-api';
-import { adminPayoutsApi } from './api/admin-payouts-api';
 import { authReducer } from './slices/auth-slice';
 
 export const store = configureStore({
@@ -63,7 +53,6 @@ export const store = configureStore({
     [adminMonitoringApi.reducerPath]: adminMonitoringApi.reducer,
     [adminSettingsApi.reducerPath]: adminSettingsApi.reducer,
     [adminUsersApi.reducerPath]: adminUsersApi.reducer,
-    [adminTeachersApi.reducerPath]: adminTeachersApi.reducer,
     [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
     [adminPaymentsApi.reducerPath]: adminPaymentsApi.reducer,
     [adminSupportApi.reducerPath]: adminSupportApi.reducer,
@@ -72,15 +61,6 @@ export const store = configureStore({
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
     [userChatApi.reducerPath]: userChatApi.reducer,
     [supportApi.reducerPath]: supportApi.reducer,
-    [familyApi.reducerPath]: familyApi.reducer,
-    [adminCurriculumApi.reducerPath]: adminCurriculumApi.reducer,
-    [academyBookingApi.reducerPath]: academyBookingApi.reducer,
-    [academyMaterialsApi.reducerPath]: academyMaterialsApi.reducer,
-    [academyLessonTemplatesApi.reducerPath]: academyLessonTemplatesApi.reducer,
-    [academyLessonInstancesApi.reducerPath]: academyLessonInstancesApi.reducer,
-    [academyGamificationApi.reducerPath]: academyGamificationApi.reducer,
-    [academyOperationsApi.reducerPath]: academyOperationsApi.reducer,
-    [adminPayoutsApi.reducerPath]: adminPayoutsApi.reducer,
   },
   middleware: (getDefault) =>
     getDefault().concat(
@@ -104,7 +84,6 @@ export const store = configureStore({
       adminMonitoringApi.middleware,
       adminSettingsApi.middleware,
       adminUsersApi.middleware,
-      adminTeachersApi.middleware,
       adminProjectsApi.middleware,
       adminPaymentsApi.middleware,
       adminSupportApi.middleware,
@@ -113,15 +92,6 @@ export const store = configureStore({
       userMediaAssetsApi.middleware,
       userChatApi.middleware,
       supportApi.middleware,
-      familyApi.middleware,
-      adminCurriculumApi.middleware,
-      academyBookingApi.middleware,
-      academyMaterialsApi.middleware,
-      academyLessonTemplatesApi.middleware,
-      academyLessonInstancesApi.middleware,
-      academyGamificationApi.middleware,
-      academyOperationsApi.middleware,
-      adminPayoutsApi.middleware,
     ),
 });
 

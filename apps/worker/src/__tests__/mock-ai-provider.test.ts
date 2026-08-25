@@ -61,29 +61,4 @@ describe('MockAIProvider demo-assets fallback', () => {
       { key: 'outputs/user-1/project-1/step-1/result.mp4', contentType: 'video/mp4' },
     ]);
   });
-
-  it('returns private image output as data URI without touching public storage', async () => {
-    const demoRoot = path.join(workDir, 'demo-assets');
-    const imageDir = path.join(demoRoot, 'photo-restore');
-    fs.mkdirSync(imageDir, { recursive: true });
-    fs.writeFileSync(path.join(imageDir, 'sample.png'), Buffer.from('private-image'));
-    const storage = memoryStorage();
-    const provider = new MockAIProvider({ storageProvider: storage, demoAssetsRoot: demoRoot });
-
-    const result = await provider.falRaw({
-      endpoint: 'fal-ai/birefnet/v2',
-      kind: 'image',
-      falInput: {},
-      context: {
-        projectId: 'private-project',
-        userId: 'teacher-1',
-        blockSlug: 'academy-generation',
-        stepId: 'remove-background',
-        privateOutput: true,
-      },
-    });
-
-    expect(result.outputUrl).toMatch(/^data:image\/png;base64,/);
-    expect(storage.uploads).toEqual([]);
-  });
 });

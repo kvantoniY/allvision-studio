@@ -31,7 +31,7 @@ const ticketListInclude = {
 
 export type SupportActor = {
   id: string;
-  role: import('../utils/jwt').JwtRole;
+  role: 'USER' | 'ADMIN' | 'READONLY_ADMIN';
 };
 
 export type GenerationReportProject = {

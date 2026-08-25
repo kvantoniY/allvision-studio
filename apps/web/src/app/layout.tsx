@@ -15,32 +15,36 @@ const inter = Inter({
 });
 
 const DEFAULT_DESCRIPTION =
-  'Allvision Academy — персональная онлайн-школа для детей: живой преподаватель, AI-персонаж ребёнка и интерактивный урок-приключение. Английский, нейросети и программирование.';
+  'Allvision Studio — AI-фабрика цифровых подарков: оживление и реставрация старых фото, перенос себя в фильм или мультфильм, трендовые видео, карусели для соцсетей, аватары и сказки. Результат за минуты, без промптов.';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: 'Allvision Academy — персональная онлайн-школа для детей',
+    default: 'Allvision Studio — AI-подарки: оживить фото, видео, мультфильмы',
     template: `%s | ${SITE_NAME}`,
   },
   description: DEFAULT_DESCRIPTION,
   applicationName: SITE_NAME,
   keywords: [
-    'онлайн школа для детей',
-    'английский для детей онлайн',
-    'нейросети для детей',
-    'программирование для детей',
-    'персональные уроки с преподавателем',
-    'интерактивное обучение детей',
+    'нейросеть подарок',
+    'оживить старое фото',
+    'реставрация фото нейросеть',
+    'я в фильме нейросеть',
+    'ребёнок в мультфильме',
+    'трендовое видео ИИ',
+    'AI генерация фото и видео',
+    'карусель для поста нейросеть',
     'Allvision',
-    'Allvision Academy',
+    'Allvision Studio',
+    'Allvision AI',
+    'allvision pulse',
   ],
   alternates: {
     canonical: '/',
     languages: { ru: '/' },
   },
   openGraph: {
-    title: 'Allvision Academy — ребёнок в центре урока',
+    title: 'Allvision Studio — AI-фабрика цифровых подарков',
     description: DEFAULT_DESCRIPTION,
     url: SITE_URL,
     siteName: SITE_NAME,
@@ -57,7 +61,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Allvision Academy — ребёнок в центре урока',
+    title: 'Allvision Studio — AI-фабрика цифровых подарков',
     description: DEFAULT_DESCRIPTION,
     images: ['/logo_socialnetwork.png'],
   },
@@ -74,7 +78,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ru">
+    <html lang="ru" className="dark">
       <body className={`${inter.variable} ${inter.className} min-h-screen flex flex-col antialiased`}>
         <ReduxProvider>
           <AppShell>{children}</AppShell>

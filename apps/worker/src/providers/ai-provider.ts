@@ -8,11 +8,6 @@ export interface ProviderRunContext {
   reportProgress?: (percent: number) => Promise<void>;
   // Человекочитаемый этап для админ-консоли (опционально).
   reportStage?: (stage: string) => Promise<void>;
-  /**
-   * Детский результат: не сохранять промежуточную копию в публичный uploads.
-   * Провайдер возвращает временный внешний URL, а процессор сразу пишет байты в private-uploads.
-   */
-  privateOutput?: boolean;
 }
 
 export interface ProviderResult {

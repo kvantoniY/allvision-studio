@@ -1,4 +1,4 @@
-import { Blocks, BookOpenCheck, CalendarClock, Clapperboard, GraduationCap, HandCoins, Home, Library, MessageCircle, ShieldCheck, Sparkles, User, Users } from 'lucide-react';
+import { Grid3X3, Home, LifeBuoy, Palette, Sparkles, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -12,56 +12,14 @@ export type SidebarSection = {
   items: SidebarItem[];
 };
 
-// Academy-навигация (реворк A2.5). Витрина Studio скрыта; «Нейролаборатория» — это
-// AI-чат, будущий инструмент уроков по нейросетям.
 export const SIDEBAR_SECTIONS: SidebarSection[] = [
   {
     items: [
       { href: '/', label: 'Главная', icon: Home },
-      { href: '/family', label: 'Семья', icon: Users },
-      { href: '/lessons', label: 'Занятия', icon: CalendarClock },
-      { href: '/messages', label: 'Сообщения', icon: MessageCircle },
-      { href: '/ai', label: 'Нейролаборатория', icon: Sparkles },
-      { href: '/profile', label: 'Профиль', icon: User },
-    ],
-  },
-];
-
-// Навигация преподавателя (роль TEACHER).
-export const TEACHER_SIDEBAR_SECTIONS: SidebarSection[] = [
-  {
-    items: [
-      { href: '/teacher', label: 'Кабинет', icon: GraduationCap },
-      { href: '/teacher/library', label: 'Материалы', icon: Library },
-      { href: '/messages', label: 'Сообщения', icon: MessageCircle },
-      { href: '/teacher/scene-player', label: 'Плеер сцен', icon: Clapperboard },
-      { href: '/ai', label: 'Нейролаборатория', icon: Sparkles },
-      { href: '/profile', label: 'Профиль', icon: User },
-    ],
-  },
-];
-
-// Навигация методиста (роль METHODIST): программа и конструктор сцен.
-export const METHODIST_SIDEBAR_SECTIONS: SidebarSection[] = [
-  {
-    items: [
-      { href: '/admin/curriculum', label: 'Учебная программа', icon: BookOpenCheck },
-      { href: '/constructor', label: 'Конструктор', icon: Blocks },
-      { href: '/teacher/library', label: 'Материалы', icon: Library },
-      { href: '/ai', label: 'Нейролаборатория', icon: Sparkles },
-      { href: '/profile', label: 'Профиль', icon: User },
-    ],
-  },
-];
-
-export const ADMIN_SIDEBAR_SECTIONS: SidebarSection[] = [
-  {
-    items: [
-      { href: '/', label: 'Главная', icon: Home },
-      { href: '/admin', label: 'Администрирование', icon: ShieldCheck },
-      { href: '/admin/curriculum', label: 'Учебная программа', icon: BookOpenCheck },
-      { href: '/admin/library', label: 'Материалы', icon: Library },
-      { href: '/admin/payouts', label: 'Выплаты', icon: HandCoins },
+      { href: '/ai', label: 'Allvision AI', icon: Sparkles },
+      { href: '/services', label: 'Услуги', icon: Grid3X3 },
+      { href: '/studio', label: 'Студия', icon: Palette },
+      { href: '/support', label: 'Поддержка', icon: LifeBuoy },
       { href: '/profile', label: 'Профиль', icon: User },
     ],
   },
@@ -69,7 +27,5 @@ export const ADMIN_SIDEBAR_SECTIONS: SidebarSection[] = [
 
 export function isActive(itemHref: string, pathname: string): boolean {
   if (itemHref === '/') return pathname === '/';
-  if (itemHref === '/teacher') return pathname === '/teacher';
-  if (itemHref === '/admin') return pathname === '/admin';
   return pathname === itemHref || pathname.startsWith(itemHref + '/');
 }

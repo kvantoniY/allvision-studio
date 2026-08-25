@@ -1,24 +1,18 @@
 import Link from 'next/link';
-import { Suspense } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RegisterForm } from '@/components/auth/RegisterForm';
 
 export default function RegisterPage() {
   return (
-    <Card className="border-border shadow-sm">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-2xl">Создать аккаунт</CardTitle>
-        <CardDescription>
-          Родительский аккаунт: профили детей, согласия, запись на уроки и отчёты.
-        </CardDescription>
+        <CardTitle>Регистрация</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Suspense>
-          <RegisterForm />
-        </Suspense>
-        <div className="text-center text-sm text-muted-foreground">
+        <RegisterForm />
+        <div className="text-sm text-muted-foreground text-center">
           Уже есть аккаунт?{' '}
-          <Link href="/login" className="font-medium text-primary hover:underline">
+          <Link href="/login" className="hover:underline">
             Войти
           </Link>
         </div>

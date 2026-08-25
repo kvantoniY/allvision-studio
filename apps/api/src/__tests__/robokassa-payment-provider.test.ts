@@ -81,14 +81,14 @@ describe('RobokassaPaymentProvider', () => {
     expect(result.confirmationParams?.InvId).toBe('123456');
     expect(Number(result.confirmationParams?.InvId)).toBeLessThanOrEqual(2_147_483_647);
     expect(result.confirmationParams?.IsTest).toBeUndefined();
-    expect(result.confirmationParams?.Description).toBe('Услуги Allvision Academy, пакет Старт');
+    expect(result.confirmationParams?.Description).toBe('Доступ к цифровым услугам Allvision Studio, пакет Старт');
     expect(result.confirmationParams?.ExpirationDate).toBe('2029-01-16T12:00');
 
     const receipt = JSON.parse(decodeURIComponent(result.confirmationParams?.Receipt ?? '')) as {
       items: Array<Record<string, unknown>>;
     };
     expect(receipt.items[0]).toMatchObject({
-      name: 'Услуги Allvision Academy, пакет Старт',
+      name: 'Доступ к цифровым услугам Allvision Studio, пакет Старт',
       quantity: 1,
       sum: 499,
       payment_method: 'full_payment',

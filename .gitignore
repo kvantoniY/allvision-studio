@@ -29,8 +29,6 @@ packages/database/src/generated/
 # User uploads / runtime data
 uploads/
 apps/api/uploads/
-# Academy: закрытое хранилище фото детей (вне /static)
-private-uploads/
 
 # IDE
 .idea/

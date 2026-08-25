@@ -1,19 +1,17 @@
 import type { Metadata } from 'next';
 import { LegalDocument } from '@/components/legal/LegalDocument';
 import { privacySections } from '@/lib/legal-docs';
-import { pageMetadata } from '@/lib/seo';
 
-export const metadata: Metadata = pageMetadata({
+export const metadata: Metadata = {
   title: 'Политика конфиденциальности',
-  description: 'Политика конфиденциальности Allvision Academy: данные родителя и ребёнка, закрытые AI-материалы, доступ, хранение и удаление.',
-  path: '/privacy',
-});
+  description: 'Политика конфиденциальности Allvision Studio: обработка персональных данных по 152-ФЗ, хранение, права пользователя и удаление данных.',
+};
 
 export default function PrivacyPage() {
   return (
     <LegalDocument
       title="Политика конфиденциальности"
-      description="Как Allvision Academy обрабатывает данные родителя и ребёнка, защищает фотографии и AI-материалы и исполняет запросы на удаление."
+      description="Как Allvision Studio собирает, использует, хранит и удаляет персональные данные пользователей."
       sections={privacySections}
     />
   );

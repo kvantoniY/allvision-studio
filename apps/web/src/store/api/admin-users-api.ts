@@ -5,7 +5,7 @@ export type AdminUser = {
   id: string;
   email: string;
   name: string | null;
-  role: 'USER' | 'PARENT' | 'TEACHER' | 'METHODIST' | 'ADMIN' | 'READONLY_ADMIN';
+  role: 'USER' | 'ADMIN' | 'READONLY_ADMIN';
   tokenBalance: number;
   deletedAt: string | null;
   createdAt: string;
@@ -77,14 +77,6 @@ export const adminUsersApi = createApi({
       query: ({ id, ...body }) => ({ url: `/users/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _error, { id }) => ['AdminUser', { type: 'AdminUser', id }],
     }),
-    // Ручная выдача занятий родителю (без оплаты) — для тестовых прогонов и компенсаций.
-    grantLessonCredits: build.mutation<
-      { granted: number; durationMin: number; balance: Array<{ durationMin: number; available: number }> },
-      { id: string; durationMin: 25 | 45; count: number }
-    >({
-      query: ({ id, ...body }) => ({ url: `/users/${id}/lesson-credits`, method: 'POST', body }),
-      invalidatesTags: (_result, _error, { id }) => [{ type: 'AdminUser', id }],
-    }),
   }),
 });
 
@@ -92,5 +84,4 @@ export const {
   useListAdminUsersQuery,
   useGetAdminUserQuery,
   useUpdateAdminUserMutation,
-  useGrantLessonCreditsMutation,
 } = adminUsersApi;

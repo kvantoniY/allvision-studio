@@ -191,7 +191,7 @@ export default function MockPaymentPage() {
                   <div className="mt-5 grid gap-3 text-sm text-slate-600">
                     <div className="flex justify-between gap-4">
                       <span>Продавец</span>
-                      <span className="font-medium text-slate-900">Allvision Academy</span>
+                      <span className="font-medium text-slate-900">Allvision Studio</span>
                     </div>
                     <div className="flex justify-between gap-4">
                       <span>Назначение</span>

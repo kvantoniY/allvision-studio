@@ -2,17 +2,6 @@ import request from 'supertest';
 import { prisma } from '@allvision/database';
 import { app } from '../app';
 
-jest.mock('../queues', () => ({
-  addAcademyDeletionJob: jest.fn().mockResolvedValue({ id: 'account-deletion-job-test' }),
-  addAcademyGenerationJob: jest.fn(),
-  addCharacterProfileJob: jest.fn(),
-  addProjectJob: jest.fn(),
-  addFairyTaleScriptJob: jest.fn(),
-  addCharacterJob: jest.fn(),
-  addEpisodeJob: jest.fn(),
-  addServicePipelineJob: jest.fn(),
-}));
-
 const EMAIL = `acc-${Date.now()}@example.com`;
 const PASSWORD = 'password123';
 const NEW_PASSWORD = 'newpassword456';
@@ -123,21 +112,11 @@ describe('POST /api/account/profile/password', () => {
 });
 
 describe('DELETE /api/account', () => {
-  it('anonymizes user, queues file cleanup and invalidates issued tokens', async () => {
-    const login = await request(app)
-      .post('/api/auth/login')
-      .send({ email: EMAIL, password: NEW_PASSWORD });
-    const issuedCookies = login.headers['set-cookie'] as unknown as string[];
-    const accessToken = issuedCookies.find((cookie) => cookie.startsWith('accessToken='))!
-      .split(';')[0].slice('accessToken='.length);
-    const refreshCookie = issuedCookies.find((cookie) => cookie.startsWith('refreshToken='))!
-      .split(';')[0];
+  it('soft-deletes user and clears cookies', async () => {
     const res = await agent
       .delete('/api/account')
       .send({ password: NEW_PASSWORD, confirmation: 'УДАЛИТЬ' });
-    expect(res.status).toBe(202);
-    expect(res.body.deletion.scope).toBe('ACCOUNT');
-    expect(res.body.deletion.status).toBe('PENDING');
+    expect(res.status).toBe(200);
 
     // /me после удаления должен сказать UNAUTHORIZED — токен ещё валидный, но cookies очищены.
     // А пользователь в БД помечен deletedAt + email освобождён.
@@ -145,14 +124,5 @@ describe('DELETE /api/account', () => {
     expect(after).not.toBeNull();
     expect(after!.deletedAt).not.toBeNull();
     expect(after!.email).not.toBe(EMAIL);
-
-    const staleAccess = await request(app)
-      .get('/api/auth/me')
-      .set('Authorization', `Bearer ${accessToken}`);
-    expect(staleAccess.status).toBe(401);
-    const staleRefresh = await request(app)
-      .post('/api/auth/refresh')
-      .set('Cookie', refreshCookie);
-    expect(staleRefresh.status).toBe(401);
   });
 });

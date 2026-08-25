@@ -9,21 +9,10 @@ export const adminUsersRouter = Router();
 
 adminUsersRouter.use(requireAuth, requireAdmin);
 
-// Роли, назначаемые из админки. Academy-роли обязательны: без TEACHER/METHODIST
-// платформу не запустить (некому вести уроки и вести программу).
-const ACADEMY_ASSIGNABLE_ROLES = [
-  'USER',
-  'PARENT',
-  'TEACHER',
-  'METHODIST',
-  'ADMIN',
-  'READONLY_ADMIN',
-] as const;
-
 const usersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
-  role: z.enum(ACADEMY_ASSIGNABLE_ROLES).optional(),
+  role: z.enum(['USER', 'ADMIN', 'READONLY_ADMIN']).optional(),
   status: z.enum(['active', 'deleted']).optional(),
   search: z.string().trim().min(1).optional(),
 });
@@ -32,7 +21,7 @@ const updateUserSchema = z
   .object({
     tokenBalance: z.coerce.number().int().min(0).optional(),
     tokenBalanceDelta: z.coerce.number().int().optional(),
-    role: z.enum(ACADEMY_ASSIGNABLE_ROLES).optional(),
+    role: z.enum(['USER', 'ADMIN', 'READONLY_ADMIN']).optional(),
     reason: z.string().trim().min(1).max(200).optional(),
   })
   .refine(
@@ -179,42 +168,6 @@ adminUsersRouter.patch('/:id', async (req: Request, res: Response, next: NextFun
     });
 
     res.json({ user: await enrichUserListItem(user) });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// Ручная выдача занятий родителю (source=manual): нужна для тестовых прогонов и
-// компенсаций без реальной оплаты через ЮKassa.
-const grantLessonsSchema = z.object({
-  durationMin: z.union([z.literal(25), z.literal(45)]),
-  count: z.coerce.number().int().min(1).max(50),
-});
-
-adminUsersRouter.post('/:id/lesson-credits', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const { durationMin, count } = grantLessonsSchema.parse(req.body);
-    const user = await prisma.user.findUnique({ where: { id: req.params.id }, select: { id: true } });
-    if (!user) throw new HttpError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
-
-    await prisma.lessonCredit.createMany({
-      data: Array.from({ length: count }, () => ({
-        parentId: user.id,
-        durationMin,
-        source: 'manual',
-      })),
-    });
-
-    const balance = await prisma.lessonCredit.groupBy({
-      by: ['durationMin'],
-      where: { parentId: user.id, consumedAt: null },
-      _count: { _all: true },
-    });
-    res.status(201).json({
-      granted: count,
-      durationMin,
-      balance: balance.map((b) => ({ durationMin: b.durationMin, available: b._count._all })),
-    });
   } catch (err) {
     next(err);
   }

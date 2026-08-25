@@ -19,7 +19,7 @@ function mailFromEmail() {
 }
 
 function mailFromName() {
-  return envText('MAIL_FROM_NAME', 'Allvision Academy');
+  return envText('MAIL_FROM_NAME', 'Allvision Studio');
 }
 
 function unisenderBaseUrl() {
