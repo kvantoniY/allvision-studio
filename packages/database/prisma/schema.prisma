@@ -70,6 +70,10 @@ model Service {
   isActive       Boolean         @default(true)
   isFeatured     Boolean         @default(false)
   sortOrder      Int             @default(0)
+  // Порядок в кураторской вкладке «Популярное» (G1). Меньше — выше.
+  featuredOrder  Int             @default(0)
+  // Сквозные теги поводов витрины (G1): BIRTHDAY, NEW_YEAR, MARCH_8 и т.д.
+  occasionTags   String[]        @default([])
   aiProvider     String?
   aiModel        String?
   aiConfig       Json?
@@ -97,6 +101,8 @@ model Service {
 // === Определения категорий услуг (data-driven, P9.2+) ===
 model ServiceCategoryDef {
   code             String   @id
+  // Вкладка витрины, в которой живёт категория (G1): services | greetings.
+  section          String   @default("services")
   title            String
   description      String?  @db.Text
   shortDescription String?  @db.Text
@@ -267,6 +273,19 @@ model SupportAttachment {
   message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
+}
+
+// === Заявки с заглушек будущих разделов (G1) ===
+model WaitlistLead {
+  id        String   @id @default(uuid())
+  topic     String
+  email     String
+  name      String?
+  comment   String?  @db.Text
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([topic, createdAt])
 }
 
 enum SupportTicketStatus {

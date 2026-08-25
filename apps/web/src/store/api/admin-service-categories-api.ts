@@ -1,9 +1,11 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { createBaseQueryWithReauth } from './base-query';
 import { publicApi } from './public-api';
+import type { CategorySection } from '@allvision/shared';
 
 export type AdminServiceCategory = {
   code: string;
+  section: CategorySection;
   title: string;
   description: string | null;
   shortDescription: string | null;
@@ -18,6 +20,7 @@ export type AdminServiceCategory = {
 
 export type AdminServiceCategoryCreate = {
   code: string;
+  section?: CategorySection;
   title: string;
   description?: string | null;
   shortDescription?: string | null;

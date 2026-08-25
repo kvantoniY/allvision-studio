@@ -16,6 +16,7 @@ import { adminStylePresetsRouter } from './style-presets';
 import { adminHomePageRouter } from './home-page';
 import { adminPaymentsRouter } from './payments';
 import { adminTokenPackagesRouter } from './token-packages';
+import { adminWaitlistRouter } from './waitlist';
 
 export const adminRouter = Router();
 
@@ -28,6 +29,7 @@ adminRouter.use('/projects', adminProjectsRouter);
 adminRouter.use('/payments', adminPaymentsRouter);
 adminRouter.use('/token-packages', adminTokenPackagesRouter);
 adminRouter.use('/support', adminSupportRouter);
+adminRouter.use('/waitlist', adminWaitlistRouter);
 adminRouter.use('/', adminUsageRouter);
 adminRouter.use('/services', adminServicesRouter);
 adminRouter.use('/service-categories', adminServiceCategoriesRouter);

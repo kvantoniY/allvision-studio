@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { contactSchema } from '@allvision/shared';
+import { contactSchema, toCategorySection, waitlistLeadSchema } from '@allvision/shared';
 import type {
   PublicServiceResponse,
   PublicServicesResponse,
@@ -15,11 +15,13 @@ import type {
   PublicSettings,
   PublicMediaAssetsResponse,
   PublicServiceCategoriesResponse,
+  WaitlistResponse,
 } from '@allvision/shared';
 import { prisma } from '@allvision/database';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
 import { requireCaptcha } from '../middleware/captcha';
+import { optionalAuth } from '../middleware/auth';
 
 export const publicRouter = Router();
 
@@ -39,6 +41,8 @@ const publicServiceSelect = {
   previewVideo: true,
   previewMode: true,
   isFeatured: true,
+  featuredOrder: true,
+  occasionTags: true,
   processingType: true,
   sortOrder: true,
 };
@@ -147,6 +151,7 @@ publicRouter.get('/service-categories', async (_req: Request, res: Response<Publ
       orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
       select: {
         code: true,
+        section: true,
         title: true,
         description: true,
         shortDescription: true,
@@ -156,7 +161,7 @@ publicRouter.get('/service-categories', async (_req: Request, res: Response<Publ
         isFeatured: true,
       },
     });
-    res.json({ categories });
+    res.json({ categories: categories.map((item) => ({ ...item, section: toCategorySection(item.section) })) });
   } catch (e) {
     next(e);
   }
@@ -390,6 +395,32 @@ publicRouter.get('/settings/public', async (_req: Request, res: Response<PublicS
     }
 
     res.json({ settings });
+  } catch (e) {
+    next(e);
+  }
+});
+
+// Заявка с заглушки будущего раздела («Альбомы»). Один e-mail на тему пишется один раз,
+// повторная отправка отвечает успехом — форма не должна ругаться на второй клик.
+publicRouter.post('/waitlist', optionalAuth, requireCaptcha(), async (req: Request, res: Response<WaitlistResponse>, next: NextFunction) => {
+  try {
+    const data = waitlistLeadSchema.parse(req.body);
+    const existing = await prisma.waitlistLead.findFirst({
+      where: { topic: data.topic, email: data.email },
+      select: { id: true },
+    });
+    if (!existing) {
+      await prisma.waitlistLead.create({
+        data: {
+          topic: data.topic,
+          email: data.email,
+          name: data.name ?? null,
+          comment: data.comment ?? null,
+          userId: req.user?.id ?? null,
+        },
+      });
+    }
+    res.status(202).json({ ok: true });
   } catch (e) {
     next(e);
   }

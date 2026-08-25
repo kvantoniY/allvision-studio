@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CATEGORY_SECTIONS } from '../catalog/sections';
 
 export const categoryCodeSchema = z
   .string()
@@ -8,6 +9,7 @@ export const categoryCodeSchema = z
   .regex(/^[A-Z0-9_-]+$/, 'Category code must be UPPERCASE letters, digits, underscores or hyphens');
 
 const baseFields = {
+  section: z.enum(CATEGORY_SECTIONS).optional(),
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(2000).nullable().optional(),
   shortDescription: z.string().trim().max(500).nullable().optional(),

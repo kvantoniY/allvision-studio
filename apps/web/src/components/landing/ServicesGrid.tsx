@@ -71,7 +71,7 @@ export function ServicesGrid() {
           const tone = toneCycle[index % toneCycle.length];
           return (
             <Reveal key={category.code} delay={index * 0.04} className="h-full">
-              <Link href={categoryHref(category.code)} className="group block h-full">
+              <Link href={categoryHref(category.code, category.section)} className="group block h-full">
                 <Card className={`h-full border bg-slate-950 transition duration-300 hover:-translate-y-1 ${tone}`}>
                   <CardContent className="flex h-full flex-col gap-5 p-5">
                     <span className="grid h-12 w-12 place-items-center rounded-md border border-current/25 bg-white/5">
@@ -102,7 +102,7 @@ export function ServicesGrid() {
             </div>
             <h3 className="mt-2 text-2xl font-bold md:text-3xl">Готовые сценарии, которые чаще всего выбирают</h3>
           </div>
-          <Link href="/services" className="text-sm font-medium text-indigo-500 hover:underline">
+          <Link href="/services?tab=services" className="text-sm font-medium text-indigo-500 hover:underline">
             Весь каталог
           </Link>
         </div>

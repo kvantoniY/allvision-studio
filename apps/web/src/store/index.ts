@@ -23,6 +23,7 @@ import { adminUsersApi } from './api/admin-users-api';
 import { adminProjectsApi } from './api/admin-projects-api';
 import { adminPaymentsApi } from './api/admin-payments-api';
 import { adminSupportApi } from './api/admin-support-api';
+import { adminWaitlistApi } from './api/admin-waitlist-api';
 import { adminTokenPackagesApi } from './api/admin-token-packages-api';
 import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
@@ -56,6 +57,7 @@ export const store = configureStore({
     [adminProjectsApi.reducerPath]: adminProjectsApi.reducer,
     [adminPaymentsApi.reducerPath]: adminPaymentsApi.reducer,
     [adminSupportApi.reducerPath]: adminSupportApi.reducer,
+    [adminWaitlistApi.reducerPath]: adminWaitlistApi.reducer,
     [adminTokenPackagesApi.reducerPath]: adminTokenPackagesApi.reducer,
     [servicesApi.reducerPath]: servicesApi.reducer,
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
@@ -87,6 +89,7 @@ export const store = configureStore({
       adminProjectsApi.middleware,
       adminPaymentsApi.middleware,
       adminSupportApi.middleware,
+      adminWaitlistApi.middleware,
       adminTokenPackagesApi.middleware,
       servicesApi.middleware,
       userMediaAssetsApi.middleware,

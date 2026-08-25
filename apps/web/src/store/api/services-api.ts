@@ -1,6 +1,6 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
 import { createBaseQueryWithReauth } from './base-query';
-import type { PublicService, ServiceCategory } from '@allvision/shared';
+import type { CategorySection, OccasionTag, PublicService, ServiceCategory } from '@allvision/shared';
 import { accountApi } from './account-api';
 import { authApi } from './auth-api';
 import { projectsApi, invalidateProjectSideEffects } from './projects-api';
@@ -8,6 +8,8 @@ import { projectsApi, invalidateProjectSideEffects } from './projects-api';
 export type ServicesQuery = {
   category?: ServiceCategory;
   featured?: boolean;
+  section?: CategorySection;
+  occasion?: OccasionTag;
 };
 
 export type LaunchServiceInput = {
@@ -37,6 +39,8 @@ export const servicesApi = createApi({
         const params = new URLSearchParams();
         if (q?.category) params.set('category', q.category);
         if (q?.featured !== undefined) params.set('featured', String(q.featured));
+        if (q?.section) params.set('section', q.section);
+        if (q?.occasion) params.set('occasion', q.occasion);
         const query = params.toString();
         return { url: query ? `/?${query}` : '/' };
       },

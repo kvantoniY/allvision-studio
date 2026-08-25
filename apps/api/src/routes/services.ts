@@ -1,7 +1,14 @@
 import crypto from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, prisma } from '@allvision/database';
-import { generationExpiresAt, userInputFormSchema, type UserInputFieldInput } from '@allvision/shared';
+import {
+  generationExpiresAt,
+  isCategorySection,
+  isOccasionTag,
+  userInputFormSchema,
+  type CategorySection,
+  type UserInputFieldInput,
+} from '@allvision/shared';
 import { requireAuth } from '../middleware/auth';
 import { uploadServiceLaunchInputs } from '../middleware/upload';
 import { HttpError } from '../utils/http-error';
@@ -11,9 +18,9 @@ import * as queues from '../queues';
 
 export const servicesRouter = Router();
 
-async function listActiveCategoryCodes(): Promise<string[]> {
+async function listActiveCategoryCodes(section?: CategorySection): Promise<string[]> {
   const items = await prisma.serviceCategoryDef.findMany({
-    where: { isActive: true },
+    where: { isActive: true, ...(section ? { section } : {}) },
     select: { code: true },
   });
   return items.map((item) => item.code);
@@ -36,6 +43,8 @@ const publicServiceSelect = {
   previewMode: true,
   coverCrop: true,
   isFeatured: true,
+  featuredOrder: true,
+  occasionTags: true,
   processingType: true,
   sortOrder: true,
 } as const;
@@ -302,7 +311,11 @@ servicesRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
   try {
     const category = typeof req.query.category === 'string' ? req.query.category : undefined;
     const featured = parseBoolean(req.query.featured);
-    const activeCategories = await listActiveCategoryCodes();
+    const section = isCategorySection(req.query.section) ? req.query.section : undefined;
+    const occasion = isOccasionTag(req.query.occasion) ? req.query.occasion : undefined;
+    // Секция сужает список категорий; конкретная категория из другой секции игнорируется,
+    // иначе вкладка показала бы чужие услуги.
+    const activeCategories = await listActiveCategoryCodes(section);
     const categoryFilter = category && activeCategories.includes(category)
       ? { category }
       : { category: { in: activeCategories } };
@@ -312,8 +325,11 @@ servicesRouter.get('/', async (req: Request, res: Response, next: NextFunction) 
         pipelineConfig: { not: Prisma.JsonNull },
         ...categoryFilter,
         ...(featured === true ? { isFeatured: true } : {}),
+        ...(occasion ? { occasionTags: { has: occasion } } : {}),
       },
-      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      orderBy: featured === true
+        ? [{ featuredOrder: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }]
+        : [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       select: publicServiceSelect,
     });
     res.json({ services });

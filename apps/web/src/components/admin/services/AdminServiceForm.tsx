@@ -52,19 +52,21 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BlockCatalogItem, JsonSchemaObject, ModelOption, ModelPriceOverrides, ParamGroupDef, PiAPIParamCapability, SourceMediaKind } from '@allvision/shared';
+import type { BlockCatalogItem, JsonSchemaObject, ModelOption, ModelPriceOverrides, OccasionTag, ParamGroupDef, PiAPIParamCapability, SourceMediaKind } from '@allvision/shared';
 import {
   applyModelPriceOverride,
   formatMoney,
   formatTokens,
   formatAdminServiceValidationError,
   getPiAPIModelCapability,
+  isOccasionTag,
   parseSourceSelectDescription,
   serviceMargin,
   summarizePipelinePricing,
   validatePipelineConfig,
   validateUserInputForm,
 } from '@allvision/shared';
+import { OccasionPicker } from './OccasionPicker';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -149,6 +151,8 @@ type FormDraft = {
   previewMode: 'auto' | 'image' | 'video';
   isActive: boolean;
   isFeatured: boolean;
+  featuredOrder: number;
+  occasionTags: OccasionTag[];
   pipelineConfig: PipelineStep[];
   userInputForm: UserInputField[];
 };
@@ -206,6 +210,8 @@ function initialDraft(service?: AdminService): FormDraft {
     previewMode: service?.previewMode ?? 'auto',
     isActive: service?.isActive ?? true,
     isFeatured: service?.isFeatured ?? false,
+    featuredOrder: service?.featuredOrder ?? 0,
+    occasionTags: (service?.occasionTags ?? []).filter(isOccasionTag),
     pipelineConfig: normalisePipeline(service?.pipelineConfig),
     userInputForm: normaliseUserInputForm(service?.userInputForm),
   };
@@ -2532,6 +2538,8 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
         coverCrop: removeImage ? null : coverCrop,
         isActive: draft.isActive,
         isFeatured: draft.isFeatured,
+        featuredOrder: draft.featuredOrder,
+        occasionTags: draft.occasionTags,
       }),
     );
     if (previewImage) form.append('previewImage', previewImage);
@@ -2677,8 +2685,24 @@ export function AdminServiceForm({ mode, service }: AdminServiceFormProps) {
           </label>
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm font-medium text-slate-200 transition-colors hover:border-violet-500/40 hover:bg-zinc-900">
             <input type="checkbox" checked={draft.isFeatured} onChange={(event) => updateDraft({ isFeatured: event.target.checked })} className="h-4 w-4 accent-violet-500" />
-            Рекомендуемая
+            Рекомендуемая (вкладка «Популярное»)
           </label>
+          {draft.isFeatured && (
+            <div className="space-y-2">
+              <Label htmlFor="featuredOrder">Позиция в «Популярном»</Label>
+              <Input
+                id="featuredOrder"
+                type="number"
+                min={0}
+                value={draft.featuredOrder}
+                onChange={(event) => updateDraft({ featuredOrder: Number(event.target.value) || 0 })}
+              />
+              <p className="text-xs text-slate-500">Меньше — выше в ленте. Первая карточка показывается крупно.</p>
+            </div>
+          )}
+          <div className="lg:col-span-2">
+            <OccasionPicker value={draft.occasionTags} onChange={(occasionTags) => updateDraft({ occasionTags })} />
+          </div>
         </div>
       </Section>
 

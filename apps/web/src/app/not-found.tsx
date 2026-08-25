@@ -16,7 +16,7 @@ export default function NotFoundPage() {
               <Link href="/">На главную</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/services">Все услуги</Link>
+              <Link href="/services?tab=services">Все услуги</Link>
             </Button>
           </div>
         </div>

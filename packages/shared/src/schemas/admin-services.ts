@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { OCCASION_TAGS } from '../catalog/sections';
 import { BLOCK_CATALOG, getBlockCatalogItem, type JsonSchemaObject } from '../blocks';
 
 const booleanFromForm = z.preprocess((value) => {
@@ -163,6 +164,8 @@ export const createAdminServiceSchema = z.object({
   isActive: booleanFromForm.optional().default(true),
   isFeatured: booleanFromForm.optional().default(false),
   sortOrder: z.coerce.number().int().min(0).optional(),
+  featuredOrder: z.coerce.number().int().min(0).max(10000).optional(),
+  occasionTags: z.array(z.enum(OCCASION_TAGS)).max(OCCASION_TAGS.length).optional(),
 });
 
 export const updateAdminServiceSchema = createAdminServiceSchema

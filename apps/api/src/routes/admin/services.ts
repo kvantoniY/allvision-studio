@@ -219,6 +219,8 @@ adminServicesRouter.post('/', uploadServiceAssets, async (req: Request, res: Res
           isActive: body.isActive,
           isFeatured: body.isFeatured,
           sortOrder,
+          featuredOrder: body.featuredOrder ?? sortOrder,
+          occasionTags: body.occasionTags ?? [],
           aiProvider: 'mock',
           aiModel: 'mock-data-driven-pipeline',
           aiConfig: {},
@@ -285,6 +287,8 @@ adminServicesRouter.patch('/:id', uploadServiceAssets, async (req: Request, res:
     if (body.userInputForm !== undefined) data.userInputForm = body.userInputForm as Prisma.InputJsonValue;
     if (body.isActive !== undefined) data.isActive = body.isActive;
     if (body.isFeatured !== undefined) data.isFeatured = body.isFeatured;
+    if (body.featuredOrder !== undefined) data.featuredOrder = body.featuredOrder;
+    if (body.occasionTags !== undefined) data.occasionTags = body.occasionTags;
     if (body.previewMode !== undefined) data.previewMode = body.previewMode;
 
     const oldImageUrl = current.previewImage ?? current.coverImage;
@@ -438,6 +442,8 @@ adminServicesRouter.post('/:id/duplicate', async (req: Request, res: Response, n
         isActive: false,
         isFeatured: false,
         sortOrder: (aggregate._max.sortOrder ?? 0) + 1,
+        featuredOrder: (aggregate._max.sortOrder ?? 0) + 1,
+        occasionTags: current.occasionTags,
         aiProvider: current.aiProvider,
         aiModel: current.aiModel,
         aiConfig: current.aiConfig ?? {},

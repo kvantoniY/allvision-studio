@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, Clapperboard, Coins, CreditCard, FolderKanban, Gauge, Images, LayoutGrid, LifeBuoy, LineChart, Palette, Sparkles, Users } from 'lucide-react';
+import { Activity, Clapperboard, Coins, CreditCard, FolderKanban, Gauge, Images, LayoutGrid, LifeBuoy, LineChart, Mail, Palette, Sparkles, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -35,6 +35,7 @@ const navGroups: NavGroup[] = [
       { href: '/admin/users', label: 'Пользователи', icon: Users },
       { href: '/admin/projects', label: 'Проекты', icon: FolderKanban },
       { href: '/admin/support', label: 'Поддержка', icon: LifeBuoy },
+      { href: '/admin/leads', label: 'Заявки', icon: Mail },
     ],
   },
   {

@@ -13,6 +13,8 @@ import type {
   PublicTokenPackagesResponse,
   PublicTrendResponse,
   PublicTrendsResponse,
+  WaitlistLeadInput,
+  WaitlistResponse,
 } from '@allvision/shared';
 
 type CaptchaBody = { captchaToken?: string };
@@ -80,6 +82,9 @@ export const publicApi = createApi({
       },
       providesTags: ['StylePresets'],
     }),
+    sendWaitlist: build.mutation<WaitlistResponse, WaitlistLeadInput & CaptchaBody>({
+      query: (body) => ({ url: '/waitlist', method: 'POST', body }),
+    }),
     sendContact: build.mutation<ContactResponse, ContactInput & CaptchaBody>({
       query: (body) => ({ url: '/contact', method: 'POST', body }),
     }),
@@ -98,4 +103,5 @@ export const {
   useGetPublicMediaAssetsQuery,
   useGetStylePresetsQuery,
   useSendContactMutation,
+  useSendWaitlistMutation,
 } = publicApi;

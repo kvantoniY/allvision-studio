@@ -1,3 +1,5 @@
+import type { CategorySection } from '../catalog/sections';
+
 import type { ProcessingType } from '@allvision/database';
 
 export type ServiceCategory = string;
@@ -19,6 +21,8 @@ export type PublicService = {
   previewMode: string;
   coverCrop?: { x: number; y: number; w: number; h: number } | null;
   isFeatured: boolean;
+  featuredOrder: number;
+  occasionTags: string[];
   userInputForm?: unknown;
   processingType: ProcessingType;
   sortOrder: number;
@@ -109,6 +113,7 @@ export type PublicMediaAsset = {
 
 export type PublicServiceCategory = {
   code: string;
+  section: CategorySection;
   title: string;
   description: string | null;
   shortDescription: string | null;
@@ -142,3 +147,5 @@ export type PublicSettingsResponse = { settings: PublicSettings };
 export type PublicMediaAssetsResponse = { assets: PublicMediaAsset[] };
 export type PublicStylePresetsResponse = { presets: PublicStylePreset[] };
 export type ContactResponse = { ok: true };
+
+export type WaitlistResponse = { ok: true };

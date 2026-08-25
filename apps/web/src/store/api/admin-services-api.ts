@@ -84,6 +84,8 @@ export type AdminService = {
   coverCrop: { x: number; y: number; w: number; h: number } | null;
   isActive: boolean;
   isFeatured: boolean;
+  featuredOrder: number;
+  occasionTags: string[];
   sortOrder: number;
   createdAt: string;
   updatedAt: string;

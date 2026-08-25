@@ -1,4 +1,4 @@
-import type { PublicService, PublicServiceCategory, ServiceCategory } from '@allvision/shared';
+import type { CategorySection, PublicService, PublicServiceCategory, ServiceCategory } from '@allvision/shared';
 
 export type GiftCategory = {
   value: ServiceCategory;
@@ -8,8 +8,11 @@ export type GiftCategory = {
   href: string;
 };
 
-export function categoryHref(code: string) {
-  return `/services?category=${encodeURIComponent(code)}`;
+// Категория живёт внутри вкладки витрины, поэтому ссылка несёт обе координаты:
+// иначе переход с лендинга открывал бы "Популярное" и выбранная категория терялась.
+export function categoryHref(code: string, section: CategorySection = 'services') {
+  const params = new URLSearchParams({ tab: section, category: code });
+  return `/services?${params.toString()}`;
 }
 
 export function fromPublicCategory(category: PublicServiceCategory): GiftCategory {
@@ -18,7 +21,7 @@ export function fromPublicCategory(category: PublicServiceCategory): GiftCategor
     label: category.title,
     description: category.description ?? category.title,
     shortDescription: category.shortDescription ?? category.description ?? '',
-    href: categoryHref(category.code),
+    href: categoryHref(category.code, category.section),
   };
 }
 

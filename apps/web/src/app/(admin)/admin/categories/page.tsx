@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CATALOG_SECTION_DEFS, CATEGORY_SECTIONS, type CategorySection } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ import {
 
 type FormDraft = {
   code: string;
+  section: CategorySection;
   title: string;
   description: string;
   shortDescription: string;
@@ -32,6 +34,7 @@ const ICON_OPTIONS = ['Sparkles', 'Heart', 'Clapperboard', 'Baby', 'Gift', 'Flam
 function emptyDraft(): FormDraft {
   return {
     code: '',
+    section: 'services',
     title: '',
     description: '',
     shortDescription: '',
@@ -44,6 +47,7 @@ function emptyDraft(): FormDraft {
 function draftFrom(category: AdminServiceCategory): FormDraft {
   return {
     code: category.code,
+    section: category.section ?? 'services',
     title: category.title,
     description: category.description ?? '',
     shortDescription: category.shortDescription ?? '',
@@ -96,6 +100,7 @@ export default function AdminCategoriesPage() {
       if (mode === 'create') {
         await createCategory({
           code: draft.code.trim().toUpperCase(),
+          section: draft.section,
           title: draft.title.trim(),
           description: draft.description.trim() || null,
           shortDescription: draft.shortDescription.trim() || null,
@@ -108,6 +113,7 @@ export default function AdminCategoriesPage() {
         await updateCategory({
           code: editingCode,
           data: {
+            section: draft.section,
             title: draft.title.trim(),
             description: draft.description.trim() || null,
             shortDescription: draft.shortDescription.trim() || null,
@@ -224,6 +230,25 @@ export default function AdminCategoriesPage() {
                 rows={3}
                 placeholder="Развёрнутое описание категории на странице каталога"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category-section">Вкладка витрины</Label>
+              <select
+                id="category-section"
+                value={draft.section}
+                onChange={(event) => setDraft({ ...draft, section: event.target.value as CategorySection })}
+                className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
+              >
+                {CATEGORY_SECTIONS.map((code) => (
+                  <option key={code} value={code}>
+                    {CATALOG_SECTION_DEFS.find((item) => item.code === code)?.title ?? code}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                В какой вкладке каталога показывать услуги этой категории. «Популярное» собирается
+                отдельно — из услуг с флагом «Рекомендуемая».
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="category-icon">Иконка</Label>

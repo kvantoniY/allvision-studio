@@ -16,6 +16,7 @@ adminServiceCategoriesRouter.use(requireAuth, requireAdmin);
 function categorySelect() {
   return {
     code: true,
+    section: true,
     title: true,
     description: true,
     shortDescription: true,
@@ -55,6 +56,7 @@ adminServiceCategoriesRouter.post('/', async (req: Request, res: Response, next:
     const category = await prisma.serviceCategoryDef.create({
       data: {
         code: body.code,
+        section: body.section ?? 'services',
         title: body.title,
         description: body.description ?? null,
         shortDescription: body.shortDescription ?? null,
@@ -79,6 +81,7 @@ adminServiceCategoriesRouter.patch('/:code', async (req: Request, res: Response,
     const category = await prisma.serviceCategoryDef.update({
       where: { code: current.code },
       data: {
+        ...(body.section !== undefined ? { section: body.section } : {}),
         ...(body.title !== undefined ? { title: body.title } : {}),
         ...(body.description !== undefined ? { description: body.description ?? null } : {}),
         ...(body.shortDescription !== undefined ? { shortDescription: body.shortDescription ?? null } : {}),
