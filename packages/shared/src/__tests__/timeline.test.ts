@@ -1,5 +1,6 @@
 import {
   TIMELINE_LIMITS,
+  applyGeneratedSource,
   parseTimeline,
   renderOverlaySvg,
   sceneAtTime,
@@ -170,5 +171,55 @@ describe('playhead', () => {
     expect(sourceTimeAt(timeline, 0, 3)).toBe(5);
     // Вторая сцена начинается на 4-й секунде ролика и не обрезана.
     expect(sourceTimeAt(timeline, 1, 6)).toBe(2);
+  });
+});
+
+describe('generation into a scene', () => {
+  function withGeneration(projectId: string) {
+    return parseTimeline({
+      scenes: [
+        { id: 'a', source: { kind: 'color', color: '#000000' }, durationSec: 3 },
+        {
+          id: 'b',
+          source: { kind: 'image', url: 'https://cdn.test/old.jpg' },
+          durationSec: 4,
+          trimStartSec: 1,
+          trimEndSec: 3,
+          generationProjectId: projectId,
+        },
+      ],
+    });
+  }
+
+  it('puts the result into the scene that was waiting for it', () => {
+    const result = applyGeneratedSource(withGeneration('p1'), 'p1', {
+      kind: 'video',
+      url: 'https://cdn.test/new.mp4',
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.timeline.scenes[1].source).toEqual({ kind: 'video', url: 'https://cdn.test/new.mp4' });
+    // Обрезка относилась к прежнему файлу и должна уйти вместе с ним.
+    expect(result.timeline.scenes[1].trimStartSec).toBeUndefined();
+    expect(result.timeline.scenes[1].trimEndSec).toBeUndefined();
+    // Соседние сцены не трогаем.
+    expect(result.timeline.scenes[0].source).toEqual({ kind: 'color', color: '#000000' });
+  });
+
+  it('finds the scene by its generation mark even after the user reordered scenes', () => {
+    const timeline = withGeneration('p1');
+    const reordered = { ...timeline, scenes: [timeline.scenes[1], timeline.scenes[0]] };
+    const result = applyGeneratedSource(reordered, 'p1', { kind: 'image', url: 'https://cdn.test/new.jpg' });
+
+    expect(result.changed).toBe(true);
+    expect(result.timeline.scenes[0].source.url).toBe('https://cdn.test/new.jpg');
+  });
+
+  it('keeps the timeline untouched when nothing is waiting for that generation', () => {
+    const timeline = withGeneration('p1');
+    const result = applyGeneratedSource(timeline, 'other', { kind: 'video', url: 'https://cdn.test/new.mp4' });
+
+    expect(result.changed).toBe(false);
+    expect(result.timeline).toBe(timeline);
   });
 });

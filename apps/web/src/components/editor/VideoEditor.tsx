@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
+import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
 import { SceneInspector } from '@/components/editor/SceneInspector';
 import { SceneStrip } from '@/components/editor/SceneStrip';
 import { TimelinePlayer } from '@/components/editor/TimelinePlayer';
@@ -26,10 +27,12 @@ import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import {
   useExportVideoProjectMutation,
+  useGenerateSceneMutation,
   useGetVideoProjectQuery,
   useUpdateVideoProjectMutation,
   useUploadEditorMediaMutation,
 } from '@/store/api/video-projects-api';
+import { useGetMeQuery } from '@/store/api/auth-api';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -73,10 +76,12 @@ function newScene(): TimelineScene {
  * при закрытии вкладки нельзя, поэтому автосохранение, а не кнопка «Сохранить».
  */
 export function VideoEditor({ id }: { id: string }) {
-  const { data, isLoading, isError } = useGetVideoProjectQuery(id);
+  const { data, isLoading, isError, refetch: refetchProject } = useGetVideoProjectQuery(id);
   const [updateProject] = useUpdateVideoProjectMutation();
   const [uploadMedia, { isLoading: uploading }] = useUploadEditorMediaMutation();
   const [exportProject, { isLoading: exporting }] = useExportVideoProjectMutation();
+  const [generateScene, { isLoading: generating }] = useGenerateSceneMutation();
+  const { data: me } = useGetMeQuery();
   const { data: musicData } = useGetPublicMediaAssetsQuery({ kind: 'background-music', active: true });
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
@@ -204,6 +209,102 @@ export function VideoEditor({ id }: { id: string }) {
       }
     },
     [id, timeline, uploadMedia, patchScene, selectedIndex],
+  );
+
+  const selectedSceneNow = timeline?.scenes[Math.min(selectedIndex, (timeline?.scenes.length ?? 1) - 1)];
+  const sceneGenerationId = selectedSceneNow?.generationProjectId ?? null;
+
+  const { data: sceneStatus } = useGetProjectStatusQuery(sceneGenerationId ?? '', {
+    skip: !sceneGenerationId,
+    pollingInterval: sceneGenerationId ? 3000 : 0,
+  });
+  const sceneGenerationRunning = sceneStatus?.status === 'PENDING' || sceneStatus?.status === 'PROCESSING';
+
+  // Результат в сцену записывает воркер — это работает и с закрытой вкладкой. Здесь мы
+  // забираем ТОЛЬКО материал готовой сцены, а не перезагружаем ролик целиком: иначе
+  // правки, которые пользователь делал, пока шла генерация, были бы затёрты ответом сервера.
+  const appliedGenerationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sceneGenerationId || sceneStatus?.status !== 'COMPLETED') return;
+    if (appliedGenerationRef.current === sceneGenerationId) return;
+    appliedGenerationRef.current = sceneGenerationId;
+
+    void (async () => {
+      try {
+        const fresh = await refetchProject().unwrap();
+        const generated = fresh.project.timeline.scenes.find(
+          (scene) => scene.generationProjectId === sceneGenerationId,
+        );
+        if (!generated?.source.url) return;
+        setTimeline((current) => {
+          if (!current) return current;
+          const scenes = current.scenes.map((scene) =>
+            scene.generationProjectId === sceneGenerationId
+              ? {
+                  ...scene,
+                  source: generated.source,
+                  trimStartSec: undefined,
+                  trimEndSec: undefined,
+                  durationSec: generated.source.kind === 'image' ? scene.durationSec ?? 4 : generated.durationSec,
+                }
+              : scene,
+          );
+          return { ...current, scenes };
+        });
+        toast({ title: 'Сцена готова' });
+      } catch {
+        toast({
+          title: 'Сцена готова, но не подтянулась',
+          description: 'Обновите страницу — материал уже сохранён в ролике.',
+        });
+      }
+    })();
+  }, [sceneGenerationId, sceneStatus?.status, refetchProject]);
+
+  useEffect(() => {
+    if (!sceneGenerationId || sceneStatus?.status !== 'FAILED') return;
+    if (appliedGenerationRef.current === sceneGenerationId) return;
+    appliedGenerationRef.current = sceneGenerationId;
+    toast({
+      title: 'Генерация не удалась',
+      description: 'Коины вернулись на баланс. Попробуйте другую модель или описание.',
+      variant: 'destructive',
+    });
+  }, [sceneGenerationId, sceneStatus?.status]);
+
+  const handleGenerate = useCallback(
+    async (request: SceneGenerationRequest) => {
+      if (!timeline) return;
+      const scene = timeline.scenes[selectedIndex];
+      if (!scene) return;
+      // Сначала досохраняем ролик: сервер ищет сцену в своей копии таймлайна,
+      // и только что добавленной сцены там может ещё не быть.
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      try {
+        await updateProject({ id, timeline }).unwrap();
+        const result = await generateScene({
+          id,
+          sceneId: scene.id,
+          body: {
+            modelSlug: request.modelSlug,
+            prompt: request.prompt,
+            aspectRatio: request.aspectRatio,
+            ...(request.duration ? { duration: request.duration } : {}),
+            ...(request.imageInputRef ? { imageInputRef: request.imageInputRef } : {}),
+          },
+        }).unwrap();
+        appliedGenerationRef.current = null;
+        patchScene(selectedIndex, { generationProjectId: result.projectId });
+        toast({
+          title: 'Генерация запущена',
+          description: 'Можно закрыть страницу — результат сам встанет в сцену.',
+        });
+      } catch (error) {
+        const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
+        toast({ title: 'Не удалось запустить генерацию', description: message, variant: 'destructive' });
+      }
+    },
+    [id, timeline, selectedIndex, updateProject, generateScene, patchScene],
   );
 
   const { data: exportStatus } = useGetProjectStatusQuery(exportId ?? '', {
@@ -350,6 +451,16 @@ export function VideoEditor({ id }: { id: string }) {
               uploading={uploading}
               onChange={(patch) => patchScene(selectedIndex, patch)}
               onUpload={handleUpload}
+            />
+          )}
+
+          {selectedScene && (
+            <SceneGenerator
+              scene={selectedScene}
+              aspect={timeline.aspect}
+              balance={me?.user?.tokenBalance ?? 0}
+              running={generating || sceneGenerationRunning}
+              onGenerate={handleGenerate}
             />
           )}
 

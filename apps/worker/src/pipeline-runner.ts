@@ -2,7 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
-import { generationExpiresAt, getUserFriendlyError, type StorageProvider } from '@allvision/shared';
+import {
+  applyGeneratedSource,
+  generationExpiresAt,
+  getUserFriendlyError,
+  timelineSchema,
+  type StorageProvider,
+} from '@allvision/shared';
 import sharp from 'sharp';
 import { getAIProvider, getStorageProvider } from './providers';
 import type { PipelineProviderMode } from './providers';
@@ -220,6 +226,17 @@ export async function runPipeline(
         projectUserInputs: project.userInputs,
         finalOutput,
         storage,
+      });
+    }
+    if (project.mode === 'editor-generation') {
+      // Результат кладём в сцену здесь, а не на клиенте: пользователь мог закрыть
+      // вкладку, а оплаченная генерация обязана доехать до ролика в любом случае.
+      await applyGenerationToScene({
+        projectId: params.generationId,
+        userId: project.userId,
+        finalOutput,
+      }).catch((err) => {
+        logger.error(`[pipeline] не удалось записать генерацию ${params.generationId} в сцену`, err);
       });
     }
     const completedAt = new Date();
@@ -580,6 +597,40 @@ export function parseLibraryGenerationMeta(value: unknown): LibraryGenerationMet
     return null;
   }
   return { kind, title, prompt, parentAssetId };
+}
+
+/**
+ * Записывает готовую генерацию в сцену ролика.
+ *
+ * Сцену находим по метке generationProjectId, которую редактор поставил при запуске:
+ * пользователь мог за это время переставить сцены местами, так что искать по индексу нельзя.
+ */
+export async function applyGenerationToScene(params: {
+  projectId: string;
+  userId: string;
+  finalOutput: { resultImage?: string; resultVideo?: string };
+}) {
+  const url = params.finalOutput.resultVideo ?? params.finalOutput.resultImage;
+  if (!url) return;
+  const kind = params.finalOutput.resultVideo ? 'video' : 'image';
+
+  const videoProjects = await prisma.videoProject.findMany({
+    where: { userId: params.userId, deletedAt: null },
+    select: { id: true, timeline: true },
+  });
+
+  for (const videoProject of videoProjects) {
+    const parsed = timelineSchema.safeParse(videoProject.timeline);
+    if (!parsed.success) continue;
+    const applied = applyGeneratedSource(parsed.data, params.projectId, { kind, url });
+    if (!applied.changed) continue;
+
+    await prisma.videoProject.update({
+      where: { id: videoProject.id },
+      data: { timeline: applied.timeline as never },
+    });
+    return;
+  }
 }
 
 export async function createLibraryMediaAssetFromProject(params: {

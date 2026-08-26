@@ -181,6 +181,33 @@ export function timelineOverlayTimings(timeline: Timeline): OverlayTiming[] {
   return result;
 }
 
+/**
+ * Ставит готовый материал в сцену, которая его ждала.
+ *
+ * Сцену ищем по метке generationProjectId, а не по индексу: пока шла генерация,
+ * пользователь мог переставить сцены местами или добавить новые, и позиция уехала бы.
+ * Обрезка сбрасывается — она относилась к прежнему файлу.
+ */
+export function applyGeneratedSource(
+  timeline: Timeline,
+  generationProjectId: string,
+  source: { kind: 'video' | 'image'; url: string },
+): { timeline: Timeline; changed: boolean } {
+  let changed = false;
+  const scenes = timeline.scenes.map((scene) => {
+    if (scene.generationProjectId !== generationProjectId) return scene;
+    changed = true;
+    return {
+      ...scene,
+      source,
+      trimStartSec: undefined,
+      trimEndSec: undefined,
+      durationSec: source.kind === 'image' ? scene.durationSec ?? DEFAULT_IMAGE_SCENE_SEC : scene.durationSec,
+    };
+  });
+  return { timeline: changed ? { ...timeline, scenes } : timeline, changed };
+}
+
 export type TimelineIssue = { code: string; message: string; sceneId?: string };
 
 /**

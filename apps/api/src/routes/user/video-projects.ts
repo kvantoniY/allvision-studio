@@ -13,6 +13,7 @@ import { requireAuth } from '../../middleware/auth';
 import { uploadEditorMedia } from '../../middleware/upload';
 import { HttpError } from '../../utils/http-error';
 import { logger } from '../../utils/logger';
+import { createFreeChatProject } from '../../services/free-chat-generation';
 import * as fileService from '../../services/file-service';
 import * as queues from '../../queues';
 
@@ -177,6 +178,46 @@ videoProjectsRouter.post('/:id/media', uploadEditorMedia, async (req: Request, r
       url: uploaded.url,
       mediaKind: uploaded.mediaKind,
       ...(uploaded.dimensions ? { dimensions: uploaded.dimensions } : {}),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Генерация материала прямо в сцену.
+ *
+ * Переиспользует тот же путь, что и Allvision AI: там уже есть проверка моделей,
+ * расчёт цены, атомарное списание и возврат коинов при сбое. Отличается только
+ * mode проекта и тем, что результат вернётся в сцену, а не в ленту чата.
+ */
+videoProjectsRouter.post('/:id/scenes/:sceneId/generate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const videoProject = await ownedProject(userId, req.params.id);
+    const timeline = parseDraftTimeline(videoProject.timeline);
+    const sceneIndex = timeline.scenes.findIndex((scene) => scene.id === req.params.sceneId);
+    if (sceneIndex < 0) throw new HttpError(404, 'SCENE_NOT_FOUND', 'Сцена не найдена');
+
+    const result = await createFreeChatProject(userId, req.body, {
+      mode: 'editor-generation',
+      titlePrefix: 'Сцена: ',
+    });
+
+    // Ссылку на генерацию пишем в сцену сразу: если пользователь закроет вкладку,
+    // результат всё равно найдёт своё место — воркер допишет его по этой метке.
+    const scenes = timeline.scenes.map((scene, index) =>
+      index === sceneIndex ? { ...scene, generationProjectId: result.projectId, origin: 'generated' as const } : scene,
+    );
+    await prisma.videoProject.update({
+      where: { id: videoProject.id },
+      data: { timeline: { ...timeline, scenes } as never },
+    });
+
+    res.status(202).json({
+      projectId: result.projectId,
+      tokensCost: result.project.tokensCost,
+      estimatedDurationSec: result.estimatedDurationSec,
     });
   } catch (err) {
     next(err);

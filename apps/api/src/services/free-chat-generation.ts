@@ -311,7 +311,13 @@ async function refundQueuedProject(projectId: string, userId: string, tokensCost
   });
 }
 
-export async function createFreeChatProject(userId: string, rawBody: unknown) {
+export type ChatProjectOptions = {
+  /** Project.mode: 'free-chat' для чата, 'editor-generation' для сцен редактора. */
+  mode?: string;
+  titlePrefix?: string;
+};
+
+export async function createFreeChatProject(userId: string, rawBody: unknown, options: ChatProjectOptions = {}) {
   const body = chatMessageSchema.parse(rawBody);
   const model = getChatModel(body.modelSlug);
   if (!model) throw new HttpError(400, 'UNKNOWN_CHAT_MODEL', 'Модель недоступна в Allvision AI');
@@ -436,8 +442,10 @@ export async function createFreeChatProject(userId: string, rawBody: unknown) {
       const created = await tx.project.create({
         data: {
           userId,
-          mode: 'free-chat',
-          title: prompt ? titleFromPrompt(prompt) : `Чат: ${model.functionTitle}`,
+          mode: options.mode ?? 'free-chat',
+          title: prompt
+            ? titleFromPrompt(prompt, options.titlePrefix ?? 'Чат: ')
+            : `${options.titlePrefix ?? 'Чат: '}${model.functionTitle}`,
           status: 'PENDING',
           progress: 0,
           inputImages: imageInput ? [imageInput.publicUrl] : [],
