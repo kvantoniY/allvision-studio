@@ -79,6 +79,24 @@ export function GreetingsTab({ services }: GreetingsTabProps) {
         </div>
       </section>
 
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <h2 className="text-lg font-bold tracking-tight sm:text-xl">Не подходит ни один шаблон?</h2>
+            <p className="mt-2 leading-7 text-slate-400">
+              Сделаем поздравление под вас: вы описываете задумку, мы уточняем детали, называем цену
+              и собираем ролик вручную.
+            </p>
+          </div>
+          <Link
+            href="/orders"
+            className="inline-flex h-11 shrink-0 items-center justify-center rounded-full border border-amber-400/60 px-6 text-sm font-semibold text-amber-200 transition hover:bg-amber-400/10"
+          >
+            Заказать под ключ
+          </Link>
+        </div>
+      </section>
+
       <section>
         <div className="mb-5 flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-amber-400" />

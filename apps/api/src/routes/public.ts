@@ -144,6 +144,25 @@ function parseHomePageContent(value: string | null | undefined) {
   }
 }
 
+// Типы заказных поздравлений для витрины. Поля брифа отдаём здесь же — форма
+// строится по ним на клиенте, отдельного запроса за схемой не нужно.
+publicRouter.get('/order-types', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const items = await prisma.orderTypeDef.findMany({
+      where: { isActive: true },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      select: {
+        id: true, slug: true, title: true, shortDesc: true, description: true,
+        coverImage: true, previewVideo: true, briefFields: true,
+        priceFromCoins: true, priceToCoins: true, leadTimeDays: true,
+      },
+    });
+    res.json({ items });
+  } catch (e) {
+    next(e);
+  }
+});
+
 publicRouter.get('/service-categories', async (_req: Request, res: Response<PublicServiceCategoriesResponse>, next: NextFunction) => {
   try {
     const categories = await prisma.serviceCategoryDef.findMany({

@@ -1,4 +1,4 @@
-import { Clapperboard, Grid3X3, Home, LifeBuoy, Palette, Sparkles, User } from 'lucide-react';
+import { Clapperboard, FileText, Grid3X3, Home, LifeBuoy, Palette, Sparkles, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export type SidebarItem = {
@@ -20,6 +20,7 @@ export const SIDEBAR_SECTIONS: SidebarSection[] = [
       { href: '/services', label: 'Услуги', icon: Grid3X3 },
       { href: '/editor', label: 'Редактор', icon: Clapperboard },
       { href: '/studio', label: 'Студия', icon: Palette },
+      { href: '/orders', label: 'Заказы', icon: FileText },
       { href: '/support', label: 'Поддержка', icon: LifeBuoy },
       { href: '/profile', label: 'Профиль', icon: User },
     ],

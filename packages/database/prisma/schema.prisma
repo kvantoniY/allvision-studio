@@ -38,6 +38,8 @@ model User {
   mediaAssets MediaAsset[]
   chats     Chat[]
   videoProjects VideoProject[]
+  customOrders  CustomOrder[]
+  customOrderMessages CustomOrderMessage[]
   supportTickets SupportTicket[] @relation("SupportTicketOwner")
   supportMessages SupportMessage[] @relation("SupportMessageAuthor")
   resolvedSupportTickets SupportTicket[] @relation("SupportTicketResolvedBy")
@@ -294,6 +296,92 @@ model VideoProject {
 
   @@index([userId, updatedAt])
   @@index([deletedAt])
+}
+
+// === Поздравления на заказ (G6) ===
+// Тип заказа целиком настраивается в админке: поля брифа, вилка цен, письма.
+// Новый вид заказа не требует кода — только заполненной формы в /admin/order-types.
+model OrderTypeDef {
+  id          String  @id @default(uuid())
+  slug        String  @unique
+  title       String
+  shortDesc   String
+  description String  @db.Text
+  coverImage  String?
+  previewVideo String?
+  /// Поля брифа (схема в @allvision/shared).
+  briefFields Json
+  priceFromCoins Int
+  priceToCoins   Int
+  /// Ориентировочный срок в днях — показывается на карточке.
+  leadTimeDays Int @default(5)
+  /// Письма по статусам: { QUOTED: { subject, body }, ... }
+  emailTemplates Json?
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders CustomOrder[]
+
+  @@index([isActive, sortOrder])
+}
+
+model CustomOrder {
+  id     String            @id @default(uuid())
+  userId String
+  /// Тип может быть удалён админом; заявка при этом должна выжить.
+  orderTypeId String?
+  /// Название типа на момент заявки — чтобы карточка читалась и после удаления типа.
+  typeTitle   String
+  status CustomOrderStatus @default(NEW)
+
+  /// Ответы на поля брифа.
+  brief       Json
+  attachments String[]
+  contactName  String
+  contactEmail String
+  contactPhone String?
+
+  /// Цена, которую назначил админ после разбора брифа.
+  quotedPriceCoins Int?
+  adminNote        String? @db.Text
+  resultUrl        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderType OrderTypeDef? @relation(fields: [orderTypeId], references: [id], onDelete: SetNull)
+  messages  CustomOrderMessage[]
+
+  @@index([userId, updatedAt])
+  @@index([status, updatedAt])
+}
+
+/// Переписка по заявке: вопросы админа и ответы заказчика.
+model CustomOrderMessage {
+  id       String  @id @default(uuid())
+  orderId  String
+  /// Автор: null — системное сообщение о смене статуса.
+  authorId String?
+  fromAdmin Boolean @default(false)
+  body     String  @db.Text
+  createdAt DateTime @default(now())
+
+  order  CustomOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  author User?       @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt])
+}
+
+enum CustomOrderStatus {
+  NEW
+  QUOTED
+  PAID
+  IN_PROGRESS
+  DELIVERED
+  CANCELLED
 }
 
 // === Заявки с заглушек будущих разделов (G1) ===

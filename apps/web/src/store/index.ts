@@ -29,6 +29,8 @@ import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
 import { userChatApi } from './api/user-chat-api';
 import { videoProjectsApi } from './api/video-projects-api';
+import { ordersApi } from './api/orders-api';
+import { adminOrdersApi } from './api/admin-orders-api';
 import { supportApi } from './api/support-api';
 import { authReducer } from './slices/auth-slice';
 
@@ -64,6 +66,8 @@ export const store = configureStore({
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
     [userChatApi.reducerPath]: userChatApi.reducer,
     [videoProjectsApi.reducerPath]: videoProjectsApi.reducer,
+    [ordersApi.reducerPath]: ordersApi.reducer,
+    [adminOrdersApi.reducerPath]: adminOrdersApi.reducer,
     [supportApi.reducerPath]: supportApi.reducer,
   },
   middleware: (getDefault) =>
@@ -97,6 +101,8 @@ export const store = configureStore({
       userMediaAssetsApi.middleware,
       userChatApi.middleware,
       videoProjectsApi.middleware,
+      ordersApi.middleware,
+      adminOrdersApi.middleware,
       supportApi.middleware,
     ),
 });
