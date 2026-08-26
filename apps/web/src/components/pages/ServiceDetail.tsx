@@ -85,7 +85,7 @@ type UserInputOption = {
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides' | 'multiselect' | 'checkbox';
+  type: 'text' | 'textarea' | 'photo' | 'photos' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides' | 'multiselect' | 'checkbox';
   label?: string;
   required?: boolean;
   requiredWhen?: { field: string; value: string };
@@ -116,6 +116,9 @@ type UserInputField = {
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;
   allowLibrary?: boolean;
+  minPhotos?: number;
+  maxPhotos?: number;
+  priceCoinsPerPhoto?: number;
 };
 
 type FormValues = Record<string, string>;
@@ -224,6 +227,16 @@ function multiselectPrice(fields: UserInputField[], values: FormValues): number 
   return sum;
 }
 
+function photosPrice(fields: UserInputField[], photoSets: Record<string, File[]>): number | null {
+  const field = fields.find(
+    (item) => item.type === 'photos' && typeof item.priceCoinsPerPhoto === 'number' && item.priceCoinsPerPhoto > 0,
+  );
+  if (!field) return null;
+  const count = photoSets[field.id]?.length ?? 0;
+  if (count === 0) return null;
+  return field.priceCoinsPerPhoto! * count;
+}
+
 function durationPrice(fields: UserInputField[], values: FormValues): number | null {
   const field = fields.find(
     (item) => fieldVisible(item, values) && item.type === 'duration' && (item.durationPrices ?? []).some((price) => typeof price.priceCoins === 'number'),
@@ -322,7 +335,7 @@ function parseFields(value: unknown): UserInputField[] {
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides', 'multiselect', 'checkbox'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'photos', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides', 'multiselect', 'checkbox'].includes(item.type));
 }
 
 function servicePrice(service: PublicService) {
@@ -464,12 +477,25 @@ function fieldIsRequired(field: UserInputField, values: FormValues): boolean {
   return field.required === true;
 }
 
-function validateClient(fields: UserInputField[], values: FormValues, files: FileValues) {
+function validateClient(
+  fields: UserInputField[],
+  values: FormValues,
+  files: FileValues,
+  photoSets: Record<string, File[]> = {},
+) {
   const errors: string[] = [];
   for (const field of fields) {
     if (field.type === 'tier') continue;
     if (!fieldVisible(field, values)) continue;
     const required = fieldIsRequired(field, values);
+    if (field.type === 'photos') {
+      const count = photoSets[field.id]?.length ?? 0;
+      const min = field.minPhotos ?? (required ? 1 : 0);
+      const max = field.maxPhotos ?? 12;
+      if (count < min) errors.push(`Нужно минимум ${min} фото: ${field.label ?? field.id}`);
+      if (count > max) errors.push(`Слишком много фото (максимум ${max}): ${field.label ?? field.id}`);
+      continue;
+    }
     if (field.type === 'photo' || field.type === 'audio' || field.type === 'video') {
       if (required && !files[field.id] && !values[field.id]?.trim()) {
         errors.push(`Загрузите файл: ${field.label ?? field.id}`);
@@ -1351,27 +1377,157 @@ function MultiSelectInput({
   );
 }
 
+/**
+ * Пачка фотографий для шаблона поздравления. Каждый снимок станет отдельной сценой,
+ * поэтому пользователю показывается и число кадров, и их порядок, и итоговая цена.
+ */
+function ServicePhotosInput({
+  field,
+  label,
+  required,
+  photos,
+  onPhotosChange,
+}: {
+  field: UserInputField;
+  label: string;
+  required: React.ReactNode;
+  photos: File[];
+  onPhotosChange: (id: string, files: File[]) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const min = field.minPhotos ?? (field.required ? 1 : 0);
+  const max = field.maxPhotos ?? 12;
+  const maxMb = field.maxSizeMb ?? PHOTO_MAX_MB;
+
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming || incoming.length === 0) return;
+    const accepted: File[] = [];
+    let rejected: string | null = null;
+    for (const file of Array.from(incoming)) {
+      if (photos.length + accepted.length >= max) {
+        rejected = `Больше ${max} фото не поместится в ролик.`;
+        break;
+      }
+      const sizeError = fileSizeError(file, maxMb);
+      if (sizeError) {
+        rejected = `${file.name}: ${sizeError}`;
+        continue;
+      }
+      accepted.push(file);
+    }
+    setError(rejected);
+    if (accepted.length > 0) onPhotosChange(field.id, [...photos, ...accepted]);
+  };
+
+  const removeAt = (index: number) => {
+    onPhotosChange(field.id, photos.filter((_, i) => i !== index));
+    setError(null);
+  };
+
+  const move = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= photos.length) return;
+    const next = [...photos];
+    [next[index], next[target]] = [next[target], next[index]];
+    onPhotosChange(field.id, next);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Label>
+        {label} {required}
+      </Label>
+      <p className="text-xs text-slate-400">
+        {photoLimitLabel(maxMb)}. От {min} до {max} фото — каждое станет отдельной сценой.
+      </p>
+
+      {photos.length > 0 && (
+        <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {photos.map((photo, index) => (
+            <li key={`${photo.name}-${index}`} className="group relative overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+              <img
+                src={URL.createObjectURL(photo)}
+                alt={`Кадр ${index + 1}`}
+                className="aspect-square w-full object-cover"
+              />
+              <span className="absolute left-1 top-1 rounded bg-black/70 px-1.5 text-[11px] font-semibold text-white">
+                {index + 1}
+              </span>
+              <div className="absolute inset-x-0 bottom-0 flex justify-between bg-black/70 px-1 py-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                <button type="button" onClick={() => move(index, -1)} aria-label="Раньше" className="px-1 text-xs text-white disabled:opacity-30" disabled={index === 0}>
+                  ←
+                </button>
+                <button type="button" onClick={() => removeAt(index)} aria-label="Убрать" className="px-1 text-xs text-rose-300">
+                  ✕
+                </button>
+                <button type="button" onClick={() => move(index, 1)} aria-label="Позже" className="px-1 text-xs text-white disabled:opacity-30" disabled={index === photos.length - 1}>
+                  →
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <label className="flex cursor-pointer items-center justify-center rounded-lg border border-dashed border-slate-700 bg-slate-900/50 px-4 py-6 text-sm text-slate-300 transition hover:border-amber-400/60 hover:text-white">
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            addFiles(event.target.files);
+            event.target.value = '';
+          }}
+        />
+        {photos.length === 0 ? 'Выбрать фотографии' : `Добавить ещё (${photos.length} из ${max})`}
+      </label>
+
+      {error && <p className="text-xs text-rose-300">{error}</p>}
+      {photos.length > 0 && photos.length < min && (
+        <p className="text-xs text-amber-300">Нужно ещё {min - photos.length} фото.</p>
+      )}
+    </div>
+  );
+}
+
 function FieldControl({
   field,
   value,
   file,
+  photos,
   mediaOptions,
   photoAvailable,
   onValueChange,
   onFileChange,
+  onPhotosChange,
 }: {
   field: UserInputField;
   value?: string;
   file?: File;
+  photos?: File[];
   mediaOptions: Record<string, MediaAssetOption[]>;
   photoAvailable?: boolean;
   onValueChange: (id: string, value: string) => void;
   onFileChange: (id: string, file?: File) => void;
+  onPhotosChange: (id: string, files: File[]) => void;
 }) {
   if (field.type === 'tier') return null;
 
   const label = field.label ?? field.id;
   const required = field.required ? <span className="text-amber-300">*</span> : null;
+
+  if (field.type === 'photos') {
+    return (
+      <ServicePhotosInput
+        field={field}
+        label={label}
+        required={required}
+        photos={photos ?? []}
+        onPhotosChange={onPhotosChange}
+      />
+    );
+  }
 
   if (field.type === 'photo') {
     return (
@@ -1861,10 +2017,24 @@ function GenerationResultLightbox({
   );
 }
 
+/**
+ * Что именно сейчас происходит. Для шаблона из десяти сцен это единственный способ
+ * показать, что работа идёт: общий процент растёт медленно, а «Сцена 4 из 10» понятна сразу.
+ */
+function currentStage(project: ProjectListItem): string | null {
+  // stepProgress приходит из БД как JSON, поэтому читаем его защитно.
+  const raw = (project as { stepProgress?: unknown }).stepProgress;
+  const steps = Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
+  const running = steps.find((step) => step.status === 'processing');
+  const stage = running?.stage;
+  return typeof stage === 'string' && stage.trim().length > 0 ? stage.trim() : null;
+}
+
 function GenerationProgress({ project, compact = false }: { project: ProjectListItem; compact?: boolean }) {
   const active = isActiveProjectStatus(project.status);
   const progress = useLivelyProgress(project.progress ?? 0, active, project.id);
   const stuck = useStuckHint(progress, active);
+  const stage = currentStage(project);
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
       <div className="flex items-start justify-between gap-3 text-sm">
@@ -1875,6 +2045,9 @@ function GenerationProgress({ project, compact = false }: { project: ProjectList
         <span className="shrink-0 text-slate-400">{progress}%</span>
       </div>
       <Progress value={progress} />
+      {stage && (
+        <p className={cn('text-slate-400', compact ? 'text-xs' : 'text-sm')}>{stage}</p>
+      )}
       {stuck ? (
         <p className={cn('leading-6 text-amber-300/90', compact ? 'text-xs' : 'text-sm')}>
           Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно закрыть, результат появится тут автоматически.
@@ -2238,6 +2411,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const [launchService, launchState] = useLaunchServiceMutation();
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
+  const [photoSets, setPhotoSets] = useState<Record<string, File[]>>({});
   const [tier, setTier] = useState<ServiceTier>('standard');
   const [mediaByKind, setMediaByKind] = useState<Record<string, MediaAssetOption[]>>({});
   const [activeView, setActiveView] = useState<ServiceDetailView>('service');
@@ -2279,7 +2453,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const launchButtonLocked = launchState.isLoading || launchStartedLock;
   // Кнопка запуска блокируется, пока форма не заполнена (обяз. поля, включая обязательный select
   // «кто на фото»). blockedByForm вычисляется ниже, после hasEnoughCoins.
-  const validationErrors = useMemo(() => validateClient(fields, values, files), [fields, values, files]);
+  const validationErrors = useMemo(
+    () => validateClient(fields, values, files, photoSets),
+    [fields, values, files, photoSets],
+  );
   const formIncomplete = validationErrors.length > 0;
 
   useEffect(() => {
@@ -2404,8 +2581,9 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const selectedDurationPrice = durationPrice(fields, values);
   const cbPrice = checkboxPrice(fields, values, files);
   const msPrice = multiselectPrice(fields, values);
+  const perPhotoPrice = photosPrice(fields, photoSets);
   const effectiveBase = cbPrice ?? selectedDurationPrice ?? basePrice;
-  const price = msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : effectiveBase;
+  const price = perPhotoPrice ?? (msPrice !== null ? msPrice : slidesCount > 0 ? basePrice * slidesCount : effectiveBase);
   // Carousel: whether the user has provided a photo at all (controls per-slide photo checkboxes).
   const photoAvailable = photoFields.some(
     (f) => Boolean(files[f.id]) || (typeof values[f.id] === 'string' && (values[f.id] as string).trim() !== ''),
@@ -2427,6 +2605,10 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     setFiles((current) => ({ ...current, [id]: file }));
   };
 
+  const setFieldPhotos = (id: string, list: File[]) => {
+    setPhotoSets((current) => ({ ...current, [id]: list }));
+  };
+
   const submit = async () => {
     if (launchButtonLocked) return;
     if (!user) {
@@ -2443,7 +2625,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
       return;
     }
 
-    const errors = validateClient(fields, values, files);
+    const errors = validateClient(fields, values, files, photoSets);
     if (errors.length > 0) {
       toast({
         title: 'Проверьте форму',
@@ -2488,6 +2670,11 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     const formData = new FormData();
     formData.append('data', JSON.stringify(payloadObj));
     for (const field of fields) {
+      if (field.type === 'photos') {
+        // Порядок добавления = порядок сцен в ролике.
+        for (const file of photoSets[field.id] ?? []) formData.append(field.id, file);
+        continue;
+      }
       if (field.type !== 'photo' && field.type !== 'audio' && field.type !== 'video') continue;
       const file = files[field.id];
       if (file) formData.append(field.id, file);
@@ -2688,10 +2875,12 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                           field={fieldWithDynamicRequired(field, values)}
                           value={values[field.id]}
                           file={files[field.id]}
+                          photos={photoSets[field.id]}
                           mediaOptions={mediaByKind}
                           photoAvailable={photoAvailable}
                           onValueChange={setFieldValue}
                           onFileChange={setFieldFile}
+                          onPhotosChange={setFieldPhotos}
                         />
                       );
                     })}

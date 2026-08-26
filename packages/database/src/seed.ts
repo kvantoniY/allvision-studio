@@ -18,6 +18,7 @@ const ServiceCategory = {
   CINEMA: 'CINEMA',
 } as const;
 import { migrateMediaAssets } from './migrate-media-assets';
+import { greetingTemplateSlugs, greetingTemplates } from './seed-greetings';
 
 const BCRYPT_COST = 12;
 const SYSTEM_PASSWORD_PLACEHOLDER = 'CHANGE_ME_AT_FIRST_DEPLOY';
@@ -3053,6 +3054,7 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
       },
     ],
   },
+  ...greetingTemplates,
 ];
 
 const legacyTrendServiceSlugs = [
@@ -3562,6 +3564,8 @@ async function ensureUser(options: EnsureUserOptions) {
 // When adding a future batch of services, add their slugs here for that deploy, then clear the list.
 const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
   'talking-character',
+  // G3: шаблоны видео-поздравлений.
+  ...greetingTemplateSlugs,
 ]);
 
 // Additive loader for explicitly new data-driven services. It creates allowlisted services only when

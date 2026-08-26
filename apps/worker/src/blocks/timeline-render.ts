@@ -36,6 +36,9 @@ const UPLOADS_DIR = resolveWorkspacePath(process.env.UPLOADS_DIR ?? './uploads')
 
 const paramsSchema = z.object({
   timeline: z.unknown(),
+  clips: z.unknown().optional(),
+  voiceover: z.unknown().optional(),
+  music: z.unknown().optional(),
   photo_motion: z.boolean().optional(),
   quality: z.enum(['fast', 'balanced', 'high']).optional(),
   max_scenes: z.number().int().min(1).max(TIMELINE_LIMITS.maxScenes).optional(),
@@ -56,13 +59,87 @@ function unwrapUrl(value: unknown): unknown {
   return value;
 }
 
-function normaliseTimelineInput(raw: unknown): unknown {
+/**
+ * Разворачивает служебную сцену-пачку в обычные сцены.
+ *
+ * Шаблон не может перечислить сцены заранее: их столько, сколько фотографий загрузил
+ * пользователь. Поэтому автор шаблона пишет одну сцену вида
+ * { source: { kind: 'batch', urls: '{{step_1.output.metadata.clips}}' } }, а её оформление
+ * (переход, длительность, титр) наследуют все развёрнутые сцены.
+ */
+function expandBatchScenes(scenes: unknown[], clips?: unknown): unknown[] {
+  const result: unknown[] = [];
+  for (const scene of scenes) {
+    if (!scene || typeof scene !== 'object') continue;
+    const record = scene as Record<string, unknown>;
+    const source = record.source as Record<string, unknown> | undefined;
+    if (!source || source.kind !== 'batch') {
+      result.push(scene);
+      continue;
+    }
+    const raw = source.urls ?? source.url ?? clips;
+    const urls = (Array.isArray(raw) ? raw : [])
+      .map((item) => unwrapUrl(item))
+      .filter((item): item is string => typeof item === 'string' && item.length > 0 && !item.includes('{{'));
+    urls.forEach((url, index) => {
+      result.push({
+        ...record,
+        id: `${record.id ?? 'batch'}-${index + 1}`,
+        source: { kind: source.itemKind === 'image' ? 'image' : 'video', url },
+      });
+    });
+  }
+  return result;
+}
+
+/** Текст, который пользователь не заполнил (или неразрешённый плейсхолдер). */
+function isBlankText(value: unknown): boolean {
+  return typeof value !== 'string' || value.trim().length === 0 || value.includes('{{');
+}
+
+/**
+ * Титры с незаполненным текстом выбрасываются.
+ *
+ * В шаблоне поля заголовка необязательные: пользователь может ничего не вписать, и тогда
+ * в JSON приезжает пустая строка. Схема требует непустой текст, так что без этой чистки
+ * незаполненный заголовок ронял бы весь ролик, а не просто исчезал бы с экрана.
+ */
+function cleanOverlays(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  const result: Record<string, unknown>[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const overlay = item as Record<string, unknown>;
+    if (isBlankText(overlay.text)) continue;
+    const subtext = isBlankText(overlay.subtext) ? undefined : overlay.subtext;
+    result.push({ ...overlay, ...(subtext ? { subtext } : { subtext: undefined }) });
+  }
+  return result;
+}
+
+/** Дорожка без файла (пользователь не выбрал музыку) не должна ронять разбор таймлайна. */
+function usableTrack(track: unknown, fallbackUrl?: unknown): unknown {
+  const url = typeof fallbackUrl === 'string' && fallbackUrl.trim().length > 0
+    ? fallbackUrl.trim()
+    : track && typeof track === 'object'
+      ? (track as Record<string, unknown>).url
+      : undefined;
+  if (typeof url !== 'string' || url.trim().length === 0 || url.includes('{{')) return undefined;
+  const base = track && typeof track === 'object' ? (track as Record<string, unknown>) : {};
+  return { ...base, url: url.trim() };
+}
+
+export function normaliseTimelineInput(raw: unknown, params: { clips?: unknown; music?: unknown; voiceover?: unknown } = {}): unknown {
   const value = typeof raw === 'string' ? JSON.parse(raw) : raw;
   if (!value || typeof value !== 'object') return value;
   const timeline = value as Record<string, unknown>;
-  const scenes = Array.isArray(timeline.scenes) ? timeline.scenes : [];
+  const scenes = expandBatchScenes(Array.isArray(timeline.scenes) ? timeline.scenes : [], params.clips);
+  const music = usableTrack(timeline.music, params.music);
+  const voiceover = usableTrack(timeline.voiceover, params.voiceover);
   return {
     ...timeline,
+    ...(music ? { music } : { music: undefined }),
+    ...(voiceover ? { voiceover } : { voiceover: undefined }),
     scenes: scenes
       .map((scene) => {
         if (!scene || typeof scene !== 'object') return scene;
@@ -70,15 +147,19 @@ function normaliseTimelineInput(raw: unknown): unknown {
         const source = record.source && typeof record.source === 'object'
           ? { ...(record.source as Record<string, unknown>), url: unwrapUrl((record.source as Record<string, unknown>).url) }
           : record.source;
-        return { ...record, source };
+        return { ...record, source, overlays: cleanOverlays(record.overlays) };
       })
       // Шаблон может содержать условные сцены: если шаг не выполнялся, плейсхолдер
       // остаётся неразрешённым. Такую сцену тихо пропускаем, а не роняем весь ролик.
       .filter((scene) => {
         if (!scene || typeof scene !== 'object') return false;
-        const source = (scene as Record<string, unknown>).source as Record<string, unknown> | undefined;
+        const record = scene as Record<string, unknown>;
+        const source = record.source as Record<string, unknown> | undefined;
         if (!source) return false;
-        if (source.kind === 'color') return true;
+        if (source.kind === 'color') {
+          // Заливка без титра — просто чёрный кадр; показывать его незачем.
+          return Array.isArray(record.overlays) && record.overlays.length > 0;
+        }
         const url = source.url;
         return typeof url === 'string' && url.length > 0 && !url.includes('{{');
       }),
@@ -218,7 +299,11 @@ export const timelineRenderBlock: BlockDefinition = {
   estimatedCostCoins: () => 0,
   async executor(rawParams, _input, ctx) {
     const params = paramsSchema.parse(rawParams ?? {});
-    const timeline = parseTimeline(normaliseTimelineInput(params.timeline));
+    const timeline = parseTimeline(normaliseTimelineInput(params.timeline, {
+      clips: params.clips,
+      music: params.music,
+      voiceover: params.voiceover,
+    }));
 
     const issues = validateTimeline(timeline, { maxScenes: params.max_scenes });
     if (issues.length > 0) {
@@ -276,6 +361,7 @@ export const timelineRenderBlock: BlockDefinition = {
           photoMotion,
           quality,
         });
+        await ctx.providerContext.reportStage?.(`Готовим сцену ${index + 1} из ${resolved.scenes.length}`);
         await runFfmpeg(plan.args);
         scenePaths.push(outputName);
         // 15..75% — самая долгая часть, поэтому прогресс идёт по сценам.
@@ -293,6 +379,7 @@ export const timelineRenderBlock: BlockDefinition = {
 
       // 5. Склейка с переходами и миксом звука.
       const outputPath = path.join(workDir, 'result.mp4');
+      await ctx.providerContext.reportStage?.('Склеиваем ролик');
       const final = planFinal({ timeline: resolved, scenePaths, musicPath, voiceoverPath, outputPath, quality });
       await runFfmpeg(final.args);
       await ctx.reportProgress(92);

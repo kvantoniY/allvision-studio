@@ -104,6 +104,7 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
   text: 'Текст',
   textarea: 'Большой текст',
   photo: 'Фото',
+  photos: 'Пачка фотографий (сцены)',
   video: 'Видео (загрузка юзером)',
   select: 'Список вариантов',
   'media-select': 'Выбор из медиа-библиотеки',
@@ -119,6 +120,7 @@ const fieldTypeLabels: Record<UserInputField['type'], string> = {
 };
 
 const fieldTypeHints: Partial<Record<UserInputField['type'], string>> = {
+  photos: 'Мульти-загрузка: каждый снимок становится отдельной сценой ролика, цена считается за фото.',
   text: 'Однострочное текстовое поле (например, имя ребёнка или короткая надпись).',
   textarea: 'Многострочное поле для длинного текста или пожеланий.',
   photo: 'Загрузка фото пользователем; можно разрешить выбор аватара из Студии.',
@@ -1835,7 +1837,7 @@ function UserInputFormBuilder({
       id,
       type,
       label: fieldTypeLabels[type],
-      required: type === 'tier' || type === 'photo' || type === 'video',
+      required: type === 'tier' || type === 'photo' || type === 'photos' || type === 'video',
       ...(type === 'video' ? { maxSizeMb: 50, maxDurationSec: 15, allowedFormats: ['mp4', 'webm', 'mov'], allowUserUpload: true } : {}),
       ...(type === 'media-select' ? { mediaKind: 'trend-video' } : {}),
       ...(type === 'music-select' ? { mediaKind: 'background-music', allowUserUpload: false, allowLibrary: true } : {}),
@@ -1848,6 +1850,9 @@ function UserInputFormBuilder({
       ...(type === 'checkbox' ? { defaultChecked: false } : {}),
       ...(type === 'photo'
         ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'], allowStudioAvatars: true, allowSystemLibrary: false }
+        : {}),
+      ...(type === 'photos'
+        ? { maxSizeMb: 15, allowedFormats: ['jpg', 'jpeg', 'png', 'webp'], minPhotos: 4, maxPhotos: 12, priceCoinsPerPhoto: 35 }
         : {}),
     };
     onChange([...fields, next]);
@@ -1966,6 +1971,52 @@ function UserInputFormBuilder({
                                   className="h-8 w-24"
                                 />
                               </label>
+                            )}
+                            {field.type === 'photos' && (
+                              <>
+                                <label className="flex items-center gap-2">
+                                  Мин. фото
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={30}
+                                    value={field.minPhotos ?? ''}
+                                    onChange={(event) => updateField(index, { minPhotos: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-20"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  Макс. фото
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={30}
+                                    value={field.maxPhotos ?? ''}
+                                    onChange={(event) => updateField(index, { maxPhotos: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-20"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  Коинов за фото
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={field.priceCoinsPerPhoto ?? ''}
+                                    onChange={(event) => updateField(index, { priceCoinsPerPhoto: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-24"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  Макс. размер, МБ
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    value={field.maxSizeMb ?? ''}
+                                    onChange={(event) => updateField(index, { maxSizeMb: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-24"
+                                  />
+                                </label>
+                              </>
                             )}
                             {field.type === 'photo' && (
                               <label className="flex items-center gap-2">
@@ -2288,7 +2339,7 @@ function UserInputFormBuilder({
             className="h-10 min-w-[220px] flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-sm text-slate-100 transition-colors hover:border-zinc-600 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500 md:flex-none"
           >
             <option value="">Выберите тип поля…</option>
-            {(['text', 'textarea', 'photo', 'video', 'select', 'multiselect', 'checkbox', 'slides', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
+            {(['text', 'textarea', 'photo', 'photos', 'video', 'select', 'multiselect', 'checkbox', 'slides', 'media-select', 'avatar', 'audio', 'duration', 'aspect_ratio', 'music-select'] as const).map((type) => (
               <option key={type} value={type}>
                 {fieldTypeLabels[type]}
               </option>
@@ -2333,6 +2384,15 @@ function UserInputFormBuilder({
                 <div className="flex h-28 items-center justify-center rounded-md border border-dashed border-zinc-700 text-sm text-slate-500">
                   <Upload className="mr-2 h-4 w-4" />
                   Фото
+                </div>
+              )}
+              {field.type === 'photos' && (
+                <div className="flex h-28 flex-col items-center justify-center rounded-md border border-dashed border-zinc-700 text-sm text-slate-500">
+                  <Upload className="mb-1 h-4 w-4" />
+                  {field.minPhotos ?? 1}–{field.maxPhotos ?? 12} фото
+                  {typeof field.priceCoinsPerPhoto === 'number' && (
+                    <span className="mt-1 text-xs text-amber-300/80">{field.priceCoinsPerPhoto} коинов за фото</span>
+                  )}
                 </div>
               )}
               {field.type === 'video' && (

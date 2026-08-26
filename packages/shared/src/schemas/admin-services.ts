@@ -62,6 +62,7 @@ export const userInputFieldSchema = z.object({
     'text',
     'textarea',
     'photo',
+    'photos',
     'video',
     'select',
     'media-select',
@@ -143,6 +144,10 @@ export const userInputFieldSchema = z.object({
   defaultAspect: z.enum(['auto', '9:16', '16:9', '1:1', '4:3', '3:4']).optional(),
   allowUserUpload: z.boolean().optional(),
   allowLibrary: z.boolean().optional(),
+  // Тип photos: сколько снимков ждём и сколько стоит каждый.
+  minPhotos: z.coerce.number().int().min(1).max(30).optional(),
+  maxPhotos: z.coerce.number().int().min(1).max(30).optional(),
+  priceCoinsPerPhoto: z.coerce.number().int().min(1).optional(),
 });
 
 export const userInputFormSchema = z.array(userInputFieldSchema).min(1);

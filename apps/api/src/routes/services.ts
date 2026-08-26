@@ -159,16 +159,23 @@ function requestFiles(req: Request): Express.Multer.File[] {
   return Array.isArray(req.files) ? req.files : [];
 }
 
-function filesByField(req: Request, allowedFields: Set<string>) {
-  const map = new Map<string, Express.Multer.File>();
+/**
+ * Файлы запуска по полям формы. Поле типа photos принимает пачку снимков под одним именем,
+ * остальные поля по-прежнему допускают ровно один файл — иначе лишний файл молча
+ * перетирал бы предыдущий.
+ */
+function filesByField(req: Request, allowedFields: Set<string>, multiFields: Set<string> = new Set()) {
+  const map = new Map<string, Express.Multer.File[]>();
   for (const file of requestFiles(req)) {
     if (!allowedFields.has(file.fieldname)) {
       throw new HttpError(400, 'UNKNOWN_FILE_FIELD', `Unknown file field: ${file.fieldname}`);
     }
-    if (map.has(file.fieldname)) {
+    const current = map.get(file.fieldname) ?? [];
+    if (current.length > 0 && !multiFields.has(file.fieldname)) {
       throw new HttpError(400, 'TOO_MANY_FILES', `Only one file is allowed for ${file.fieldname}`);
     }
-    map.set(file.fieldname, file);
+    current.push(file);
+    map.set(file.fieldname, current);
   }
   return map;
 }
@@ -380,15 +387,18 @@ servicesRouter.post(
       const steps = pipelineSteps(service.pipelineConfig);
       const data = parseDataField(req.body.data ?? req.body);
       const photoFields = fields.filter((field) => field.type === 'photo');
+      const photosFields = fields.filter((field) => field.type === 'photos');
       const audioFields = fields.filter((field) => field.type === 'audio');
       const videoFields = fields.filter((field) => field.type === 'video');
       const fileMap = filesByField(
         req,
         new Set([
           ...photoFields.map((field) => field.id),
+          ...photosFields.map((field) => field.id),
           ...audioFields.map((field) => field.id),
           ...videoFields.map((field) => field.id),
         ]),
+        new Set(photosFields.map((field) => field.id)),
       );
       const tierField = fields.find((field) => field.type === 'tier');
       const userId = req.user!.id;
@@ -413,6 +423,19 @@ servicesRouter.post(
           if (!hasFile && !requiredMissing(value)) {
             const asset = await resolvePhotoInputAsset(field, value, userId);
             if (asset) assetInputs.set(field.id, asset);
+          }
+          continue;
+        }
+
+        if (field.type === 'photos') {
+          const files = fileMap.get(field.id) ?? [];
+          const min = field.minPhotos ?? (field.required ? 1 : 0);
+          const max = field.maxPhotos ?? 12;
+          if (files.length < min) {
+            throw new HttpError(400, 'NOT_ENOUGH_PHOTOS', `${field.id} needs at least ${min} photos`);
+          }
+          if (files.length > max) {
+            throw new HttpError(400, 'TOO_MANY_PHOTOS', `${field.id} accepts at most ${max} photos`);
           }
           continue;
         }
@@ -517,27 +540,33 @@ servicesRouter.post(
         userInputs[fieldId] = asset.ref;
       }
 
-      for (const field of [...photoFields, ...audioFields, ...videoFields]) {
-        const file = fileMap.get(field.id);
-        if (!file) continue;
-        if (field.maxSizeMb && file.size > field.maxSizeMb * 1024 * 1024) {
-          throw new HttpError(413, 'FILE_TOO_LARGE', `${field.id} is too large`);
-        }
-        if (field.allowedFormats?.length) {
-          const ext = file.originalname.split('.').pop()?.toLowerCase();
-          if (!ext || !field.allowedFormats.map((item) => item.toLowerCase()).includes(ext)) {
-            throw new HttpError(400, 'UNSUPPORTED_FORMAT', `${field.id} has unsupported format`);
+      for (const field of [...photoFields, ...photosFields, ...audioFields, ...videoFields]) {
+        const files = fileMap.get(field.id) ?? [];
+        if (files.length === 0) continue;
+        const urls: string[] = [];
+        for (const [index, file] of files.entries()) {
+          if (field.maxSizeMb && file.size > field.maxSizeMb * 1024 * 1024) {
+            throw new HttpError(413, 'FILE_TOO_LARGE', `${field.id} is too large`);
           }
+          if (field.allowedFormats?.length) {
+            const ext = file.originalname.split('.').pop()?.toLowerCase();
+            if (!ext || !field.allowedFormats.map((item) => item.toLowerCase()).includes(ext)) {
+              throw new HttpError(400, 'UNSUPPORTED_FORMAT', `${field.id} has unsupported format`);
+            }
+          }
+          // Порядок снимков — это порядок сцен в ролике, поэтому индекс попадает в имя файла.
+          const slot = field.type === 'photos' ? `${field.id}-${index + 1}` : field.id;
+          const uploaded = await fileService.uploadUserInput(
+            userId,
+            projectId,
+            slot,
+            file.buffer,
+            file.mimetype,
+          );
+          uploadedInputs.push({ key: uploaded.key, url: uploaded.url });
+          urls.push(uploaded.url);
         }
-        const uploaded = await fileService.uploadUserInput(
-          userId,
-          projectId,
-          field.id,
-          file.buffer,
-          file.mimetype,
-        );
-        uploadedInputs.push({ key: uploaded.key, url: uploaded.url });
-        userInputs[field.id] = uploaded.url;
+        userInputs[field.id] = field.type === 'photos' ? urls : urls[0];
       }
 
       // music-select: convert asset:<id> placeholder to public URL of background-music MediaAsset
@@ -612,9 +641,22 @@ servicesRouter.post(
         }
         if (sum > 0) tokensCost = sum;
       }
-      const inputImages = photoFields
-        .map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id])
-        .filter((value): value is string => typeof value === 'string');
+
+      // Шаблон поздравления тарифицируется за сцену: сколько снимков загрузили,
+      // столько платных генераций и будет.
+      const pricedPhotos = photosFields.find((field) => (field.priceCoinsPerPhoto ?? 0) > 0);
+      if (pricedPhotos) {
+        const uploaded = userInputs[pricedPhotos.id];
+        const count = Array.isArray(uploaded) ? uploaded.length : 0;
+        if (count > 0) tokensCost = pricedPhotos.priceCoinsPerPhoto! * count;
+      }
+      const inputImages = [
+        ...photoFields.map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id]),
+        ...photosFields.flatMap((field) => {
+          const value = userInputs[field.id];
+          return Array.isArray(value) ? value : [];
+        }),
+      ].filter((value): value is string => typeof value === 'string');
       const stepProgress = steps.map((step) => ({
         stepId: step.id,
         blockSlug: step.blockSlug,

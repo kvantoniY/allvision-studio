@@ -48,6 +48,7 @@ export type ProjectStatusResponse = Pick<
     blockSlug: string;
     status: string;
     progress: number;
+    stage?: string;
     output?: unknown;
     errorMessage?: string;
   }>;

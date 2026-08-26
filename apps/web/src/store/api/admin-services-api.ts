@@ -20,6 +20,7 @@ export type UserInputField = {
     | 'text'
     | 'textarea'
     | 'photo'
+    | 'photos'
     | 'video'
     | 'select'
     | 'media-select'
@@ -63,6 +64,9 @@ export type UserInputField = {
   defaultAspect?: 'auto' | '9:16' | '16:9' | '1:1' | '4:3' | '3:4';
   allowUserUpload?: boolean;
   allowLibrary?: boolean;
+  minPhotos?: number;
+  maxPhotos?: number;
+  priceCoinsPerPhoto?: number;
 };
 
 export type AdminService = {

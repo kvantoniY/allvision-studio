@@ -1703,6 +1703,81 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
     supportedModels: imageEditModels,
   },
   {
+    slug: 'scene-batch',
+    title: 'Сцены из пачки фотографий',
+    description: 'Повторяет одну и ту же операцию для каждой загруженной фотографии и возвращает готовые клипы для сборки ролика. Число сцен задаёт пользователь, когда выбирает, сколько снимков загрузить.',
+    category: 'video',
+    useWhen: 'В шаблонах видео-поздравлений: пользователь загружает 6-10 фото, из каждого нужна своя сцена.',
+    compatibleInputs: ['photos field ({{user.photos}})'],
+    examples: [
+      'Десять семейных фото -> десять оживших сцен -> timeline-render собирает поздравление.',
+      'Фото ребёнка -> мультстилизация каждого кадра -> сцены с движением.',
+    ],
+    paramsSchema: objectSchema(
+      {
+        photos: {
+          type: 'string',
+          title: 'Фотографии',
+          description: 'Плейсхолдер поля мульти-загрузки, обычно {{user.photos}}. Порядок снимков = порядок сцен.',
+        },
+        mode: {
+          type: 'string',
+          title: 'Что делать с каждым фото',
+          enum: ['animate', 'stylize-animate', 'stylize'],
+          enumLabels: {
+            animate: 'Оживить как есть',
+            'stylize-animate': 'Сначала стилизовать, потом оживить',
+            stylize: 'Только стилизовать (без видео)',
+          },
+          default: 'animate',
+          description: 'Оживление дешевле и сохраняет лица. Стилизация нужна там, где кадр должен стать мультяшным или ретро.',
+        },
+        model: modelTierObject,
+        prompt: {
+          type: 'string',
+          title: 'Промпт движения',
+          description: 'Как должна двигаться сцена. Один и тот же для всех кадров — иначе ролик разваливается на несвязные куски.',
+        },
+        stylize_model: {
+          type: 'string',
+          title: 'Модель стилизации',
+          ...modelEnum(imageEditModels),
+          description: 'Используется в режимах со стилизацией.',
+        },
+        stylize_prompt: {
+          type: 'string',
+          title: 'Промпт стилизации',
+          description: 'Во что превратить каждый кадр до анимации. Пусто — стилизация пропускается.',
+        },
+        duration: {
+          type: 'number',
+          title: 'Длительность сцены, сек',
+          minimum: 3,
+          maximum: 15,
+          default: 5,
+          description: 'Умножается на число сцен: десять сцен по 5 секунд дадут почти минуту ролика.',
+        },
+        aspect_ratio: {
+          type: 'string',
+          title: 'Формат кадра',
+          enum: ['auto', '9:16', '16:9', '1:1'],
+          default: '9:16',
+          description: 'Подарок отправляют в мессенджер, поэтому по умолчанию вертикаль.',
+        },
+        max_scenes: {
+          type: 'number',
+          title: 'Максимум сцен',
+          minimum: 1,
+          maximum: 30,
+          default: 12,
+          description: 'Страховка от слишком длинного и дорогого ролика.',
+        },
+      },
+      ['photos'],
+    ),
+    supportedModels: imageToVideoModels,
+  },
+  {
     slug: 'timeline-render',
     title: 'Сборка ролика из сцен',
     description: 'Собирает готовый ролик из нескольких сцен: приводит кадры к общему формату, ставит переходы, выжигает титры и подмешивает музыку с озвучкой. Работает локальным ffmpeg, платных вызовов нет. Используется и шаблонами видео-поздравлений, и редактором.',
@@ -1718,7 +1793,22 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         timeline: {
           type: 'string',
           title: 'Таймлайн (JSON)',
-          description: 'Описание ролика: сцены, переходы, титры, музыка. Ссылки на клипы подставляются плейсхолдерами вида {{step_1.output.url}} — обязательно с .url, иначе в JSON попадёт объект целиком.',
+          description: 'Описание ролика: сцены, переходы, титры. Одна сцена может быть пачкой: { "source": { "kind": "batch" } } — она развернётся в столько сцен, сколько клипов пришло в параметре ниже.',
+        },
+        clips: {
+          type: 'string',
+          title: 'Клипы для сцены-пачки',
+          description: 'Массив клипов от предыдущего шага, обычно {{step_1.output.metadata.clips}}. Отдельным параметром, а не внутри JSON: плейсхолдер внутри строки склеился бы в текст вместо массива.',
+        },
+        music: {
+          type: 'string',
+          title: 'Музыка',
+          description: 'URL фоновой дорожки, обычно {{user.music}}. Пусто — ролик без музыки.',
+        },
+        voiceover: {
+          type: 'string',
+          title: 'Озвучка',
+          description: 'URL дорожки голоса, обычно {{step_2.output.url}} от блока озвучки. Под неё музыка автоматически приглушается.',
         },
         photo_motion: {
           type: 'boolean',

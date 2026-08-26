@@ -7,6 +7,7 @@ import { faceSwapVideoBlock } from './face-swap-video';
 import { motionTransferBlock } from './motion-transfer';
 import { videoComposeBlock } from './video-compose';
 import { timelineRenderBlock } from './timeline-render';
+import { sceneBatchBlock } from './scene-batch';
 import { textToSpeechBlock } from './text-to-speech';
 import { textToVideoBlock } from './text-to-video';
 import { trendVideoTransferBlock } from './trend-video-transfer';
@@ -28,6 +29,7 @@ export const BLOCK_REGISTRY: Record<string, BlockDefinition> = {
   'motion-transfer': motionTransferBlock,
   'face-swap-video': faceSwapVideoBlock,
   'video-compose': videoComposeBlock,
+  'scene-batch': sceneBatchBlock,
   'timeline-render': timelineRenderBlock,
   'text-to-speech': textToSpeechBlock,
   'text-to-video': textToVideoBlock,
