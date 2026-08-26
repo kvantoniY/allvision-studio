@@ -37,6 +37,7 @@ model User {
   episodes   Episode[]
   mediaAssets MediaAsset[]
   chats     Chat[]
+  videoProjects VideoProject[]
   supportTickets SupportTicket[] @relation("SupportTicketOwner")
   supportMessages SupportMessage[] @relation("SupportMessageAuthor")
   resolvedSupportTickets SupportTicket[] @relation("SupportTicketResolvedBy")
@@ -273,6 +274,26 @@ model SupportAttachment {
   message SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@index([messageId])
+}
+
+// === Редактор видео (G4) ===
+// Ролик, который пользователь собирает сам. Вся раскладка живёт в timeline —
+// той же схеме, что читают предпросмотр в браузере и рендер на сервере.
+model VideoProject {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  timeline  Json
+  /// Последний экспорт: Project с mode = "video-export".
+  lastExportId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+  @@index([deletedAt])
 }
 
 // === Заявки с заглушек будущих разделов (G1) ===

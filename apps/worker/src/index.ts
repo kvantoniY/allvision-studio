@@ -18,6 +18,8 @@ const CONCURRENCY = 2;
 const CHARACTER_NSFW_CONCURRENCY = 4;
 const EPISODE_CONCURRENCY = 1;
 export const SERVICE_PIPELINE_CONCURRENCY = 1;
+// Склейка упирается в CPU, а не в чужой API: две параллельные — предел для нашей ВМ.
+export const VIDEO_RENDER_CONCURRENCY = 2;
 
 // BullMQ requires maxRetriesPerRequest: null for blocking commands.
 let connection: IORedis | undefined;
@@ -34,12 +36,15 @@ const queues: Array<[QueueName, Processor]> = [
   [QUEUE_NAMES.CHARACTER_NSFW, processCharacterNsfw as Processor],
   [QUEUE_NAMES.EPISODE, processEpisode as Processor],
   [QUEUE_NAMES.SERVICE_PIPELINE, processServicePipeline as Processor],
+  // Экспорт из редактора — тот же исполнитель, но своя очередь и свой параллелизм.
+  [QUEUE_NAMES.VIDEO_RENDER, processServicePipeline as Processor],
 ];
 
 export function queueConcurrencyFor(name: QueueName) {
   if (name === QUEUE_NAMES.CHARACTER_NSFW) return CHARACTER_NSFW_CONCURRENCY;
   if (name === QUEUE_NAMES.EPISODE) return EPISODE_CONCURRENCY;
   if (name === QUEUE_NAMES.SERVICE_PIPELINE) return SERVICE_PIPELINE_CONCURRENCY;
+  if (name === QUEUE_NAMES.VIDEO_RENDER) return VIDEO_RENDER_CONCURRENCY;
   return CONCURRENCY;
 }
 

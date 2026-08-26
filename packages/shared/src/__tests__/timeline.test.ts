@@ -2,6 +2,8 @@ import {
   TIMELINE_LIMITS,
   parseTimeline,
   renderOverlaySvg,
+  sceneAtTime,
+  sourceTimeAt,
   sceneDurationSec,
   timelineDurationSec,
   timelineOverlayTimings,
@@ -139,5 +141,34 @@ describe('timeline titles', () => {
     );
     expect(card).toContain('<rect');
     expect(clean).not.toContain('<rect');
+  });
+});
+
+describe('playhead', () => {
+  const timeline = parseTimeline({
+    scenes: [
+      { id: 'a', source: { kind: 'video', url: 'https://cdn.test/a.mp4' }, durationSec: 5, trimStartSec: 2, trimEndSec: 7, transition: 'dissolve', transitionDurationSec: 1 },
+      { id: 'b', source: { kind: 'video', url: 'https://cdn.test/b.mp4' }, durationSec: 5 },
+    ],
+  });
+
+  it('shows only the active scene outside a transition', () => {
+    const frame = sceneAtTime(timeline, 1);
+    expect(frame).toEqual({ activeIndex: 0, incomingIndex: null, mix: 0 });
+  });
+
+  it('blends both scenes inside the transition window', () => {
+    // Переход начинается на 4-й секунде и длится одну.
+    expect(sceneAtTime(timeline, 4)).toEqual({ activeIndex: 0, incomingIndex: 1, mix: 0 });
+    expect(sceneAtTime(timeline, 4.5)).toEqual({ activeIndex: 0, incomingIndex: 1, mix: 0.5 });
+    expect(sceneAtTime(timeline, 5)?.activeIndex).toBe(1);
+  });
+
+  it('maps timeline seconds back to a position inside the source file', () => {
+    // Сцена обрезана с 2-й секунды исходника, поэтому её начало — это 2 секунды файла.
+    expect(sourceTimeAt(timeline, 0, 0)).toBe(2);
+    expect(sourceTimeAt(timeline, 0, 3)).toBe(5);
+    // Вторая сцена начинается на 4-й секунде ролика и не обрезана.
+    expect(sourceTimeAt(timeline, 1, 6)).toBe(2);
   });
 });

@@ -102,6 +102,55 @@ export function timelineDurationSec(timeline: Timeline): number {
   return Number((last.startSec + last.durationSec).toFixed(3));
 }
 
+export type PlayheadFrame = {
+  /** Сцена, которая сейчас на экране. */
+  activeIndex: number;
+  /** Следующая сцена, если мы внутри перехода; иначе null. */
+  incomingIndex: number | null;
+  /** Доля перехода 0..1: 0 — видна только активная сцена, 1 — переход закончился. */
+  mix: number;
+};
+
+/**
+ * Что показывать в момент t.
+ *
+ * Плеер предпросмотра и ffmpeg должны сходиться именно здесь: если тайминг перехода
+ * посчитан по-разному, превью покажет не тот кадр, что окажется в файле. Поэтому расчёт
+ * общий, а не свой у каждой стороны.
+ */
+export function sceneAtTime(timeline: Timeline, seconds: number): PlayheadFrame | null {
+  const timings = timelineTimings(timeline);
+  if (timings.length === 0) return null;
+  const time = Math.max(0, seconds);
+
+  // Активная сцена — ПЕРВАЯ, которая ещё не закончилась. Внутри перехода сцены
+  // перекрываются, и если брать последнюю начавшуюся, уходящий кадр пропадёт
+  // раньше времени: переход выглядел бы как резкая склейка.
+  let activeIndex = timings.length - 1;
+  for (let i = 0; i < timings.length; i += 1) {
+    if (time < timings[i].startSec + timings[i].durationSec) {
+      activeIndex = i;
+      break;
+    }
+  }
+
+  const active = timings[activeIndex];
+  const next = timings[activeIndex + 1];
+  if (!next || active.transitionOutSec <= 0 || time < next.startSec) {
+    return { activeIndex, incomingIndex: null, mix: 0 };
+  }
+  const mix = Math.min(1, Math.max(0, (time - next.startSec) / active.transitionOutSec));
+  return { activeIndex, incomingIndex: activeIndex + 1, mix };
+}
+
+/** Время внутри исходного файла сцены для момента t (с учётом обрезки). */
+export function sourceTimeAt(timeline: Timeline, sceneIndex: number, seconds: number): number {
+  const timing = timelineTimings(timeline)[sceneIndex];
+  if (!timing) return 0;
+  const trimStart = timing.scene.source.kind === 'video' ? timing.scene.trimStartSec ?? 0 : 0;
+  return trimStart + Math.max(0, seconds - timing.startSec);
+}
+
 export type OverlayTiming = {
   overlay: TimelineTextOverlay;
   sceneIndex: number;

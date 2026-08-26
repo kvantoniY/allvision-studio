@@ -8,6 +8,7 @@ import {
   type ProjectJobData,
   type QueueName,
   type ServicePipelineJobData,
+  type VideoRenderJobData,
 } from '@allvision/shared';
 
 let connectionSingleton: Redis | undefined;
@@ -79,6 +80,13 @@ export async function addServicePipelineJob(data: ServicePipelineJobData, opts?:
       ...opts,
     },
   );
+}
+
+export async function addVideoRenderJob(data: VideoRenderJobData, opts?: JobsOptions) {
+  return getQueue(QUEUE_NAMES.VIDEO_RENDER).add(QUEUE_NAMES.VIDEO_RENDER, data, {
+    attempts: 1,
+    ...opts,
+  });
 }
 
 export async function closeQueues() {

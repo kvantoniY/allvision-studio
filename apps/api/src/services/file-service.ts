@@ -391,6 +391,40 @@ export async function uploadChatInput(
   throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются JPEG, PNG, WebP, MP4, MOV и audio');
 }
 
+/**
+ * Материал сцены редактора. Живёт в папке своего ролика, чтобы файлы одного
+ * проекта было видно вместе и их можно было чистить целиком.
+ */
+export async function uploadEditorMedia(
+  userId: string,
+  videoProjectId: string,
+  file: Express.Multer.File,
+): Promise<{ url: string; key: string; mediaKind: 'image' | 'video' | 'audio'; dimensions?: { width: number; height: number } }> {
+  const safeName = `${Date.now()}-${crypto.randomUUID()}`;
+  const folder = `user-uploads/editor/${userId}/${videoProjectId}`;
+
+  if (ALLOWED_V3_IMAGE_MIME.has(file.mimetype)) {
+    const processed = await validateAndProcessImage(file.buffer);
+    const key = `${folder}/${safeName}.${ext(processed.contentType)}`;
+    const { url } = await getStorageProvider().upload({ key, body: processed.buffer, contentType: processed.contentType });
+    return { url, key, mediaKind: 'image', dimensions: processed.dimensions };
+  }
+
+  if (ALLOWED_CHAT_VIDEO_MIME.has(file.mimetype)) {
+    const key = `${folder}/${safeName}.${ext(file.mimetype)}`;
+    const { url } = await getStorageProvider().upload({ key, body: file.buffer, contentType: file.mimetype });
+    return { url, key, mediaKind: 'video' };
+  }
+
+  if (ALLOWED_CHAT_AUDIO_MIME.has(file.mimetype)) {
+    const key = `${folder}/${safeName}.${ext(file.mimetype)}`;
+    const { url } = await getStorageProvider().upload({ key, body: file.buffer, contentType: file.mimetype });
+    return { url, key, mediaKind: 'audio' };
+  }
+
+  throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются JPEG, PNG, WebP, MP4, MOV и аудио');
+}
+
 export async function uploadSupportAttachment(
   userId: string,
   ticketId: string,

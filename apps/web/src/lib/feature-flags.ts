@@ -4,5 +4,5 @@
  */
 
 /** Редактор видео со сценами (этап G4). */
-export const VIDEO_EDITOR_ENABLED = false;
+export const VIDEO_EDITOR_ENABLED = true;
 export const VIDEO_EDITOR_PATH = '/editor';

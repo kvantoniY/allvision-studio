@@ -179,6 +179,16 @@ const chatInputMulter = multer({
   fileFilter: chatInputFileFilter,
 });
 
+// Материалы редактора: сюда несут и фотографии, и куски видео с телефона,
+// поэтому лимит заметно выше чатового.
+const MAX_EDITOR_MEDIA_SIZE = 200 * 1024 * 1024;
+
+const editorMediaMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_EDITOR_MEDIA_SIZE },
+  fileFilter: chatInputFileFilter,
+});
+
 const supportAttachmentMulter = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_FILE_SIZE },
@@ -205,5 +215,6 @@ export const uploadServiceAssets = serviceAssetsMulter.fields([
 ]);
 export const uploadMediaAsset = mediaAssetMulter.single('file');
 export const uploadChatInput = chatInputMulter.single('file');
+export const uploadEditorMedia = editorMediaMulter.single('file');
 export const uploadSupportAttachments = supportAttachmentMulter.array('files', 5);
 export const uploadServiceLaunchInputs = serviceLaunchMulter.any();

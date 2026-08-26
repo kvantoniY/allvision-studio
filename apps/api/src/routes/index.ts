@@ -14,6 +14,7 @@ import { userMediaAssetsRouter } from './user-media-assets';
 import { userChatRouter } from './user/chat';
 import { userChatsRouter } from './user/chats';
 import { userEventsRouter } from './user/events';
+import { videoProjectsRouter } from './user/video-projects';
 import { adminRouter } from './admin';
 import { adminReadonlyRouter } from './admin-readonly';
 
@@ -35,5 +36,6 @@ router.use('/user/media-assets', userMediaAssetsRouter);
 router.use('/user/chat', userChatRouter);
 router.use('/user/chats', userChatsRouter);
 router.use('/user/events', userEventsRouter);
+router.use('/user/video-projects', videoProjectsRouter);
 router.use('/admin', adminRouter);
 router.use('/admin-readonly', adminReadonlyRouter);

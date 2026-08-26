@@ -28,6 +28,7 @@ import { adminTokenPackagesApi } from './api/admin-token-packages-api';
 import { servicesApi } from './api/services-api';
 import { userMediaAssetsApi } from './api/user-media-assets-api';
 import { userChatApi } from './api/user-chat-api';
+import { videoProjectsApi } from './api/video-projects-api';
 import { supportApi } from './api/support-api';
 import { authReducer } from './slices/auth-slice';
 
@@ -62,6 +63,7 @@ export const store = configureStore({
     [servicesApi.reducerPath]: servicesApi.reducer,
     [userMediaAssetsApi.reducerPath]: userMediaAssetsApi.reducer,
     [userChatApi.reducerPath]: userChatApi.reducer,
+    [videoProjectsApi.reducerPath]: videoProjectsApi.reducer,
     [supportApi.reducerPath]: supportApi.reducer,
   },
   middleware: (getDefault) =>
@@ -94,6 +96,7 @@ export const store = configureStore({
       servicesApi.middleware,
       userMediaAssetsApi.middleware,
       userChatApi.middleware,
+      videoProjectsApi.middleware,
       supportApi.middleware,
     ),
 });
