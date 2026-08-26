@@ -3480,6 +3480,10 @@ export async function runSeed(options: SeedOptions = {}) {
   console.log('[seed] gift services: ensuring allowlisted data-driven catalog services');
   const gift = await ensureGiftServices();
   console.log(`[seed] gift services: ${gift.created} created, ${gift.skipped} existing skipped (admin edits preserved)`);
+  const refreshedPipelines = await refreshGiftPipelines(gift.createdSlugs);
+  if (refreshedPipelines > 0) {
+    console.log(`[seed] gift pipelines refreshed: ${refreshedPipelines}`);
+  }
 
   console.log('[seed] step 3/5: token packages');
   await ensureTokenPackages();
@@ -3572,6 +3576,7 @@ const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
 // they are missing. Existing rows are never updated here: prices, covers, prompts and pipeline are
 // managed from /admin/services and must survive deploy-time seed runs.
 async function ensureGiftServices() {
+  const createdSlugs = new Set<string>();
   let created = 0;
   let skipped = 0;
   for (const service of giftFactoryServices) {
@@ -3587,9 +3592,43 @@ async function ensureGiftServices() {
     }
     await prisma.service.create({ data: service });
     console.log(`[seed] gift service created: ${service.slug}`);
+    createdSlugs.add(service.slug);
     created += 1;
   }
-  return { created, skipped };
+  return { created, skipped, createdSlugs };
+}
+
+// Точечное обновление пайплайна уже созданных услуг.
+//
+// ensureGiftServices намеренно не апдейтит существующие строки: каталог живёт в админке.
+// Но когда в самом пайплайне находится дефект (а не пожелание по тексту), исправление
+// иначе не доедет до прода — услуга ведь уже создана. Поэтому список ЯВНЫЙ и точечный:
+// трогаем только pipelineConfig и только у перечисленных слугов, оставляя цены, тексты
+// и превью такими, какими их сделал админ. После деплоя список нужно очистить.
+const GIFT_PIPELINES_TO_REFRESH = new Set<string>([
+  // Пустая необязательная озвучка роняла весь оплаченный ролик на шаге text-to-speech.
+  'greeting-pet',
+]);
+
+async function refreshGiftPipelines(justCreated: Set<string>) {
+  let refreshed = 0;
+  for (const service of giftFactoryServices) {
+    if (!GIFT_PIPELINES_TO_REFRESH.has(service.slug)) continue;
+    // Услуга, созданная в этом же прогоне, уже содержит актуальный пайплайн.
+    if (justCreated.has(service.slug)) continue;
+    const existing = await prisma.service.findUnique({
+      where: { slug: service.slug },
+      select: { id: true },
+    });
+    if (!existing) continue;
+    await prisma.service.update({
+      where: { slug: service.slug },
+      data: { pipelineConfig: service.pipelineConfig as never },
+    });
+    console.log(`[seed] gift pipeline refreshed: ${service.slug}`);
+    refreshed += 1;
+  }
+  return refreshed;
 }
 
 async function ensureCatalog(options: SeedOptions) {

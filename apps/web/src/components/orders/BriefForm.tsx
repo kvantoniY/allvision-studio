@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Send } from 'lucide-react';
 import { validateBriefValues, type BriefField } from '@allvision/shared';
@@ -22,10 +22,19 @@ export function BriefForm({ orderType }: { orderType: PublicOrderType }) {
   const [createOrder, { isLoading }] = useCreateOrderMutation();
 
   const [values, setValues] = useState<Record<string, string>>({});
-  const [contactName, setContactName] = useState(me?.user?.name ?? '');
-  const [contactEmail, setContactEmail] = useState(me?.user?.email ?? '');
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [touched, setTouched] = useState(false);
+
+  // Профиль обычно догружается уже после первого рендера, поэтому подставляем контакты
+  // эффектом: иначе поля так и остались бы пустыми и человек заполнял бы их вручную.
+  // Введённое пользователем не трогаем.
+  useEffect(() => {
+    if (!me?.user) return;
+    setContactName((current) => current || me.user.name || '');
+    setContactEmail((current) => current || me.user.email || '');
+  }, [me?.user]);
 
   const issues = useMemo(() => validateBriefValues(orderType.briefFields, values), [orderType.briefFields, values]);
   const issueFor = (fieldId: string) => issues.find((issue) => issue.fieldId === fieldId)?.message;

@@ -16,6 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useGetChatModelsQuery } from '@/store/api/user-chat-api';
 import { cn } from '@/lib/utils';
 
 /**
@@ -56,6 +57,9 @@ export function SceneGenerator({
   onGenerate: (request: SceneGenerationRequest) => void;
 }) {
   const hasImage = scene.source.kind === 'image' && Boolean(scene.source.url);
+  // Оверрайды цен живут в БД и работают как минимум: без них редактор показывал бы
+  // цену ниже той, что спишет сервер.
+  const { data: pricing } = useGetChatModelsQuery();
   const [prompt, setPrompt] = useState('');
   const [duration, setDuration] = useState(5);
   const [modelSlug, setModelSlug] = useState<string | null>(null);
@@ -79,8 +83,9 @@ export function SceneGenerator({
     if (!model) return 0;
     return estimateChatGenerationPriceCoins(model.slug, {
       duration: isVideo ? duration : undefined,
+      priceOverrides: pricing?.modelPriceOverrides,
     });
-  }, [model, isVideo, duration]);
+  }, [model, isVideo, duration, pricing?.modelPriceOverrides]);
 
   const presets = useMemo(
     () => SCENE_PRESETS.filter((preset) => (preset.needsPhoto ? hasImage : true)),

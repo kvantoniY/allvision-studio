@@ -237,6 +237,9 @@ function buildPipeline(template: GreetingTemplate) {
     steps.push({
       id: 'step_2',
       blockSlug: 'text-to-speech',
+      // Текст поздравления необязателен: без этого условия пустое поле роняло бы
+      // весь оплаченный ролик на шаге озвучки.
+      when: { field: 'speech', filled: true },
       params: {
         model: 'minimax-speech',
         text: '{{user.speech}}',

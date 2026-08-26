@@ -167,6 +167,19 @@ export async function resolveInputRef(value: string, userId: string): Promise<In
     return { ref: staticUrlForKey(staticKey), publicUrl: staticUrlForKey(staticKey), mediaKind };
   }
 
+  // Результат генерации (outputs/{userId}/{projectId}/...). Без этой ветки нельзя было
+  // доработать только что сгенерированный кадр: редактор отдаёт именно такой URL.
+  // Здесь же проверяем владельца — путь его прямо содержит, так что это бесплатно.
+  if (staticKey && staticKey.startsWith('outputs/')) {
+    const [, ownerId] = staticKey.split('/');
+    if (ownerId !== userId) {
+      throw new HttpError(404, 'PROJECT_OUTPUT_NOT_FOUND', 'Результат не найден');
+    }
+    const mediaKind = mediaKindFromKey(staticKey);
+    if (!mediaKind) throw new HttpError(400, 'UNSUPPORTED_INPUT_KIND', 'Этот результат нельзя использовать как референс');
+    return { ref: staticUrlForKey(staticKey), publicUrl: staticUrlForKey(staticKey), mediaKind };
+  }
+
   throw new HttpError(400, 'INVALID_INPUT_REF', 'Выберите файл из Студии, библиотеки сайта или загрузите новый');
 }
 

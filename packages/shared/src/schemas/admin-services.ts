@@ -43,13 +43,20 @@ export const pipelineStepSchema = z.object({
   blockSlug: z.string().trim().min(1).max(120),
   params: z.unknown().optional(),
   input: z.unknown().optional(),
-  // Conditional step: the step runs only when the given user input field equals the given value.
-  // Used e.g. for an optional "animate photo" step that runs only when the user ticked the checkbox.
-  // When the condition is not met, the runner skips the step and keeps the previous step's output.
+  // Conditional step: the step runs only when the condition on a user input field holds.
+  //   { field, value }  — поле равно значению (галочка «анимировать фото»);
+  //   { field, filled } — поле вообще заполнено.
+  // Второй режим нужен необязательным текстовым полям: шаг озвучки не должен ронять
+  // оплаченный ролик только потому, что пользователь не стал ничего диктовать.
+  // Когда условие не выполняется, runner пропускает шаг и оставляет выход предыдущего.
   when: z
     .object({
       field: z.string().trim().min(1).max(80),
-      value: z.string().trim().min(1).max(120),
+      value: z.string().trim().min(1).max(120).optional(),
+      filled: z.boolean().optional(),
+    })
+    .refine((condition) => condition.value !== undefined || condition.filled !== undefined, {
+      message: 'Условие шага должно задавать value или filled',
     })
     .optional(),
 });

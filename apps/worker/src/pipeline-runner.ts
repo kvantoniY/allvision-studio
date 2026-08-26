@@ -27,8 +27,9 @@ export interface PipelineStep {
   blockSlug: string;
   params?: unknown;
   input?: unknown;
-  // Conditional step: run only when userInputs[when.field] equals when.value (as strings).
-  when?: { field: string; value: string };
+  // Conditional step: выполняется, только если условие на поле формы выполняется —
+  // равенство значению или просто «поле заполнено» (см. stepConditionHolds).
+  when?: StepCondition;
 }
 
 export interface PipelineRunParams {
@@ -122,7 +123,7 @@ export async function runPipeline(
       // Conditional step: skip when its `when` condition does not match the user input.
       // Skipped steps keep the previous step's output, so the final result stays the last
       // produced output (e.g. the photo when the user did not tick "animate").
-      if (step.when && String(readPath(userInputs, step.when.field) ?? '') !== String(step.when.value)) {
+      if (step.when && !stepConditionHolds(step.when, userInputs)) {
         stepProgress[index] = {
           ...stepProgress[index],
           status: 'completed',
@@ -347,12 +348,25 @@ export function parsePipelineConfig(value: unknown): PipelineStep[] {
   });
 }
 
-function parseStepCondition(value: unknown): { field: string; value: string } | undefined {
+type StepCondition = { field: string; value?: string; filled?: boolean };
+
+function parseStepCondition(value: unknown): StepCondition | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   if (typeof record.field !== 'string' || record.field.length === 0) return undefined;
+  if (record.filled === true) return { field: record.field, filled: true };
   if (typeof record.value !== 'string' || record.value.length === 0) return undefined;
   return { field: record.field, value: record.value };
+}
+
+/** Выполняется ли условие шага на введённых пользователем данных. */
+function stepConditionHolds(condition: StepCondition, userInputs: Record<string, unknown>): boolean {
+  const raw = readPath(userInputs, condition.field);
+  if (condition.filled) {
+    if (Array.isArray(raw)) return raw.length > 0;
+    return raw !== undefined && raw !== null && String(raw).trim().length > 0;
+  }
+  return String(raw ?? '') === String(condition.value);
 }
 
 export function resolvePlaceholders(value: unknown, context: PlaceholderContext): unknown {

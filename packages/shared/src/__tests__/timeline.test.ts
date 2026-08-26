@@ -14,6 +14,7 @@ import {
   validateTimeline,
   wrapText,
 } from '../timeline';
+import { pipelineStepSchema } from '../schemas/admin-services';
 
 function scene(overrides: Record<string, unknown> = {}) {
   return {
@@ -221,5 +222,30 @@ describe('generation into a scene', () => {
 
     expect(result.changed).toBe(false);
     expect(result.timeline).toBe(timeline);
+  });
+});
+
+describe('conditional pipeline steps', () => {
+  it('accepts both an equality condition and a filled check', () => {
+    const equality = pipelineStepSchema.parse({
+      id: 'step_1',
+      blockSlug: 'image-edit',
+      when: { field: 'animate', value: 'true' },
+    });
+    expect(equality.when).toEqual({ field: 'animate', value: 'true' });
+
+    const filled = pipelineStepSchema.parse({
+      id: 'step_2',
+      blockSlug: 'text-to-speech',
+      when: { field: 'speech', filled: true },
+    });
+    expect(filled.when).toEqual({ field: 'speech', filled: true });
+  });
+
+  it('rejects a condition that says nothing', () => {
+    // Пустое условие молча выключило бы шаг — лучше упасть на валидации.
+    expect(() =>
+      pipelineStepSchema.parse({ id: 'step_1', blockSlug: 'image-edit', when: { field: 'speech' } }),
+    ).toThrow();
   });
 });
