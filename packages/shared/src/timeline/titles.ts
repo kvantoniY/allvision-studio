@@ -1,4 +1,18 @@
+import { boxForTextPosition, type LayerBox } from './layers';
 import type { TimelineTextOverlay, TimelineTextStyle } from './types';
+
+/** Титр в любой из двух форм: слой с рамкой или прежний overlay с позицией. */
+export type TitleInput = {
+  text: string;
+  subtext?: string;
+  style: TimelineTextStyle;
+  box?: LayerBox;
+  position?: TimelineTextOverlay['position'];
+};
+
+function titleBox(overlay: TitleInput): LayerBox {
+  return overlay.box ?? boxForTextPosition(overlay.position ?? 'bottom');
+}
 
 /**
  * Титры рисуются как SVG.
@@ -228,11 +242,15 @@ export type OverlayLayout = {
   centerX: number;
 };
 
-export function layoutOverlay(overlay: TimelineTextOverlay, options: OverlayRenderOptions): OverlayLayout {
+export function layoutOverlay(overlay: TitleInput, options: OverlayRenderOptions): OverlayLayout {
   const spec = STYLES[overlay.style] ?? STYLES.clean;
-  const fontSize = Math.round(options.width * spec.fontScale);
-  const subFontSize = Math.round(options.width * spec.subFontScale);
-  const maxWidth = options.width * (1 - spec.sideMargin * 2);
+  const box = titleBox(overlay);
+  const boxWidth = Math.max(1, box.w * options.width);
+  // Кегль считаем от ширины РАМКИ: титр в узкой колонке коллажа не должен
+  // набираться тем же размером, что заголовок во весь кадр.
+  const fontSize = Math.round(boxWidth * spec.fontScale);
+  const subFontSize = Math.round(boxWidth * spec.subFontScale);
+  const maxWidth = boxWidth * (1 - spec.sideMargin * 2);
 
   const text = spec.uppercase ? overlay.text.toUpperCase() : overlay.text;
   const subWeight = Math.max(400, spec.weight - 200);
@@ -250,13 +268,10 @@ export function layoutOverlay(overlay: TimelineTextOverlay, options: OverlayRend
     0,
   );
 
-  const safeTop = options.height * 0.08;
-  const safeBottom = options.height * 0.92;
-  const top = overlay.position === 'top'
-    ? safeTop
-    : overlay.position === 'center'
-      ? (options.height - blockHeight) / 2
-      : safeBottom - blockHeight;
+  // Блок текста центрируется внутри своей рамки по вертикали.
+  const boxTop = box.y * options.height;
+  const boxHeight = Math.max(1, box.h * options.height);
+  const top = boxTop + Math.max(0, (boxHeight - blockHeight) / 2);
 
   return {
     lines,
@@ -268,7 +283,7 @@ export function layoutOverlay(overlay: TimelineTextOverlay, options: OverlayRend
     blockWidth,
     blockHeight,
     top,
-    centerX: options.width / 2,
+    centerX: (box.x + box.w / 2) * options.width,
   };
 }
 
@@ -276,13 +291,14 @@ export function layoutOverlay(overlay: TimelineTextOverlay, options: OverlayRend
  * SVG титра поверх прозрачного кадра. Возвращается цельный документ, который годится
  * и как `innerHTML` предпросмотра, и как вход sharp.
  */
-export function renderOverlaySvg(overlay: TimelineTextOverlay, options: OverlayRenderOptions): string {
+export function renderOverlaySvg(overlay: TitleInput, options: OverlayRenderOptions): string {
   const spec = STYLES[overlay.style] ?? STYLES.clean;
   const layout = layoutOverlay(overlay, options);
   const parts: string[] = [];
 
   if (spec.plate) {
-    const plateWidth = Math.min(options.width * 0.96, layout.blockWidth + spec.plate.padX * 2);
+    const box = titleBox(overlay);
+    const plateWidth = Math.min(box.w * options.width * 0.98, layout.blockWidth + spec.plate.padX * 2);
     const plateHeight = layout.blockHeight + spec.plate.padY * 2;
     const plateX = layout.centerX - plateWidth / 2;
     const plateY = layout.top - spec.plate.padY;
@@ -293,7 +309,7 @@ export function renderOverlaySvg(overlay: TimelineTextOverlay, options: OverlayR
   }
 
   if (spec.rules) {
-    const ruleWidth = Math.min(options.width * 0.5, layout.blockWidth + layout.fontSize);
+    const ruleWidth = Math.min(titleBox(overlay).w * options.width * 0.6, layout.blockWidth + layout.fontSize);
     const ruleX = layout.centerX - ruleWidth / 2;
     const above = layout.top - layout.fontSize * 0.7;
     const below = layout.top + layout.blockHeight + layout.fontSize * 0.5;

@@ -38,6 +38,8 @@ export const TIMELINE_LIMITS = {
   minSceneDurationSec: 0.5,
   maxTransitionDurationSec: 2,
   maxOverlaysPerScene: 3,
+  /** Слоёв в одной сцене: больше — и коллаж превращается в кашу, а рендер в минуты. */
+  maxLayersPerScene: 8,
   maxTextLength: 200,
   /** Шаблон видео-поздравления заведомо короче ролика из редактора. */
   maxTemplateScenes: 12,
@@ -71,7 +73,18 @@ export type TimelineSource = z.infer<typeof timelineSourceSchema>;
 
 export const timelineSceneSchema = z.object({
   id: z.string().trim().min(1).max(80),
-  source: timelineSourceSchema,
+  /**
+   * Слои сцены снизу вверх: медиа и титры. Это основная форма записи.
+   * Схема слоёв лежит в ./layers, а не здесь, чтобы не было кольцевого импорта.
+   */
+  layers: z.array(z.unknown()).max(TIMELINE_LIMITS.maxLayersPerScene).optional(),
+  /** Цвет подложки под слоями. */
+  background: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+
+  // --- Прежняя форма записи: один источник и титры поверх. ---
+  // Так записаны все ролики и двенадцать шаблонов, созданных до слоёв. Переписывать их
+  // незачем: sceneLayers() раскладывает такую сцену на слои при чтении.
+  source: timelineSourceSchema.optional(),
   /** Обрезка исходного видео. Для картинок и заливок не используется. */
   trimStartSec: z.number().min(0).max(3600).optional(),
   trimEndSec: z.number().min(0).max(3600).optional(),

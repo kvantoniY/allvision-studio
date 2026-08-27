@@ -1,5 +1,5 @@
-import { parseTimeline, timelineResolution } from '@allvision/shared';
-import { planFinal, planScene, timelineRenderShape } from '../blocks/timeline-plan';
+import { collageBoxes, mediaLayerSchema, parseTimeline, timelineResolution } from '@allvision/shared';
+import { planFinal, planScene, timelineRenderShape, type LayerInput } from '../blocks/timeline-plan';
 
 const { width, height } = timelineResolution('9:16');
 
@@ -12,6 +12,17 @@ function videoScene(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Слой с файлом на диске — то, что планировщик получает после материализации. */
+function layerInput(overrides: Record<string, unknown> = {}, extra: Partial<LayerInput> = {}): LayerInput {
+  const layer = mediaLayerSchema.parse({
+    id: 'l1',
+    kind: 'media',
+    source: { kind: 'video', url: 'https://cdn.test/clip.mp4' },
+    ...overrides,
+  });
+  return { layer, kind: 'video', path: '/tmp/clip.mp4', hasAudio: true, ...extra };
+}
+
 /** Значение аргумента, идущего сразу за флагом. */
 function argAfter(args: string[], flag: string): string | undefined {
   const index = args.indexOf(flag);
@@ -22,97 +33,120 @@ function filterGraph(args: string[]): string {
   return argAfter(args, '-filter_complex') ?? '';
 }
 
+function scenePlan(layers: LayerInput[], sceneOverrides: Record<string, unknown> = {}, options: Record<string, unknown> = {}) {
+  const timeline = parseTimeline({ scenes: [videoScene(sceneOverrides)] });
+  return planScene({
+    scene: timeline.scenes[0],
+    layers,
+    overlays: [],
+    width,
+    height,
+    index: 0,
+    outputName: '/tmp/scene-0.mp4',
+    photoMotion: true,
+    quality: 'balanced',
+    ...options,
+  });
+}
+
 describe('planScene', () => {
+  it('always starts from a full-frame background so layers have a stable base', () => {
+    const plan = scenePlan([layerInput()]);
+    expect(plan.args.join(' ')).toContain(`color=c=#000000:s=${width}x${height}`);
+    expect(filterGraph(plan.args)).toContain('[base]');
+  });
+
   it('trims video with -ss before the input so the seek stays fast', () => {
-    const timeline = parseTimeline({ scenes: [videoScene({ trimStartSec: 3, trimEndSec: 7 })] });
-    const plan = planScene({
-      scene: timeline.scenes[0],
-      source: { kind: 'video', path: '/tmp/clip.mp4', trimStartSec: 3, hasAudio: true },
-      overlays: [],
-      width,
-      height,
-      index: 0,
-      outputName: '/tmp/scene-0.mp4',
-      photoMotion: true,
-      quality: 'balanced',
-    });
-
-    expect(plan.durationSec).toBe(4);
-    expect(plan.args.indexOf('-ss')).toBeLessThan(plan.args.indexOf('-i'));
+    const plan = scenePlan([layerInput({ trimStartSec: 3, trimEndSec: 7 })], { trimStartSec: 3, trimEndSec: 7 });
     expect(argAfter(plan.args, '-ss')).toBe('3.000');
-    expect(argAfter(plan.args, '-t')).toBe('4.000');
+    // -ss должен стоять перед входом СВОЕГО слоя (нулевой вход — подложка).
+    const ssIndex = plan.args.indexOf('-ss');
+    const nextInput = plan.args.indexOf('-i', ssIndex);
+    expect(plan.args[nextInput + 1]).toBe('/tmp/clip.mp4');
   });
 
-  it('adds silence when the clip has no audio so every scene has a track to mix', () => {
-    const timeline = parseTimeline({ scenes: [videoScene()] });
-    const plan = planScene({
-      scene: timeline.scenes[0],
-      source: { kind: 'video', path: '/tmp/clip.mp4', trimStartSec: 0, hasAudio: false },
-      overlays: [],
-      width,
-      height,
-      index: 0,
-      outputName: '/tmp/scene-0.mp4',
-      photoMotion: true,
-      quality: 'balanced',
-    });
+  it('composites several layers bottom-up, each into its own box', () => {
+    const [left, right] = collageBoxes('side-by-side');
+    const plan = scenePlan([
+      layerInput({ id: 'a', box: left, fit: 'cover' }),
+      layerInput({ id: 'b', box: right, fit: 'cover' }, { path: '/tmp/b.mp4' }),
+    ]);
+    const graph = filterGraph(plan.args);
+
+    // Первый слой ложится на подложку, второй — поверх первого.
+    expect(graph).toContain('[base][l0]overlay=0:0');
+    expect(graph).toContain('[v0][l1]overlay=');
+    // Правый кадр начинается примерно с середины кадра.
+    const rightX = Math.round(right.x * width);
+    expect(graph).toContain(`[v0][l1]overlay=${rightX}:0`);
+  });
+
+  it('centres a contain layer inside its box instead of pinning it to the corner', () => {
+    const graph = filterGraph(scenePlan([layerInput({ fit: 'contain' })]).args);
+    expect(graph).toContain('overlay=0+(1080-overlay_w)/2');
+  });
+
+  it('crops the source rect before scaling when the user cropped the layer', () => {
+    const graph = filterGraph(
+      scenePlan([layerInput({ crop: { x: 0.1, y: 0.2, w: 0.5, h: 0.6 } })]).args,
+    );
+    expect(graph).toContain('crop=iw*0.500:ih*0.600:iw*0.100:ih*0.200');
+  });
+
+  it('rotates a layer with transparent corners', () => {
+    const graph = filterGraph(scenePlan([layerInput({ rotation: 15 })]).args);
+    expect(graph).toContain('rotate=');
+    expect(graph).toContain('c=none@0');
+  });
+
+  it('adds silence when no layer carries audio, so every scene has a track to mix', () => {
+    const plan = scenePlan([layerInput({}, {})], {}, {});
     expect(plan.args.join(' ')).toContain('anullsrc');
+
+    const silent = scenePlan([layerInput({ muted: true })]);
+    expect(filterGraph(silent.args)).toContain('aformat=sample_fmts=fltp:channel_layouts=stereo[aout]');
   });
 
-  it('mutes the source instead of dropping the track when the scene is muted', () => {
-    const timeline = parseTimeline({ scenes: [videoScene({ muted: true })] });
-    const plan = planScene({
-      scene: timeline.scenes[0],
-      source: { kind: 'video', path: '/tmp/clip.mp4', trimStartSec: 0, hasAudio: true },
-      overlays: [],
-      width,
-      height,
-      index: 0,
-      outputName: '/tmp/scene-0.mp4',
-      photoMotion: true,
-      quality: 'balanced',
-    });
-    expect(plan.args.join(' ')).toContain('anullsrc');
+  it('mixes audio of two sounding layers at full volume', () => {
+    const graph = filterGraph(
+      scenePlan([
+        layerInput({ id: 'a' }),
+        layerInput({ id: 'b' }, { path: '/tmp/b.mp4' }),
+      ]).args,
+    );
+    // normalize=0 — иначе два слоя со звуком зазвучали бы вдвое тише каждого.
+    expect(graph).toContain('amix=inputs=2:normalize=0');
   });
 
-  it('gives photos a slow zoom, and leaves video alone', () => {
-    const photo = parseTimeline({
-      scenes: [{ id: 'p', source: { kind: 'image', url: 'https://cdn.test/a.jpg' }, durationSec: 4 }],
+  it('gives a single full-frame photo a slow zoom, but leaves collage tiles still', () => {
+    const photo = layerInput({ source: { kind: 'image', url: 'https://cdn.test/a.jpg' } }, {
+      kind: 'image',
+      path: '/tmp/a.jpg',
+      hasAudio: false,
     });
-    const photoPlan = planScene({
-      scene: photo.scenes[0],
-      source: { kind: 'image', path: '/tmp/a.jpg' },
-      overlays: [],
-      width,
-      height,
-      index: 0,
-      outputName: '/tmp/scene-0.mp4',
-      photoMotion: true,
-      quality: 'balanced',
-    });
-    expect(filterGraph(photoPlan.args)).toContain('zoompan');
+    expect(filterGraph(scenePlan([photo]).args)).toContain('zoompan');
 
-    const stillPlan = planScene({
-      scene: photo.scenes[0],
-      source: { kind: 'image', path: '/tmp/a.jpg' },
-      overlays: [],
-      width,
-      height,
-      index: 0,
-      outputName: '/tmp/scene-0.mp4',
-      photoMotion: false,
-      quality: 'balanced',
-    });
-    expect(filterGraph(stillPlan.args)).not.toContain('zoompan');
+    const [left, right] = collageBoxes('side-by-side');
+    const tiles = filterGraph(
+      scenePlan([
+        layerInput({ id: 'a', box: left, source: { kind: 'image', url: 'https://cdn.test/a.jpg' } }, { kind: 'image', path: '/tmp/a.jpg', hasAudio: false }),
+        layerInput({ id: 'b', box: right, source: { kind: 'image', url: 'https://cdn.test/b.jpg' } }, { kind: 'image', path: '/tmp/b.jpg', hasAudio: false }),
+      ]).args,
+    );
+    // Наезд на каждую плитку коллажа выглядел бы дёргано, поэтому его там нет.
+    expect(tiles).not.toContain('zoompan');
+  });
+
+  it('limits a layer to its own visibility window', () => {
+    const graph = filterGraph(scenePlan([layerInput({ startSec: 1, endSec: 3 })]).args);
+    expect(graph).toContain("enable='between(t,1.000,3.000)'");
   });
 
   it('burns titles with their scene-relative timing', () => {
-    const timeline = parseTimeline({
-      scenes: [videoScene({ overlays: [{ id: 'o1', text: 'С юбилеем' }] })],
-    });
+    const timeline = parseTimeline({ scenes: [videoScene()] });
     const plan = planScene({
       scene: timeline.scenes[0],
-      source: { kind: 'video', path: '/tmp/clip.mp4', trimStartSec: 0, hasAudio: true },
+      layers: [layerInput()],
       overlays: [{ path: '/tmp/o1.png', startSec: 1, endSec: 4 }],
       width,
       height,

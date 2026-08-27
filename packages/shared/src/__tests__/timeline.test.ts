@@ -2,6 +2,7 @@ import {
   TIMELINE_LIMITS,
   applyGeneratedSource,
   parseTimeline,
+  primaryMediaLayer,
   renderOverlaySvg,
   sceneAtTime,
   sourceTimeAt,
@@ -123,7 +124,7 @@ describe('timeline titles', () => {
 
   it('escapes markup so text cannot break the svg', () => {
     const svg = renderOverlaySvg(
-      { id: 'o', text: 'Маша & <Петя>', style: 'clean', position: 'bottom' },
+      { text: 'Маша & <Петя>', style: 'clean', position: 'bottom' },
       { width: 1080, height: 1920 },
     );
     expect(svg).toContain('&amp;');
@@ -134,11 +135,11 @@ describe('timeline titles', () => {
 
   it('draws a plate for styles that need contrast', () => {
     const card = renderOverlaySvg(
-      { id: 'o', text: 'С юбилеем', style: 'card', position: 'bottom' },
+      { text: 'С юбилеем', style: 'card', position: 'bottom' },
       { width: 1080, height: 1920 },
     );
     const clean = renderOverlaySvg(
-      { id: 'o', text: 'С юбилеем', style: 'clean', position: 'bottom' },
+      { text: 'С юбилеем', style: 'clean', position: 'bottom' },
       { width: 1080, height: 1920 },
     );
     expect(card).toContain('<rect');
@@ -199,12 +200,13 @@ describe('generation into a scene', () => {
     });
 
     expect(result.changed).toBe(true);
-    expect(result.timeline.scenes[1].source).toEqual({ kind: 'video', url: 'https://cdn.test/new.mp4' });
+    const target = primaryMediaLayer(result.timeline.scenes[1]);
+    expect(target?.source).toEqual({ kind: 'video', url: 'https://cdn.test/new.mp4' });
     // Обрезка относилась к прежнему файлу и должна уйти вместе с ним.
-    expect(result.timeline.scenes[1].trimStartSec).toBeUndefined();
-    expect(result.timeline.scenes[1].trimEndSec).toBeUndefined();
+    expect(target?.trimStartSec).toBeUndefined();
+    expect(target?.trimEndSec).toBeUndefined();
     // Соседние сцены не трогаем.
-    expect(result.timeline.scenes[0].source).toEqual({ kind: 'color', color: '#000000' });
+    expect(primaryMediaLayer(result.timeline.scenes[0])?.source).toEqual({ kind: 'color', color: '#000000' });
   });
 
   it('finds the scene by its generation mark even after the user reordered scenes', () => {
@@ -213,7 +215,7 @@ describe('generation into a scene', () => {
     const result = applyGeneratedSource(reordered, 'p1', { kind: 'image', url: 'https://cdn.test/new.jpg' });
 
     expect(result.changed).toBe(true);
-    expect(result.timeline.scenes[0].source.url).toBe('https://cdn.test/new.jpg');
+    expect(primaryMediaLayer(result.timeline.scenes[0])?.source.url).toBe('https://cdn.test/new.jpg');
   });
 
   it('keeps the timeline untouched when nothing is waiting for that generation', () => {

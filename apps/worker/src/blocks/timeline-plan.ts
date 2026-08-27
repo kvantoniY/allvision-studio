@@ -4,6 +4,8 @@ import {
   timelineResolution,
   timelineTimings,
   timelineDurationSec,
+  layerRect,
+  type MediaLayer,
   type Timeline,
   type TimelineScene,
   type TimelineTransition,
@@ -16,10 +18,6 @@ import {
  * поэтому раскладку сцен, переходы и микс звука можно проверять тестами без окружения.
  */
 
-export type ScenePlanInput =
-  | { kind: 'video'; path: string; trimStartSec: number; hasAudio: boolean }
-  | { kind: 'image'; path: string }
-  | { kind: 'color'; color: string };
 
 export type ScenePlan = {
   index: number;
@@ -61,35 +59,6 @@ function fixed(value: number, digits = 3): string {
   return value.toFixed(digits);
 }
 
-/**
- * Кадр приводится к целевому размеру вписыванием с полями: обрезать чужое видео
- * по краям хуже, чем оставить поля — из кадра может уехать лицо.
- */
-function fitFilter(width: number, height: number): string {
-  return [
-    `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
-    `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
-    'setsar=1',
-    `fps=${TIMELINE_FPS}`,
-  ].join(',');
-}
-
-/**
- * Лёгкий наезд камеры на фотографии: статичное фото на 4 секунды выглядит как ошибка,
- * а не как сцена. Для видео не нужен — там движение уже есть.
- */
-function photoMotionFilter(width: number, height: number, durationSec: number): string {
-  const frames = Math.max(1, Math.round(durationSec * TIMELINE_FPS));
-  // Работаем на удвоенном кадре: zoompan семплирует исходник до зума, и без запаса
-  // по разрешению картинка заметно мылится.
-  return [
-    `scale=${width * 2}:${height * 2}:force_original_aspect_ratio=decrease`,
-    `pad=${width * 2}:${height * 2}:(ow-iw)/2:(oh-ih)/2:color=black`,
-    `zoompan=z='min(zoom+0.0009,1.12)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=${TIMELINE_FPS}`,
-    'setsar=1',
-  ].join(',');
-}
-
 export type SceneOverlayFile = {
   path: string;
   /** Секунды от начала сцены. */
@@ -97,15 +66,88 @@ export type SceneOverlayFile = {
   endSec: number;
 };
 
+/** Материализованный слой: геометрия из таймлайна плюс файл на диске. */
+export type LayerInput = {
+  layer: MediaLayer;
+  kind: 'video' | 'image' | 'color';
+  /** Путь к файлу для video/image. */
+  path?: string;
+  color?: string;
+  hasAudio: boolean;
+};
+
+/** Пиксельная рамка слоя в кадре. */
+function boxRect(layer: MediaLayer, width: number, height: number) {
+  const rect = layerRect(layer.box, width, height);
+  // Чётные размеры: yuv420p не умеет нечётные, и ffmpeg падает уже на выводе.
+  return {
+    x: rect.x,
+    y: rect.y,
+    w: Math.max(2, rect.width - (rect.width % 2)),
+    h: Math.max(2, rect.height - (rect.height % 2)),
+  };
+}
+
 /**
- * Команда нормализации одной сцены: обрезка, приведение к целевому кадру, титры и звук.
+ * Цепочка подготовки одного слоя: обрезка источника, вписывание в рамку, поворот.
  *
- * Титры выжигаются здесь, а не в финальной склейке: их время задано относительно сцены,
- * а на стыке переход красиво уводит титр вместе с кадром.
+ * cover заполняет рамку и срезает лишнее, contain вписывает целиком — то же различие,
+ * что у object-fit в браузере, чтобы предпросмотр и экспорт понимали слой одинаково.
+ */
+function layerFilter(input: LayerInput, box: { w: number; h: number }, durationSec: number, photoMotion: boolean): string {
+  const stages: string[] = [];
+  const crop = input.layer.crop;
+  if (crop && (crop.x > 0 || crop.y > 0 || crop.w < 1 || crop.h < 1)) {
+    stages.push(`crop=iw*${fixed(crop.w)}:ih*${fixed(crop.h)}:iw*${fixed(crop.x)}:ih*${fixed(crop.y)}`);
+  }
+
+  if (input.kind === 'image' && photoMotion) {
+    // Лёгкий наезд на фото: статичный кадр на несколько секунд выглядит как зависший.
+    // Работаем на удвоенном размере, иначе zoompan заметно мылит картинку.
+    const frames = Math.max(1, Math.round(durationSec * TIMELINE_FPS));
+    stages.push(`scale=${box.w * 2}:${box.h * 2}:force_original_aspect_ratio=increase`);
+    stages.push(`crop=${box.w * 2}:${box.h * 2}`);
+    stages.push(
+      `zoompan=z='min(zoom+0.0009,1.12)':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${box.w}x${box.h}:fps=${TIMELINE_FPS}`,
+    );
+  } else if (input.layer.fit === 'cover') {
+    stages.push(`scale=${box.w}:${box.h}:force_original_aspect_ratio=increase`);
+    stages.push(`crop=${box.w}:${box.h}`);
+  } else {
+    stages.push(`scale=${box.w}:${box.h}:force_original_aspect_ratio=decrease`);
+  }
+
+  stages.push('setsar=1', `fps=${TIMELINE_FPS}`, 'format=rgba');
+
+  if (input.layer.rotation !== 0) {
+    const radians = (input.layer.rotation * Math.PI) / 180;
+    // ow/oh расширяют холст под повёрнутый кадр, c=none@0 — прозрачные углы.
+    stages.push(`rotate=${radians.toFixed(4)}:ow=rotw(${radians.toFixed(4)}):oh=roth(${radians.toFixed(4)}):c=none@0`);
+  }
+  if (input.layer.opacity < 1) {
+    stages.push(`colorchannelmixer=aa=${fixed(input.layer.opacity, 2)}`);
+  }
+  return stages.join(',');
+}
+
+/** Окно видимости слоя внутри сцены. Пусто — слой виден всю сцену. */
+function enableExpr(startSec: number | undefined, endSec: number | undefined, durationSec: number): string {
+  const start = Math.max(0, startSec ?? 0);
+  const end = Math.min(durationSec, endSec ?? durationSec);
+  if (start <= 0 && end >= durationSec) return '';
+  return `:enable='between(t,${fixed(start)},${fixed(end)})'`;
+}
+
+/**
+ * Команда сборки одной сцены: подложка, слои поверх неё, титры и звук.
+ *
+ * Сцена больше не «один файл»: слои накладываются снизу вверх, каждый в своей рамке.
+ * Титры выжигаются здесь же — их время задано относительно сцены, а на стыке переход
+ * красиво уводит титр вместе с кадром.
  */
 export function planScene(input: {
   scene: TimelineScene;
-  source: ScenePlanInput;
+  layers: LayerInput[];
   overlays: SceneOverlayFile[];
   width: number;
   height: number;
@@ -114,55 +156,96 @@ export function planScene(input: {
   photoMotion: boolean;
   quality: EncodeQuality;
 }): ScenePlan {
-  const { scene, source, overlays, width, height, index, outputName, quality } = input;
+  const { scene, layers, overlays, width, height, index, outputName, quality } = input;
   const durationSec = sceneDurationSec(scene);
+  const background = scene.background ?? '#000000';
   const args: string[] = ['-y'];
 
-  if (source.kind === 'video') {
-    // -ss перед -i — быстрый поиск по ключевым кадрам; -t после него ограничивает длину.
-    if (source.trimStartSec > 0) args.push('-ss', fixed(source.trimStartSec));
-    args.push('-t', fixed(durationSec), '-i', source.path);
-  } else if (source.kind === 'image') {
-    args.push('-loop', '1', '-t', fixed(durationSec), '-i', source.path);
-  } else {
-    args.push('-f', 'lavfi', '-t', fixed(durationSec), '-i', `color=c=${source.color}:s=${width}x${height}:r=${TIMELINE_FPS}`);
+  // Вход 0 — подложка на весь кадр. Она даёт стабильную основу нужного размера,
+  // поэтому слоям не нужно ничем добивать кадр до целого.
+  args.push('-f', 'lavfi', '-t', fixed(durationSec), '-i', `color=c=${background}:s=${width}x${height}:r=${TIMELINE_FPS}`);
+
+  const layerIndexes: number[] = [];
+  for (const item of layers) {
+    layerIndexes.push(args.filter((arg) => arg === '-i').length);
+    if (item.kind === 'video') {
+      const trimStart = item.layer.trimStartSec ?? 0;
+      if (trimStart > 0) args.push('-ss', fixed(trimStart));
+      args.push('-t', fixed(durationSec), '-i', item.path ?? '');
+    } else if (item.kind === 'image') {
+      args.push('-loop', '1', '-t', fixed(durationSec), '-i', item.path ?? '');
+    } else {
+      args.push('-f', 'lavfi', '-t', fixed(durationSec), '-i', `color=c=${item.color ?? '#000000'}:s=${width}x${height}:r=${TIMELINE_FPS}`);
+    }
   }
 
+  const overlayIndexes: number[] = [];
   for (const overlay of overlays) {
+    overlayIndexes.push(args.filter((arg) => arg === '-i').length);
     args.push('-i', overlay.path);
   }
 
-  const useSourceAudio = source.kind === 'video' && source.hasAudio && !scene.muted;
-  const silenceIndex = 1 + overlays.length;
-  if (!useSourceAudio) {
-    args.push('-f', 'lavfi', '-t', fixed(durationSec), '-i', 'anullsrc=r=48000:cl=stereo');
-  }
+  const audioLayers = layers
+    .map((item, position) => ({ item, inputIndex: layerIndexes[position] }))
+    .filter(({ item }) => item.kind === 'video' && item.hasAudio && !item.layer.muted && item.layer.volume > 0);
+
+  const silenceIndex = args.filter((arg) => arg === '-i').length;
+  args.push('-f', 'lavfi', '-t', fixed(durationSec), '-i', 'anullsrc=r=48000:cl=stereo');
 
   const chain: string[] = [];
-  const baseFilter = source.kind === 'image' && input.photoMotion
-    ? photoMotionFilter(width, height, durationSec)
-    : fitFilter(width, height);
-  chain.push(`[0:v]${baseFilter},format=yuv420p[v0]`);
+  chain.push(`[0:v]format=rgba,fps=${TIMELINE_FPS},setsar=1[base]`);
 
-  let videoLabel = 'v0';
-  overlays.forEach((overlay, overlayIndex) => {
-    const next = `vo${overlayIndex}`;
-    const enable = `enable='between(t,${fixed(overlay.startSec)},${fixed(overlay.endSec)})'`;
-    chain.push(`[${videoLabel}][${overlayIndex + 1}:v]overlay=0:0:${enable}[${next}]`);
+  let videoLabel = 'base';
+  layers.forEach((item, position) => {
+    const box = boxRect(item.layer, width, height);
+    const singleFullFrame = layers.length === 1 && item.layer.box.w >= 0.999 && item.layer.box.h >= 0.999;
+    const prepared = `l${position}`;
+    chain.push(
+      `[${layerIndexes[position]}:v]${layerFilter(item, box, durationSec, input.photoMotion && item.kind === 'image' && singleFullFrame)}[${prepared}]`,
+    );
+    // contain оставляет кадр меньше рамки, поэтому кладём его по центру рамки.
+    const x = item.layer.fit === 'cover' ? String(box.x) : `${box.x}+(${box.w}-overlay_w)/2`;
+    const y = item.layer.fit === 'cover' ? String(box.y) : `${box.y}+(${box.h}-overlay_h)/2`;
+    const next = `v${position}`;
+    chain.push(
+      `[${videoLabel}][${prepared}]overlay=${x}:${y}${enableExpr(item.layer.startSec, item.layer.endSec, durationSec)}[${next}]`,
+    );
     videoLabel = next;
   });
 
-  const volume = scene.muted ? 0 : scene.volume;
-  if (useSourceAudio) {
-    chain.push(`[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${fixed(volume, 2)}[aout]`);
-  } else {
+  overlays.forEach((overlay, position) => {
+    const next = `t${position}`;
+    chain.push(
+      `[${videoLabel}][${overlayIndexes[position]}:v]overlay=0:0:enable='between(t,${fixed(overlay.startSec)},${fixed(overlay.endSec)})'[${next}]`,
+    );
+    videoLabel = next;
+  });
+
+  chain.push(`[${videoLabel}]format=yuv420p[vout]`);
+
+  if (audioLayers.length === 0) {
     chain.push(`[${silenceIndex}:a]aformat=sample_fmts=fltp:channel_layouts=stereo[aout]`);
+  } else {
+    const labels: string[] = [];
+    audioLayers.forEach(({ item, inputIndex }, position) => {
+      const label = `la${position}`;
+      chain.push(
+        `[${inputIndex}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${fixed(item.layer.volume, 2)}[${label}]`,
+      );
+      labels.push(label);
+    });
+    if (labels.length === 1) {
+      chain.push(`[${labels[0]}]anull[aout]`);
+    } else {
+      // normalize=0 — иначе два слоя со звуком зазвучали бы вдвое тише каждого.
+      chain.push(`${labels.map((label) => `[${label}]`).join('')}amix=inputs=${labels.length}:normalize=0:dropout_transition=0[aout]`);
+    }
   }
 
   const encode = ENCODE_PRESETS[quality] ?? ENCODE_PRESETS.balanced;
   args.push(
     '-filter_complex', chain.join(';'),
-    '-map', `[${videoLabel}]`,
+    '-map', '[vout]',
     '-map', '[aout]',
     '-c:v', 'libx264',
     '-preset', encode.preset,

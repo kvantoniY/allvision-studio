@@ -10,10 +10,14 @@ import {
   TIMELINE_LIMITS,
   getBlockCatalogItem,
   parseTimeline,
+  primaryMediaLayer,
   renderOverlaySvg,
   sceneDurationSec,
+  sceneMediaLayers,
+  sceneTextLayers,
   timelineTimings,
   validateTimeline,
+  type MediaLayer,
   type Timeline,
   type TimelineScene,
 } from '@allvision/shared';
@@ -25,7 +29,7 @@ import {
   planScene,
   timelineRenderShape,
   type EncodeQuality,
-  type ScenePlanInput,
+  type LayerInput,
   type SceneOverlayFile,
 } from './timeline-plan';
 
@@ -248,11 +252,11 @@ function probe(filePath: string): Promise<ProbeResult> {
  * Без этого шага сцена схлопнулась бы до длительности по умолчанию, и от готового
  * ролика Kling осталось бы четыре секунды из десяти.
  */
-function withProbedDuration(scene: TimelineScene, probed: ProbeResult | undefined): TimelineScene {
-  if (scene.source.kind !== 'video' || !probed?.durationSec) return scene;
-  const hasExplicitTrim = typeof scene.trimEndSec === 'number' && scene.trimEndSec > (scene.trimStartSec ?? 0);
+function withProbedDuration(scene: TimelineScene, layer: MediaLayer, probed: ProbeResult | undefined): TimelineScene {
+  if (layer.source.kind !== 'video' || !probed?.durationSec) return scene;
+  const hasExplicitTrim = typeof layer.trimEndSec === 'number' && layer.trimEndSec > (layer.trimStartSec ?? 0);
   if (hasExplicitTrim || typeof scene.durationSec === 'number') return scene;
-  const available = Math.max(0, probed.durationSec - (scene.trimStartSec ?? 0));
+  const available = Math.max(0, probed.durationSec - (layer.trimStartSec ?? 0));
   return {
     ...scene,
     durationSec: Math.min(TIMELINE_LIMITS.maxSceneDurationSec, Math.max(TIMELINE_LIMITS.minSceneDurationSec, available)),
@@ -272,7 +276,10 @@ async function renderOverlayFiles(input: {
 
   for (const timing of timings) {
     const files: SceneOverlayFile[] = [];
-    for (const [overlayIndex, overlay] of timing.scene.overlays.entries()) {
+    // Титр — это такой же слой сцены, поэтому берём их из слоёв: старая форма
+    // записи (overlays на сцене) разворачивается в те же слои при чтении.
+    const textLayers = sceneTextLayers(timing.scene);
+    for (const [overlayIndex, overlay] of textLayers.entries()) {
       const start = Math.max(0, overlay.startSec ?? 0);
       const end = Math.min(timing.durationSec, overlay.endSec ?? timing.durationSec);
       if (end <= start) continue;
@@ -314,26 +321,35 @@ export const timelineRenderBlock: BlockDefinition = {
 
     const workDir = await fs.mkdtemp(path.join(os.tmpdir(), 'allvision-timeline-'));
     try {
-      // 1. Складываем исходники на диск и уточняем длительности.
-      const sources: ScenePlanInput[] = [];
+      // 1. Складываем на диск исходники КАЖДОГО слоя и уточняем длительности.
+      const layersByScene: LayerInput[][] = [];
       const scenes: TimelineScene[] = [];
-      for (const [index, scene] of timeline.scenes.entries()) {
-        if (scene.source.kind === 'color') {
-          sources.push({ kind: 'color', color: scene.source.color ?? '#000000' });
-          scenes.push(scene);
-          continue;
+      for (const [index, rawScene] of timeline.scenes.entries()) {
+        let scene = rawScene;
+        const inputs: LayerInput[] = [];
+        const primary = primaryMediaLayer(rawScene);
+
+        for (const [layerIndex, layer] of sceneMediaLayers(rawScene).entries()) {
+          if (layer.source.kind === 'color') {
+            inputs.push({ layer, kind: 'color', color: layer.source.color ?? '#000000', hasAudio: false });
+            continue;
+          }
+          const url = layer.source.url as string;
+          const ext = path.extname(new URL(url, 'https://placeholder.local').pathname)
+            || (layer.source.kind === 'video' ? '.mp4' : '.jpg');
+          const filePath = await materialize(url, path.join(workDir, `s${index}-l${layerIndex}${ext}`));
+          if (layer.source.kind === 'video') {
+            const probed = await probe(filePath);
+            // Длину сцены задаёт только главный слой: остальные подрезаются под неё.
+            if (layer === primary) scene = withProbedDuration(scene, layer, probed);
+            inputs.push({ layer, kind: 'video', path: filePath, hasAudio: probed.hasAudio });
+          } else {
+            inputs.push({ layer, kind: 'image', path: filePath, hasAudio: false });
+          }
         }
-        const url = scene.source.url as string;
-        const ext = path.extname(new URL(url, 'https://placeholder.local').pathname) || (scene.source.kind === 'video' ? '.mp4' : '.jpg');
-        const filePath = await materialize(url, path.join(workDir, `source-${index}${ext}`));
-        if (scene.source.kind === 'video') {
-          const probed = await probe(filePath);
-          scenes.push(withProbedDuration(scene, probed));
-          sources.push({ kind: 'video', path: filePath, trimStartSec: scene.trimStartSec ?? 0, hasAudio: probed.hasAudio });
-        } else {
-          scenes.push(scene);
-          sources.push({ kind: 'image', path: filePath });
-        }
+
+        layersByScene.push(inputs);
+        scenes.push(scene);
       }
 
       const resolved: Timeline = { ...timeline, scenes };
@@ -352,7 +368,7 @@ export const timelineRenderBlock: BlockDefinition = {
         const outputName = path.join(workDir, `scene-${index}.mp4`);
         const plan = planScene({
           scene,
-          source: sources[index],
+          layers: layersByScene[index],
           overlays: overlaysByScene.get(index) ?? [],
           width,
           height,
@@ -410,7 +426,7 @@ export const timelineRenderBlock: BlockDefinition = {
           scenes: resolved.scenes.map((scene, index) => ({
             id: scene.id,
             durationSec: sceneDurationSec(scene),
-            sourceUrl: scene.source.url ?? null,
+            sourceUrl: primaryMediaLayer(scene)?.source.url ?? null,
             index,
           })),
         },

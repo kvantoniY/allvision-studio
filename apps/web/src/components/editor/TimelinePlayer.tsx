@@ -5,6 +5,7 @@ import { Pause, Play, RotateCcw } from 'lucide-react';
 import {
   formatTimelineDuration,
   renderOverlaySvg,
+  primaryMediaLayer,
   sceneAtTime,
   sourceTimeAt,
   timelineDurationSec,
@@ -87,9 +88,10 @@ export function TimelinePlayer({ timeline, className }: { timeline: Timeline; cl
       const element = videoRefs.current[slot];
       if (!element) return;
       const scene = timeline.scenes[layer.sceneIndex];
-      if (!scene || scene.source.kind !== 'video') return;
+      const primary = scene ? primaryMediaLayer(scene) : undefined;
+      if (!primary || primary.source.kind !== 'video') return;
 
-      const url = mediaUrl(scene.source.url);
+      const url = mediaUrl(primary.source.url);
       if (!url) return;
 
       if (assignedRef.current[slot] !== layer.sceneIndex) {
@@ -97,8 +99,8 @@ export function TimelinePlayer({ timeline, className }: { timeline: Timeline; cl
         element.src = url;
         element.currentTime = sceneTimeFor(layer.sceneIndex, time);
       }
-      element.muted = scene.muted;
-      element.volume = Math.min(1, scene.volume);
+      element.muted = primary.muted;
+      element.volume = Math.min(1, primary.volume);
 
       // Мелкое расхождение неизбежно (браузер не перематывает по кадрам), поэтому
       // подтягиваем время только когда разошлись заметно — иначе видео дёргается.
@@ -243,13 +245,16 @@ function SceneLayer({
   };
 
   if (!scene) return null;
+  const primary = primaryMediaLayer(scene);
+  if (!primary) return null;
+  const source = primary.source;
 
-  if (scene.source.kind === 'color') {
-    return <div className="absolute inset-0" style={{ ...style, backgroundColor: scene.source.color ?? '#000000' }} />;
+  if (source.kind === 'color') {
+    return <div className="absolute inset-0" style={{ ...style, backgroundColor: source.color ?? '#000000' }} />;
   }
 
-  if (scene.source.kind === 'image') {
-    const url = mediaUrl(scene.source.url);
+  if (source.kind === 'image') {
+    const url = mediaUrl(source.url);
     return (
       <div className="absolute inset-0" style={style}>
         {url && <img src={url} alt="" className="h-full w-full object-contain" />}

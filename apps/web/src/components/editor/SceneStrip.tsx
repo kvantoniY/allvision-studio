@@ -1,7 +1,7 @@
 'use client';
 
 import { ArrowLeft, ArrowRight, Copy, Film, ImageIcon, Palette, Plus, Trash2 } from 'lucide-react';
-import { formatTimelineDuration, sceneDurationSec, type Timeline, type TimelineScene } from '@allvision/shared';
+import { formatTimelineDuration, primaryMediaLayer, sceneDurationSec, type Timeline, type TimelineScene } from '@allvision/shared';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -13,24 +13,28 @@ function mediaUrl(value?: string | null) {
 }
 
 function SceneThumb({ scene }: { scene: TimelineScene }) {
-  if (scene.source.kind === 'color') {
+  // Миниатюру показывает главный слой сцены — тот же, что задаёт её длительность.
+  const primary = primaryMediaLayer(scene);
+  if (!primary) return <div className="h-full w-full bg-slate-800" />;
+  const source = primary.source;
+  if (source.kind === 'color') {
     return (
-      <div className="grid h-full w-full place-items-center" style={{ backgroundColor: scene.source.color ?? '#000' }}>
+      <div className="grid h-full w-full place-items-center" style={{ backgroundColor: source.color ?? '#000' }}>
         <Palette className="h-4 w-4 text-white/50" />
       </div>
     );
   }
-  const url = mediaUrl(scene.source.url);
-  if (scene.source.kind === 'image' && url) {
+  const url = mediaUrl(source.url);
+  if (source.kind === 'image' && url) {
     return <img src={url} alt="" className="h-full w-full object-cover" />;
   }
-  if (scene.source.kind === 'video' && url) {
+  if (source.kind === 'video' && url) {
     // Кадр из видео вместо иконки: по нему сцену узнают с одного взгляда.
     return <video src={`${url}#t=0.1`} muted playsInline preload="metadata" className="h-full w-full object-cover" />;
   }
   return (
     <div className="grid h-full w-full place-items-center bg-slate-800">
-      {scene.source.kind === 'video' ? <Film className="h-4 w-4 text-slate-500" /> : <ImageIcon className="h-4 w-4 text-slate-500" />}
+      {source.kind === 'video' ? <Film className="h-4 w-4 text-slate-500" /> : <ImageIcon className="h-4 w-4 text-slate-500" />}
     </div>
   );
 }

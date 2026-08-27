@@ -7,6 +7,7 @@ import {
   TIMELINE_TEXT_POSITIONS,
   TIMELINE_TRANSITIONS,
   TITLE_STYLE_DEFS,
+  primaryMediaLayer,
   sceneDurationSec,
   type TimelineScene,
   type TimelineTextOverlay,
@@ -61,7 +62,9 @@ export function SceneInspector({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [trimError, setTrimError] = useState<string | null>(null);
   const duration = sceneDurationSec(scene);
-  const isVideo = scene.source.kind === 'video';
+  const primary = primaryMediaLayer(scene);
+  const source = primary?.source ?? { kind: 'color' as const, color: '#0b1020' };
+  const isVideo = source.kind === 'video';
 
   const updateOverlay = (overlayIndex: number, patch: Partial<TimelineTextOverlay>) => {
     const overlays = scene.overlays.map((overlay, i) => (i === overlayIndex ? { ...overlay, ...patch } : overlay));
@@ -82,7 +85,7 @@ export function SceneInspector({
     <div className="space-y-6 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-slate-100">Сцена {index + 1}</h3>
-        <span className="text-xs text-slate-500">{SOURCE_LABELS[scene.source.kind]}</span>
+        <span className="text-xs text-slate-500">{SOURCE_LABELS[source.kind]}</span>
       </div>
 
       <section className="space-y-2">
@@ -112,11 +115,11 @@ export function SceneInspector({
             }}
           />
         </div>
-        {scene.source.kind === 'color' && (
+        {source.kind === 'color' && (
           <div className="flex items-center gap-2">
             <input
               type="color"
-              value={scene.source.color ?? '#0b1020'}
+              value={source.color ?? '#0b1020'}
               onChange={(event) => onChange({ source: { kind: 'color', color: event.target.value } })}
               className="h-9 w-14 cursor-pointer rounded border border-slate-700 bg-transparent"
               aria-label="Цвет заливки"

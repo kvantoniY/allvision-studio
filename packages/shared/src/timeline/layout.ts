@@ -5,6 +5,7 @@ import {
   type TimelineScene,
   type TimelineTextOverlay,
 } from './types';
+import { primaryMediaLayer, sceneLayers } from './layers';
 
 export type TimelineResolution = { width: number; height: number };
 
@@ -36,9 +37,11 @@ export const DEFAULT_IMAGE_SCENE_SEC = 4;
  * на дефолт — молча ронять сцену из-за неизвестной длины нельзя.
  */
 export function sceneDurationSec(scene: TimelineScene): number {
-  if (scene.source.kind === 'video') {
-    const start = scene.trimStartSec ?? 0;
-    const end = scene.trimEndSec;
+  // Длину задаёт главный видео-слой: именно его обрезку тянул пользователь.
+  const primary = primaryMediaLayer(scene);
+  if (primary?.source.kind === 'video') {
+    const start = primary.trimStartSec ?? 0;
+    const end = primary.trimEndSec;
     if (typeof end === 'number' && end > start) {
       return clampSceneDuration(end - start);
     }
@@ -147,7 +150,8 @@ export function sceneAtTime(timeline: Timeline, seconds: number): PlayheadFrame 
 export function sourceTimeAt(timeline: Timeline, sceneIndex: number, seconds: number): number {
   const timing = timelineTimings(timeline)[sceneIndex];
   if (!timing) return 0;
-  const trimStart = timing.scene.source.kind === 'video' ? timing.scene.trimStartSec ?? 0 : 0;
+  const primary = primaryMediaLayer(timing.scene);
+  const trimStart = primary?.source.kind === 'video' ? primary.trimStartSec ?? 0 : 0;
   return trimStart + Math.max(0, seconds - timing.startSec);
 }
 
@@ -194,17 +198,35 @@ export function applyGeneratedSource(
   source: { kind: 'video' | 'image'; url: string },
 ): { timeline: Timeline; changed: boolean } {
   let changed = false;
+
   const scenes = timeline.scenes.map((scene) => {
-    if (scene.generationProjectId !== generationProjectId) return scene;
+    // Новая форма: метку несёт конкретный слой, и материал встаёт именно в него —
+    // остальные слои коллажа трогать нельзя.
+    const layers = sceneLayers(scene);
+    const target = layers.find(
+      (layer) => layer.kind === 'media' && layer.generationProjectId === generationProjectId,
+    );
+    if (!target) return scene;
+
     changed = true;
+    const nextLayers = layers.map((layer) =>
+      layer === target
+        ? { ...layer, source, trimStartSec: undefined, trimEndSec: undefined }
+        : layer,
+    );
     return {
       ...scene,
-      source,
+      layers: nextLayers,
+      // Сцена старой формы здесь же переезжает на слои: держать обе записи разом
+      // значило бы иметь два источника правды об одном кадре.
+      source: undefined,
+      overlays: [],
       trimStartSec: undefined,
       trimEndSec: undefined,
       durationSec: source.kind === 'image' ? scene.durationSec ?? DEFAULT_IMAGE_SCENE_SEC : scene.durationSec,
     };
   });
+
   return { timeline: changed ? { ...timeline, scenes } : timeline, changed };
 }
 
@@ -232,11 +254,34 @@ export function validateTimeline(timeline: Timeline, options?: { maxScenes?: num
     }
     seen.add(scene.id);
 
-    if (scene.source.kind === 'color') {
+    const layers = sceneLayers(scene);
+    if (layers.length === 0) {
+      issues.push({ code: 'EMPTY_SCENE', message: 'В сцене нет ни одного слоя.', sceneId: scene.id });
+    }
+    for (const layer of layers) {
+      if (layer.kind !== 'media') continue;
+      if (layer.source.kind === 'color') {
+        if (!layer.source.color) {
+          issues.push({ code: 'COLOR_REQUIRED', message: 'У слоя-заливки не задан цвет.', sceneId: scene.id });
+        }
+      } else if (!layer.source.url) {
+        issues.push({ code: 'SOURCE_REQUIRED', message: 'У слоя не задан файл-источник.', sceneId: scene.id });
+      }
+      if (
+        typeof layer.trimStartSec === 'number'
+        && typeof layer.trimEndSec === 'number'
+        && layer.trimEndSec <= layer.trimStartSec
+      ) {
+        issues.push({ code: 'INVALID_TRIM', message: 'Конец обрезки раньше начала.', sceneId: scene.id });
+      }
+    }
+
+    // Прежняя форма записи проверяется отдельно: у неё источник лежит на самой сцене.
+    if (!scene.layers && scene.source && scene.source.kind === 'color') {
       if (!scene.source.color) {
         issues.push({ code: 'COLOR_REQUIRED', message: 'У сцены-заливки не задан цвет.', sceneId: scene.id });
       }
-    } else if (!scene.source.url) {
+    } else if (!scene.layers && scene.source && !scene.source.url) {
       issues.push({ code: 'SOURCE_REQUIRED', message: 'У сцены не задан файл-источник.', sceneId: scene.id });
     }
 

@@ -6,7 +6,9 @@ import { AlertCircle, ArrowLeft, Check, Download, Film, Loader2 } from 'lucide-r
 import {
   TIMELINE_ASPECTS,
   TIMELINE_LIMITS,
+  applyGeneratedSource,
   formatTimelineDuration,
+  sceneMediaLayers,
   timelineDurationSec,
   validateTimeline,
   type Timeline,
@@ -232,24 +234,20 @@ export function VideoEditor({ id }: { id: string }) {
     void (async () => {
       try {
         const fresh = await refetchProject().unwrap();
-        const generated = fresh.project.timeline.scenes.find(
-          (scene) => scene.generationProjectId === sceneGenerationId,
-        );
-        if (!generated?.source.url) return;
+        // Воркер уже вписал результат в свою копию ролика — забираем оттуда только
+        // материал готового слоя, а не весь таймлайн: правки, сделанные во время
+        // генерации, затирать нельзя.
+        const generatedLayer = fresh.project.timeline.scenes
+          .flatMap((scene) => sceneMediaLayers(scene))
+          .find((layer) => layer.generationProjectId === sceneGenerationId);
+        const url = generatedLayer?.source.url;
+        const kind = generatedLayer?.source.kind;
+        if (!url || (kind !== 'image' && kind !== 'video')) return;
+
         setTimeline((current) => {
           if (!current) return current;
-          const scenes = current.scenes.map((scene) =>
-            scene.generationProjectId === sceneGenerationId
-              ? {
-                  ...scene,
-                  source: generated.source,
-                  trimStartSec: undefined,
-                  trimEndSec: undefined,
-                  durationSec: generated.source.kind === 'image' ? scene.durationSec ?? 4 : generated.durationSec,
-                }
-              : scene,
-          );
-          return { ...current, scenes };
+          const applied = applyGeneratedSource(current, sceneGenerationId, { kind, url });
+          return applied.changed ? applied.timeline : current;
         });
         toast({ title: 'Сцена готова' });
       } catch {

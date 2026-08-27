@@ -9,6 +9,7 @@ import {
   SCENE_PRESET_GROUP_TITLES,
   estimateChatGenerationPriceCoins,
   formatTokens,
+  primaryMediaLayer,
   type ChatAspectRatio,
   type TimelineAspect,
   type TimelineScene,
@@ -56,7 +57,9 @@ export function SceneGenerator({
   running: boolean;
   onGenerate: (request: SceneGenerationRequest) => void;
 }) {
-  const hasImage = scene.source.kind === 'image' && Boolean(scene.source.url);
+  // Референсом в генерацию идёт главный слой сцены — тот, что видно на миниатюре.
+  const primary = primaryMediaLayer(scene);
+  const hasImage = primary?.source.kind === 'image' && Boolean(primary.source.url);
   // Оверрайды цен живут в БД и работают как минимум: без них редактор показывал бы
   // цену ниже той, что спишет сервер.
   const { data: pricing } = useGetChatModelsQuery();
@@ -203,7 +206,7 @@ export function SceneGenerator({
               prompt: prompt.trim(),
               aspectRatio: aspectForTimeline(aspect),
               duration: isVideo ? duration : undefined,
-              imageInputRef: hasImage ? scene.source.url : undefined,
+              imageInputRef: hasImage ? primary?.source.url : undefined,
             })
           }
         >
