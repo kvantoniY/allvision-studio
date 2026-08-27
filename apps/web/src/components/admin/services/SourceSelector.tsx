@@ -43,7 +43,7 @@ type SourceSelectorProps = {
 const mediaKinds: Record<SourceMediaKind, { primary: string; extra: string[]; uploadKinds: string[] }> = {
   image: { primary: 'preview-image', extra: [], uploadKinds: ['preview-image'] },
   video: { primary: 'trend-video', extra: [], uploadKinds: ['trend-video'] },
-  audio: { primary: 'music-track', extra: [], uploadKinds: ['music-track'] },
+  audio: { primary: 'background-music', extra: [], uploadKinds: ['background-music'] },
 };
 
 function SourceKindIcon({ mediaKind }: { mediaKind: SourceMediaKind }) {

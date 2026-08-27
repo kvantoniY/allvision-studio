@@ -82,7 +82,7 @@ export function InputSourcePicker({ mediaKind, value, required, compact, iconOnl
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 }, { skip: mediaKind !== 'image' });
   const locations = useListUserMediaAssetsQuery({ kind: 'user-location', limit: 100 }, { skip: mediaKind !== 'image' });
   const publicAssets = useGetPublicMediaAssetsQuery({
-    kind: mediaKind === 'image' ? 'preview-image' : mediaKind === 'video' ? 'trend-video' : 'music-track',
+    kind: mediaKind === 'image' ? 'preview-image' : mediaKind === 'video' ? 'trend-video' : 'background-music',
     active: true,
   });
 

@@ -17,7 +17,7 @@ import {
   useUpdateAdminMediaAssetMutation,
 } from '@/store/api/admin-media-assets-api';
 
-const kinds = ['trend-video', 'preview-image', 'music-track', 'user-avatar', 'user-location'];
+const kinds = ['trend-video', 'preview-image', 'background-music', 'user-avatar', 'user-location'];
 
 function formatBytes(value: number) {
   if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`;
