@@ -61,6 +61,8 @@ type StyleSpec = {
   uppercase?: boolean;
 };
 
+export type TitleStyleSpec = StyleSpec;
+
 const STYLES: Record<TimelineTextStyle, StyleSpec> = {
   clean: {
     fontScale: 0.062,
@@ -241,6 +243,11 @@ export type OverlayLayout = {
   top: number;
   centerX: number;
 };
+
+/** Оформление стиля титра: цвета, вес, плашка. Нужно холсту, чтобы рисовать так же. */
+export function titleStyleSpec(style: TimelineTextStyle): TitleStyleSpec {
+  return STYLES[style] ?? STYLES.clean;
+}
 
 export function layoutOverlay(overlay: TitleInput, options: OverlayRenderOptions): OverlayLayout {
   const spec = STYLES[overlay.style] ?? STYLES.clean;

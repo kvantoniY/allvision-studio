@@ -2,15 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { AlertCircle, ArrowLeft, Check, Download, Film, Loader2 } from 'lucide-react';
 import {
+  AlertCircle,
+  ArrowLeft,
+  Check,
+  Download,
+  Film,
+  Image as ImageIcon,
+  LayoutGrid,
+  Loader2,
+  Music,
+  Sparkles,
+  Type,
+  Upload,
+} from 'lucide-react';
+import {
+  COLLAGE_LAYOUT_TITLES,
   TIMELINE_ASPECTS,
   TIMELINE_LIMITS,
   applyGeneratedSource,
   formatTimelineDuration,
+  sceneLayers,
   sceneMediaLayers,
   timelineDurationSec,
   validateTimeline,
+  type CollageLayout,
+  type SceneLayer,
   type Timeline,
   type TimelineAspect,
   type TimelineScene,
@@ -21,10 +38,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
+import { EditorStage } from '@/components/editor/EditorStage';
+import { LayerInspector } from '@/components/editor/LayerInspector';
+import { LayerPanel } from '@/components/editor/LayerPanel';
 import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
-import { SceneInspector } from '@/components/editor/SceneInspector';
 import { SceneStrip } from '@/components/editor/SceneStrip';
-import { TimelinePlayer } from '@/components/editor/TimelinePlayer';
+import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import {
@@ -47,35 +66,27 @@ const ASPECT_LABELS: Record<TimelineAspect, string> = {
   '4:5': 'Лента',
 };
 
+const TOOLS = [
+  { code: 'media', label: 'Медиа', icon: ImageIcon },
+  { code: 'text', label: 'Текст', icon: Type },
+  { code: 'audio', label: 'Звук', icon: Music },
+  { code: 'ai', label: 'ИИ', icon: Sparkles },
+] as const;
+
+type ToolCode = (typeof TOOLS)[number]['code'];
+
 function mediaUrl(value?: string | null) {
   if (!value) return null;
   if (value.startsWith('/static/')) return `${API_URL}${value}`;
   return value;
 }
 
-function uid(prefix: string) {
-  return `${prefix}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function newScene(): TimelineScene {
-  return {
-    id: uid('scene'),
-    source: { kind: 'color', color: '#0b1020' },
-    durationSec: 4,
-    transition: 'dissolve',
-    transitionDurationSec: 0.6,
-    muted: false,
-    volume: 1,
-    overlays: [],
-  };
-}
-
 /**
  * Редактор ролика.
  *
- * Правки живут в локальном состоянии и уезжают на сервер с задержкой: сохранять
- * каждое нажатие клавиши в поле титра — это запрос на символ, а терять работу
- * при закрытии вкладки нельзя, поэтому автосохранение, а не кнопка «Сохранить».
+ * Раскладка повторяет то, к чему приучили монтажки: инструменты слева, холст в центре,
+ * лента сцен под ним, а справа — слои и настройки того, что выделено. Постоянная стопка
+ * всех настроек сразу и была тем, что делало прежнюю панель нечитаемой.
  */
 export function VideoEditor({ id }: { id: string }) {
   const { data, isLoading, isError, refetch: refetchProject } = useGetVideoProjectQuery(id);
@@ -88,14 +99,19 @@ export function VideoEditor({ id }: { id: string }) {
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [title, setTitle] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [sceneIndex, setSceneIndex] = useState(0);
+  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [tool, setTool] = useState<ToolCode>('media');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [exportId, setExportId] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
+  const uploadTargetRef = useRef<{ sceneIndex: number; layerId: string | null } | null>(null);
+  const addFileRef = useRef<HTMLInputElement | null>(null);
+  const timelineRef = useRef<Timeline | null>(null);
 
   // Ответ сервера принимаем один раз: иначе автосохранение перетирало бы то,
-  // что пользователь успел напечатать, пока запрос летел.
+  // что пользователь успел изменить, пока летел запрос.
   useEffect(() => {
     if (!data?.project || loadedRef.current) return;
     loadedRef.current = true;
@@ -103,6 +119,10 @@ export function VideoEditor({ id }: { id: string }) {
     setTitle(data.project.title);
     setExportId(data.project.lastExportId);
   }, [data]);
+
+  useEffect(() => {
+    timelineRef.current = timeline;
+  }, [timeline]);
 
   const scheduleSave = useCallback(
     (patch: { title?: string; timeline?: Timeline }) => {
@@ -132,20 +152,25 @@ export function VideoEditor({ id }: { id: string }) {
   const applyTimeline = useCallback(
     (next: Timeline) => {
       setTimeline(next);
+      timelineRef.current = next;
       scheduleSave({ timeline: next });
     },
     [scheduleSave],
   );
 
-  const patchScene = useCallback(
-    (index: number, patch: Partial<TimelineScene>) => {
-      if (!timeline) return;
-      const scenes = timeline.scenes.map((scene, i) => (i === index ? { ...scene, ...patch } : scene));
-      applyTimeline({ ...timeline, scenes });
-    },
-    [timeline, applyTimeline],
-  );
+  const ops = useEditorOperations(timeline, applyTimeline);
 
+  const currentScene: TimelineScene | undefined =
+    timeline?.scenes[Math.min(sceneIndex, (timeline?.scenes.length ?? 1) - 1)];
+  const layers: SceneLayer[] = useMemo(() => (currentScene ? sceneLayers(currentScene) : []), [currentScene]);
+  const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) ?? null;
+
+  // Выделение живёт внутри сцены: при переходе на другую оно должно сбрасываться.
+  useEffect(() => {
+    setSelectedLayerId(null);
+  }, [sceneIndex]);
+
+  // --- сцены ---
   const addScene = useCallback(() => {
     if (!timeline) return;
     if (timeline.scenes.length >= TIMELINE_LIMITS.maxScenes) {
@@ -153,7 +178,7 @@ export function VideoEditor({ id }: { id: string }) {
       return;
     }
     applyTimeline({ ...timeline, scenes: [...timeline.scenes, newScene()] });
-    setSelectedIndex(timeline.scenes.length);
+    setSceneIndex(timeline.scenes.length);
   }, [timeline, applyTimeline]);
 
   const moveScene = useCallback(
@@ -164,20 +189,28 @@ export function VideoEditor({ id }: { id: string }) {
       const scenes = [...timeline.scenes];
       [scenes[index], scenes[target]] = [scenes[target], scenes[index]];
       applyTimeline({ ...timeline, scenes });
-      setSelectedIndex(target);
+      setSceneIndex(target);
     },
     [timeline, applyTimeline],
   );
 
   const duplicateScene = useCallback(
     (index: number) => {
-      if (!timeline) return;
-      if (timeline.scenes.length >= TIMELINE_LIMITS.maxScenes) return;
-      const copy = { ...timeline.scenes[index], id: uid('scene') };
+      if (!timeline || timeline.scenes.length >= TIMELINE_LIMITS.maxScenes) return;
+      const source = timeline.scenes[index];
+      // У копии новые идентификаторы: иначе метка генерации и выделение указывали бы
+      // сразу на две сцены.
+      const copy: TimelineScene = {
+        ...source,
+        id: uid('scene'),
+        layers: sceneLayers(source).map((layer) => ({ ...layer, id: uid('layer'), generationProjectId: undefined })),
+        source: undefined,
+        overlays: [],
+      };
       const scenes = [...timeline.scenes];
       scenes.splice(index + 1, 0, copy);
       applyTimeline({ ...timeline, scenes });
-      setSelectedIndex(index + 1);
+      setSceneIndex(index + 1);
     },
     [timeline, applyTimeline],
   );
@@ -185,51 +218,63 @@ export function VideoEditor({ id }: { id: string }) {
   const removeScene = useCallback(
     (index: number) => {
       if (!timeline || timeline.scenes.length <= 1) return;
-      const scenes = timeline.scenes.filter((_, i) => i !== index);
-      applyTimeline({ ...timeline, scenes });
-      setSelectedIndex(Math.max(0, index - 1));
+      applyTimeline({ ...timeline, scenes: timeline.scenes.filter((_, i) => i !== index) });
+      setSceneIndex(Math.max(0, index - 1));
     },
     [timeline, applyTimeline],
   );
 
+  // --- загрузка файлов ---
   const handleUpload = useCallback(
     async (file: File) => {
-      if (!timeline) return;
+      const target = uploadTargetRef.current ?? { sceneIndex, layerId: selectedLayerId };
+      uploadTargetRef.current = null;
       try {
         const uploaded = await uploadMedia({ id, file }).unwrap();
-        // Длительность меряет браузер: на сервере ffprobe нет, а рендер всё равно
-        // перемерит файл сам — здесь это нужно только чтобы сцена сразу была правильной длины.
-        const durationSec = uploaded.mediaKind === 'video' ? await probeDuration(file) : undefined;
-        patchScene(selectedIndex, {
-          source: { kind: uploaded.mediaKind === 'video' ? 'video' : 'image', url: uploaded.url },
-          trimStartSec: undefined,
-          trimEndSec: undefined,
-          durationSec: uploaded.mediaKind === 'video' ? durationSec : 4,
-        });
+        const kind = uploaded.mediaKind === 'video' ? ('video' as const) : ('image' as const);
+        // Длительность меряет браузер: ffprobe на сервере нет, а рендер всё равно
+        // перемерит файл сам — здесь это нужно, чтобы сцена сразу была нужной длины.
+        const durationSec = kind === 'video' ? await probeDuration(file) : undefined;
+
+        if (target.layerId) {
+          ops.changeLayer(target.sceneIndex, target.layerId, {
+            source: { kind, url: uploaded.url },
+            trimStartSec: undefined,
+            trimEndSec: undefined,
+          });
+        } else {
+          const layerId = ops.addMediaLayer(target.sceneIndex, { kind, url: uploaded.url });
+          if (layerId) setSelectedLayerId(layerId);
+        }
+        if (kind === 'video' && durationSec) ops.patchScene(target.sceneIndex, { durationSec });
       } catch {
         toast({ title: 'Не удалось загрузить файл', description: 'Проверьте формат и размер.', variant: 'destructive' });
       }
     },
-    [id, timeline, uploadMedia, patchScene, selectedIndex],
+    [id, uploadMedia, ops, sceneIndex, selectedLayerId],
   );
 
-  const selectedSceneNow = timeline?.scenes[Math.min(selectedIndex, (timeline?.scenes.length ?? 1) - 1)];
-  const sceneGenerationId = selectedSceneNow?.generationProjectId ?? null;
+  const pickFileFor = (layerId: string | null) => {
+    uploadTargetRef.current = { sceneIndex, layerId };
+    addFileRef.current?.click();
+  };
 
-  const { data: sceneStatus } = useGetProjectStatusQuery(sceneGenerationId ?? '', {
-    skip: !sceneGenerationId,
-    pollingInterval: sceneGenerationId ? 3000 : 0,
+  // --- генерация в слой ---
+  const runningGenerationId = currentScene
+    ? sceneMediaLayers(currentScene).find((layer) => Boolean(layer.generationProjectId))?.generationProjectId ?? null
+    : null;
+
+  const { data: sceneStatus } = useGetProjectStatusQuery(runningGenerationId ?? '', {
+    skip: !runningGenerationId,
+    pollingInterval: runningGenerationId ? 3000 : 0,
   });
-  const sceneGenerationRunning = sceneStatus?.status === 'PENDING' || sceneStatus?.status === 'PROCESSING';
+  const generationRunning = sceneStatus?.status === 'PENDING' || sceneStatus?.status === 'PROCESSING';
 
-  // Результат в сцену записывает воркер — это работает и с закрытой вкладкой. Здесь мы
-  // забираем ТОЛЬКО материал готовой сцены, а не перезагружаем ролик целиком: иначе
-  // правки, которые пользователь делал, пока шла генерация, были бы затёрты ответом сервера.
   const appliedGenerationRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!sceneGenerationId || sceneStatus?.status !== 'COMPLETED') return;
-    if (appliedGenerationRef.current === sceneGenerationId) return;
-    appliedGenerationRef.current = sceneGenerationId;
+    if (!runningGenerationId || sceneStatus?.status !== 'COMPLETED') return;
+    if (appliedGenerationRef.current === runningGenerationId) return;
+    appliedGenerationRef.current = runningGenerationId;
 
     void (async () => {
       try {
@@ -239,47 +284,40 @@ export function VideoEditor({ id }: { id: string }) {
         // генерации, затирать нельзя.
         const generatedLayer = fresh.project.timeline.scenes
           .flatMap((scene) => sceneMediaLayers(scene))
-          .find((layer) => layer.generationProjectId === sceneGenerationId);
+          .find((layer) => layer.generationProjectId === runningGenerationId);
         const url = generatedLayer?.source.url;
         const kind = generatedLayer?.source.kind;
         if (!url || (kind !== 'image' && kind !== 'video')) return;
 
         setTimeline((current) => {
           if (!current) return current;
-          const applied = applyGeneratedSource(current, sceneGenerationId, { kind, url });
+          const applied = applyGeneratedSource(current, runningGenerationId, { kind, url });
           return applied.changed ? applied.timeline : current;
         });
-        toast({ title: 'Сцена готова' });
+        toast({ title: 'Кадр готов' });
       } catch {
-        toast({
-          title: 'Сцена готова, но не подтянулась',
-          description: 'Обновите страницу — материал уже сохранён в ролике.',
-        });
+        toast({ title: 'Генерация готова', description: 'Обновите страницу, если кадр не появился.' });
       }
     })();
-  }, [sceneGenerationId, sceneStatus?.status, refetchProject]);
-
-  useEffect(() => {
-    if (!sceneGenerationId || sceneStatus?.status !== 'FAILED') return;
-    if (appliedGenerationRef.current === sceneGenerationId) return;
-    appliedGenerationRef.current = sceneGenerationId;
-    toast({
-      title: 'Генерация не удалась',
-      description: 'Коины вернулись на баланс. Попробуйте другую модель или описание.',
-      variant: 'destructive',
-    });
-  }, [sceneGenerationId, sceneStatus?.status]);
+  }, [runningGenerationId, sceneStatus?.status, refetchProject]);
 
   const handleGenerate = useCallback(
     async (request: SceneGenerationRequest) => {
-      if (!timeline) return;
-      const scene = timeline.scenes[selectedIndex];
-      if (!scene) return;
-      // Сначала досохраняем ролик: сервер ищет сцену в своей копии таймлайна,
-      // и только что добавленной сцены там может ещё не быть.
+      const scene = currentScene;
+      if (!timeline || !scene) return;
+
+      // Результат встаёт в НОВЫЙ слой поверх сцены: подменять то, что человек уже
+      // разложил, без спроса нельзя.
+      const layerId = ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
+      if (!layerId) {
+        toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+        return;
+      }
+
       if (saveTimer.current) clearTimeout(saveTimer.current);
       try {
-        await updateProject({ id, timeline }).unwrap();
+        // Сервер ищет сцену в своей копии таймлайна, поэтому сначала досохраняем.
+        if (timelineRef.current) await updateProject({ id, timeline: timelineRef.current }).unwrap();
         const result = await generateScene({
           id,
           sceneId: scene.id,
@@ -292,19 +330,19 @@ export function VideoEditor({ id }: { id: string }) {
           },
         }).unwrap();
         appliedGenerationRef.current = null;
-        patchScene(selectedIndex, { generationProjectId: result.projectId });
-        toast({
-          title: 'Генерация запущена',
-          description: 'Можно закрыть страницу — результат сам встанет в сцену.',
-        });
+        ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId, origin: 'generated' });
+        setSelectedLayerId(layerId);
+        toast({ title: 'Генерация запущена', description: 'Можно закрыть страницу — кадр сам встанет в сцену.' });
       } catch (error) {
+        ops.removeLayer(sceneIndex, layerId);
         const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
         toast({ title: 'Не удалось запустить генерацию', description: message, variant: 'destructive' });
       }
     },
-    [id, timeline, selectedIndex, updateProject, generateScene, patchScene],
+    [timeline, currentScene, ops, sceneIndex, id, updateProject, generateScene],
   );
 
+  // --- экспорт ---
   const { data: exportStatus } = useGetProjectStatusQuery(exportId ?? '', {
     skip: !exportId,
     pollingInterval: exportId ? 3000 : 0,
@@ -321,7 +359,6 @@ export function VideoEditor({ id }: { id: string }) {
       toast({ title: 'Ролик пока нельзя собрать', description: issues[0].message, variant: 'destructive' });
       return;
     }
-    // Даём автосохранению доехать: экспорт читает таймлайн с сервера, а не с экрана.
     if (saveTimer.current) clearTimeout(saveTimer.current);
     try {
       await updateProject({ id, title, timeline }).unwrap();
@@ -329,7 +366,7 @@ export function VideoEditor({ id }: { id: string }) {
       setExportId(result.projectId);
       setSaveState('saved');
       toast({
-        title: result.alreadyRunning ? 'Экспорт уже идёт' : 'Собираем ролик',
+        title: result.alreadyRunning ? 'Сборка уже идёт' : 'Собираем ролик',
         description: 'Можно закрыть страницу — файл появится здесь, когда будет готов.',
       });
     } catch {
@@ -358,12 +395,11 @@ export function VideoEditor({ id }: { id: string }) {
     );
   }
 
-  const selectedScene = timeline.scenes[Math.min(selectedIndex, timeline.scenes.length - 1)];
   const musicOptions = musicData?.assets ?? [];
 
   return (
-    <div className="container space-y-6 py-6 lg:max-w-6xl">
-      <header className="flex flex-wrap items-center gap-3">
+    <div className="mx-auto w-full max-w-[1700px] px-3 py-4 lg:px-6">
+      <header className="mb-4 flex flex-wrap items-center gap-3">
         <Link
           href="/editor"
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
@@ -395,7 +431,7 @@ export function VideoEditor({ id }: { id: string }) {
       </header>
 
       {issues.length > 0 && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Ролик пока нельзя собрать</AlertTitle>
           <AlertDescription>
@@ -409,7 +445,7 @@ export function VideoEditor({ id }: { id: string }) {
       )}
 
       {exportUrl && (
-        <Alert className="border-emerald-500/40 bg-emerald-500/10">
+        <Alert className="mb-4 border-emerald-500/40 bg-emerald-500/10">
           <Check className="h-4 w-4" />
           <AlertTitle>Ролик готов</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-3">
@@ -426,13 +462,77 @@ export function VideoEditor({ id }: { id: string }) {
         </Alert>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr),380px]">
-        <div className="space-y-4">
-          <TimelinePlayer timeline={timeline} />
+      <div className="grid gap-4 lg:grid-cols-[76px,minmax(0,1fr),340px]">
+        {/* Лента инструментов. На узком экране становится горизонтальной строкой. */}
+        <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+          {TOOLS.map((item) => (
+            <button
+              key={item.code}
+              type="button"
+              onClick={() => setTool(item.code)}
+              className={cn(
+                'flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-[11px] font-medium transition lg:w-full',
+                tool === item.code
+                  ? 'border-amber-400 bg-amber-400/10 text-amber-200'
+                  : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200',
+              )}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="min-w-0 space-y-4">
+          <EditorStage
+            timeline={timeline}
+            selectedSceneIndex={sceneIndex}
+            onSelectScene={setSceneIndex}
+            selectedLayerId={selectedLayerId}
+            onSelectLayer={setSelectedLayerId}
+            onChangeLayer={(index, layerId, patch) => ops.changeLayer(index, layerId, patch)}
+          />
+
+          <ToolBar
+            tool={tool}
+            uploading={uploading}
+            musicOptions={musicOptions}
+            timeline={timeline}
+            balance={me?.user?.tokenBalance ?? 0}
+            generating={generating || generationRunning}
+            scene={currentScene}
+            onPickFile={() => pickFileFor(null)}
+            onAddColor={() => {
+              const layerId = ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
+              if (layerId) setSelectedLayerId(layerId);
+            }}
+            onAddText={() => setSelectedLayerId(ops.addTextLayer(sceneIndex))}
+            onCollage={(layout) => ops.applyCollage(sceneIndex, layout)}
+            onMusicChange={(url) =>
+              applyTimeline({
+                ...timeline,
+                music: url
+                  ? {
+                      url,
+                      volume: timeline.music?.volume ?? 0.7,
+                      fadeInSec: 1.5,
+                      fadeOutSec: 2.5,
+                      loop: true,
+                      startAtSec: 0,
+                    }
+                  : undefined,
+              })
+            }
+            onMusicVolume={(volume) =>
+              timeline.music && applyTimeline({ ...timeline, music: { ...timeline.music, volume } })
+            }
+            onGenerate={handleGenerate}
+          />
+
           <SceneStrip
             timeline={timeline}
-            selectedIndex={selectedIndex}
-            onSelect={setSelectedIndex}
+            selectedIndex={sceneIndex}
+            onSelect={setSceneIndex}
             onMove={moveScene}
             onDuplicate={duplicateScene}
             onRemove={removeScene}
@@ -440,102 +540,288 @@ export function VideoEditor({ id }: { id: string }) {
           />
         </div>
 
-        <div className="space-y-4">
-          {selectedScene && (
-            <SceneInspector
-              scene={selectedScene}
-              index={Math.min(selectedIndex, timeline.scenes.length - 1)}
-              isLast={selectedIndex >= timeline.scenes.length - 1}
-              uploading={uploading}
-              onChange={(patch) => patchScene(selectedIndex, patch)}
-              onUpload={handleUpload}
-            />
-          )}
-
-          {selectedScene && (
-            <SceneGenerator
-              scene={selectedScene}
-              aspect={timeline.aspect}
-              balance={me?.user?.tokenBalance ?? 0}
-              running={generating || sceneGenerationRunning}
-              onGenerate={handleGenerate}
-            />
-          )}
-
-          <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-            <h3 className="font-semibold text-slate-100">Ролик целиком</h3>
-
-            <div className="space-y-2">
-              <Label>Формат кадра</Label>
-              <div className="flex flex-wrap gap-2">
-                {TIMELINE_ASPECTS.map((aspect) => (
-                  <button
-                    key={aspect}
-                    type="button"
-                    onClick={() => applyTimeline({ ...timeline, aspect })}
-                    className={cn(
-                      'rounded-full border px-3 py-1.5 text-sm transition',
-                      timeline.aspect === aspect
-                        ? 'border-amber-400 bg-amber-400/15 text-amber-200'
-                        : 'border-slate-700 text-slate-300 hover:border-slate-500',
-                    )}
-                  >
-                    {ASPECT_LABELS[aspect]}
-                  </button>
-                ))}
+        <aside className="space-y-4">
+          {currentScene && (
+            <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-100">Слои сцены</h3>
+                <span className="text-[11px] text-slate-500">
+                  {layers.length} из {TIMELINE_LIMITS.maxLayersPerScene}
+                </span>
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Музыка</Label>
-              <select
-                value={timeline.music?.url ?? ''}
-                onChange={(event) => {
-                  const url = event.target.value;
-                  applyTimeline({
-                    ...timeline,
-                    music: url
-                      ? { url, volume: timeline.music?.volume ?? 0.7, fadeInSec: 1.5, fadeOutSec: 2.5, loop: true, startAtSec: 0 }
-                      : undefined,
-                  });
+              <LayerPanel
+                scene={currentScene}
+                selectedLayerId={selectedLayerId}
+                onSelect={setSelectedLayerId}
+                onMove={(layerId, direction) => ops.moveLayer(sceneIndex, layerId, direction)}
+                onRemove={(layerId) => {
+                  ops.removeLayer(sceneIndex, layerId);
+                  if (layerId === selectedLayerId) setSelectedLayerId(null);
                 }}
-                className="h-10 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
-              >
-                <option value="">Без музыки</option>
-                {musicOptions.map((asset) => (
-                  <option key={asset.id} value={asset.publicUrl}>
-                    {asset.title}
-                  </option>
-                ))}
-              </select>
-              {musicOptions.length === 0 && (
-                <p className="text-xs text-slate-500">Библиотека музыки пока пуста.</p>
-              )}
-              {timeline.music && (
-                <label className="block text-xs text-slate-400">
-                  Громкость музыки
-                  <input
-                    type="range"
-                    min={0}
-                    max={1.5}
-                    step={0.05}
-                    value={timeline.music.volume}
-                    onChange={(event) =>
-                      applyTimeline({ ...timeline, music: { ...timeline.music!, volume: Number(event.target.value) } })
-                    }
-                    className="mt-1 w-full accent-amber-400"
-                  />
-                </label>
-              )}
-            </div>
+                onChange={(layerId, patch) => ops.changeLayer(sceneIndex, layerId, patch)}
+              />
+            </section>
+          )}
 
-            <p className="text-xs text-slate-500">
-              Сцен: {timeline.scenes.length} из {TIMELINE_LIMITS.maxScenes}. Длительность {formatTimelineDuration(duration)}{' '}
-              из {formatTimelineDuration(TIMELINE_LIMITS.maxTotalDurationSec)}.
-            </p>
+          <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+            {selectedLayer ? (
+              <>
+                <h3 className="mb-3 text-sm font-semibold text-slate-100">Настройки слоя</h3>
+                <LayerInspector
+                  layer={selectedLayer}
+                  uploading={uploading}
+                  onChange={(patch: LayerPatch) => ops.changeLayer(sceneIndex, selectedLayer.id, patch)}
+                  onReplaceFile={() => pickFileFor(selectedLayer.id)}
+                />
+              </>
+            ) : (
+              currentScene && (
+                <SceneSettings
+                  scene={currentScene}
+                  isLast={sceneIndex >= timeline.scenes.length - 1}
+                  aspect={timeline.aspect}
+                  onSceneChange={(patch) => ops.patchScene(sceneIndex, patch)}
+                  onAspectChange={(aspect) => applyTimeline({ ...timeline, aspect })}
+                />
+              )
+            )}
+          </section>
+        </aside>
+      </div>
+
+      <input
+        ref={addFileRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleUpload(file);
+          event.target.value = '';
+        }}
+      />
+    </div>
+  );
+}
+
+function ToolBar({
+  tool,
+  uploading,
+  musicOptions,
+  timeline,
+  balance,
+  generating,
+  scene,
+  onPickFile,
+  onAddColor,
+  onAddText,
+  onCollage,
+  onMusicChange,
+  onMusicVolume,
+  onGenerate,
+}: {
+  tool: ToolCode;
+  uploading: boolean;
+  musicOptions: Array<{ id: string; title: string; publicUrl: string }>;
+  timeline: Timeline;
+  balance: number;
+  generating: boolean;
+  scene?: TimelineScene;
+  onPickFile: () => void;
+  onAddColor: () => void;
+  onAddText: () => void;
+  onCollage: (layout: CollageLayout) => void;
+  onMusicChange: (url: string) => void;
+  onMusicVolume: (volume: number) => void;
+  onGenerate: (request: SceneGenerationRequest) => void;
+}) {
+  if (tool === 'media') {
+    return (
+      <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onPickFile} disabled={uploading}>
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+            Добавить фото или видео
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={onAddColor}>
+            Добавить заливку
+          </Button>
+        </div>
+        <div>
+          <Label className="text-xs">Разложить коллажем</Label>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            {(Object.keys(COLLAGE_LAYOUT_TITLES) as CollageLayout[]).map((layout) => (
+              <button
+                key={layout}
+                type="button"
+                onClick={() => onCollage(layout)}
+                className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:border-amber-400/60 hover:text-amber-200"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                {COLLAGE_LAYOUT_TITLES[layout]}
+              </button>
+            ))}
           </div>
+          <p className="mt-1.5 text-xs text-slate-500">
+            Расставит кадры сцены по сетке. Слои, которым не хватило места, останутся как были.
+          </p>
         </div>
       </div>
+    );
+  }
+
+  if (tool === 'text') {
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+        <Button type="button" variant="outline" size="sm" onClick={onAddText}>
+          <Type className="h-4 w-4" />
+          Добавить титр
+        </Button>
+        <p className="mt-2 text-xs text-slate-500">
+          Титр появится поверх сцены — его можно двигать и растягивать прямо на холсте.
+        </p>
+      </div>
+    );
+  }
+
+  if (tool === 'audio') {
+    return (
+      <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+        <Label className="text-xs">Музыка ролика</Label>
+        <select
+          value={timeline.music?.url ?? ''}
+          onChange={(event) => onMusicChange(event.target.value)}
+          className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
+        >
+          <option value="">Без музыки</option>
+          {musicOptions.map((asset) => (
+            <option key={asset.id} value={asset.publicUrl}>
+              {asset.title}
+            </option>
+          ))}
+        </select>
+        {musicOptions.length === 0 && <p className="text-xs text-slate-500">Библиотека музыки пока пуста.</p>}
+        {timeline.music && (
+          <label className="block text-xs text-slate-400">
+            Громкость: {Math.round(timeline.music.volume * 100)}%
+            <input
+              type="range"
+              min={0}
+              max={1.5}
+              step={0.05}
+              value={timeline.music.volume}
+              onChange={(event) => onMusicVolume(Number(event.target.value))}
+              className="mt-1 w-full accent-amber-400"
+            />
+          </label>
+        )}
+      </div>
+    );
+  }
+
+  return scene ? (
+    <SceneGenerator
+      scene={scene}
+      aspect={timeline.aspect}
+      balance={balance}
+      running={generating}
+      onGenerate={onGenerate}
+    />
+  ) : null;
+}
+
+function SceneSettings({
+  scene,
+  isLast,
+  aspect,
+  onSceneChange,
+  onAspectChange,
+}: {
+  scene: TimelineScene;
+  isLast: boolean;
+  aspect: TimelineAspect;
+  onSceneChange: (patch: Partial<TimelineScene>) => void;
+  onAspectChange: (aspect: TimelineAspect) => void;
+}) {
+  const transitions: Array<{ code: TimelineScene['transition']; label: string }> = [
+    { code: 'cut', label: 'Встык' },
+    { code: 'dissolve', label: 'Растворение' },
+    { code: 'fade-black', label: 'Через чёрный' },
+    { code: 'slide', label: 'Сдвиг' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-slate-100">Сцена и ролик</h3>
+
+      <label className="block text-xs text-slate-400">
+        Длительность сцены, сек
+        <Input
+          type="number"
+          min={TIMELINE_LIMITS.minSceneDurationSec}
+          max={TIMELINE_LIMITS.maxSceneDurationSec}
+          step={0.5}
+          value={scene.durationSec ?? 4}
+          onChange={(event) => onSceneChange({ durationSec: Number(event.target.value) })}
+          className="mt-1 h-9"
+        />
+      </label>
+
+      {!isLast && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Переход к следующей</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {transitions.map((item) => (
+              <button
+                key={item.code}
+                type="button"
+                onClick={() => onSceneChange({ transition: item.code })}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs transition',
+                  scene.transition === item.code
+                    ? 'border-amber-400 bg-amber-400/15 text-amber-200'
+                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Формат кадра</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {TIMELINE_ASPECTS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => onAspectChange(item)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition',
+                aspect === item
+                  ? 'border-amber-400 bg-amber-400/15 text-amber-200'
+                  : 'border-slate-700 text-slate-300 hover:border-slate-500',
+              )}
+            >
+              {ASPECT_LABELS[item]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <label className="block text-xs text-slate-400">
+        Цвет подложки
+        <input
+          type="color"
+          value={scene.background ?? '#000000'}
+          onChange={(event) => onSceneChange({ background: event.target.value })}
+          className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-700 bg-transparent"
+        />
+      </label>
+
+      <p className="text-xs text-slate-500">Выделите слой на холсте, чтобы настроить его отдельно.</p>
     </div>
   );
 }

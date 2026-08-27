@@ -162,6 +162,23 @@ export function sceneLayers(scene: TimelineScene): SceneLayer[] {
   return layers;
 }
 
+/**
+ * Сцена, гарантированно записанная слоями.
+ *
+ * Любая правка слоёв должна идти через неё: прежние поля при этом очищаются, иначе
+ * у одного кадра осталось бы два источника правды.
+ */
+export function sceneWithLayers(scene: TimelineScene): TimelineScene {
+  return {
+    ...scene,
+    layers: sceneLayers(scene),
+    source: undefined,
+    overlays: [],
+    trimStartSec: undefined,
+    trimEndSec: undefined,
+  };
+}
+
 /** Медиа-слои сцены в порядке отрисовки (снизу вверх). */
 export function sceneMediaLayers(scene: TimelineScene): MediaLayer[] {
   return sceneLayers(scene).filter((layer): layer is MediaLayer => layer.kind === 'media');

@@ -12,6 +12,13 @@ const nextConfig = {
     cpus: 1,
     outputFileTracingRoot: path.join(__dirname, '../..'),
   },
+  // Konva тянет пакет canvas для отрисовки на сервере. Холст живёт только в браузере,
+  // поэтому на сборке серверного бандла этот импорт отключаем — иначе Next падает
+  // на 'Can't resolve canvas'.
+  webpack: (config) => {
+    config.resolve.alias = { ...config.resolve.alias, canvas: false };
+    return config;
+  },
   images: {
     remotePatterns: [
       {
