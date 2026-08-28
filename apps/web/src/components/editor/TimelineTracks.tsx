@@ -1,8 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Music, Mic, Repeat, Trash2 } from 'lucide-react';
-import { formatTimelineDuration, type Timeline, type TimelineAudioTrack } from '@allvision/shared';
+import { ChevronLeft, ChevronRight, Copy, Music, Mic, Plus, Repeat, Trash2 } from 'lucide-react';
+import {
+  formatTimelineDuration,
+  primaryMediaLayer,
+  timelineTimings,
+  type Timeline,
+  type TimelineAudioTrack,
+} from '@allvision/shared';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
 import { cn } from '@/lib/utils';
 
@@ -55,6 +61,12 @@ export function TimelineTracks({
   onChangeVoiceover,
   onRemoveMusic,
   onRemoveVoiceover,
+  selectedSceneIndex,
+  onSelectScene,
+  onDuplicateScene,
+  onRemoveScene,
+  onMoveScene,
+  onAddScene,
   className,
 }: {
   timeline: Timeline;
@@ -63,6 +75,12 @@ export function TimelineTracks({
   onChangeVoiceover: (track: TimelineAudioTrack) => void;
   onRemoveMusic: () => void;
   onRemoveVoiceover: () => void;
+  selectedSceneIndex: number;
+  onSelectScene: (index: number) => void;
+  onDuplicateScene: (index: number) => void;
+  onRemoveScene: (index: number) => void;
+  onMoveScene: (index: number, direction: -1 | 1) => void;
+  onAddScene: () => void;
   className?: string;
 }) {
   const ticks = ticksFor(Math.max(totalSec, 1));
@@ -80,6 +98,17 @@ export function TimelineTracks({
           </span>
         ))}
       </div>
+
+      <SceneLane
+        timeline={timeline}
+        totalSec={totalSec}
+        selectedIndex={selectedSceneIndex}
+        onSelect={onSelectScene}
+        onDuplicate={onDuplicateScene}
+        onRemove={onRemoveScene}
+        onMove={onMoveScene}
+        onAdd={onAddScene}
+      />
 
       <TrackRow
         icon={<Music className="h-3.5 w-3.5" />}
@@ -274,6 +303,134 @@ function TrackRow({
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Сцены на той же шкале, что и звук.
+ *
+ * Прежняя лента показывала плитки одинаковой ширины, и понять, где кончается сцена и куда
+ * попадает реплика, было нельзя. Ширина блока здесь равна длительности сцены, поэтому
+ * картинка и звук читаются вместе.
+ */
+function SceneLane({
+  timeline,
+  totalSec,
+  selectedIndex,
+  onSelect,
+  onDuplicate,
+  onRemove,
+  onMove,
+  onAdd,
+}: {
+  timeline: Timeline;
+  totalSec: number;
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+  onDuplicate: (index: number) => void;
+  onRemove: (index: number) => void;
+  onMove: (index: number, direction: -1 | 1) => void;
+  onAdd: () => void;
+}) {
+  const total = Math.max(totalSec, 1);
+  const timings = timelineTimings(timeline);
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex w-24 shrink-0 items-center gap-1.5 text-[11px] text-slate-400">Сцены</div>
+
+      <div className="relative h-14 min-w-0 flex-1 rounded-md border border-slate-800 bg-slate-950/60">
+        {timings.map((timing) => {
+          const selected = timing.index === selectedIndex;
+          const preview = primaryMediaLayer(timing.scene);
+          const previewUrl = preview?.source.kind === 'image' || preview?.source.kind === 'video'
+            ? mediaUrl(preview.source.url)
+            : null;
+          return (
+            <button
+              key={timing.scene.id}
+              type="button"
+              onClick={() => onSelect(timing.index)}
+              title={`Сцена ${timing.index + 1} — ${timing.durationSec.toFixed(1)} с`}
+              className={cn(
+                'absolute inset-y-1 overflow-hidden rounded border text-left transition',
+                selected
+                  ? 'border-amber-400 ring-1 ring-amber-400/40'
+                  : 'border-slate-700 hover:border-slate-500',
+              )}
+              style={{
+                left: `${(timing.startSec / total) * 100}%`,
+                width: `calc(${(timing.durationSec / total) * 100}% - 2px)`,
+              }}
+            >
+              {previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={previewUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />
+              ) : (
+                <span className="absolute inset-0 bg-slate-900" />
+              )}
+              <span className="absolute left-1 top-1 rounded bg-slate-950/80 px-1 text-[10px] text-slate-200">
+                {timing.index + 1}
+              </span>
+              <span className="absolute bottom-1 right-1 rounded bg-slate-950/80 px-1 font-mono text-[10px] text-slate-300">
+                {timing.durationSec.toFixed(1)}с
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onMove(selectedIndex, -1)}
+          disabled={selectedIndex <= 0}
+          title="Сдвинуть сцену раньше"
+          aria-label="Сцена раньше"
+          className="grid h-7 w-7 place-items-center rounded border border-slate-700 text-slate-400 transition hover:text-slate-100 disabled:opacity-30"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onMove(selectedIndex, 1)}
+          disabled={selectedIndex >= timeline.scenes.length - 1}
+          title="Сдвинуть сцену позже"
+          aria-label="Сцена позже"
+          className="grid h-7 w-7 place-items-center rounded border border-slate-700 text-slate-400 transition hover:text-slate-100 disabled:opacity-30"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onDuplicate(selectedIndex)}
+          title="Дублировать выбранную сцену"
+          aria-label="Дублировать сцену"
+          className="grid h-7 w-7 place-items-center rounded border border-slate-700 text-slate-400 transition hover:text-slate-100"
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemove(selectedIndex)}
+          disabled={timeline.scenes.length <= 1}
+          title="Удалить выбранную сцену"
+          aria-label="Удалить сцену"
+          className="grid h-7 w-7 place-items-center rounded border border-slate-700 text-slate-400 transition hover:border-rose-400/60 hover:text-rose-300 disabled:opacity-30"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={onAdd}
+          title="Добавить сцену"
+          aria-label="Добавить сцену"
+          className="grid h-7 w-7 place-items-center rounded border border-slate-700 text-slate-400 transition hover:border-amber-400/60 hover:text-amber-200"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

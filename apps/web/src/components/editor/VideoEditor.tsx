@@ -52,7 +52,6 @@ import { EditorStage } from '@/components/editor/EditorStage';
 import { LayerInspector } from '@/components/editor/LayerInspector';
 import { LayerPanel } from '@/components/editor/LayerPanel';
 import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
-import { SceneStrip } from '@/components/editor/SceneStrip';
 import { TimelineTracks } from '@/components/editor/TimelineTracks';
 import { AudioTools, type VoiceoverRequest } from '@/components/editor/AudioTools';
 import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
@@ -319,6 +318,20 @@ export function VideoEditor({ id }: { id: string }) {
     addFileRef.current?.click();
   };
 
+  /** Загружает файл-референс для генерации и отдаёт публичную ссылку. */
+  const uploadReference = useCallback(
+    async (file: File) => {
+      try {
+        const uploaded = await uploadMedia({ id, file }).unwrap();
+        return uploaded.url;
+      } catch {
+        toast({ title: 'Не удалось загрузить референс', variant: 'destructive' });
+        return null;
+      }
+    },
+    [id, uploadMedia],
+  );
+
   // --- озвучка ---
   const setVoiceover = useCallback(
     (url: string | null) => {
@@ -451,6 +464,21 @@ export function VideoEditor({ id }: { id: string }) {
         const current = timelineRef.current;
         if (!current) return;
         const applied = applyGeneratedSource(current, runningGenerationId, { kind, url });
+        // Сцена подстраивается под длину клипа: иначе короткое видео дотягивается замершим
+        // кадром, и переход происходит по застывшей картинке.
+        if (applied.changed && kind === 'video') {
+          const measured = await probeUrlDurationSec(mediaUrl(url) ?? url);
+          if (measured) {
+            applied.timeline = {
+              ...applied.timeline,
+              scenes: applied.timeline.scenes.map((scene) =>
+                sceneMediaLayers(scene).some((layer) => layer.source.url === url)
+                  ? { ...scene, durationSec: Number(measured.toFixed(2)) }
+                  : scene,
+              ),
+            };
+          }
+        }
         // Сохраняем сразу: подстановка снимает метку со слоя, и обе копии ролика должны
         // сойтись. Иначе сервер продолжит считать, что слой ждёт генерацию.
         if (applied.changed) applyWithoutHistory(applied.timeline);
@@ -502,6 +530,7 @@ export function VideoEditor({ id }: { id: string }) {
             layerId,
             ...(request.duration ? { duration: request.duration } : {}),
             ...(request.imageInputRef ? { imageInputRef: request.imageInputRef } : {}),
+            ...(request.params ? { params: request.params } : {}),
           },
         }).unwrap();
         appliedGenerationRef.current = null;
@@ -858,10 +887,20 @@ export function VideoEditor({ id }: { id: string }) {
             onVoiceoverRemove={() => setVoiceover(null)}
             onGenerateVoiceover={handleGenerateVoiceover}
             onGenerate={handleGenerate}
+            onUploadReference={uploadReference}
             onInsertGeneration={(url, kind) => {
               const layerId = ops.addMediaLayer(sceneIndex, { kind, url });
-              if (layerId) setSelectedLayerId(layerId);
-              else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+              if (!layerId) {
+                toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+                return;
+              }
+              setSelectedLayerId(layerId);
+              // Длину сцены подгоняем под клип: короткое видео иначе дотянется замершим кадром.
+              if (kind === 'video') {
+                void probeUrlDurationSec(mediaUrl(url) ?? url).then((measured) => {
+                  if (measured) ops.patchScene(sceneIndex, { durationSec: Number(measured.toFixed(2)) });
+                });
+              }
             }}
           />
         </section>
@@ -948,18 +987,15 @@ export function VideoEditor({ id }: { id: string }) {
        */}
       {!showExportScreen && (
       <footer className="shrink-0 space-y-2 border-t border-slate-800 bg-slate-950/80 px-3 py-2 lg:px-4">
-        <SceneStrip
-          timeline={timeline}
-          selectedIndex={sceneIndex}
-          onSelect={setSceneIndex}
-          onMove={moveScene}
-          onDuplicate={duplicateScene}
-          onRemove={removeScene}
-          onAdd={addScene}
-        />
         <TimelineTracks
           timeline={timeline}
           totalSec={duration}
+          selectedSceneIndex={sceneIndex}
+          onSelectScene={setSceneIndex}
+          onDuplicateScene={duplicateScene}
+          onRemoveScene={removeScene}
+          onMoveScene={moveScene}
+          onAddScene={addScene}
           onChangeMusic={(track) => applyTimeline({ ...timeline, music: track })}
           onChangeVoiceover={(track) => applyTimeline({ ...timeline, voiceover: track })}
           onRemoveMusic={() => applyTimeline({ ...timeline, music: undefined })}
@@ -1017,6 +1053,7 @@ function ToolBar({
   onVoiceoverRemove,
   onGenerateVoiceover,
   onGenerate,
+  onUploadReference,
   onInsertGeneration,
 }: {
   tool: ToolCode;
@@ -1040,6 +1077,7 @@ function ToolBar({
   onVoiceoverVolume: (volume: number) => void;
   onVoiceoverRemove: () => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
+  onUploadReference: (file: File) => Promise<string | null>;
   onInsertGeneration: (url: string, kind: 'image' | 'video') => void;
   onGenerate: (request: SceneGenerationRequest) => void;
 }) {
@@ -1127,6 +1165,7 @@ function ToolBar({
       balance={balance}
       running={generating}
       selectedLayer={selectedLayer}
+      onUploadReference={onUploadReference}
       onGenerate={onGenerate}
     />
   ) : null;
@@ -1229,6 +1268,23 @@ function SceneSettings({
 }
 
 /** Длительность видео из самого файла: браузер знает её сразу после чтения метаданных. */
+/**
+ * Длительность видео по ссылке.
+ *
+ * Нужна, когда кадр приехал из генерации: сцена сохраняет прежнюю длину, и если клип
+ * короче, ffmpeg дотягивает сцену последним кадром — видео «застывает» и переход идёт уже
+ * по замершей картинке. Ровно на это и жаловались.
+ */
+function probeUrlDurationSec(url: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const element = document.createElement('video');
+    element.preload = 'metadata';
+    element.onloadedmetadata = () => resolve(Number.isFinite(element.duration) ? element.duration : undefined);
+    element.onerror = () => resolve(undefined);
+    element.src = url;
+  });
+}
+
 function probeDuration(file: File): Promise<number | undefined> {
   return new Promise((resolve) => {
     const element = document.createElement('video');

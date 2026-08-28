@@ -84,10 +84,24 @@ export function useEditorOperations(
     (sceneIndex: number, input: { kind: 'image' | 'video' | 'color'; url?: string; color?: string }) => {
       if (!timeline) return null;
       const id = uid('layer');
-      const existing = sceneLayers(timeline.scenes[sceneIndex]).length;
-      if (existing >= TIMELINE_LIMITS.maxLayersPerScene) return null;
-      // Новый слой кладём не на весь кадр, а меньше и со сдвигом: иначе он полностью
-      // накрыл бы предыдущий, и человек решил бы, что тот пропал.
+      const current = sceneLayers(timeline.scenes[sceneIndex]);
+      if (current.length >= TIMELINE_LIMITS.maxLayersPerScene) return null;
+
+      // Пустая сцена — это одна заливка-подложка. Первое фото должно ВСТАТЬ НА ЕЁ МЕСТО во
+      // весь кадр: если положить его сверху маленьким прямоугольником, человек видит всё ту
+      // же заливку и решает, что картинка не добавилась.
+      const placeholder = current.length === 1
+        && current[0].kind === 'media'
+        && current[0].source.kind === 'color'
+        && input.kind !== 'color';
+      if (placeholder) {
+        withLayers(sceneIndex, () => [newMediaLayer({ id, ...input, box: FULL_FRAME_BOX })]);
+        return id;
+      }
+
+      const existing = current.length;
+      // Следующие слои кладём меньше и со сдвигом: иначе они полностью накрыли бы предыдущий,
+      // и человек решил бы, что тот пропал.
       const box = existing === 0
         ? FULL_FRAME_BOX
         : { x: 0.12 + existing * 0.04, y: 0.12 + existing * 0.04, w: 0.6, h: 0.4 };
@@ -208,16 +222,22 @@ export function useEditorOperations(
       withLayers(sceneIndex, (layers) => {
         const media = layers.filter((layer): layer is MediaLayer => layer.kind === 'media');
         const rest = layers.filter((layer) => layer.kind !== 'media');
-        const placed = media.slice(0, boxes.length).map((layer, index) => ({
+        // У «одного кадра» рамка одна, и её получают ВСЕ кадры: иначе второй остаётся
+        // поверх первого, и раскладка выглядит нерабочей.
+        const boxFor = (index: number) => (layout === 'single' ? boxes[0] : boxes[index]);
+        const placedCount = layout === 'single' ? media.length : boxes.length;
+        const placed = media.slice(0, placedCount).map((layer, index) => ({
           ...layer,
-          box: boxes[index],
+          box: boxFor(index),
           // В сетке кадр должен заполнять свою плитку целиком, иначе между плитками
           // появятся неровные поля и коллаж будет выглядеть неаккуратно.
-          fit: 'cover' as const,
+          // В сетке кадр заполняет плитку целиком, а один кадр показываем полностью:
+          // обрезать единственное фото по краям человек не просил.
+          fit: (layout === 'single' ? 'contain' : 'cover') as 'cover' | 'contain',
           rotation: 0,
         }));
         // Слои, которым не хватило места, остаются как были — удалять чужую работу нельзя.
-        const leftovers = media.slice(boxes.length);
+        const leftovers = media.slice(placedCount);
         return [...placed, ...leftovers, ...rest];
       });
     },

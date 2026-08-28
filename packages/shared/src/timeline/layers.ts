@@ -263,6 +263,8 @@ export function collageBoxes(layout: CollageLayout): LayerBox[] {
         FULL_FRAME_BOX,
         { x: 0.62, y: 0.04, w: 0.34, h: 0.24 },
       ];
+    // «Один кадр» — единственная раскладка, где рамка одна на всех: остальные слои не
+    // остаются висеть поверх, а тоже разворачиваются во весь экран.
     default:
       return [FULL_FRAME_BOX];
   }

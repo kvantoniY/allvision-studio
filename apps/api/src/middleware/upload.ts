@@ -2,7 +2,12 @@ import multer from 'multer';
 
 const ALLOWED_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
-const ALLOWED_AUDIO_MIME = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg']);
+const ALLOWED_AUDIO_MIME = new Set([
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg',
+  // webm/mp4 приходят не из файлового диалога, а с микрофона: MediaRecorder пишет в webm
+  // (Chrome) или в mp4 (Safari), и без них запись голоса отбивалась как «не аудиофайл».
+  'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/aac',
+]);
 const ALLOWED_SUPPORT_FILE_MIME = new Set([
   'application/pdf',
   'text/plain',

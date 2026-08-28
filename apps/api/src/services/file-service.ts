@@ -18,6 +18,10 @@ const MIME_TO_EXT: Record<string, string> = {
   'audio/wav': 'wav',
   'audio/x-wav': 'wav',
   'audio/ogg': 'ogg',
+  'audio/webm': 'weba',
+  'audio/mp4': 'm4a',
+  'audio/x-m4a': 'm4a',
+  'audio/aac': 'aac',
   'application/pdf': 'pdf',
   'text/plain': 'txt',
   'text/csv': 'csv',
@@ -36,7 +40,12 @@ const MAX_TREND_THUMBNAIL_SIZE = 5 * 1024 * 1024;
 const ALLOWED_V3_IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const ALLOWED_V3_VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
 const ALLOWED_CHAT_VIDEO_MIME = new Set(['video/mp4', 'video/quicktime']);
-const ALLOWED_CHAT_AUDIO_MIME = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg']);
+const ALLOWED_CHAT_AUDIO_MIME = new Set([
+  'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/ogg',
+  // webm/mp4 приходят не из файлового диалога, а с микрофона: MediaRecorder пишет в webm
+  // (Chrome) или в mp4 (Safari), и без них запись голоса отбивалась как «не аудиофайл».
+  'audio/webm', 'audio/mp4', 'audio/x-m4a', 'audio/aac',
+]);
 const MAX_CHARACTER_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_SCENE_REFERENCE_SIZE = 10 * 1024 * 1024;
 const MAX_TEMPLATE_PREVIEW_SIZE = 50 * 1024 * 1024;

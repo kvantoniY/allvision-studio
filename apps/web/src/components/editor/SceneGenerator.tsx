@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, Plus, Sparkles, Wand2, X } from 'lucide-react';
 import {
   CHAT_MODELS,
   SCENE_PRESETS,
+  chatReferenceSlots,
   SCENE_PRESET_GROUPS,
   SCENE_PRESET_GROUP_TITLES,
   estimateChatGenerationPriceCoins,
@@ -45,6 +46,8 @@ export type SceneGenerationRequest = {
   aspectRatio: ChatAspectRatio;
   duration?: number;
   imageInputRef?: string;
+  /** Дополнительные референсы модели: столько, сколько она принимает. */
+  params?: Record<string, unknown>;
   target: SceneGenerationTarget;
 };
 
@@ -66,6 +69,7 @@ export function SceneGenerator({
   balance,
   running,
   selectedLayer,
+  onUploadReference,
   onGenerate,
 }: {
   scene: TimelineScene;
@@ -74,6 +78,8 @@ export function SceneGenerator({
   running: boolean;
   /** Выделенный на холсте медиа-слой: он же по умолчанию и референс, и место результата. */
   selectedLayer: MediaLayer | null;
+  /** Загружает файл и возвращает публичную ссылку — тот же путь, что у материала сцены. */
+  onUploadReference: (file: File) => Promise<string | null>;
   onGenerate: (request: SceneGenerationRequest) => void;
 }) {
   // Референс по умолчанию — тот кадр, который человек выделил. Если не выделен ничего,
@@ -131,6 +137,49 @@ export function SceneGenerator({
     [hasImage],
   );
 
+  // Дополнительные референсы модели: столько слотов, сколько она принимает. Первый слот
+  // закрывает выбранный кадр сцены, остальные человек прикрепляет сам.
+  const slots = useMemo(() => (model ? chatReferenceSlots(model) : []), [model]);
+  const [slotRefs, setSlotRefs] = useState<Record<string, string>>({});
+  const [slotBusy, setSlotBusy] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const pendingSlotRef = useRef<string | null>(null);
+
+  // Слоты у моделей разные, и чужие ссылки в новой модели смысла не имеют.
+  useEffect(() => {
+    setSlotRefs({});
+  }, [model?.slug]);
+
+  const extraSlots = useMemo(() => {
+    // Первый слот изображения занимает кадр сцены, если он выбран референсом.
+    if (!reference) return slots;
+    const firstImage = slots.find((slot) => slot.mediaKind === 'image');
+    return slots.filter((slot) => slot.key !== firstImage?.key);
+  }, [slots, reference]);
+
+  const slotParams = useMemo(() => {
+    const params: Record<string, unknown> = {};
+    const images: string[] = [];
+    const imageUrls: string[] = [];
+    const mainRef = reference?.source.url;
+    const firstImageSlot = slots.find((slot) => slot.mediaKind === 'image');
+    if (mainRef && firstImageSlot) {
+      if (firstImageSlot.param === 'images') images.push(mainRef);
+      if (firstImageSlot.param === 'image_urls') imageUrls.push(mainRef);
+    }
+    for (const slot of extraSlots) {
+      const ref = slotRefs[slot.key];
+      if (!ref) continue;
+      if (slot.param === 'images') images.push(ref);
+      else if (slot.param === 'image_urls') imageUrls.push(ref);
+      else if (slot.param === 'video_urls') params.video_urls = [ref];
+      else params[slot.param] = ref;
+    }
+    if (images.length > 0) params.images = images;
+    if (imageUrls.length > 0) params.image_urls = imageUrls;
+    return params;
+  }, [slots, extraSlots, slotRefs, reference]);
+
   const enoughCoins = balance >= price;
   const canGenerate = Boolean(model) && !running && enoughCoins && (!model?.requiresPrompt || prompt.trim().length > 0);
 
@@ -148,7 +197,21 @@ export function SceneGenerator({
               // eslint-disable-next-line @next/next/no-img-element
               <img src={mediaUrl(reference.source.url) ?? ''} alt="" className="h-full w-full object-cover" />
             ) : (
-              <div className="grid h-full w-full place-items-center text-[10px] text-slate-600">с нуля</div>
+              <button
+                type="button"
+                onClick={() => {
+                  // Прикрепляем в первый слот изображения: у моделей без слотов он же и есть
+                  // единственный вход, поэтому кнопка работает одинаково везде.
+                  const firstImage = slots.find((slot) => slot.mediaKind === 'image');
+                  pendingSlotRef.current = firstImage?.key ?? 'main';
+                  fileInputRef.current?.click();
+                }}
+                title="Прикрепить файл-референс"
+                className="grid h-full w-full place-items-center gap-0.5 text-[10px] text-slate-500 transition hover:text-slate-300"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                файл
+              </button>
             )}
           </div>
           <div className="min-w-0 text-xs leading-5 text-slate-400">
@@ -184,6 +247,80 @@ export function SceneGenerator({
           </div>
         )}
       </div>
+
+      {extraSlots.length > 0 && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Ещё референсы для модели</Label>
+          <div className="flex flex-wrap gap-2">
+            {extraSlots.map((slot) => {
+              const ref = slotRefs[slot.key];
+              return (
+                <button
+                  key={slot.key}
+                  type="button"
+                  onClick={() => {
+                    if (ref) {
+                      setSlotRefs((current) => {
+                        const next = { ...current };
+                        delete next[slot.key];
+                        return next;
+                      });
+                      return;
+                    }
+                    pendingSlotRef.current = slot.key;
+                    fileInputRef.current?.click();
+                  }}
+                  title={ref ? 'Убрать референс' : `Прикрепить: ${slot.label}`}
+                  className={cn(
+                    'relative h-16 w-16 overflow-hidden rounded-lg border text-[10px] transition',
+                    ref ? 'border-violet-400' : 'border-dashed border-slate-700 text-slate-500 hover:border-slate-500',
+                  )}
+                >
+                  {slotBusy === slot.key ? (
+                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-violet-300" />
+                  ) : ref ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={mediaUrl(ref) ?? ''} alt="" className="h-full w-full object-cover" />
+                      <span className="absolute right-0.5 top-0.5 grid h-4 w-4 place-items-center rounded-full bg-slate-950/80 text-slate-200">
+                        <X className="h-3 w-3" />
+                      </span>
+                    </>
+                  ) : (
+                    <span className="flex h-full flex-col items-center justify-center gap-1 px-1">
+                      <Plus className="h-3.5 w-3.5" />
+                      {slot.label}
+                      {slot.required && <span className="text-amber-300">обяз.</span>}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Модель принимает {slots.length} референс{slots.length > 4 ? 'ов' : slots.length > 1 ? 'а' : ''}:
+            например, объединить два фото в один кадр.
+          </p>
+        </div>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          const slotKey = pendingSlotRef.current;
+          pendingSlotRef.current = null;
+          if (!file || !slotKey) return;
+          setSlotBusy(slotKey);
+          const url = await onUploadReference(file);
+          setSlotBusy(null);
+          if (url) setSlotRefs((current) => ({ ...current, [slotKey]: url }));
+        }}
+      />
 
       {selectedLayer && (
         <div className="space-y-1.5">
@@ -294,7 +431,8 @@ export function SceneGenerator({
               prompt: prompt.trim(),
               aspectRatio: aspectForTimeline(aspect),
               duration: isVideo ? duration : undefined,
-              imageInputRef: reference?.source.url,
+              imageInputRef: reference?.source.url ?? slotRefs.main,
+              params: Object.keys(slotParams).length > 0 ? slotParams : undefined,
               target: selectedLayer ? target : 'new',
             })
           }

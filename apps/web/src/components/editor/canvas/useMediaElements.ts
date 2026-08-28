@@ -100,6 +100,19 @@ export function useMediaElements(layers: MediaLayer[]): Map<string, LoadedMedia>
     };
   }, [wanted]);
 
+  // При размонтировании глушим всё: элементы живут в ref, а не в разметке, и после
+  // закрытия холста продолжали играть — звук доигрывал уже после остановки предпросмотра.
+  useEffect(() => () => {
+    for (const entry of cache.current.values()) {
+      if (!entry.isVideo) continue;
+      const video = entry.element as HTMLVideoElement;
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    }
+    cache.current.clear();
+  }, []);
+
   // Ключи наружу отдаём по id слоя: вызывающему не нужно знать про склейку с URL.
   const byLayer = new Map<string, LoadedMedia>();
   for (const item of wanted) {
