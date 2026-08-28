@@ -1,9 +1,12 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '@allvision/database';
+import { ORDER_CONTACT_CHANNELS } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { HttpError } from '../../utils/http-error';
 import { createCustomOrder, payCustomOrder } from '../../services/order-service';
+import { uploadEditorMedia as uploadOrderFile } from '../../middleware/upload';
+import * as fileService from '../../services/file-service';
 
 export const userOrdersRouter = Router();
 
@@ -27,6 +30,8 @@ const createSchema = z.object({
   contactName: z.string().trim().min(1).max(120),
   contactEmail: z.string().trim().toLowerCase().email().max(200),
   contactPhone: z.string().trim().max(40).optional(),
+  contactMessenger: z.enum(ORDER_CONTACT_CHANNELS).optional(),
+  contactHandle: z.string().trim().max(120).optional(),
 });
 
 const messageSchema = z.object({
@@ -43,6 +48,8 @@ async function ownedOrder(userId: string, id: string) {
       contactName: true,
       contactEmail: true,
       contactPhone: true,
+      contactMessenger: true,
+      contactHandle: true,
       adminNote: true,
       messages: {
         orderBy: { createdAt: 'asc' },
@@ -74,6 +81,21 @@ userOrdersRouter.post('/', async (req: Request, res: Response, next: NextFunctio
     const body = createSchema.parse(req.body ?? {});
     const order = await createCustomOrder({ userId: req.user!.id, ...body });
     res.status(201).json({ order });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Вложение к заявке. Загружается до создания заявки: человек прикладывает исходники и
+ * референсы прямо в форме, а ссылки уходят в поле attachments.
+ */
+userOrdersRouter.post('/attachments', uploadOrderFile, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) throw new HttpError(400, 'FILE_REQUIRED', 'Файл не получен');
+    const uploaded = await fileService.uploadOrderAttachment(req.user!.id, file);
+    res.status(201).json({ url: uploaded.url });
   } catch (err) {
     next(err);
   }

@@ -36,6 +36,8 @@ export type AdminOrderDetail = AdminOrderListItem & {
   brief: Record<string, unknown>;
   attachments: string[];
   contactPhone: string | null;
+  contactMessenger: string | null;
+  contactHandle: string | null;
   adminNote: string | null;
   resultUrl: string | null;
   user: { id: string; email: string; name: string | null; tokenBalance: number };

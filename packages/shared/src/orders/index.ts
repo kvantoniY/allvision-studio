@@ -56,7 +56,10 @@ export const CUSTOM_ORDER_STATUS_HINTS: Record<CustomOrderStatus, string> = {
 /** Разрешённые переходы. Отмена возможна из любого рабочего состояния. */
 const TRANSITIONS: Record<CustomOrderStatus, CustomOrderStatus[]> = {
   NEW: ['QUOTED', 'CANCELLED'],
-  QUOTED: ['PAID', 'NEW', 'CANCELLED'],
+  // Из «цена названа» можно и оплатить на сайте, и сразу взять в работу: с заказными
+  // работами часто договариваются с менеджером и платят иначе. Доставить неоплаченное
+  // случайным кликом всё так же нельзя — DELIVERED доступен только из IN_PROGRESS.
+  QUOTED: ['PAID', 'IN_PROGRESS', 'NEW', 'CANCELLED'],
   PAID: ['IN_PROGRESS', 'CANCELLED'],
   IN_PROGRESS: ['DELIVERED', 'CANCELLED'],
   DELIVERED: [],
@@ -137,3 +140,22 @@ export function validateBriefValues(fields: BriefField[], values: Record<string,
   }
   return issues;
 }
+
+/**
+ * Способы связи по заявке.
+ *
+ * Не всем удобно ждать письма: часть людей хочет сразу написать в мессенджер, часть —
+ * оставить контакт и чтобы менеджер написал сам. Оба пути ведут к одной заявке, поэтому
+ * список общий для формы и админской карточки.
+ */
+export const ORDER_CONTACT_CHANNELS = ['max', 'telegram', 'whatsapp'] as const;
+export type OrderContactChannel = (typeof ORDER_CONTACT_CHANNELS)[number];
+
+export const ORDER_CONTACT_CHANNEL_TITLES: Record<OrderContactChannel, string> = {
+  max: 'MAX',
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp',
+};
+
+/** Базовая цена заказного поздравления. Итог называет менеджер после разбора брифа. */
+export const CUSTOM_ORDER_PRICE_FROM_COINS = 2990;

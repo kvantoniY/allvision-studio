@@ -342,6 +342,10 @@ model CustomOrder {
   contactName  String
   contactEmail String
   contactPhone String?
+  /// Мессенджер для связи: max | telegram | whatsapp. Пусто — общаемся почтой.
+  contactMessenger String?
+  /// Ник или номер в этом мессенджере.
+  contactHandle    String?
 
   /// Цена, которую назначил админ после разбора брифа.
   quotedPriceCoins Int?

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import {
   CUSTOM_ORDER_STATUSES,
   CUSTOM_ORDER_STATUS_LABELS,
+  ORDER_CONTACT_CHANNEL_TITLES,
+  type OrderContactChannel,
   nextOrderStatuses,
   type CustomOrderStatus,
 } from '@allvision/shared';
@@ -151,6 +153,9 @@ function OrderPanel({ id, onClose }: { id: string; onClose: () => void }) {
           <p className="mt-1 text-sm text-slate-400">
             {order.contactName} · {order.contactEmail}
             {order.contactPhone ? ` · ${order.contactPhone}` : ''}
+            {order.contactMessenger
+              ? ` · ${ORDER_CONTACT_CHANNEL_TITLES[order.contactMessenger as OrderContactChannel] ?? order.contactMessenger}: ${order.contactHandle ?? '—'}`
+              : ''}
           </p>
           <p className="text-xs text-slate-500">
             Аккаунт: {order.user.email} · баланс {order.user.tokenBalance} коинов

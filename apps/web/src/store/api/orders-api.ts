@@ -53,6 +53,8 @@ export type CreateOrderInput = {
   contactName: string;
   contactEmail: string;
   contactPhone?: string;
+  contactMessenger?: string;
+  contactHandle?: string;
 };
 
 export const ordersApi = createApi({
@@ -78,6 +80,13 @@ export const ordersApi = createApi({
       query: (body) => ({ url: '/user/orders', method: 'POST', body }),
       invalidatesTags: ['Order'],
     }),
+    uploadOrderAttachment: build.mutation<{ url: string }, File>({
+      query: (file) => {
+        const body = new FormData();
+        body.append('file', file);
+        return { url: '/user/orders/attachments', method: 'POST', body };
+      },
+    }),
     sendOrderMessage: build.mutation<{ order: CustomOrderDetail }, { id: string; body: string }>({
       query: ({ id, body }) => ({ url: `/user/orders/${id}/messages`, method: 'POST', body: { body } }),
       invalidatesTags: (_result, _error, { id }) => ['Order', { type: 'Order', id }],
@@ -100,6 +109,7 @@ export const {
   useListMyOrdersQuery,
   useGetMyOrderQuery,
   useCreateOrderMutation,
+  useUploadOrderAttachmentMutation,
   useSendOrderMessageMutation,
   usePayOrderMutation,
 } = ordersApi;

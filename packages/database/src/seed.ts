@@ -20,6 +20,7 @@ const ServiceCategory = {
 import { migrateMediaAssets } from './migrate-media-assets';
 import { greetingTemplateSlugs, greetingTemplates } from './seed-greetings';
 import { editorScenePresets } from './seed-scene-presets';
+import { orderTypes } from './seed-order-types';
 
 const BCRYPT_COST = 12;
 const SYSTEM_PASSWORD_PLACEHOLDER = 'CHANGE_ME_AT_FIRST_DEPLOY';
@@ -3491,6 +3492,7 @@ export async function runSeed(options: SeedOptions = {}) {
 
   console.log('[seed] step 4/5: style presets');
   await ensureStylePresets();
+  await ensureOrderTypes();
 
   console.log('[seed] step 5/5: media assets migration');
   await ensureMediaAssetsMigration();
@@ -3673,6 +3675,24 @@ async function ensureTokenPackages() {
   if (createdSettings > 0) {
     console.log(`[seed] public settings: ${createdSettings} created`);
   }
+}
+
+
+/**
+ * Заказные форматы.
+ *
+ * Create-only, как и услуги: тексты, цены и поля брифа владелец правит в админке, и сид не
+ * должен затирать эту работу на каждом деплое.
+ */
+async function ensureOrderTypes() {
+  let created = 0;
+  for (const type of orderTypes) {
+    const existing = await prisma.orderTypeDef.findUnique({ where: { slug: type.slug }, select: { id: true } });
+    if (existing) continue;
+    await prisma.orderTypeDef.create({ data: { ...type, briefFields: type.briefFields as never } });
+    created += 1;
+  }
+  console.log(`[seed] order types created: ${created}`);
 }
 
 async function ensureStylePresets() {

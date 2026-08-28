@@ -27,7 +27,9 @@ describe('order status flow', () => {
     // Главное, ради чего переходы описаны явно: случайный клик не должен закрывать
     // заказ, за который не заплатили.
     expect(canTransitionOrder('NEW', 'DELIVERED')).toBe(false);
-    expect(canTransitionOrder('QUOTED', 'IN_PROGRESS')).toBe(false);
+    // Взять в работу сразу после названной цены МОЖНО: с заказными работами платят и
+    // мимо сайта. Запрет остаётся там, где он важен, — на выдаче результата.
+    expect(canTransitionOrder('QUOTED', 'DELIVERED')).toBe(false);
     expect(canTransitionOrder('NEW', 'PAID')).toBe(false);
   });
 
@@ -90,5 +92,19 @@ describe('order emails', () => {
   it('leaves unknown placeholders alone instead of blanking them', () => {
     // Опечатка админа не должна превращаться в пустое место посреди письма.
     expect(renderOrderEmail('Привет, {{nmae}}', vars)).toBe('Привет, {{nmae}}');
+  });
+});
+
+describe('заказ можно взять в работу сразу после названной цены', () => {
+  it('разрешает QUOTED → IN_PROGRESS', () => {
+    // С заказными работами часто договариваются с менеджером и платят мимо сайта:
+    // требовать статус «оплачено» ради начала работы значило бы выдумывать процесс.
+    expect(canTransitionOrder('QUOTED', 'IN_PROGRESS')).toBe(true);
+    expect(nextOrderStatuses('QUOTED')).toContain('IN_PROGRESS');
+  });
+
+  it('но доставить неоплаченное мимо работы по-прежнему нельзя', () => {
+    expect(canTransitionOrder('QUOTED', 'DELIVERED')).toBe(false);
+    expect(canTransitionOrder('NEW', 'DELIVERED')).toBe(false);
   });
 });

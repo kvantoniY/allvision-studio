@@ -124,6 +124,8 @@ export async function createCustomOrder(input: {
   contactName: string;
   contactEmail: string;
   contactPhone?: string;
+  contactMessenger?: string;
+  contactHandle?: string;
 }) {
   const orderType = await prisma.orderTypeDef.findFirst({
     where: { slug: input.typeSlug, isActive: true },
@@ -152,6 +154,8 @@ export async function createCustomOrder(input: {
       contactName: input.contactName,
       contactEmail: input.contactEmail,
       contactPhone: input.contactPhone ?? null,
+      contactMessenger: input.contactMessenger ?? null,
+      contactHandle: input.contactHandle ?? null,
     },
     select: { id: true, status: true, createdAt: true, typeTitle: true },
   });

@@ -434,6 +434,34 @@ export async function uploadEditorMedia(
   throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются JPEG, PNG, WebP, MP4, MOV и аудио');
 }
 
+/**
+ * Вложение к заявке на заказ: исходные фото и референсы.
+ *
+ * Кладём в отдельную папку пользователя, а не рядом с генерациями: у заявки другой срок
+ * жизни — она живёт, пока идёт работа с менеджером, и не подпадает под чистку результатов.
+ */
+export async function uploadOrderAttachment(
+  userId: string,
+  file: Express.Multer.File,
+): Promise<{ url: string; key: string }> {
+  const safeName = `${Date.now()}-${crypto.randomUUID()}`;
+  const folder = `user-uploads/orders/${userId}`;
+
+  if (ALLOWED_V3_IMAGE_MIME.has(file.mimetype)) {
+    const processed = await validateAndProcessImage(file.buffer);
+    const key = `${folder}/${safeName}.${ext(processed.contentType)}`;
+    const { url } = await getStorageProvider().upload({ key, body: processed.buffer, contentType: processed.contentType });
+    return { url, key };
+  }
+  if (ALLOWED_CHAT_VIDEO_MIME.has(file.mimetype)) {
+    const key = `${folder}/${safeName}.${ext(file.mimetype)}`;
+    const { url } = await getStorageProvider().upload({ key, body: file.buffer, contentType: file.mimetype });
+    return { url, key };
+  }
+
+  throw new HttpError(400, 'UNSUPPORTED_FORMAT', 'Поддерживаются JPEG, PNG, WebP и видео MP4/MOV');
+}
+
 export async function uploadSupportAttachment(
   userId: string,
   ticketId: string,

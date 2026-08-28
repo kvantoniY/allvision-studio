@@ -3,8 +3,14 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Clapperboard, Film, Loader2, Plus, Trash2 } from 'lucide-react';
-import { formatTimelineDuration, timelineDurationSec } from '@allvision/shared';
+import {
+  formatTimelineDuration,
+  primaryMediaLayer,
+  timelineDurationSec,
+  type Timeline,
+} from '@allvision/shared';
 import { Button } from '@/components/ui/button';
+import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -15,6 +21,25 @@ import {
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+}
+
+
+/**
+ * Обложка ролика — первый настоящий кадр из его сцен.
+ *
+ * Берём первый медиа-слой, у которого есть файл: у пустых сцен это заливка, и показывать
+ * чёрный прямоугольник вместо превью бессмысленно. Видео браузер сам покажет первым кадром.
+ */
+function coverOf(timeline: Timeline): { url: string; isVideo: boolean } | null {
+  for (const scene of timeline.scenes) {
+    const layer = primaryMediaLayer(scene);
+    const source = layer?.source;
+    if (!source?.url) continue;
+    if (source.kind !== 'image' && source.kind !== 'video') continue;
+    const url = mediaUrl(source.url);
+    if (url) return { url, isVideo: source.kind === 'video' };
+  }
+  return null;
 }
 
 export function VideoProjectList() {
@@ -69,20 +94,42 @@ export function VideoProjectList() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {items.map((project) => {
             const duration = timelineDurationSec(project.timeline);
+            const cover = coverOf(project.timeline);
             return (
-              <div key={project.id} className="group rounded-xl border border-slate-800 bg-slate-900/60 transition hover:border-slate-700">
-                <Link href={`/editor/${project.id}`} className="block p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-slate-700 bg-slate-950 text-amber-300">
-                      <Film className="h-5 w-5" />
+              <div key={project.id} className="group overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60 transition hover:border-slate-700">
+                <Link href={`/editor/${project.id}`} className="block">
+                  <div className="relative aspect-video overflow-hidden bg-slate-950">
+                    {cover ? (
+                      cover.isVideo ? (
+                        <video
+                          src={cover.url}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        />
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={cover.url}
+                          alt=""
+                          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        />
+                      )
+                    ) : (
+                      <span className="grid h-full w-full place-items-center bg-gradient-to-br from-slate-800 to-slate-950 text-slate-600">
+                        <Film className="h-7 w-7" />
+                      </span>
+                    )}
+                    <span className="absolute bottom-2 right-2 rounded bg-slate-950/85 px-1.5 py-0.5 font-mono text-[11px] text-slate-200">
+                      {formatTimelineDuration(duration)}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <h2 className="truncate font-semibold text-slate-100">{project.title}</h2>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {project.timeline.scenes.length} сцен · {formatTimelineDuration(duration)}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-600">{formatDate(project.updatedAt)}</p>
-                    </div>
+                  </div>
+                  <div className="p-4">
+                    <h2 className="truncate font-semibold text-slate-100">{project.title}</h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {project.timeline.scenes.length} сцен · {formatDate(project.updatedAt)}
+                    </p>
                   </div>
                 </Link>
                 <div className="flex justify-end border-t border-slate-800 px-2 py-1">
