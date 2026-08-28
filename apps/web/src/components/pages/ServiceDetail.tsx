@@ -274,11 +274,20 @@ function checkboxPrice(fields: UserInputField[], values: FormValues, files: File
   return typeof next === 'number' && next > 0 ? next : null;
 }
 
+/**
+ * Разбор описания формы услуги.
+ *
+ * Поля, которым нужна нормализация формы (варианты, условия, массивы), перечислены явно,
+ * а всё остальное проходит как есть. Раньше список был закрытым, и любое новое поле схемы
+ * молча терялось по дороге: так пропали `minPhotos`/`maxPhotos`/`priceCoinsPerPhoto` из G3 —
+ * форма разрешала отправить меньше снимков, чем требует сервер, и показывала не ту цену.
+ */
 function parseFields(value: unknown): UserInputField[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
     .map((item) => ({
+      ...(item as Partial<UserInputField>),
       id: typeof item.id === 'string' ? item.id : '',
       type: typeof item.type === 'string' ? (item.type as UserInputField['type']) : 'text',
       label: typeof item.label === 'string' ? item.label : undefined,
