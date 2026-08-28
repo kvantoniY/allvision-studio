@@ -3,3 +3,4 @@ export * from './layers';
 export * from './layout';
 export * from './titles';
 export * from './scene-presets';
+export * from './voiceover';

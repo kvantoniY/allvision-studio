@@ -69,6 +69,17 @@ export const videoProjectsApi = createApi({
       },
       invalidatesTags: (_result, _error, { id }) => [{ type: 'VideoProject', id }],
     }),
+    generateVoiceover: build.mutation<
+      { projectId: string; tokensCost: number },
+      { id: string; body: { text: string; model: string; emotion?: string; speed?: number } }
+    >({
+      query: ({ id, body }) => ({ url: `/${id}/voiceover/generate`, method: 'POST', body }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        await queryFulfilled;
+        // Озвучка списывает коины и создаёт обычный Project — баланс должен это увидеть.
+        dispatch(projectsApi.util.invalidateTags(['Project']));
+      },
+    }),
     exportVideoProject: build.mutation<{ projectId: string; alreadyRunning?: boolean }, string>({
       query: (id) => ({ url: `/${id}/export`, method: 'POST' }),
       async onQueryStarted(_id, { dispatch, queryFulfilled }) {
@@ -90,4 +101,5 @@ export const {
   useUploadEditorMediaMutation,
   useExportVideoProjectMutation,
   useGenerateSceneMutation,
+  useGenerateVoiceoverMutation,
 } = videoProjectsApi;

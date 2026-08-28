@@ -5,7 +5,7 @@ import {
   type TimelineScene,
   type TimelineTextOverlay,
 } from './types';
-import { primaryMediaLayer, sceneLayers } from './layers';
+import { primaryMediaLayer, sceneLayers, sceneWithLayers, type SceneLayer } from './layers';
 
 export type TimelineResolution = { width: number; height: number };
 
@@ -224,6 +224,43 @@ export function applyGeneratedSource(
       trimStartSec: undefined,
       trimEndSec: undefined,
       durationSec: source.kind === 'image' ? scene.durationSec ?? DEFAULT_IMAGE_SCENE_SEC : scene.durationSec,
+    };
+  });
+
+  return { timeline: changed ? { ...timeline, scenes } : timeline, changed };
+}
+
+/**
+ * Помечает слой ожидающим генерацию.
+ *
+ * Метку ставит сервер в свою копию ролика, а не только клиент: между запуском и
+ * автосохранением есть окно в секунду с небольшим, и если человек закроет вкладку
+ * внутри него, оплаченная генерация всё равно обязана найти своё место. Сцена при
+ * этом переводится в форму слоёв: метка на самой сцене работала только для прежней
+ * записи, а холст пишет слои.
+ */
+export function markLayerGeneration(
+  timeline: Timeline,
+  sceneId: string,
+  layerId: string,
+  generationProjectId: string,
+): { timeline: Timeline; changed: boolean } {
+  let changed = false;
+
+  const scenes = timeline.scenes.map((scene) => {
+    if (scene.id !== sceneId) return scene;
+    const layered = sceneWithLayers(scene);
+    const layers = (layered.layers ?? []) as SceneLayer[];
+    if (!layers.some((layer) => layer.kind === 'media' && layer.id === layerId)) return scene;
+
+    changed = true;
+    return {
+      ...layered,
+      layers: layers.map((layer) =>
+        layer.kind === 'media' && layer.id === layerId
+          ? { ...layer, generationProjectId, origin: 'generated' as const }
+          : layer,
+      ),
     };
   });
 

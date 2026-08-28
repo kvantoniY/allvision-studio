@@ -4,16 +4,21 @@ import { z } from 'zod';
 import { prisma } from '@allvision/database';
 import {
   TIMELINE_LIMITS,
+  VOICEOVER_MAX_LENGTH,
+  applyModelPriceOverride,
   generationExpiresAt,
+  markLayerGeneration,
   timelineDurationSec,
   timelineSchema,
   validateTimeline,
+  voiceoverPriceCoins,
 } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { uploadEditorMedia } from '../../middleware/upload';
 import { HttpError } from '../../utils/http-error';
 import { logger } from '../../utils/logger';
 import { createFreeChatProject } from '../../services/free-chat-generation';
+import { readModelPriceOverrides } from '../../services/model-pricing';
 import * as fileService from '../../services/file-service';
 import * as queues from '../../queues';
 
@@ -34,6 +39,9 @@ const createSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   timeline: z.unknown().optional(),
 });
+
+/** Слой, который ждёт результат генерации. Остальные поля тела разбирает чатовый путь. */
+const generateTargetSchema = z.object({ layerId: z.string().trim().min(1).max(80).optional() });
 
 const updateSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
@@ -198,17 +206,26 @@ videoProjectsRouter.post('/:id/scenes/:sceneId/generate', async (req: Request, r
     const timeline = parseDraftTimeline(videoProject.timeline);
     const sceneIndex = timeline.scenes.findIndex((scene) => scene.id === req.params.sceneId);
     if (sceneIndex < 0) throw new HttpError(404, 'SCENE_NOT_FOUND', 'Сцена не найдена');
+    const { layerId } = generateTargetSchema.parse(req.body ?? {});
 
     const result = await createFreeChatProject(userId, req.body, {
       mode: 'editor-generation',
       titlePrefix: 'Сцена: ',
     });
 
-    // Ссылку на генерацию пишем в сцену сразу: если пользователь закроет вкладку,
-    // результат всё равно найдёт своё место — воркер допишет его по этой метке.
-    const scenes = timeline.scenes.map((scene, index) =>
-      index === sceneIndex ? { ...scene, generationProjectId: result.projectId, origin: 'generated' as const } : scene,
-    );
+    // Метку пишем сразу и именно в тот слой, который ждёт результат: между запуском и
+    // автосохранением редактора есть окно, и если пользователь закроет вкладку внутри
+    // него, оплаченная генерация всё равно доедет — воркер найдёт её по этой метке.
+    const marked = layerId
+      ? markLayerGeneration(timeline, req.params.sceneId, layerId, result.projectId)
+      : { changed: false, timeline };
+    const scenes = marked.changed
+      ? marked.timeline.scenes
+      // Слой не назвали — помечаем сцену: так работают ролики прежней формы, где
+      // кадр у сцены ровно один.
+      : timeline.scenes.map((scene, index) =>
+        index === sceneIndex ? { ...scene, generationProjectId: result.projectId, origin: 'generated' as const } : scene,
+      );
     await prisma.videoProject.update({
       where: { id: videoProject.id },
       data: { timeline: { ...timeline, scenes } as never },
@@ -301,6 +318,126 @@ videoProjectsRouter.post('/:id/export', async (req: Request, res: Response, next
     }
 
     res.status(202).json({ projectId: project.id, durationSec });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const voiceoverSchema = z.object({
+  text: z.string().trim().min(1).max(VOICEOVER_MAX_LENGTH),
+  model: z.enum(['minimax-speech', 'elevenlabs-tts']).default('minimax-speech'),
+  voice: z.string().trim().min(1).max(60).optional(),
+  emotion: z.enum(['neutral', 'happy', 'sad', 'surprised']).optional(),
+  speed: z.number().min(0.5).max(2).optional(),
+});
+
+/**
+ * Озвучка ролика голосом.
+ *
+ * Готовую дорожку пользователь может просто загрузить файлом — для этого хватает общей
+ * загрузки материала и правки таймлайна. Здесь платный путь: текст произносит модель,
+ * поэтому нужны списание, очередь и возврат коинов при сбое — тот же порядок, что и у
+ * генерации образа в Студии.
+ */
+videoProjectsRouter.post('/:id/voiceover/generate', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const videoProject = await ownedProject(userId, req.params.id);
+    const body = voiceoverSchema.parse(req.body ?? {});
+    const tokensCost = applyModelPriceOverride(
+      body.model,
+      voiceoverPriceCoins(body.model),
+      await readModelPriceOverrides(),
+    );
+
+    const pipelineSnapshot = [
+      {
+        id: 'step_1',
+        blockSlug: 'text-to-speech',
+        params: {
+          model: body.model,
+          text: body.text,
+          ...(body.voice ? { voice: body.voice } : {}),
+          ...(body.emotion ? { emotion: body.emotion } : {}),
+          ...(body.speed ? { speed: body.speed } : {}),
+          language: body.model === 'minimax-speech' ? 'Russian' : 'English',
+        },
+      },
+    ];
+
+    let project;
+    try {
+      project = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({
+          where: { id: userId, tokenBalance: { gte: tokensCost } },
+          data: { tokenBalance: { decrement: tokensCost } },
+          select: { tokenBalance: true },
+        });
+        const created = await tx.project.create({
+          data: {
+            userId,
+            mode: 'editor-voiceover',
+            title: `Озвучка: ${videoProject.title}`,
+            status: 'PENDING',
+            progress: 0,
+            inputImages: [],
+            inputText: body.text,
+            tokensCost,
+            pipelineSnapshot: pipelineSnapshot as never,
+            selectedTier: 'standard',
+            // Ролик называем здесь: дорожку в него впишет воркер, даже если вкладку закроют.
+            userInputs: { editorVoiceover: { videoProjectId: videoProject.id } } as never,
+            stepProgress: [] as never,
+            expiresAt: generationExpiresAt(),
+          },
+          select: { id: true, tokensCost: true },
+        });
+        await tx.tokenTransaction.create({
+          data: {
+            reason: 'editor_voiceover',
+            amount: -tokensCost,
+            balanceAfter: user.tokenBalance,
+            refId: created.id,
+            userId,
+          },
+        });
+        return created;
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2025') {
+        throw new HttpError(402, 'INSUFFICIENT_TOKENS', 'Недостаточно коинов');
+      }
+      throw err;
+    }
+
+    try {
+      await queues.addServicePipelineJob({ projectId: project.id, userId, mode: 'production' });
+    } catch (queueError) {
+      logger.error(`[video-projects] failed to enqueue voiceover ${project.id}`, queueError);
+      await prisma.$transaction(async (tx) => {
+        await tx.project.update({
+          where: { id: project.id },
+          data: { status: 'FAILED', errorCode: 'QUEUE_UNAVAILABLE', errorMessage: 'Не удалось поставить озвучку в очередь' },
+        });
+        const user = await tx.user.update({
+          where: { id: userId },
+          data: { tokenBalance: { increment: tokensCost } },
+          select: { tokenBalance: true },
+        });
+        await tx.tokenTransaction.create({
+          data: {
+            reason: 'refund',
+            amount: tokensCost,
+            balanceAfter: user.tokenBalance,
+            refId: project.id,
+            userId,
+          },
+        });
+      });
+      throw new HttpError(503, 'QUEUE_UNAVAILABLE', 'Сервис озвучки временно недоступен');
+    }
+
+    res.status(202).json({ projectId: project.id, tokensCost: project.tokensCost });
   } catch (err) {
     next(err);
   }

@@ -1,10 +1,12 @@
 import {
   TIMELINE_LIMITS,
   applyGeneratedSource,
+  markLayerGeneration,
   parseTimeline,
   primaryMediaLayer,
   renderOverlaySvg,
   sceneAtTime,
+  sceneLayers,
   sourceTimeAt,
   sceneDurationSec,
   timelineDurationSec,
@@ -13,6 +15,7 @@ import {
   timelineTimings,
   transitionDurationSec,
   validateTimeline,
+  voiceoverPriceCoins,
   wrapText,
 } from '../timeline';
 import { pipelineStepSchema } from '../schemas/admin-services';
@@ -249,5 +252,77 @@ describe('conditional pipeline steps', () => {
     expect(() =>
       pipelineStepSchema.parse({ id: 'step_1', blockSlug: 'image-edit', when: { field: 'speech' } }),
     ).toThrow();
+  });
+});
+
+describe('generation mark on a layer', () => {
+  const layered = () =>
+    parseTimeline({
+      scenes: [
+        {
+          id: 'scene_1',
+          layers: [
+            { id: 'layer_a', kind: 'media', source: { kind: 'image', url: 'https://cdn.test/a.jpg' } },
+            { id: 'layer_b', kind: 'media', source: { kind: 'color', color: '#0b1020' } },
+          ],
+          durationSec: 4,
+        },
+      ],
+    });
+
+  it('marks exactly the layer that is waiting, leaving the collage alone', () => {
+    const result = markLayerGeneration(layered(), 'scene_1', 'layer_b', 'p1');
+
+    expect(result.changed).toBe(true);
+    const layers = sceneLayers(result.timeline.scenes[0]);
+    expect(layers.find((layer) => layer.id === 'layer_b')).toMatchObject({
+      generationProjectId: 'p1',
+      origin: 'generated',
+    });
+    expect(layers.find((layer) => layer.id === 'layer_a')).not.toHaveProperty('generationProjectId');
+  });
+
+  it('lets the worker put the result into that same layer', () => {
+    const marked = markLayerGeneration(layered(), 'scene_1', 'layer_b', 'p1');
+    const applied = applyGeneratedSource(marked.timeline, 'p1', { kind: 'video', url: 'https://cdn.test/new.mp4' });
+
+    expect(applied.changed).toBe(true);
+    const layers = sceneLayers(applied.timeline.scenes[0]);
+    expect(layers.find((layer) => layer.id === 'layer_b')).toMatchObject({
+      source: { kind: 'video', url: 'https://cdn.test/new.mp4' },
+    });
+    // Соседний кадр коллажа остался прежним.
+    expect(layers.find((layer) => layer.id === 'layer_a')).toMatchObject({
+      source: { kind: 'image', url: 'https://cdn.test/a.jpg' },
+    });
+  });
+
+  it('marks the derived layer of an old one-source scene', () => {
+    const timeline = parseTimeline({ scenes: [scene()] });
+    const derivedId = sceneLayers(timeline.scenes[0])[0].id;
+    const result = markLayerGeneration(timeline, 'scene_1', derivedId, 'p1');
+
+    expect(result.changed).toBe(true);
+    // Прежняя запись переезжает на слои: два источника правды об одном кадре недопустимы.
+    expect(result.timeline.scenes[0].source).toBeUndefined();
+    expect(sceneLayers(result.timeline.scenes[0])[0]).toMatchObject({ generationProjectId: 'p1' });
+  });
+
+  it('changes nothing when the named layer is gone', () => {
+    const result = markLayerGeneration(layered(), 'scene_1', 'layer_missing', 'p1');
+    expect(result.changed).toBe(false);
+  });
+});
+
+describe('voiceover pricing', () => {
+  it('never charges less than the floor', () => {
+    // Себестоимость синтеза копеечная, и без пола цена скатывалась бы к одному коину.
+    expect(voiceoverPriceCoins('minimax-speech')).toBeGreaterThanOrEqual(5);
+    // Неизвестная модель тарифицируется по ориентиру дешёвой, а не бесплатно.
+    expect(voiceoverPriceCoins('unknown-model')).toBeGreaterThanOrEqual(5);
+  });
+
+  it('charges the pricier voice more', () => {
+    expect(voiceoverPriceCoins('elevenlabs-tts')).toBeGreaterThan(voiceoverPriceCoins('minimax-speech'));
   });
 });

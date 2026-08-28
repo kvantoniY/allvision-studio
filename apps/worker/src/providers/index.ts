@@ -42,9 +42,13 @@ const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit',
 // omni). Прод переопределяет env-ом FAL_BLOCKS — туда тоже нужно добавить trend-video-transfer и
 // scene-transfer, чтобы тренд-услуги пошли через fal (Wan Motion для животных).
 const DEFAULT_FAL_BLOCKS = 'image-edit,text-to-video,image-to-video,motion-transfer,face-swap-video,trend-video-transfer,scene-transfer,carousel-slides,product-card,photo-2017,fal-generic,text-to-speech';
+// Синтез речи в список из env добавляется всегда. Откат блока на mock означает не «дешевле
+// и проще», а тишину вместо голоса — и в редакторе человек уже заплатил именно за голос.
+// Полезного mock-поведения у платной озвучки нет, поэтому выключать её нечем.
+const ALWAYS_FAL_BLOCKS = ['text-to-speech'];
 function getFalBlocks(): Set<string> {
   const raw = process.env.FAL_BLOCKS ?? DEFAULT_FAL_BLOCKS;
-  return new Set(raw.split(',').map((s) => s.trim()).filter(Boolean));
+  return new Set([...raw.split(','), ...ALWAYS_FAL_BLOCKS].map((s) => s.trim()).filter(Boolean));
 }
 
 /**

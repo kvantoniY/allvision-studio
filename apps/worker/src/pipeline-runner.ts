@@ -240,6 +240,16 @@ export async function runPipeline(
         logger.error(`[pipeline] не удалось записать генерацию ${params.generationId} в сцену`, err);
       });
     }
+    if (project.mode === 'editor-voiceover') {
+      await applyVoiceoverToProject({
+        projectId: params.generationId,
+        userId: project.userId,
+        projectUserInputs: project.userInputs,
+        finalOutput,
+      }).catch((err) => {
+        logger.error(`[pipeline] не удалось записать озвучку ${params.generationId} в ролик`, err);
+      });
+    }
     const completedAt = new Date();
     await prisma.project.update({
       where: { id: params.generationId },
@@ -645,6 +655,47 @@ export async function applyGenerationToScene(params: {
     });
     return;
   }
+}
+
+/**
+ * Кладёт готовую озвучку в дорожку голоса ролика.
+ *
+ * Ролик назван в userInputs при запуске: искать «последний открытый» нельзя — за время
+ * синтеза человек мог уйти в другой ролик, и голос встал бы не туда. Дорожка не
+ * зацикливается: реплика короче ролика должна прозвучать один раз, а не идти по кругу.
+ */
+export async function applyVoiceoverToProject(params: {
+  projectId: string;
+  userId: string;
+  projectUserInputs: unknown;
+  finalOutput: { resultImage?: string; resultVideo?: string };
+}) {
+  const url = params.finalOutput.resultVideo ?? params.finalOutput.resultImage;
+  if (!url) return;
+
+  const root = params.projectUserInputs as Record<string, unknown> | null;
+  const meta = root && typeof root === 'object' ? (root.editorVoiceover as Record<string, unknown> | undefined) : undefined;
+  const videoProjectId = typeof meta?.videoProjectId === 'string' ? meta.videoProjectId : null;
+  if (!videoProjectId) return;
+
+  const videoProject = await prisma.videoProject.findFirst({
+    where: { id: videoProjectId, userId: params.userId, deletedAt: null },
+    select: { id: true, timeline: true },
+  });
+  if (!videoProject) return;
+
+  const parsed = timelineSchema.safeParse(videoProject.timeline);
+  if (!parsed.success) return;
+
+  await prisma.videoProject.update({
+    where: { id: videoProject.id },
+    data: {
+      timeline: {
+        ...parsed.data,
+        voiceover: { url, volume: 1, fadeInSec: 0.2, fadeOutSec: 0.4, loop: false, startAtSec: 0 },
+      } as never,
+    },
+  });
 }
 
 export async function createLibraryMediaAssetFromProject(params: {

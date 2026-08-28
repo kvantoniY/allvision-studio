@@ -27,6 +27,7 @@ import {
   timelineDurationSec,
   validateTimeline,
   type CollageLayout,
+  type MediaLayer,
   type SceneLayer,
   type Timeline,
   type TimelineAspect,
@@ -43,17 +44,20 @@ import { LayerInspector } from '@/components/editor/LayerInspector';
 import { LayerPanel } from '@/components/editor/LayerPanel';
 import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
 import { SceneStrip } from '@/components/editor/SceneStrip';
+import { AudioTools, type VoiceoverRequest } from '@/components/editor/AudioTools';
 import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import {
   useExportVideoProjectMutation,
   useGenerateSceneMutation,
+  useGenerateVoiceoverMutation,
   useGetVideoProjectQuery,
   useUpdateVideoProjectMutation,
   useUploadEditorMediaMutation,
 } from '@/store/api/video-projects-api';
 import { useGetMeQuery } from '@/store/api/auth-api';
+import { useGetChatModelsQuery } from '@/store/api/user-chat-api';
 import { cn } from '@/lib/utils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -94,8 +98,11 @@ export function VideoEditor({ id }: { id: string }) {
   const [uploadMedia, { isLoading: uploading }] = useUploadEditorMediaMutation();
   const [exportProject, { isLoading: exporting }] = useExportVideoProjectMutation();
   const [generateScene, { isLoading: generating }] = useGenerateSceneMutation();
+  const [generateVoiceover, { isLoading: generatingVoiceover }] = useGenerateVoiceoverMutation();
   const { data: me } = useGetMeQuery();
   const { data: musicData } = useGetPublicMediaAssetsQuery({ kind: 'background-music', active: true });
+  // Оверрайды цен общие с чатом: показывать цену ниже той, что спишет сервер, нельзя.
+  const { data: chatPricing } = useGetChatModelsQuery();
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [title, setTitle] = useState('');
@@ -108,6 +115,7 @@ export function VideoEditor({ id }: { id: string }) {
   const loadedRef = useRef(false);
   const uploadTargetRef = useRef<{ sceneIndex: number; layerId: string | null } | null>(null);
   const addFileRef = useRef<HTMLInputElement | null>(null);
+  const voiceFileRef = useRef<HTMLInputElement | null>(null);
   const timelineRef = useRef<Timeline | null>(null);
 
   // Ответ сервера принимаем один раз: иначе автосохранение перетирало бы то,
@@ -259,6 +267,85 @@ export function VideoEditor({ id }: { id: string }) {
     addFileRef.current?.click();
   };
 
+  // --- озвучка ---
+  const setVoiceover = useCallback(
+    (url: string | null) => {
+      if (!timelineRef.current) return;
+      const current = timelineRef.current;
+      applyTimeline({
+        ...current,
+        voiceover: url
+          ? { url, volume: 1, fadeInSec: 0.2, fadeOutSec: 0.4, loop: false, startAtSec: 0 }
+          : undefined,
+      });
+    },
+    [applyTimeline],
+  );
+
+  const handleVoiceUpload = useCallback(
+    async (file: File) => {
+      try {
+        const uploaded = await uploadMedia({ id, file }).unwrap();
+        if (uploaded.mediaKind !== 'audio') {
+          toast({ title: 'Нужен аудиофайл', description: 'MP3, WAV или M4A.', variant: 'destructive' });
+          return;
+        }
+        setVoiceover(uploaded.url);
+      } catch {
+        toast({ title: 'Не удалось загрузить запись', description: 'Проверьте формат и размер.', variant: 'destructive' });
+      }
+    },
+    [id, uploadMedia, setVoiceover],
+  );
+
+  const [voiceoverProjectId, setVoiceoverProjectId] = useState<string | null>(null);
+  const { data: voiceoverStatus } = useGetProjectStatusQuery(voiceoverProjectId ?? '', {
+    skip: !voiceoverProjectId,
+    pollingInterval: voiceoverProjectId ? 3000 : 0,
+  });
+  const voiceoverRunning =
+    generatingVoiceover || voiceoverStatus?.status === 'PENDING' || voiceoverStatus?.status === 'PROCESSING';
+
+  useEffect(() => {
+    if (!voiceoverProjectId) return;
+    if (voiceoverStatus?.status === 'FAILED') {
+      setVoiceoverProjectId(null);
+      toast({ title: 'Озвучка не получилась', description: 'Коины вернулись на баланс.', variant: 'destructive' });
+      return;
+    }
+    if (voiceoverStatus?.status !== 'COMPLETED') return;
+    setVoiceoverProjectId(null);
+
+    // Дорожку в свою копию ролика уже вписал воркер — забираем оттуда только её,
+    // чтобы не затереть правки, сделанные пока шёл синтез.
+    void (async () => {
+      try {
+        const fresh = await refetchProject().unwrap();
+        const url = fresh.project.timeline.voiceover?.url;
+        if (url) {
+          setVoiceover(url);
+          toast({ title: 'Голос записан' });
+        }
+      } catch {
+        toast({ title: 'Озвучка готова', description: 'Обновите страницу, если дорожка не появилась.' });
+      }
+    })();
+  }, [voiceoverProjectId, voiceoverStatus?.status, refetchProject, setVoiceover]);
+
+  const handleGenerateVoiceover = useCallback(
+    async (request: VoiceoverRequest) => {
+      try {
+        const result = await generateVoiceover({ id, body: request }).unwrap();
+        setVoiceoverProjectId(result.projectId);
+        toast({ title: 'Озвучка запущена', description: 'Голос сам встанет в ролик.' });
+      } catch (error) {
+        const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
+        toast({ title: 'Не удалось запустить озвучку', description: message, variant: 'destructive' });
+      }
+    },
+    [generateVoiceover, id],
+  );
+
   // --- генерация в слой ---
   const runningGenerationId = currentScene
     ? sceneMediaLayers(currentScene).find((layer) => Boolean(layer.generationProjectId))?.generationProjectId ?? null
@@ -306,9 +393,12 @@ export function VideoEditor({ id }: { id: string }) {
       const scene = currentScene;
       if (!timeline || !scene) return;
 
-      // Результат встаёт в НОВЫЙ слой поверх сцены: подменять то, что человек уже
-      // разложил, без спроса нельзя.
-      const layerId = ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
+      // По умолчанию результат встаёт в НОВЫЙ слой поверх сцены: подменять то, что человек
+      // уже разложил, без спроса нельзя. Заменить выделенный слой можно, но только явно.
+      const replaceSelected = request.target === 'selected' && selectedLayer?.kind === 'media';
+      const layerId = replaceSelected
+        ? selectedLayer!.id
+        : ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
       if (!layerId) {
         toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
         return;
@@ -325,6 +415,9 @@ export function VideoEditor({ id }: { id: string }) {
             modelSlug: request.modelSlug,
             prompt: request.prompt,
             aspectRatio: request.aspectRatio,
+            // Слой называем серверу: он поставит метку в свою копию ролика, и результат
+            // доедет, даже если вкладку закроют до автосохранения.
+            layerId,
             ...(request.duration ? { duration: request.duration } : {}),
             ...(request.imageInputRef ? { imageInputRef: request.imageInputRef } : {}),
           },
@@ -334,12 +427,14 @@ export function VideoEditor({ id }: { id: string }) {
         setSelectedLayerId(layerId);
         toast({ title: 'Генерация запущена', description: 'Можно закрыть страницу — кадр сам встанет в сцену.' });
       } catch (error) {
-        ops.removeLayer(sceneIndex, layerId);
+        // Убираем только тот слой, который завели ради этой генерации: чужой кадр,
+        // выбранный пользователем, из-за нашей ошибки исчезать не должен.
+        if (!replaceSelected) ops.removeLayer(sceneIndex, layerId);
         const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
         toast({ title: 'Не удалось запустить генерацию', description: message, variant: 'destructive' });
       }
     },
-    [timeline, currentScene, ops, sceneIndex, id, updateProject, generateScene],
+    [timeline, currentScene, ops, sceneIndex, id, updateProject, generateScene, selectedLayer],
   );
 
   // --- экспорт ---
@@ -501,6 +596,9 @@ export function VideoEditor({ id }: { id: string }) {
             balance={me?.user?.tokenBalance ?? 0}
             generating={generating || generationRunning}
             scene={currentScene}
+            selectedLayer={selectedLayer?.kind === 'media' ? selectedLayer : null}
+            voiceoverRunning={Boolean(voiceoverRunning)}
+            priceOverrides={chatPricing?.modelPriceOverrides}
             onPickFile={() => pickFileFor(null)}
             onAddColor={() => {
               const layerId = ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
@@ -526,6 +624,12 @@ export function VideoEditor({ id }: { id: string }) {
             onMusicVolume={(volume) =>
               timeline.music && applyTimeline({ ...timeline, music: { ...timeline.music, volume } })
             }
+            onPickVoiceFile={() => voiceFileRef.current?.click()}
+            onVoiceoverVolume={(volume) =>
+              timeline.voiceover && applyTimeline({ ...timeline, voiceover: { ...timeline.voiceover, volume } })
+            }
+            onVoiceoverRemove={() => setVoiceover(null)}
+            onGenerateVoiceover={handleGenerateVoiceover}
             onGenerate={handleGenerate}
           />
 
@@ -590,6 +694,17 @@ export function VideoEditor({ id }: { id: string }) {
       </div>
 
       <input
+        ref={voiceFileRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleVoiceUpload(file);
+          event.target.value = '';
+        }}
+      />
+      <input
         ref={addFileRef}
         type="file"
         accept="image/*,video/*"
@@ -612,12 +727,19 @@ function ToolBar({
   balance,
   generating,
   scene,
+  selectedLayer,
+  voiceoverRunning,
+  priceOverrides,
   onPickFile,
   onAddColor,
   onAddText,
   onCollage,
   onMusicChange,
   onMusicVolume,
+  onPickVoiceFile,
+  onVoiceoverVolume,
+  onVoiceoverRemove,
+  onGenerateVoiceover,
   onGenerate,
 }: {
   tool: ToolCode;
@@ -627,12 +749,19 @@ function ToolBar({
   balance: number;
   generating: boolean;
   scene?: TimelineScene;
+  selectedLayer: MediaLayer | null;
+  voiceoverRunning: boolean;
+  priceOverrides?: Record<string, number>;
   onPickFile: () => void;
   onAddColor: () => void;
   onAddText: () => void;
   onCollage: (layout: CollageLayout) => void;
   onMusicChange: (url: string) => void;
   onMusicVolume: (volume: number) => void;
+  onPickVoiceFile: () => void;
+  onVoiceoverVolume: (volume: number) => void;
+  onVoiceoverRemove: () => void;
+  onGenerateVoiceover: (request: VoiceoverRequest) => void;
   onGenerate: (request: SceneGenerationRequest) => void;
 }) {
   if (tool === 'media') {
@@ -686,36 +815,20 @@ function ToolBar({
 
   if (tool === 'audio') {
     return (
-      <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-        <Label className="text-xs">Музыка ролика</Label>
-        <select
-          value={timeline.music?.url ?? ''}
-          onChange={(event) => onMusicChange(event.target.value)}
-          className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
-        >
-          <option value="">Без музыки</option>
-          {musicOptions.map((asset) => (
-            <option key={asset.id} value={asset.publicUrl}>
-              {asset.title}
-            </option>
-          ))}
-        </select>
-        {musicOptions.length === 0 && <p className="text-xs text-slate-500">Библиотека музыки пока пуста.</p>}
-        {timeline.music && (
-          <label className="block text-xs text-slate-400">
-            Громкость: {Math.round(timeline.music.volume * 100)}%
-            <input
-              type="range"
-              min={0}
-              max={1.5}
-              step={0.05}
-              value={timeline.music.volume}
-              onChange={(event) => onMusicVolume(Number(event.target.value))}
-              className="mt-1 w-full accent-amber-400"
-            />
-          </label>
-        )}
-      </div>
+      <AudioTools
+        timeline={timeline}
+        musicOptions={musicOptions}
+        balance={balance}
+        uploading={uploading}
+        voiceoverRunning={voiceoverRunning}
+        priceOverrides={priceOverrides}
+        onMusicChange={onMusicChange}
+        onMusicVolume={onMusicVolume}
+        onPickVoiceFile={onPickVoiceFile}
+        onVoiceoverVolume={onVoiceoverVolume}
+        onVoiceoverRemove={onVoiceoverRemove}
+        onGenerateVoiceover={onGenerateVoiceover}
+      />
     );
   }
 
@@ -725,6 +838,7 @@ function ToolBar({
       aspect={timeline.aspect}
       balance={balance}
       running={generating}
+      selectedLayer={selectedLayer}
       onGenerate={onGenerate}
     />
   ) : null;
