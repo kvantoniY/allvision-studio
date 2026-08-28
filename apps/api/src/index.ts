@@ -3,6 +3,7 @@ import { app } from './app';
 import { logger } from './utils/logger';
 import { startPendingPaymentPoller, stopPendingPaymentPoller } from './services/payment-poller';
 import { startPiAPIReconciler, stopPiAPIReconciler } from './services/piapi-reconciler';
+import { startStalledGenerationReaper, stopStalledGenerationReaper } from './services/stalled-generation-reaper';
 
 const port = Number(process.env.PORT ?? 4000);
 
@@ -10,6 +11,7 @@ const server = app.listen(port, () => {
   logger.info(`\x1b[32m✓\x1b[0m API готов на http://localhost:${port}`);
   startPendingPaymentPoller();
   startPiAPIReconciler();
+  startStalledGenerationReaper();
 });
 
 server.on('error', (err: NodeJS.ErrnoException) => {
@@ -27,6 +29,7 @@ function shutdown(signal: string) {
   shuttingDown = true;
   stopPendingPaymentPoller();
   stopPiAPIReconciler();
+  stopStalledGenerationReaper();
   logger.info(`Получен ${signal}, останавливаю API...`);
   const timer = setTimeout(() => {
     logger.warn('Принудительное завершение по таймауту');

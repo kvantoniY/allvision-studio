@@ -57,6 +57,11 @@ type GreetingTemplate = {
   featured?: boolean;
   sortOrder: number;
   /** Цена за одну сцену (одну фотографию). */
+  /**
+   * Цена за снимок. Считается от ФАКТА: Kling 3.0 Standard стоит $0.46 за клип (замер по
+   * прод-логам), это 37 коинов себестоимости, цена — примерно вдвое. Со стилизацией сверху
+   * ложится Nano Banana ($0.15), поэтому такие шаблоны дороже.
+   */
   pricePerPhoto: number;
   minPhotos: number;
   maxPhotos: number;
@@ -310,7 +315,7 @@ const TEMPLATES: GreetingTemplate[] = [
     occasionTags: ['MEMORY', 'JUBILEE', 'BIRTHDAY'],
     featured: true,
     sortOrder: 1,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 4,
     maxPhotos: 12,
     photosLabel: 'Фотографии для ролика',
@@ -334,7 +339,7 @@ const TEMPLATES: GreetingTemplate[] = [
     occasionTags: ['BIRTHDAY'],
     featured: true,
     sortOrder: 2,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 4,
     maxPhotos: 12,
     photosLabel: 'Фотографии именинника',
@@ -358,7 +363,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Ролик к юбилею: снимки разных лет оживают и складываются в спокойную, торжественную историю. Подходит для показа за праздничным столом и для отправки родным.',
     occasionTags: ['JUBILEE', 'MEMORY'],
     sortOrder: 3,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 6,
     maxPhotos: 12,
     photosLabel: 'Фотографии разных лет',
@@ -383,7 +388,7 @@ const TEMPLATES: GreetingTemplate[] = [
     occasionTags: ['ANNIVERSARY', 'VALENTINE', 'WEDDING'],
     featured: true,
     sortOrder: 4,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 4,
     maxPhotos: 12,
     photosLabel: 'Ваши общие фотографии',
@@ -406,7 +411,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Свадебные кадры оживают и превращаются в короткий фильм с плавными переходами и музыкой. Хороший подарок молодожёнам от гостей и родителей.',
     occasionTags: ['WEDDING', 'ANNIVERSARY'],
     sortOrder: 5,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 5,
     maxPhotos: 12,
     photosLabel: 'Свадебные фотографии',
@@ -430,7 +435,7 @@ const TEMPLATES: GreetingTemplate[] = [
     occasionTags: ['NEW_YEAR'],
     featured: true,
     sortOrder: 6,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 4,
     maxPhotos: 12,
     photosLabel: 'Фотографии для поздравления',
@@ -454,7 +459,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Поздравление к 8 марта: фотографии оживают в мягком весеннем свете, добавляются титры и музыка. Готово за несколько минут.',
     occasionTags: ['MARCH_8'],
     sortOrder: 7,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 3,
     maxPhotos: 10,
     photosLabel: 'Фотографии',
@@ -477,7 +482,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Поздравление к 23 февраля: фотографии оживают в спокойном, сдержанном стиле, с титрами и музыкой. Подойдёт и для семьи, и для коллег.',
     occasionTags: ['FEB_23'],
     sortOrder: 8,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 3,
     maxPhotos: 10,
     photosLabel: 'Фотографии',
@@ -500,7 +505,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Ролик о первом годе жизни: снимки по месяцам оживают и складываются в тёплую историю взросления. Отличный подарок бабушкам и дедушкам.',
     occasionTags: ['NEWBORN', 'BIRTHDAY'],
     sortOrder: 9,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 6,
     maxPhotos: 12,
     photosLabel: 'Фотографии по месяцам',
@@ -523,7 +528,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Каждая фотография ребёнка превращается в мультипликационный кадр, а затем оживает. Получается собственный маленький мультфильм с титрами и музыкой.',
     occasionTags: ['BIRTHDAY', 'NEWBORN', 'GRADUATION'],
     sortOrder: 10,
-    pricePerPhoto: 55,
+    pricePerPhoto: 100,
     minPhotos: 3,
     maxPhotos: 10,
     photosLabel: 'Фотографии ребёнка',
@@ -548,7 +553,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Ролик к выпускному или 1 сентября: школьные фотографии оживают и складываются в историю. Подойдёт для показа на празднике и для родительского чата.',
     occasionTags: ['GRADUATION'],
     sortOrder: 11,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 4,
     maxPhotos: 12,
     photosLabel: 'Школьные фотографии',
@@ -571,7 +576,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Фотографии питомца оживают, а поверх звучит поздравление, озвученное живым голосом по вашему тексту. Неожиданно и очень тепло — такое пересылают дальше.',
     occasionTags: ['BIRTHDAY', 'JUST_BECAUSE', 'NEW_YEAR'],
     sortOrder: 12,
-    pricePerPhoto: 35,
+    pricePerPhoto: 75,
     minPhotos: 2,
     maxPhotos: 8,
     photosLabel: 'Фотографии питомца',
