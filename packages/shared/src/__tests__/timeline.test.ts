@@ -326,3 +326,15 @@ describe('voiceover pricing', () => {
     expect(voiceoverPriceCoins('elevenlabs-tts')).toBeGreaterThan(voiceoverPriceCoins('minimax-speech'));
   });
 });
+
+describe('audio track trim', () => {
+  it('keeps the trim start on the track', () => {
+    const parsed = parseTimeline({
+      scenes: [scene()],
+      music: { url: 'https://cdn.test/song.mp3', trimStartSec: 42 },
+    });
+    expect(parsed.music?.trimStartSec).toBe(42);
+    // Умолчание — играть файл с начала: без него старые ролики зазвучали бы иначе.
+    expect(parseTimeline({ scenes: [scene()], music: { url: 'https://cdn.test/song.mp3' } }).music?.trimStartSec).toBe(0);
+  });
+});

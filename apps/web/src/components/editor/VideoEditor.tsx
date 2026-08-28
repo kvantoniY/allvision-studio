@@ -51,6 +51,7 @@ import { LayerInspector } from '@/components/editor/LayerInspector';
 import { LayerPanel } from '@/components/editor/LayerPanel';
 import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
 import { SceneStrip } from '@/components/editor/SceneStrip';
+import { TimelineTracks } from '@/components/editor/TimelineTracks';
 import { AudioTools, type VoiceoverRequest } from '@/components/editor/AudioTools';
 import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
@@ -124,6 +125,9 @@ export function VideoEditor({ id }: { id: string }) {
   const addFileRef = useRef<HTMLInputElement | null>(null);
   const voiceFileRef = useRef<HTMLInputElement | null>(null);
   const timelineRef = useRef<Timeline | null>(null);
+  // Буфер обмена слоями живёт в ref: он переживает переход между сценами и не должен
+  // перерисовывать редактор при копировании.
+  const clipboardRef = useRef<SceneLayer | null>(null);
   // История живёт в ref: её глубина нужна только кнопкам, а перерисовывать редактор
   // на каждую запись незачем.
   const historyRef = useRef<TimelineHistory>(createTimelineHistory());
@@ -317,7 +321,7 @@ export function VideoEditor({ id }: { id: string }) {
       applyTimeline({
         ...current,
         voiceover: url
-          ? { url, volume: 1, fadeInSec: 0.2, fadeOutSec: 0.4, loop: false, startAtSec: 0 }
+          ? { url, volume: 1, fadeInSec: 0.2, fadeOutSec: 0.4, loop: false, startAtSec: 0, trimStartSec: 0 }
           : undefined,
       });
     },
@@ -494,23 +498,41 @@ export function VideoEditor({ id }: { id: string }) {
       // Пока человек пишет титр или название, клавиши принадлежат полю, а не редактору.
       if (isTyping(event.target)) return;
       const mod = event.ctrlKey || event.metaKey;
+      // Сравниваем ФИЗИЧЕСКУЮ клавишу, а не символ: в русской раскладке Ctrl+Z даёт «я»,
+      // Ctrl+D — «в», и по event.key ни одно сочетание не срабатывало.
+      const code = event.code;
 
-      if (mod && event.key.toLowerCase() === 'z') {
+      if (mod && code === 'KeyZ') {
         event.preventDefault();
         if (event.shiftKey) redo();
         else undo();
         return;
       }
-      if (mod && event.key.toLowerCase() === 'y') {
+      if (mod && code === 'KeyY') {
         event.preventDefault();
         redo();
         return;
       }
-      if (mod && event.key.toLowerCase() === 'd') {
+      if (mod && code === 'KeyD') {
         event.preventDefault();
         if (!selectedLayerId) return;
         const copyId = ops.duplicateLayer(sceneIndex, selectedLayerId);
         if (copyId) setSelectedLayerId(copyId);
+        else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+        return;
+      }
+      if (mod && code === 'KeyC') {
+        if (!selectedLayer) return;
+        event.preventDefault();
+        clipboardRef.current = selectedLayer;
+        toast({ title: 'Слой скопирован' });
+        return;
+      }
+      if (mod && code === 'KeyV') {
+        if (!clipboardRef.current) return;
+        event.preventDefault();
+        const pastedId = ops.pasteLayer(sceneIndex, clipboardRef.current);
+        if (pastedId) setSelectedLayerId(pastedId);
         else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
         return;
       }
@@ -541,7 +563,7 @@ export function VideoEditor({ id }: { id: string }) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [ops, sceneIndex, selectedLayerId, undo, redo]);
+  }, [ops, sceneIndex, selectedLayerId, selectedLayer, undo, redo]);
 
   // --- экспорт ---
   const { data: exportStatus } = useGetProjectStatusQuery(exportId ?? '', {
@@ -599,8 +621,8 @@ export function VideoEditor({ id }: { id: string }) {
   const musicOptions = musicData?.assets ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-[1700px] px-3 py-4 lg:px-6">
-      <header className="mb-4 flex flex-wrap items-center gap-3">
+    <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden md:h-dvh">
+      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-2 lg:px-4">
         <Link
           href="/editor"
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
@@ -654,7 +676,7 @@ export function VideoEditor({ id }: { id: string }) {
       </header>
 
       {issues.length > 0 && (
-        <Alert variant="destructive" className="mb-4">
+        <Alert variant="destructive" className="mx-3 mt-2 shrink-0 lg:mx-4">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Ролик пока нельзя собрать</AlertTitle>
           <AlertDescription>
@@ -668,7 +690,7 @@ export function VideoEditor({ id }: { id: string }) {
       )}
 
       {exportUrl && (
-        <Alert className="mb-4 border-emerald-500/40 bg-emerald-500/10">
+        <Alert className="mx-3 mt-2 shrink-0 border-emerald-500/40 bg-emerald-500/10 lg:mx-4">
           <Check className="h-4 w-4" />
           <AlertTitle>Ролик готов</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-3">
@@ -685,9 +707,9 @@ export function VideoEditor({ id }: { id: string }) {
         </Alert>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[76px,minmax(0,1fr),340px]">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Лента инструментов. На узком экране становится горизонтальной строкой. */}
-        <nav className="flex gap-2 overflow-x-auto lg:flex-col lg:overflow-visible">
+        <nav className="flex shrink-0 gap-2 overflow-x-auto border-b border-slate-800 p-2 lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r">
           {TOOLS.map((item) => (
             <button
               key={item.code}
@@ -706,22 +728,11 @@ export function VideoEditor({ id }: { id: string }) {
           ))}
         </nav>
 
-        <div className="min-w-0 space-y-4">
-          <EditorStage
-            timeline={timeline}
-            selectedSceneIndex={sceneIndex}
-            onSelectScene={setSceneIndex}
-            selectedLayerId={selectedLayerId}
-            onSelectLayer={setSelectedLayerId}
-            onChangeLayer={(index, layerId, patch) => ops.changeLayer(index, layerId, patch)}
-          />
-
-          {/* Про горячие клавиши на холсте догадаться нельзя — подсказываем строкой. */}
-          <p className="hidden text-[11px] text-slate-600 lg:block">
-            Ctrl+Z — отменить · Ctrl+D — дублировать слой · Delete — удалить · стрелки — сдвинуть
-            (с Shift — крупнее) · Esc — снять выделение
-          </p>
-
+        {/*
+         * Панель инструмента стоит сбоку, а не под холстом. Раньше она вклинивалась между
+         * кадром и лентой сцен, и рабочая область уезжала на два экрана вниз.
+         */}
+        <section className="shrink-0 overflow-y-auto border-b border-slate-800 p-3 lg:w-[330px] lg:border-b-0 lg:border-r">
           <ToolBar
             tool={tool}
             uploading={uploading}
@@ -751,6 +762,7 @@ export function VideoEditor({ id }: { id: string }) {
                       fadeOutSec: 2.5,
                       loop: true,
                       startAtSec: 0,
+                      trimStartSec: timeline.music?.trimStartSec ?? 0,
                     }
                   : undefined,
               })
@@ -766,19 +778,27 @@ export function VideoEditor({ id }: { id: string }) {
             onGenerateVoiceover={handleGenerateVoiceover}
             onGenerate={handleGenerate}
           />
+        </section>
 
-          <SceneStrip
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3">
+          <EditorStage
+            className="min-h-0 flex-1"
             timeline={timeline}
-            selectedIndex={sceneIndex}
-            onSelect={setSceneIndex}
-            onMove={moveScene}
-            onDuplicate={duplicateScene}
-            onRemove={removeScene}
-            onAdd={addScene}
+            selectedSceneIndex={sceneIndex}
+            onSelectScene={setSceneIndex}
+            selectedLayerId={selectedLayerId}
+            onSelectLayer={setSelectedLayerId}
+            onChangeLayer={(index, layerId, patch) => ops.changeLayer(index, layerId, patch)}
           />
-        </div>
 
-        <aside className="space-y-4">
+          {/* Про горячие клавиши на холсте догадаться нельзя — подсказываем строкой. */}
+          <p className="hidden shrink-0 text-[11px] text-slate-600 xl:block">
+            Ctrl+Z — отменить · Ctrl+C/Ctrl+V — копировать слой · Ctrl+D — дублировать · Delete — удалить ·
+            стрелки — сдвинуть (с Shift — крупнее) · Esc — снять выделение
+          </p>
+        </main>
+
+        <aside className="shrink-0 space-y-3 overflow-y-auto border-t border-slate-800 p-3 lg:w-[330px] lg:border-l lg:border-t-0">
           {currentScene && (
             <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -831,6 +851,31 @@ export function VideoEditor({ id }: { id: string }) {
           </section>
         </aside>
       </div>
+
+
+      {/*
+       * Нижняя панель — то, что тянется во времени: сцены и звук. Здесь видно, где именно
+       * звучит реплика, и её можно подвинуть, а не гадать по числу в настройках.
+       */}
+      <footer className="shrink-0 space-y-2 border-t border-slate-800 bg-slate-950/80 px-3 py-2 lg:px-4">
+        <SceneStrip
+          timeline={timeline}
+          selectedIndex={sceneIndex}
+          onSelect={setSceneIndex}
+          onMove={moveScene}
+          onDuplicate={duplicateScene}
+          onRemove={removeScene}
+          onAdd={addScene}
+        />
+        <TimelineTracks
+          timeline={timeline}
+          totalSec={duration}
+          onChangeMusic={(track) => applyTimeline({ ...timeline, music: track })}
+          onChangeVoiceover={(track) => applyTimeline({ ...timeline, voiceover: track })}
+          onRemoveMusic={() => applyTimeline({ ...timeline, music: undefined })}
+          onRemoveVoiceover={() => setVoiceover(null)}
+        />
+      </footer>
 
       <input
         ref={voiceFileRef}

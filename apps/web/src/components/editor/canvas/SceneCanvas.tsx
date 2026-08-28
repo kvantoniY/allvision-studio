@@ -61,13 +61,20 @@ export function SceneCanvas({
   );
   const elements = useMediaElements(mediaLayers);
 
-  // Холст занимает доступную ширину, сохраняя пропорции кадра.
+  // Кадр вписывается в доступное место целиком: и по ширине, и по высоте. Считать только
+  // по ширине нельзя — вертикальный ролик в широкой колонке уезжал вниз на два экрана.
   useEffect(() => {
     const node = containerRef.current;
     if (!node) return;
     const update = () => {
-      const width = node.clientWidth;
-      const height = (width * resolution.height) / resolution.width;
+      const availableWidth = node.clientWidth;
+      const availableHeight = node.clientHeight;
+      let width = availableWidth;
+      let height = (width * resolution.height) / resolution.width;
+      if (availableHeight > 0 && height > availableHeight) {
+        height = availableHeight;
+        width = (height * resolution.width) / resolution.height;
+      }
       setStageSize({ width, height });
     };
     update();
@@ -120,11 +127,11 @@ export function SceneCanvas({
       .map((layer) => boxToRect(layer.box, stageSize.width, stageSize.height));
 
   if (stageSize.width === 0) {
-    return <div ref={containerRef} className="w-full" style={{ aspectRatio: `${resolution.width} / ${resolution.height}` }} />;
+    return <div ref={containerRef} className="h-full w-full" />;
   }
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef} className="flex h-full w-full items-center justify-center">
       <Stage
         width={stageSize.width}
         height={stageSize.height}

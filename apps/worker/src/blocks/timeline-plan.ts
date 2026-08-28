@@ -278,6 +278,17 @@ export type FinalPlanInput = {
  * Стык «встык» делается concat, а не xfade нулевой длины: xfade требует положительной
  * длительности и сдвинул бы весь дальнейший тайминг относительно расчётного.
  */
+/**
+ * Обрезка начала аудиофайла.
+ *
+ * asetpts обязателен: без него отрезанный кусок сохраняет исходные метки времени и
+ * вступает в ролике позже, чем просили, — а поверх ещё ляжет adelay, и звук уедет.
+ */
+function trimStages(trimStartSec?: number): string[] {
+  if (!trimStartSec || trimStartSec <= 0) return [];
+  return [`atrim=start=${fixed(trimStartSec)}`, 'asetpts=PTS-STARTPTS'];
+}
+
 export function planFinal(input: FinalPlanInput): FinalPlan {
   const { timeline, scenePaths, musicPath, voiceoverPath, outputPath, quality } = input;
   const timings = timelineTimings(timeline);
@@ -337,7 +348,7 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
     // Под озвучку музыка уводится в фон фиксированным коэффициентом. Это грубее
     // сайдчейн-компрессии, но предсказуемо и не зависит от версии ffmpeg.
     const volume = hasVoice ? music.volume * 0.35 : music.volume;
-    const stages = [`volume=${fixed(volume, 3)}`];
+    const stages = [...trimStages(music.trimStartSec), `volume=${fixed(volume, 3)}`];
     if (music.startAtSec > 0) {
       const delayMs = Math.round(music.startAtSec * 1000);
       stages.push(`adelay=${delayMs}|${delayMs}`);
@@ -355,7 +366,7 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
 
   if (hasVoice && timeline.voiceover) {
     const voice = timeline.voiceover;
-    const stages = [`volume=${fixed(voice.volume, 3)}`];
+    const stages = [...trimStages(voice.trimStartSec), `volume=${fixed(voice.volume, 3)}`];
     if (voice.startAtSec > 0) {
       const delayMs = Math.round(voice.startAtSec * 1000);
       stages.push(`adelay=${delayMs}|${delayMs}`);

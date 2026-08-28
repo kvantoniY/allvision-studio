@@ -16,7 +16,7 @@ import {
 // страницы не должен его касаться.
 const SceneCanvas = dynamic(() => import('./canvas/SceneCanvas').then((m) => m.SceneCanvas), {
   ssr: false,
-  loading: () => <div className="aspect-[9/16] w-full animate-pulse rounded-xl bg-slate-900" />,
+  loading: () => <div className="h-full w-full animate-pulse rounded-xl bg-slate-900" />,
 });
 import { mediaUrl } from './canvas/useMediaElements';
 import { cn } from '@/lib/utils';
@@ -126,8 +126,9 @@ export function EditorStage({
   }, [playing, frame?.activeIndex]);
 
   return (
-    <div className={cn('space-y-3', className)}>
-      <div className="relative">
+    <div className={cn('flex min-h-0 flex-col gap-3', className)}>
+      {/* Кадр забирает всю свободную высоту, транспорт остаётся на месте. */}
+      <div className="relative min-h-0 flex-1">
         {shownScene && (
           <SceneCanvas
             key={`scene-${shownIndex}`}
@@ -162,7 +163,7 @@ export function EditorStage({
         {musicSrc && <audio ref={musicRef} src={musicSrc} preload="auto" className="hidden" />}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         <button
           type="button"
           onClick={() => setPlaying((value) => !value)}

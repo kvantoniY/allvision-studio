@@ -130,6 +130,32 @@ export function useEditorOperations(
     [timeline, withLayers],
   );
 
+  /**
+   * Вставка скопированного слоя — в том числе в другую сцену.
+   *
+   * Копия получает новый идентификатор и сдвиг: с прежним id она бы конфликтовала с
+   * оригиналом, а без сдвига встала бы точно под него и выглядела как ничего не произошло.
+   */
+  const pasteLayer = useCallback(
+    (sceneIndex: number, layer: SceneLayer) => {
+      if (!timeline) return null;
+      if (sceneLayers(timeline.scenes[sceneIndex]).length >= TIMELINE_LIMITS.maxLayersPerScene) return null;
+      const id = uid(layer.kind === 'text' ? 'text' : 'layer');
+      withLayers(sceneIndex, (layers) => [
+        ...layers,
+        {
+          ...layer,
+          id,
+          box: { ...layer.box, x: Math.min(0.9, layer.box.x + 0.04), y: Math.min(0.9, layer.box.y + 0.04) },
+          // Метку генерации не переносим: результат чужого запуска должен встать в оригинал.
+          generationProjectId: undefined,
+        } as SceneLayer,
+      ]);
+      return id;
+    },
+    [timeline, withLayers],
+  );
+
   /** Сдвиг слоя стрелками. Рамку держим в кадре: уехавший за край слой не выделить обратно. */
   const nudgeLayer = useCallback(
     (sceneIndex: number, layerId: string, dx: number, dy: number) => {
@@ -204,6 +230,7 @@ export function useEditorOperations(
     addMediaLayer,
     addTextLayer,
     duplicateLayer,
+    pasteLayer,
     nudgeLayer,
     removeLayer,
     moveLayer,

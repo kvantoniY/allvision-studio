@@ -117,6 +117,12 @@ export const timelineAudioTrackSchema = z.object({
   loop: z.boolean().default(true),
   /** С какой секунды ролика играет дорожка. */
   startAtSec: z.number().min(0).max(TIMELINE_LIMITS.maxTotalDurationSec).default(0),
+  /**
+   * С какой секунды САМОГО ФАЙЛА начинать. Не путать со startAtSec: тот говорит, когда
+   * дорожка вступает в ролике, а этот — какой кусок трека брать (например, начать песню
+   * с припева, а не со вступления).
+   */
+  trimStartSec: z.number().min(0).max(3600).default(0),
 });
 
 export type TimelineAudioTrack = z.infer<typeof timelineAudioTrackSchema>;
