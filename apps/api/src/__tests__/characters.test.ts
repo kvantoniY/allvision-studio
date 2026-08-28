@@ -14,8 +14,8 @@ import { processCharacterNsfw } from '../../../worker/src/processors/character-n
 import { _resetWorkerProvidersForTests } from '../../../worker/src/providers';
 
 const RUN_ID = Date.now();
-const OWNER_EMAIL = `characters-owner-${RUN_ID}@example.com`;
-const OTHER_EMAIL = `characters-other-${RUN_ID}@example.com`;
+const OWNER_EMAIL = `characters-owner-${RUN_ID}@example.ru`;
+const OTHER_EMAIL = `characters-other-${RUN_ID}@example.ru`;
 
 let tmpDir: string;
 let originalUploads: string | undefined;
@@ -237,19 +237,20 @@ describe('/api/characters', () => {
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ownerUserId } });
     expect(user.freeCharacterUsed).toBe(true);
-    expect(user.tokenBalance).toBe(300);
+    // Считаем от константы цены: она уже менялась, и жёсткое число ломало тест.
+    expect(user.tokenBalance).toBe(500 - CHARACTER_SLOT_PRICE_TOKENS);
 
     const tx = await prisma.tokenTransaction.findFirstOrThrow({
       where: { userId: ownerUserId, refId: res.body.character.id, reason: 'character_slot' },
     });
     expect(tx.amount).toBe(-CHARACTER_SLOT_PRICE_TOKENS);
-    expect(tx.balanceAfter).toBe(300);
+    expect(tx.balanceAfter).toBe(500 - CHARACTER_SLOT_PRICE_TOKENS);
   });
 
-  it('returns 402 INSUFFICIENT_TOKENS for a paid character with balance 199', async () => {
+  it('returns 402 INSUFFICIENT_TOKENS when the balance is one coin short', async () => {
     await prisma.user.update({
       where: { id: ownerUserId },
-      data: { freeCharacterUsed: true, tokenBalance: 199 },
+      data: { freeCharacterUsed: true, tokenBalance: CHARACTER_SLOT_PRICE_TOKENS - 1 },
     });
 
     const res = await request(app)
@@ -266,7 +267,7 @@ describe('/api/characters', () => {
     expect(res.body.error.code).toBe('INSUFFICIENT_TOKENS');
     await expect(prisma.character.count({ where: { userId: ownerUserId } })).resolves.toBe(0);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ownerUserId } });
-    expect(user.tokenBalance).toBe(199);
+    expect(user.tokenBalance).toBe(CHARACTER_SLOT_PRICE_TOKENS - 1);
   });
 
   it('returns 503 and resets the free slot when NSFW queue is unavailable for a free character', async () => {
@@ -369,7 +370,8 @@ describe('/api/characters', () => {
     expect(updated.nsfwChecked).toBe(true);
 
     const user = await prisma.user.findUniqueOrThrow({ where: { id: ownerUserId } });
-    expect(user.tokenBalance).toBe(500);
+    // Баланс до проверки — 300, возврат равен цене слота.
+    expect(user.tokenBalance).toBe(300 + CHARACTER_SLOT_PRICE_TOKENS);
     const refund = await prisma.tokenTransaction.findFirstOrThrow({
       where: { userId: ownerUserId, refId: character.id, reason: 'refund' },
     });

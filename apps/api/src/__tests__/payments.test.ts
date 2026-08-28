@@ -3,8 +3,8 @@ import { prisma } from '@allvision/database';
 import { app } from '../app';
 
 const RUN_ID = Date.now();
-const EMAIL = `payments-${RUN_ID}@example.com`;
-const OTHER_EMAIL = `payments-other-${RUN_ID}@example.com`;
+const EMAIL = `payments-${RUN_ID}@example.ru`;
+const OTHER_EMAIL = `payments-other-${RUN_ID}@example.ru`;
 const PASSWORD = 'password123';
 const ACTIVE_PACKAGE_TITLE = `Payments Active ${RUN_ID}`;
 const INACTIVE_PACKAGE_TITLE = `Payments Inactive ${RUN_ID}`;

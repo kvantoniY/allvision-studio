@@ -100,8 +100,10 @@ function mapValidationError(err: unknown): HttpError {
   ) {
     return new HttpError(400, 'INVALID_BLOCK_PARAMS', formatAdminServiceValidationError(message));
   }
-  if (message === 'TIER_FIELD_REQUIRED') {
-    return new HttpError(400, 'TIER_FIELD_REQUIRED', formatAdminServiceValidationError(message));
+  // С P9 tier-поле необязательно, и валидатор больше не бросает TIER_FIELD_REQUIRED.
+  // Живая ошибка теперь одна: два поля выбора тарифа в одной форме.
+  if (message === 'TIER_FIELD_DUPLICATE') {
+    return new HttpError(400, 'TIER_FIELD_DUPLICATE', formatAdminServiceValidationError(message));
   }
   if (message.startsWith('DUPLICATE_FIELD_ID:')) {
     return new HttpError(400, 'DUPLICATE_FIELD_ID', formatAdminServiceValidationError(message));

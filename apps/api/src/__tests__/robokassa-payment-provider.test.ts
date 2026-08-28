@@ -71,7 +71,7 @@ describe('RobokassaPaymentProvider', () => {
       metadata: {
         paymentId: 'payment_1',
         packageTitle: 'Старт',
-        customerEmail: 'customer@example.com',
+        customerEmail: 'customer@example.ru',
       },
     });
 

@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '@allvision/database';
 import { app } from '../app';
 
-const EMAIL = `test-${Date.now()}@example.com`;
+const EMAIL = `test-${Date.now()}@example.ru`;
 const PASSWORD = 'password123';
 const NAME = 'Test User';
 
@@ -25,6 +25,17 @@ afterAll(async () => {
 });
 
 describe('POST /api/auth/register', () => {
+  // Продуктовый контракт — ноль на старте. В локальном .env бонус может быть выставлен
+  // для ручных прогонов, но тест проверяет контракт, а не чужую настройку машины.
+  const envBonus = process.env.WELCOME_TOKENS_BONUS;
+  beforeAll(() => {
+    process.env.WELCOME_TOKENS_BONUS = '0';
+  });
+  afterAll(() => {
+    if (envBonus === undefined) delete process.env.WELCOME_TOKENS_BONUS;
+    else process.env.WELCOME_TOKENS_BONUS = envBonus;
+  });
+
   it('creates user, sets cookies, starts with zero balance and no welcome bonus', async () => {
     const res = await request(app)
       .post('/api/auth/register')

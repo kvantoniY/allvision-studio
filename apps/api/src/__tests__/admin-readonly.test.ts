@@ -19,8 +19,8 @@ jest.mock('../services/piapi-client', () => ({
 const { app } = require('../app') as typeof import('../app');
 
 const RUN_ID = Date.now();
-const READONLY_EMAIL = `readonly-${RUN_ID}@example.com`;
-const USER_EMAIL = `readonly-user-${RUN_ID}@example.com`;
+const READONLY_EMAIL = `readonly-${RUN_ID}@example.ru`;
+const USER_EMAIL = `readonly-user-${RUN_ID}@example.ru`;
 const SERVICE_SLUG = `readonly-service-${RUN_ID}`;
 const MEDIA_TITLE = `Readonly ${RUN_ID} Trend Video`;
 

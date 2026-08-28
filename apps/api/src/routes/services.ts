@@ -408,6 +408,11 @@ servicesRouter.post(
       let tierValue: 'standard' | 'pro' = 'pro';
       if (tierField) {
         const raw = data[tierField.id];
+        // Непонятное значение не превращаем в Pro молча: это дороже, а платит человек.
+        // Пустое поле оставляем на прежнем Pro-умолчании — так вели себя старые клиенты.
+        if (raw !== undefined && raw !== null && raw !== '' && raw !== 'standard' && raw !== 'pro') {
+          throw new HttpError(400, 'INVALID_TIER', 'Неизвестный тариф');
+        }
         tierValue = raw === 'standard' ? 'standard' : 'pro';
         data[tierField.id] = tierValue;
       }

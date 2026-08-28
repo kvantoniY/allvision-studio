@@ -11,8 +11,8 @@ import { processEpisode } from '../../../worker/src/processors/episode';
 import * as workerProviders from '../../../worker/src/providers';
 
 const RUN_ID = Date.now();
-const OWNER_EMAIL = `episodes-owner-${RUN_ID}@example.com`;
-const OTHER_EMAIL = `episodes-other-${RUN_ID}@example.com`;
+const OWNER_EMAIL = `episodes-owner-${RUN_ID}@example.ru`;
+const OTHER_EMAIL = `episodes-other-${RUN_ID}@example.ru`;
 const TEMPLATE_PREFIX = `episode-test-${RUN_ID}`;
 
 let ownerUserId: string;

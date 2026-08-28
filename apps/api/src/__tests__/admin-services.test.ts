@@ -5,6 +5,7 @@ import {
   ProcessingType,
   ProjectStatus,
   type Service,
+  type ServiceCategory,
 } from '@allvision/database';
 import { app } from '../app';
 import { signAccessToken } from '../utils/jwt';
@@ -12,8 +13,8 @@ import * as fileService from '../services/file-service';
 import * as queues from '../queues';
 
 const RUN_ID = Date.now();
-const ADMIN_EMAIL = `admin-services-${RUN_ID}@example.com`;
-const USER_EMAIL = `admin-services-user-${RUN_ID}@example.com`;
+const ADMIN_EMAIL = `admin-services-${RUN_ID}@example.ru`;
+const USER_EMAIL = `admin-services-user-${RUN_ID}@example.ru`;
 
 let adminUserId: string;
 let regularUserId: string;
@@ -76,7 +77,8 @@ async function createService(data = validData()): Promise<Service> {
       title: data.title,
       shortDesc: data.shortDesc,
       description: data.description,
-      category: data.category as priceTokens: data.priceCoinsStandard,
+      category: data.category as ServiceCategory,
+      priceTokens: data.priceCoinsStandard,
       costUsd: 0,
       galleryImages: [],
       isActive: data.isActive,
@@ -90,7 +92,7 @@ async function createService(data = validData()): Promise<Service> {
       userInputForm: data.userInputForm,
       priceCoinsStandard: data.priceCoinsStandard,
       priceCoinsPro: data.priceCoinsPro,
-      previewImage: 'http://test.local/static/service-assets/images/old.png',
+      previewImage: `http://test.local/static/service-assets/images/${data.slug}-old.png`,
     },
   });
 }
@@ -180,16 +182,29 @@ describe('/api/admin/services', () => {
     expect(brokenRes.body.error.code).toBe('INVALID_STEP_REFERENCE');
   });
 
-  it('rejects invalid userInputForm', async () => {
-    const noTier = validData();
+  it('allows a form without a tier field but rejects two of them', async () => {
+    // С P9 услуга живёт и без выбора тарифа: цену берут из priceCoinsPro. А вот два
+    // tier-поля — это две разные цены в одной форме, и понять, что спишется, нельзя.
+    const noTier = validData(`service-${RUN_ID}-no-tier`);
     noTier.userInputForm = [{ id: 'photo', type: 'photo', label: 'Photo', required: true }];
-    const res = await request(app)
+    const okRes = await request(app)
       .post('/api/admin/services')
       .set('Cookie', authCookie(adminUserId, 'ADMIN'))
       .field('data', JSON.stringify(noTier));
+    expect(okRes.status).toBe(201);
+
+    const twoTiers = validData(`service-${RUN_ID}-two-tiers`);
+    twoTiers.userInputForm = [
+      { id: 'tier', type: 'tier', label: 'Качество', required: true },
+      { id: 'tier2', type: 'tier', label: 'Ещё качество', required: true },
+    ];
+    const res = await request(app)
+      .post('/api/admin/services')
+      .set('Cookie', authCookie(adminUserId, 'ADMIN'))
+      .field('data', JSON.stringify(twoTiers));
 
     expect(res.status).toBe(400);
-    expect(res.body.error.code).toBe('TIER_FIELD_REQUIRED');
+    expect(res.body.error.code).toBe('TIER_FIELD_DUPLICATE');
   });
 
   it('returns SERVICE_SLUG_TAKEN for duplicate slugs', async () => {
@@ -332,7 +347,30 @@ describe('/api/admin/services', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.service.title).toBe('Updated Service Title');
-    expect(deleteSpy).toHaveBeenCalledWith('service-assets/images/old.png');
+    expect(deleteSpy).toHaveBeenCalledWith(`service-assets/images/${service.slug}-old.png`);
+    deleteSpy.mockRestore();
+  });
+
+  it('keeps a preview file that another service still uses', async () => {
+    // Дубликат услуги копирует ссылку на обложку, а не файл. Пока на файл кто-то
+    // ссылается, удалять его нельзя — иначе обложка пропадёт у оригинала.
+    const shared = 'http://test.local/static/service-assets/images/shared-cover.png';
+    const first = await createService(validData(`service-${RUN_ID}-shared-a`));
+    const second = await createService(validData(`service-${RUN_ID}-shared-b`));
+    await prisma.service.updateMany({
+      where: { id: { in: [first.id, second.id] } },
+      data: { previewImage: shared, coverImage: shared },
+    });
+
+    const deleteSpy = jest.spyOn(fileService, 'deleteFile').mockResolvedValue(undefined);
+    const res = await request(app)
+      .patch(`/api/admin/services/${first.id}`)
+      .set('Cookie', authCookie(adminUserId, 'ADMIN'))
+      .field('data', JSON.stringify({ title: 'Первая услуга' }))
+      .attach('previewImage', await pngBuffer(), { filename: 'new-cover.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(200);
+    expect(deleteSpy).not.toHaveBeenCalledWith('service-assets/images/shared-cover.png');
     deleteSpy.mockRestore();
   });
 

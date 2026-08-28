@@ -14,8 +14,8 @@ jest.mock('../services/piapi-client', () => ({
 const { app } = require('../app') as typeof import('../app');
 
 const RUN_ID = Date.now();
-const ADMIN_EMAIL = `admin-diagnostics-${RUN_ID}@example.com`;
-const USER_EMAIL = `admin-diagnostics-user-${RUN_ID}@example.com`;
+const ADMIN_EMAIL = `admin-diagnostics-${RUN_ID}@example.ru`;
+const USER_EMAIL = `admin-diagnostics-user-${RUN_ID}@example.ru`;
 
 let adminUserId: string;
 let userId: string;
@@ -66,12 +66,42 @@ describe('/api/admin/diagnostics', () => {
     expect(JSON.stringify(res.body)).not.toContain('diagnostics-key-abcdef');
   });
 
-  it('refreshes PiAPI balance through action endpoint', async () => {
+  // Баланс теперь читается у fal (провайдер сменился в P11), а не у PiAPI.
+  it('refreshes the provider balance through the action endpoint', async () => {
+    const originalKey = process.env.FAL_KEY;
+    process.env.FAL_KEY = 'fal-test-key';
+    const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ username: 'allvision', credits: { current_balance: 9.5, currency: 'USD' } }),
+    } as never);
+
     const res = await request(app)
       .post('/api/admin/diagnostics/refresh-balance')
       .set('Cookie', authCookie(adminUserId, 'ADMIN'));
 
     expect(res.status).toBe(200);
     expect(res.body.balanceUsd).toBe(9.5);
+
+    fetchSpy.mockRestore();
+    if (originalKey === undefined) delete process.env.FAL_KEY;
+    else process.env.FAL_KEY = originalKey;
+  });
+
+  it('says plainly that the balance cannot be read without a key', async () => {
+    const originalKey = process.env.FAL_KEY;
+    const originalBilling = process.env.FAL_BILLING_KEY;
+    delete process.env.FAL_KEY;
+    delete process.env.FAL_BILLING_KEY;
+
+    const res = await request(app)
+      .post('/api/admin/diagnostics/refresh-balance')
+      .set('Cookie', authCookie(adminUserId, 'ADMIN'));
+
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('FAL_KEY_MISSING');
+
+    if (originalKey !== undefined) process.env.FAL_KEY = originalKey;
+    if (originalBilling !== undefined) process.env.FAL_BILLING_KEY = originalBilling;
   });
 });

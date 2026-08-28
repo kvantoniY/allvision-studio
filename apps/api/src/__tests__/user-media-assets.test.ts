@@ -11,9 +11,9 @@ import { signAccessToken } from '../utils/jwt';
 import * as queuesModule from '../queues';
 
 const RUN_ID = Date.now();
-const USER_EMAIL = `library-user-${RUN_ID}@example.com`;
-const OTHER_EMAIL = `library-other-${RUN_ID}@example.com`;
-const ADMIN_EMAIL = `library-admin-${RUN_ID}@example.com`;
+const USER_EMAIL = `library-user-${RUN_ID}@example.ru`;
+const OTHER_EMAIL = `library-other-${RUN_ID}@example.ru`;
+const ADMIN_EMAIL = `library-admin-${RUN_ID}@example.ru`;
 
 let tmpDir: string;
 let originalUploads: string | undefined;

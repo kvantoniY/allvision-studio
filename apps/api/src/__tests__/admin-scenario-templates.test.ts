@@ -11,8 +11,8 @@ import { signAccessToken } from '../utils/jwt';
 import * as fileService from '../services/file-service';
 
 const RUN_ID = Date.now();
-const ADMIN_EMAIL = `admin-templates-${RUN_ID}@example.com`;
-const USER_EMAIL = `admin-templates-user-${RUN_ID}@example.com`;
+const ADMIN_EMAIL = `admin-templates-${RUN_ID}@example.ru`;
+const USER_EMAIL = `admin-templates-user-${RUN_ID}@example.ru`;
 
 let tmpDir: string;
 let originalUploads: string | undefined;

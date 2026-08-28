@@ -2,7 +2,7 @@ import request from 'supertest';
 import { prisma } from '@allvision/database';
 import { app } from '../app';
 
-const EMAIL = `acc-${Date.now()}@example.com`;
+const EMAIL = `acc-${Date.now()}@example.ru`;
 const PASSWORD = 'password123';
 const NEW_PASSWORD = 'newpassword456';
 const NAME = 'Account User';

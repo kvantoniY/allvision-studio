@@ -5,8 +5,8 @@ import { signAccessToken } from '../utils/jwt';
 const { app } = require('../app') as typeof import('../app');
 
 const RUN_ID = Date.now();
-const ADMIN_EMAIL = `admin-settings-${RUN_ID}@example.com`;
-const USER_EMAIL = `admin-settings-user-${RUN_ID}@example.com`;
+const ADMIN_EMAIL = `admin-settings-${RUN_ID}@example.ru`;
+const USER_EMAIL = `admin-settings-user-${RUN_ID}@example.ru`;
 
 let adminUserId: string;
 let regularUserId: string;

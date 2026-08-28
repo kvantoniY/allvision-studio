@@ -199,7 +199,9 @@ videoProjectsRouter.post('/from-project', async (req: Request, res: Response, ne
     const project = await prisma.videoProject.create({
       data: {
         userId,
-        title: body.title ?? source.title ?? 'Ролик',
+        // Название проекта бывает длинным (в него попадает промпт), а в шапке редактора
+        // это поле ввода: режем по той же границе, что и при обычном создании ролика.
+        title: (body.title ?? source.title ?? 'Ролик').slice(0, 120),
         timeline: timeline as never,
       },
       select: listSelect,

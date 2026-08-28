@@ -113,14 +113,14 @@ beforeAll(async () => {
   const [user, lowBalanceUser] = await Promise.all([
     prisma.user.create({
       data: {
-        email: `launch-user-${RUN_ID}@example.com`,
+        email: `launch-user-${RUN_ID}@example.ru`,
         passwordHash: 'hash',
         tokenBalance: 1000,
       },
     }),
     prisma.user.create({
       data: {
-        email: `launch-low-${RUN_ID}@example.com`,
+        email: `launch-low-${RUN_ID}@example.ru`,
         passwordHash: 'hash',
         tokenBalance: 10,
       },

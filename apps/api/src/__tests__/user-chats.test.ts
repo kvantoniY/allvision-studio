@@ -1,13 +1,14 @@
 import request from 'supertest';
 import { prisma } from '@allvision/database';
-import { getChatModel } from '@allvision/shared';
+import { estimateChatGenerationPriceCoins } from '@allvision/shared';
+import { titleFromPrompt } from '../services/free-chat-generation';
 import { app } from '../app';
 import { signAccessToken } from '../utils/jwt';
 import * as queuesModule from '../queues';
 
 const RUN_ID = Date.now();
-const USER_EMAIL = `chats-user-${RUN_ID}@example.com`;
-const OTHER_EMAIL = `chats-other-${RUN_ID}@example.com`;
+const USER_EMAIL = `chats-user-${RUN_ID}@example.ru`;
+const OTHER_EMAIL = `chats-other-${RUN_ID}@example.ru`;
 
 let userId: string;
 let otherUserId: string;
@@ -92,7 +93,9 @@ describe('/api/user/chats', () => {
 
   it('adds a message, creates a free-chat project, updates chat timestamp and auto-title', async () => {
     jest.spyOn(queuesModule, 'addServicePipelineJob').mockResolvedValue({} as never);
-    const cost = getChatModel('nano-banana')?.estimatedCostCoins ?? 10;
+    // Цену считаем той же функцией, что и сервер: у неё есть ценовые полы (P14.2),
+    // и себестоимость из каталога им не равна.
+    const cost = estimateChatGenerationPriceCoins('nano-banana');
     const beforeUser = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const chat = await prisma.chat.create({ data: { userId, title: 'Новый чат' } });
     const beforeUpdatedAt = chat.updatedAt;
@@ -114,7 +117,8 @@ describe('/api/user/chats', () => {
     }));
 
     const updatedChat = await prisma.chat.findUniqueOrThrow({ where: { id: chat.id } });
-    expect(updatedChat.title).toBe(prompt.slice(0, 50));
+    // Длинный промпт обрезается с многоточием — сверяемся с тем же helper, что и код.
+    expect(updatedChat.title).toBe(titleFromPrompt(prompt, ''));
     expect(updatedChat.updatedAt.getTime()).toBeGreaterThanOrEqual(beforeUpdatedAt.getTime());
 
     const afterUser = await prisma.user.findUniqueOrThrow({ where: { id: userId } });

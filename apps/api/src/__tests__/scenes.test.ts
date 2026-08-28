@@ -10,8 +10,8 @@ import { signAccessToken } from '../utils/jwt';
 import * as fileService from '../services/file-service';
 
 const RUN_ID = Date.now();
-const OWNER_EMAIL = `scenes-owner-${RUN_ID}@example.com`;
-const OTHER_EMAIL = `scenes-other-${RUN_ID}@example.com`;
+const OWNER_EMAIL = `scenes-owner-${RUN_ID}@example.ru`;
+const OTHER_EMAIL = `scenes-other-${RUN_ID}@example.ru`;
 
 let tmpDir: string;
 let originalUploads: string | undefined;

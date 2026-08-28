@@ -229,7 +229,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 400 without file', async () => {
-    const { cookie } = await createAuthedUser(`projects-main-${RUN_ID}@example.com`);
+    const { cookie } = await createAuthedUser(`projects-main-${RUN_ID}@example.ru`);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -239,7 +239,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 400 for invalid MIME', async () => {
-    const { cookie } = await createAuthedUser(`projects-mime-${RUN_ID}@example.com`);
+    const { cookie } = await createAuthedUser(`projects-mime-${RUN_ID}@example.ru`);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -250,7 +250,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 404 for unknown service slug', async () => {
-    const { cookie } = await createAuthedUser(`projects-unknown-${RUN_ID}@example.com`);
+    const { cookie } = await createAuthedUser(`projects-unknown-${RUN_ID}@example.ru`);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -261,7 +261,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 402 when user has insufficient tokens', async () => {
-    const { cookie } = await createAuthedUser(`projects-low-${RUN_ID}@example.com`, 10);
+    const { cookie } = await createAuthedUser(`projects-low-${RUN_ID}@example.ru`, 10);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -272,7 +272,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 402 when photo-animate balance is below 80 tokens', async () => {
-    const { cookie } = await createAuthedUser(`projects-animate-low-${RUN_ID}@example.com`, 79);
+    const { cookie } = await createAuthedUser(`projects-animate-low-${RUN_ID}@example.ru`, 79);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -283,7 +283,7 @@ describe('POST /api/projects', () => {
   });
 
   it('creates a photo-restore project, charges tokens and enqueues a job', async () => {
-    const { cookie, userId } = await createAuthedUser(`projects-restore-${RUN_ID}@example.com`, 100);
+    const { cookie, userId } = await createAuthedUser(`projects-restore-${RUN_ID}@example.ru`, 100);
     const addJobSpy = jest.spyOn(queuesModule, 'addProjectJob').mockResolvedValue({ id: 'job-1' } as any);
 
     const res = await request(app)
@@ -324,7 +324,7 @@ describe('POST /api/projects', () => {
   });
 
   it('creates a photo-animate project, charges 80 tokens and enqueues a job', async () => {
-    const { cookie, userId } = await createAuthedUser(`projects-animate-${RUN_ID}@example.com`, 200);
+    const { cookie, userId } = await createAuthedUser(`projects-animate-${RUN_ID}@example.ru`, 200);
     const addJobSpy = jest.spyOn(queuesModule, 'addProjectJob').mockResolvedValue({ id: 'job-2' } as any);
 
     const res = await request(app)
@@ -354,7 +354,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 400 TREND_REQUIRED for trends without trendId', async () => {
-    const { cookie } = await createAuthedUser(`projects-trend-required-${RUN_ID}@example.com`, 200);
+    const { cookie } = await createAuthedUser(`projects-trend-required-${RUN_ID}@example.ru`, 200);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -365,7 +365,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 404 TREND_NOT_FOUND for missing trendId', async () => {
-    const { cookie } = await createAuthedUser(`projects-trend-missing-${RUN_ID}@example.com`, 200);
+    const { cookie } = await createAuthedUser(`projects-trend-missing-${RUN_ID}@example.ru`, 200);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -377,7 +377,7 @@ describe('POST /api/projects', () => {
   });
 
   it('returns 400 TREND_SERVICE_MISMATCH for a trend from another service', async () => {
-    const { cookie } = await createAuthedUser(`projects-trend-mismatch-${RUN_ID}@example.com`, 200);
+    const { cookie } = await createAuthedUser(`projects-trend-mismatch-${RUN_ID}@example.ru`, 200);
     const res = await request(app)
       .post('/api/projects')
       .set('Cookie', cookie)
@@ -389,7 +389,7 @@ describe('POST /api/projects', () => {
   });
 
   it('creates a trends project, charges 150 tokens and enqueues a trend job', async () => {
-    const { cookie, userId } = await createAuthedUser(`projects-trend-happy-${RUN_ID}@example.com`, 300);
+    const { cookie, userId } = await createAuthedUser(`projects-trend-happy-${RUN_ID}@example.ru`, 300);
     const addJobSpy = jest.spyOn(queuesModule, 'addProjectJob').mockResolvedValue({ id: 'job-3' } as any);
 
     const res = await request(app)
@@ -423,7 +423,7 @@ describe('POST /api/projects', () => {
 
   it('uses service price when Trend.priceTokens is null', async () => {
     await prisma.trend.update({ where: { id: testTrend.id }, data: { priceTokens: null } });
-    const { cookie, userId } = await createAuthedUser(`projects-trend-null-price-${RUN_ID}@example.com`, 300);
+    const { cookie, userId } = await createAuthedUser(`projects-trend-null-price-${RUN_ID}@example.ru`, 300);
     jest.spyOn(queuesModule, 'addProjectJob').mockResolvedValue({ id: 'job-null-price' } as any);
 
     const res = await request(app)
@@ -444,7 +444,7 @@ describe('POST /api/projects', () => {
     await prisma.trend.update({ where: { id: testTrend.id }, data: { priceTokens: 250 } });
     jest.spyOn(queuesModule, 'addProjectJob').mockResolvedValue({ id: 'job-custom-price' } as any);
 
-    const enough = await createAuthedUser(`projects-trend-custom-price-${RUN_ID}@example.com`, 300);
+    const enough = await createAuthedUser(`projects-trend-custom-price-${RUN_ID}@example.ru`, 300);
     const ok = await request(app)
       .post('/api/projects')
       .set('Cookie', enough.cookie)
@@ -457,7 +457,7 @@ describe('POST /api/projects', () => {
     const enoughUser = await prisma.user.findUniqueOrThrow({ where: { id: enough.userId } });
     expect(enoughUser.tokenBalance).toBe(50);
 
-    const low = await createAuthedUser(`projects-trend-custom-price-low-${RUN_ID}@example.com`, 200);
+    const low = await createAuthedUser(`projects-trend-custom-price-low-${RUN_ID}@example.ru`, 200);
     const insufficient = await request(app)
       .post('/api/projects')
       .set('Cookie', low.cookie)
@@ -472,8 +472,8 @@ describe('POST /api/projects', () => {
 
 describe('GET /api/projects', () => {
   it('returns 404 for another user project', async () => {
-    const owner = await createAuthedUser(`projects-owner-${RUN_ID}@example.com`);
-    const other = await createAuthedUser(`projects-other-${RUN_ID}@example.com`);
+    const owner = await createAuthedUser(`projects-owner-${RUN_ID}@example.ru`);
+    const other = await createAuthedUser(`projects-other-${RUN_ID}@example.ru`);
     const project = await prisma.project.create({
       data: {
         userId: owner.userId,
@@ -492,7 +492,7 @@ describe('GET /api/projects', () => {
   });
 
   it('paginates user projects', async () => {
-    const { cookie, userId } = await createAuthedUser(`projects-list-${RUN_ID}@example.com`);
+    const { cookie, userId } = await createAuthedUser(`projects-list-${RUN_ID}@example.ru`);
 
     await prisma.project.createMany({
       data: Array.from({ length: 25 }).map((_, index) => ({

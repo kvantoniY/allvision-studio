@@ -1,11 +1,12 @@
 import request from 'supertest';
 import { prisma } from '@allvision/database';
+import { BLOCK_CATALOG } from '@allvision/shared';
 import { app } from '../app';
 import { signAccessToken } from '../utils/jwt';
 
 const RUN_ID = Date.now();
-const ADMIN_EMAIL = `admin-blocks-${RUN_ID}@example.com`;
-const USER_EMAIL = `admin-blocks-user-${RUN_ID}@example.com`;
+const ADMIN_EMAIL = `admin-blocks-${RUN_ID}@example.ru`;
+const USER_EMAIL = `admin-blocks-user-${RUN_ID}@example.ru`;
 
 let adminUserId: string;
 let regularUserId: string;
@@ -63,7 +64,9 @@ describe('GET /api/admin/blocks', () => {
       .set('Cookie', authCookie(adminUserId, 'ADMIN'));
 
     expect(res.status).toBe(200);
-    expect(res.body.blocks).toHaveLength(8);
+    // Считаем по каталогу, а не числом: блоки добавляются, и захардкоженное число
+    // ломало этот тест каждый раз, пока набор перестали запускать вовсе.
+    expect(res.body.blocks).toHaveLength(BLOCK_CATALOG.length);
     expect(res.body.blocks).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

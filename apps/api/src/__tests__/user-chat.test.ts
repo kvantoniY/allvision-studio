@@ -8,7 +8,7 @@ import { app } from '../app';
 import { signAccessToken } from '../utils/jwt';
 
 const RUN_ID = Date.now();
-const USER_EMAIL = `chat-upload-${RUN_ID}@example.com`;
+const USER_EMAIL = `chat-upload-${RUN_ID}@example.ru`;
 
 let tmpDir: string;
 let originalUploads: string | undefined;

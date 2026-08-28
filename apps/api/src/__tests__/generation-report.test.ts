@@ -4,9 +4,9 @@ import { app } from '../app';
 import { signAccessToken } from '../utils/jwt';
 
 const RUN_ID = Date.now();
-const USER_EMAIL = `generation-report-user-${RUN_ID}@example.com`;
-const OTHER_EMAIL = `generation-report-other-${RUN_ID}@example.com`;
-const ADMIN_EMAIL = `generation-report-admin-${RUN_ID}@example.com`;
+const USER_EMAIL = `generation-report-user-${RUN_ID}@example.ru`;
+const OTHER_EMAIL = `generation-report-other-${RUN_ID}@example.ru`;
+const ADMIN_EMAIL = `generation-report-admin-${RUN_ID}@example.ru`;
 const SERVICE_SLUG = `generation-report-service-${RUN_ID}`;
 
 let userId: string;

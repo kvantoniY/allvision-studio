@@ -4,8 +4,8 @@ import { app } from '../app';
 import { signAccessToken } from '../utils/jwt';
 
 const RUN_ID = Date.now();
-const ADMIN_EMAIL = `style-admin-${RUN_ID}@example.com`;
-const USER_EMAIL = `style-user-${RUN_ID}@example.com`;
+const ADMIN_EMAIL = `style-admin-${RUN_ID}@example.ru`;
+const USER_EMAIL = `style-user-${RUN_ID}@example.ru`;
 
 let adminUserId: string;
 let regularUserId: string;
