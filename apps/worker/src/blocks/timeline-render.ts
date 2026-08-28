@@ -421,6 +421,10 @@ export const timelineRenderBlock: BlockDefinition = {
           height,
           hasMusic: Boolean(musicPath),
           hasVoiceover: Boolean(voiceoverPath),
+          // Раскладка целиком — чтобы готовый ролик можно было открыть в редакторе и
+          // доработать. По одним ссылкам на исходники титры и музыку не восстановить,
+          // а шаблон без своего поздравления открывать бессмысленно.
+          resolvedTimeline: resolved,
           // Каждая сцена доступна отдельным файлом: пользователь может забрать
           // понравившийся кусок, не пересобирая ролик.
           scenes: resolved.scenes.map((scene, index) => ({

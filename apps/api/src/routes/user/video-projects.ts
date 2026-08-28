@@ -132,6 +132,84 @@ videoProjectsRouter.post('/', async (req: Request, res: Response, next: NextFunc
   }
 });
 
+const fromProjectSchema = z.object({
+  projectId: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1).max(120).optional(),
+});
+
+/**
+ * Достаёт раскладку из завершённого рендера.
+ *
+ * Шаблон поздравления собирается блоком timeline-render, и он кладёт в результат саму
+ * раскладку: по одним ссылкам на файлы сцен титры и музыку не восстановить, а шаблон без
+ * своего поздравления открывать в редакторе незачем.
+ */
+function renderedTimeline(stepProgress: unknown): unknown | null {
+  if (!Array.isArray(stepProgress)) return null;
+  for (let index = stepProgress.length - 1; index >= 0; index -= 1) {
+    const step = stepProgress[index] as Record<string, unknown> | null;
+    if (!step || typeof step !== 'object') continue;
+    const output = step.output as Record<string, unknown> | undefined;
+    const metadata = output?.metadata as Record<string, unknown> | undefined;
+    if (metadata?.resolvedTimeline) return metadata.resolvedTimeline;
+  }
+  return null;
+}
+
+/** Ролик из одного кадра: так открывается любой другой результат — из чата, услуги, Студии. */
+function singleSceneTimeline(project: { resultVideo: string | null; resultImage: string | null }) {
+  const url = project.resultVideo ?? project.resultImage;
+  if (!url) return null;
+  return timelineSchema.parse({
+    scenes: [
+      {
+        id: `scene_${crypto.randomUUID().slice(0, 8)}`,
+        source: { kind: project.resultVideo ? 'video' : 'image', url },
+        durationSec: project.resultVideo ? undefined : 4,
+        transition: 'dissolve',
+        transitionDurationSec: 0.6,
+      },
+    ],
+  });
+}
+
+/**
+ * Ролик из готового результата: «доработать в редакторе».
+ *
+ * Генерации уже оплачены, поэтому здесь никаких списаний — мы только переносим готовое
+ * в редактируемый вид. Шаблон открывается целиком со сценами, титрами и музыкой, любой
+ * другой результат — одной сценой, из которой можно собрать что-то своё.
+ */
+videoProjectsRouter.post('/from-project', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const body = fromProjectSchema.parse(req.body ?? {});
+    const source = await prisma.project.findFirst({
+      where: { id: body.projectId, userId, status: 'COMPLETED' },
+      select: { id: true, title: true, stepProgress: true, resultVideo: true, resultImage: true },
+    });
+    // 404 и на чужой, и на незавершённый: существование чужого проекта — тоже информация.
+    if (!source) throw new HttpError(404, 'PROJECT_NOT_FOUND', 'Готовый результат не найден');
+
+    const rendered = renderedTimeline(source.stepProgress);
+    const parsed = rendered ? timelineSchema.safeParse(rendered) : null;
+    const timeline = parsed?.success ? parsed.data : singleSceneTimeline(source);
+    if (!timeline) throw new HttpError(400, 'NOTHING_TO_EDIT', 'У этого результата нет материала для редактора');
+
+    const project = await prisma.videoProject.create({
+      data: {
+        userId,
+        title: body.title ?? source.title ?? 'Ролик',
+        timeline: timeline as never,
+      },
+      select: listSelect,
+    });
+    res.status(201).json({ project });
+  } catch (err) {
+    next(err);
+  }
+});
+
 videoProjectsRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const project = await ownedProject(req.user!.id, req.params.id);

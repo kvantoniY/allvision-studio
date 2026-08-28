@@ -31,6 +31,7 @@ import { GenerationRetentionNotice } from '@/components/generations/GenerationRe
 import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
+import { OpenInEditorButton } from '@/components/editor/OpenInEditorButton';
 import {
   type ProjectDetails,
   useGetProjectQuery,
@@ -348,6 +349,11 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 <Share2 className="h-4 w-4" />
                 Поделиться
               </Button>
+              <OpenInEditorButton
+                projectId={project.id}
+                title={project.title}
+                className="border-slate-700 bg-slate-900"
+              />
               <SaveToStudioButton projectId={project.id} defaultTitle={project.title} />
               <ReportGenerationButton projectId={project.id} />
             </div>

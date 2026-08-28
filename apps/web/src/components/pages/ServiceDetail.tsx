@@ -52,6 +52,7 @@ import { DeleteGenerationButton } from '@/components/generations/DeleteGeneratio
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
 import { ReportGenerationButton } from '@/components/generations/ReportGenerationButton';
 import { SaveToStudioButton } from '@/components/studio/SaveToStudioButton';
+import { OpenInEditorButton } from '@/components/editor/OpenInEditorButton';
 import { cn } from '@/lib/utils';
 
 import { TokenIcon } from '@/components/ui/token-icon';
@@ -2215,6 +2216,7 @@ function GenerationCard({
                   </a>
                 </Button>
               )}
+              <OpenInEditorButton projectId={project.id} title={project.title} className="w-full sm:w-auto" />
               <SaveToStudioButton projectId={project.id} defaultTitle={project.title} className="w-full sm:w-auto" />
               <ReportGenerationButton projectId={project.id} className="w-full sm:w-auto" />
             </div>

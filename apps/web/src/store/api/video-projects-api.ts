@@ -46,6 +46,10 @@ export const videoProjectsApi = createApi({
       // саму карточку — нет, иначе автосохранение перетирало бы правки в редакторе ответом сервера.
       invalidatesTags: ['VideoProject'],
     }),
+    createFromProject: build.mutation<{ project: VideoProjectSummary }, { projectId: string; title?: string }>({
+      query: (body) => ({ url: '/from-project', method: 'POST', body }),
+      invalidatesTags: ['VideoProject'],
+    }),
     deleteVideoProject: build.mutation<void, string>({
       query: (id) => ({ url: `/${id}`, method: 'DELETE' }),
       invalidatesTags: ['VideoProject'],
@@ -96,6 +100,7 @@ export const {
   useListVideoProjectsQuery,
   useGetVideoProjectQuery,
   useCreateVideoProjectMutation,
+  useCreateFromProjectMutation,
   useUpdateVideoProjectMutation,
   useDeleteVideoProjectMutation,
   useUploadEditorMediaMutation,
