@@ -106,6 +106,51 @@ export function useEditorOperations(
     [withLayers],
   );
 
+  const duplicateLayer = useCallback(
+    (sceneIndex: number, layerId: string) => {
+      if (!timeline) return null;
+      if (sceneLayers(timeline.scenes[sceneIndex]).length >= TIMELINE_LIMITS.maxLayersPerScene) return null;
+      const id = uid(layerId.startsWith('text') ? 'text' : 'layer');
+      withLayers(sceneIndex, (layers) => {
+        const index = layers.findIndex((layer) => layer.id === layerId);
+        if (index < 0) return layers;
+        const source = layers[index];
+        const copy = {
+          ...source,
+          id,
+          // Сдвигаем копию: точно поверх оригинала она выглядела бы как «ничего не произошло».
+          box: { ...source.box, x: Math.min(0.9, source.box.x + 0.04), y: Math.min(0.9, source.box.y + 0.04) },
+          // Копия не ждёт чужую генерацию: метку забирать нельзя, иначе результат встанет в неё.
+          generationProjectId: undefined,
+        } as SceneLayer;
+        return [...layers.slice(0, index + 1), copy, ...layers.slice(index + 1)];
+      });
+      return id;
+    },
+    [timeline, withLayers],
+  );
+
+  /** Сдвиг слоя стрелками. Рамку держим в кадре: уехавший за край слой не выделить обратно. */
+  const nudgeLayer = useCallback(
+    (sceneIndex: number, layerId: string, dx: number, dy: number) => {
+      withLayers(sceneIndex, (layers) =>
+        layers.map((layer) =>
+          layer.id === layerId
+            ? ({
+              ...layer,
+              box: {
+                ...layer.box,
+                x: Math.min(1 - layer.box.w / 2, Math.max(-layer.box.w / 2, layer.box.x + dx)),
+                y: Math.min(1 - layer.box.h / 2, Math.max(-layer.box.h / 2, layer.box.y + dy)),
+              },
+            } as SceneLayer)
+            : layer,
+        ),
+      );
+    },
+    [withLayers],
+  );
+
   const removeLayer = useCallback(
     (sceneIndex: number, layerId: string) => {
       withLayers(sceneIndex, (layers) => (layers.length <= 1 ? layers : layers.filter((layer) => layer.id !== layerId)));
@@ -158,6 +203,8 @@ export function useEditorOperations(
     changeLayer,
     addMediaLayer,
     addTextLayer,
+    duplicateLayer,
+    nudgeLayer,
     removeLayer,
     moveLayer,
     applyCollage,

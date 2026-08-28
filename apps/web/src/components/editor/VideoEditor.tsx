@@ -12,8 +12,10 @@ import {
   LayoutGrid,
   Loader2,
   Music,
+  Redo2,
   Sparkles,
   Type,
+  Undo2,
   Upload,
 } from 'lucide-react';
 import {
@@ -21,7 +23,11 @@ import {
   TIMELINE_ASPECTS,
   TIMELINE_LIMITS,
   applyGeneratedSource,
+  createTimelineHistory,
   formatTimelineDuration,
+  pushTimelineHistory,
+  redoTimeline,
+  undoTimeline,
   sceneLayers,
   sceneMediaLayers,
   timelineDurationSec,
@@ -31,6 +37,7 @@ import {
   type SceneLayer,
   type Timeline,
   type TimelineAspect,
+  type TimelineHistory,
   type TimelineScene,
 } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -117,6 +124,10 @@ export function VideoEditor({ id }: { id: string }) {
   const addFileRef = useRef<HTMLInputElement | null>(null);
   const voiceFileRef = useRef<HTMLInputElement | null>(null);
   const timelineRef = useRef<Timeline | null>(null);
+  // История живёт в ref: её глубина нужна только кнопкам, а перерисовывать редактор
+  // на каждую запись незачем.
+  const historyRef = useRef<TimelineHistory>(createTimelineHistory());
+  const [historyDepth, setHistoryDepth] = useState({ past: 0, future: 0 });
 
   // Ответ сервера принимаем один раз: иначе автосохранение перетирало бы то,
   // что пользователь успел изменить, пока летел запрос.
@@ -157,7 +168,8 @@ export function VideoEditor({ id }: { id: string }) {
     if (saveTimer.current) clearTimeout(saveTimer.current);
   }, []);
 
-  const applyTimeline = useCallback(
+  /** Применяет раскладку без записи в историю: так возвращаются отмена и повтор. */
+  const applyWithoutHistory = useCallback(
     (next: Timeline) => {
       setTimeline(next);
       timelineRef.current = next;
@@ -165,6 +177,36 @@ export function VideoEditor({ id }: { id: string }) {
     },
     [scheduleSave],
   );
+
+  const applyTimeline = useCallback(
+    (next: Timeline) => {
+      const previous = timelineRef.current;
+      if (previous) historyRef.current = pushTimelineHistory(historyRef.current, previous, Date.now());
+      setHistoryDepth({ past: historyRef.current.past.length, future: historyRef.current.future.length });
+      applyWithoutHistory(next);
+    },
+    [applyWithoutHistory],
+  );
+
+  const undo = useCallback(() => {
+    const current = timelineRef.current;
+    if (!current) return;
+    const result = undoTimeline(historyRef.current, current);
+    if (!result) return;
+    historyRef.current = result.history;
+    setHistoryDepth({ past: result.history.past.length, future: result.history.future.length });
+    applyWithoutHistory(result.timeline);
+  }, [applyWithoutHistory]);
+
+  const redo = useCallback(() => {
+    const current = timelineRef.current;
+    if (!current) return;
+    const result = redoTimeline(historyRef.current, current);
+    if (!result) return;
+    historyRef.current = result.history;
+    setHistoryDepth({ past: result.history.past.length, future: result.history.future.length });
+    applyWithoutHistory(result.timeline);
+  }, [applyWithoutHistory]);
 
   const ops = useEditorOperations(timeline, applyTimeline);
 
@@ -437,6 +479,70 @@ export function VideoEditor({ id }: { id: string }) {
     [timeline, currentScene, ops, sceneIndex, id, updateProject, generateScene, selectedLayer],
   );
 
+  // --- клавиатура ---
+  // Горячие клавиши редактора. Ловим на окне, потому что фокус чаще всего на холсте Konva,
+  // а он обычный canvas и о клавишах ничего не знает.
+  useEffect(() => {
+    const isTyping = (target: EventTarget | null) => {
+      const node = target as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable;
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Пока человек пишет титр или название, клавиши принадлежат полю, а не редактору.
+      if (isTyping(event.target)) return;
+      const mod = event.ctrlKey || event.metaKey;
+
+      if (mod && event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if (mod && event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redo();
+        return;
+      }
+      if (mod && event.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        if (!selectedLayerId) return;
+        const copyId = ops.duplicateLayer(sceneIndex, selectedLayerId);
+        if (copyId) setSelectedLayerId(copyId);
+        else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+        return;
+      }
+      if (event.key === 'Escape') {
+        setSelectedLayerId(null);
+        return;
+      }
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedLayerId) {
+        event.preventDefault();
+        ops.removeLayer(sceneIndex, selectedLayerId);
+        setSelectedLayerId(null);
+        return;
+      }
+
+      const step = event.shiftKey ? 0.05 : 0.005;
+      const nudge: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0],
+        ArrowRight: [step, 0],
+        ArrowUp: [0, -step],
+        ArrowDown: [0, step],
+      };
+      const delta = nudge[event.key];
+      if (delta && selectedLayerId) {
+        event.preventDefault();
+        ops.nudgeLayer(sceneIndex, selectedLayerId, delta[0], delta[1]);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [ops, sceneIndex, selectedLayerId, undo, redo]);
+
   // --- экспорт ---
   const { data: exportStatus } = useGetProjectStatusQuery(exportId ?? '', {
     skip: !exportId,
@@ -517,6 +623,28 @@ export function VideoEditor({ id }: { id: string }) {
           {saveState === 'saving' ? 'Сохраняем…' : saveState === 'saved' ? 'Сохранено' : ''}
         </span>
         <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={undo}
+              disabled={historyDepth.past === 0}
+              title="Отменить (Ctrl+Z)"
+              aria-label="Отменить"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white disabled:opacity-35 disabled:hover:border-slate-700"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={redo}
+              disabled={historyDepth.future === 0}
+              title="Вернуть (Ctrl+Shift+Z)"
+              aria-label="Вернуть"
+              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white disabled:opacity-35 disabled:hover:border-slate-700"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+          </div>
           <span className="hidden font-mono text-xs text-slate-500 sm:inline">{formatTimelineDuration(duration)}</span>
           <Button type="button" onClick={handleExport} disabled={exporting || exportRunning}>
             {exporting || exportRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
@@ -588,6 +716,12 @@ export function VideoEditor({ id }: { id: string }) {
             onChangeLayer={(index, layerId, patch) => ops.changeLayer(index, layerId, patch)}
           />
 
+          {/* Про горячие клавиши на холсте догадаться нельзя — подсказываем строкой. */}
+          <p className="hidden text-[11px] text-slate-600 lg:block">
+            Ctrl+Z — отменить · Ctrl+D — дублировать слой · Delete — удалить · стрелки — сдвинуть
+            (с Shift — крупнее) · Esc — снять выделение
+          </p>
+
           <ToolBar
             tool={tool}
             uploading={uploading}
@@ -658,6 +792,11 @@ export function VideoEditor({ id }: { id: string }) {
                 selectedLayerId={selectedLayerId}
                 onSelect={setSelectedLayerId}
                 onMove={(layerId, direction) => ops.moveLayer(sceneIndex, layerId, direction)}
+                onDuplicate={(layerId) => {
+                  const copyId = ops.duplicateLayer(sceneIndex, layerId);
+                  if (copyId) setSelectedLayerId(copyId);
+                  else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+                }}
                 onRemove={(layerId) => {
                   ops.removeLayer(sceneIndex, layerId);
                   if (layerId === selectedLayerId) setSelectedLayerId(null);

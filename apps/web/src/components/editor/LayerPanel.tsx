@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, ChevronUp, Eye, EyeOff, Image as ImageIcon, Lock, Palette, Trash2, Type, Video } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Eye, EyeOff, Image as ImageIcon, Lock, Palette, Trash2, Type, Video } from 'lucide-react';
 import {
   sceneLayers,
   type MediaLayer,
@@ -35,6 +35,7 @@ export function LayerPanel({
   selectedLayerId,
   onSelect,
   onMove,
+  onDuplicate,
   onRemove,
   onChange,
 }: {
@@ -42,6 +43,7 @@ export function LayerPanel({
   selectedLayerId: string | null;
   onSelect: (layerId: string) => void;
   onMove: (layerId: string, direction: -1 | 1) => void;
+  onDuplicate: (layerId: string) => void;
   onRemove: (layerId: string) => void;
   onChange: (layerId: string, patch: Partial<MediaLayer> & Partial<TextLayer>) => void;
 }) {
@@ -106,6 +108,15 @@ export function LayerPanel({
               className="p-1 text-slate-500 transition hover:text-slate-200"
             >
               <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDuplicate(layer.id)}
+              aria-label="Дублировать слой"
+              title="Дублировать (Ctrl+D)"
+              className="p-1 text-slate-500 transition hover:text-slate-200"
+            >
+              <Copy className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
