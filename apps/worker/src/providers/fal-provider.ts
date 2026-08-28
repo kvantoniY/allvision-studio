@@ -118,13 +118,16 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'wan-2.7-reference': { endpoint: 'fal-ai/wan/v2.7/reference-to-video', kind: 'text-to-video', estimatedCostUsd: 2 },
   // hailuo text-to-video: слуги *-text (в чате hailuo-2.3/hailuo-2.3-fast — это image-to-video, см. ниже).
   'hailuo-2.3-text': { endpoint: 'fal-ai/minimax/hailuo-02/standard/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
-  'hailuo-2.3-fast-text': { endpoint: 'fal-ai/minimax/hailuo-02/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.3 },
+  // У fast-версии Hailuo на fal нет text-to-video: остаётся standard, иначе запрос уходит в 404.
+  'hailuo-2.3-fast-text': { endpoint: 'fal-ai/minimax/hailuo-02/standard/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.5 },
   'wan-2.6': { endpoint: 'fal-ai/wan-25-preview/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.4 },
   'luma-ray2': { endpoint: 'fal-ai/luma-dream-machine/ray-2', kind: 'text-to-video', estimatedCostUsd: 0.5, paramProfile: 'aspect-only' },
 
   // ---- image-to-video ----
   'hailuo-2.3': { endpoint: 'fal-ai/minimax/hailuo-02/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },
-  'hailuo-2.3-fast': { endpoint: 'fal-ai/minimax/hailuo-02/fast/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.3 },
+  // Путь именно через дефис: fal-ai/minimax/hailuo-02/fast/... отвечает 404, и на нём легли
+  // все шаблоны поздравлений.
+  'hailuo-2.3-fast': { endpoint: 'fal-ai/minimax/hailuo-02-fast/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.3 },
   'kling-std': { endpoint: 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.25 },
   'kling-pro': { endpoint: 'fal-ai/kling-video/v2.5-turbo/pro/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.35 },
   'kling-3-std': { endpoint: 'fal-ai/kling-video/v3/standard/image-to-video', kind: 'image-to-video', estimatedCostUsd: 0.5 },

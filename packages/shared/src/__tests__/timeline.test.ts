@@ -338,3 +338,25 @@ describe('audio track trim', () => {
     expect(parseTimeline({ scenes: [scene()], music: { url: 'https://cdn.test/song.mp3' } }).music?.trimStartSec).toBe(0);
   });
 });
+
+describe('mark is released after the frame lands', () => {
+  it('clears generationProjectId so the scene stops waiting', () => {
+    const timeline = parseTimeline({
+      scenes: [
+        {
+          id: 'scene_1',
+          layers: [{ id: 'layer_a', kind: 'media', source: { kind: 'color', color: '#000000' } }],
+          durationSec: 4,
+        },
+      ],
+    });
+    const marked = markLayerGeneration(timeline, 'scene_1', 'layer_a', 'p1');
+    const applied = applyGeneratedSource(marked.timeline, 'p1', { kind: 'image', url: 'https://cdn.test/f.jpg' });
+
+    const layer = sceneLayers(applied.timeline.scenes[0])[0];
+    expect(layer).toMatchObject({ source: { kind: 'image', url: 'https://cdn.test/f.jpg' } });
+    // Пока метка оставалась, заглушка висела поверх готового кадра, а следующая генерация
+    // в той же сцене не отслеживалась вовсе.
+    expect((layer as { generationProjectId?: string }).generationProjectId).toBeUndefined();
+  });
+});

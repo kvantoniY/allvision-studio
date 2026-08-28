@@ -3606,8 +3606,9 @@ async function ensureGiftServices() {
 // трогаем только pipelineConfig и только у перечисленных слугов, оставляя цены, тексты
 // и превью такими, какими их сделал админ. После деплоя список нужно очистить.
 const GIFT_PIPELINES_TO_REFRESH = new Set<string>([
-  // Пустая необязательная озвучка роняла весь оплаченный ролик на шаге text-to-speech.
-  'greeting-pet',
+  // Все шаблоны поздравлений: они анимировали фото моделью hailuo-2.3-fast, а её путь на fal
+  // отвечает 404 — рендер падал «собрано 0 сцен из 6». Переведены на Kling 3.0 Standard.
+  ...greetingTemplateSlugs,
 ]);
 
 async function refreshGiftPipelines(justCreated: Set<string>) {

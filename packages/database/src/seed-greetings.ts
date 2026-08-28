@@ -18,10 +18,15 @@ function image(seed: string, width = 800, height = 600) {
   return `https://picsum.photos/seed/${seed}/${width}/${height}`;
 }
 
-/** Дешёвая и аккуратная модель оживления фото: движение мягкое, лица не плывут. */
-const ANIMATE_MODEL = 'hailuo-2.3-fast';
-/** Стилизация кадра перед анимацией. */
-const STYLIZE_MODEL = 'seedream-4';
+/**
+ * Модель оживления фото — Kling 3.0 Standard.
+ *
+ * Выбрана владельцем как рабочая и предсказуемая. Длительность сцены держим короткой:
+ * платят за каждую фотографию, и лишние секунды дорожают ролик, ничего не добавляя.
+ */
+const ANIMATE_MODEL = 'kling-3-std';
+/** Стилизация кадра перед анимацией: Nano Banana Pro. */
+const STYLIZE_MODEL = 'nano-banana';
 
 type TimelineOverlay = {
   id: string;
@@ -312,7 +317,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 4 до 12 снимков. Порядок можно менять — он станет порядком сцен в ролике.',
     motionPrompt:
       'Gently bring this photograph to life. Subtle, tasteful motion only: slow parallax camera drift, soft breathing, natural blinking, hair and fabric moving slightly in the air.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'quote',
     introColor: '#0b1020',
     titleLabel: 'Заголовок ролика',
@@ -336,7 +341,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 4 до 12 фото. Лучше всего работают снимки, где лицо видно крупно.',
     motionPrompt:
       'Bring this celebratory photograph to life with warm, joyful motion: gentle camera push-in, soft smiling micro-expressions, natural blinking, festive light shimmering in the background.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'bold',
     introColor: '#1a0b20',
     titleLabel: 'Кому поздравление',
@@ -360,7 +365,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 6 до 12 снимков. Расположите их по порядку — от самых старых к недавним.',
     motionPrompt:
       'Bring this photograph to life with calm, dignified motion: very slow cinematic camera drift, gentle breathing and blinking, warm nostalgic light.' + IDENTITY_TAIL,
-    sceneDurationSec: 6,
+    sceneDurationSec: 3,
     introStyle: 'ribbon',
     introColor: '#12100a',
     titleLabel: 'Заголовок',
@@ -385,7 +390,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 4 до 12 снимков — от первых свиданий до сегодняшнего дня.',
     motionPrompt:
       'Bring this romantic photograph to life: soft slow camera movement, tender micro-expressions, natural blinking, warm golden light and gently moving background.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'quote',
     introColor: '#1b0d14',
     titleLabel: 'Заголовок',
@@ -408,7 +413,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 5 до 12 кадров: сборы, церемония, банкет, портреты.',
     motionPrompt:
       'Bring this wedding photograph to life with elegant cinematic motion: slow graceful camera glide, veil and fabric moving softly, warm celebratory light, tender expressions.' + IDENTITY_TAIL,
-    sceneDurationSec: 6,
+    sceneDurationSec: 3,
     introStyle: 'quote',
     introColor: '#14100c',
     titleLabel: 'Имена молодожёнов',
@@ -432,7 +437,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 4 до 12 снимков. Подойдут и новогодние кадры, и обычные — атмосферу добавим мы.',
     motionPrompt:
       'Bring this photograph to life with festive winter magic: softly falling snow, warm bokeh of holiday garlands twinkling in the background, gentle camera drift, natural blinking and breathing.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'bold',
     introColor: '#0a1424',
     titleLabel: 'Поздравление',
@@ -456,7 +461,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 3 до 10 снимков — можно одну героиню, можно всю женскую часть семьи.',
     motionPrompt:
       'Bring this photograph to life with soft spring atmosphere: warm sunlight, gentle breeze moving hair, delicate flower petals drifting through the air, tender smile and natural blinking.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'ribbon',
     introColor: '#1d1016',
     titleLabel: 'Поздравление',
@@ -479,7 +484,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 3 до 10 снимков. Можно сделать общий ролик на весь отдел.',
     motionPrompt:
       'Bring this photograph to life with restrained, confident motion: slow steady camera move, calm expression, natural blinking, subtle atmospheric light.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'bold',
     introColor: '#0d1410',
     titleLabel: 'Поздравление',
@@ -502,7 +507,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 6 до 12 снимков. Расположите их по возрасту — от самых первых дней.',
     motionPrompt:
       'Bring this baby photograph to life with very gentle motion: soft camera drift, tiny natural movements, blinking, warm nursery light. Keep the motion calm and safe-looking.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'card',
     introColor: '#0f1220',
     titleLabel: 'Заголовок',
@@ -527,7 +532,7 @@ const TEMPLATES: GreetingTemplate[] = [
       'Redraw this photo as a warm, friendly 2D cartoon illustration for children: clean bold outlines, bright saturated colours, simple shapes, soft shading. Keep the child clearly recognizable — same hair, same face proportions, same clothing colours. Cheerful storybook style.',
     motionPrompt:
       'Animate this cartoon illustration with playful, bouncy motion: the character moves and smiles, the background elements sway gently. Keep the cartoon style consistent and the character recognizable in every frame.',
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'bold',
     introColor: '#101a2a',
     titleLabel: 'Заголовок',
@@ -550,7 +555,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 4 до 12 кадров: класс, друзья, поездки, последний звонок.',
     motionPrompt:
       'Bring this school photograph to life with light, optimistic motion: gentle camera movement, friendly smiles, natural blinking, bright daylight.' + IDENTITY_TAIL,
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'card',
     introColor: '#0b1524',
     titleLabel: 'Заголовок',
@@ -573,7 +578,7 @@ const TEMPLATES: GreetingTemplate[] = [
     photosHint: 'От 2 до 8 снимков. Подойдут любые кадры, где питомца хорошо видно.',
     motionPrompt:
       'Bring this pet photograph to life with charming natural motion: the animal blinks, tilts its head slightly, ears and fur move softly, gentle camera drift. Keep the animal anatomically correct and clearly recognizable — same breed, same colouring, no human features.',
-    sceneDurationSec: 5,
+    sceneDurationSec: 3,
     introStyle: 'card',
     introColor: '#141018',
     titleLabel: 'Заголовок',

@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   LayoutGrid,
   Loader2,
+  Images,
   Music,
   Redo2,
   RotateCcw,
@@ -54,6 +55,8 @@ import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor
 import { SceneStrip } from '@/components/editor/SceneStrip';
 import { TimelineTracks } from '@/components/editor/TimelineTracks';
 import { AudioTools, type VoiceoverRequest } from '@/components/editor/AudioTools';
+import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
+import { ExportOverlay } from '@/components/editor/ExportOverlay';
 import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
@@ -84,6 +87,7 @@ const TOOLS = [
   { code: 'text', label: 'Текст', icon: Type },
   { code: 'audio', label: 'Звук', icon: Music },
   { code: 'ai', label: 'ИИ', icon: Sparkles },
+  { code: 'library', label: 'Мои', icon: Images },
 ] as const;
 
 type ToolCode = (typeof TOOLS)[number]['code'];
@@ -120,6 +124,7 @@ export function VideoEditor({ id }: { id: string }) {
   const [tool, setTool] = useState<ToolCode>('media');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [exportId, setExportId] = useState<string | null>(null);
+  const [showExportScreen, setShowExportScreen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
   const uploadTargetRef = useRef<{ sceneIndex: number; layerId: string | null } | null>(null);
@@ -435,19 +440,26 @@ export function VideoEditor({ id }: { id: string }) {
           .find((layer) => layer.generationProjectId === runningGenerationId);
         const url = generatedLayer?.source.url;
         const kind = generatedLayer?.source.kind;
-        if (!url || (kind !== 'image' && kind !== 'video')) return;
+        if (!url || (kind !== 'image' && kind !== 'video')) {
+          // Воркер не нашёл, куда положить кадр. Берём его копию ролика целиком: иначе
+          // наше следующее автосохранение затрёт результат, за который уже заплачено.
+          applyWithoutHistory(fresh.project.timeline);
+          toast({ title: 'Кадр готов', description: 'Ролик обновлён с сервера.' });
+          return;
+        }
 
-        setTimeline((current) => {
-          if (!current) return current;
-          const applied = applyGeneratedSource(current, runningGenerationId, { kind, url });
-          return applied.changed ? applied.timeline : current;
-        });
+        const current = timelineRef.current;
+        if (!current) return;
+        const applied = applyGeneratedSource(current, runningGenerationId, { kind, url });
+        // Сохраняем сразу: подстановка снимает метку со слоя, и обе копии ролика должны
+        // сойтись. Иначе сервер продолжит считать, что слой ждёт генерацию.
+        if (applied.changed) applyWithoutHistory(applied.timeline);
         toast({ title: 'Кадр готов' });
       } catch {
         toast({ title: 'Генерация готова', description: 'Обновите страницу, если кадр не появился.' });
       }
     })();
-  }, [runningGenerationId, sceneStatus?.status, refetchProject]);
+  }, [runningGenerationId, sceneStatus?.status, refetchProject, applyWithoutHistory]);
 
   /** Что показать поверх кадра, пока идёт генерация: рамка с процентом вместо пустого слоя. */
   const generationOverlay = pendingLayer && runningGenerationId
@@ -611,6 +623,7 @@ export function VideoEditor({ id }: { id: string }) {
       await updateProject({ id, title, timeline }).unwrap();
       const result = await exportProject(id).unwrap();
       setExportId(result.projectId);
+      setShowExportScreen(true);
       setSaveState('saved');
       toast({
         title: result.alreadyRunning ? 'Сборка уже идёт' : 'Собираем ролик',
@@ -709,7 +722,7 @@ export function VideoEditor({ id }: { id: string }) {
           <span className="hidden font-mono text-xs text-slate-500 sm:inline">{formatTimelineDuration(duration)}</span>
           <Button type="button" onClick={handleExport} disabled={exporting || exportRunning}>
             {exporting || exportRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
-            {exportRunning ? 'Собираем…' : 'Собрать ролик'}
+            {exportRunning ? 'Собираем…' : 'Собрать ролик за 2 коина'}
           </Button>
         </div>
       </header>
@@ -765,6 +778,15 @@ export function VideoEditor({ id }: { id: string }) {
         </Alert>
       )}
 
+      {showExportScreen ? (
+        <ExportOverlay
+          projectId={id}
+          running={Boolean(exportRunning)}
+          progress={exportStatus?.progress ?? 0}
+          resultUrl={exportUrl}
+          onBackToEditor={() => setShowExportScreen(false)}
+        />
+      ) : (
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Лента инструментов. На узком экране становится горизонтальной строкой. */}
         <nav className="flex shrink-0 gap-2 overflow-x-auto border-b border-slate-800 p-2 lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r">
@@ -829,12 +851,18 @@ export function VideoEditor({ id }: { id: string }) {
               timeline.music && applyTimeline({ ...timeline, music: { ...timeline.music, volume } })
             }
             onPickVoiceFile={() => voiceFileRef.current?.click()}
+            onRecordVoice={(file) => void handleVoiceUpload(file)}
             onVoiceoverVolume={(volume) =>
               timeline.voiceover && applyTimeline({ ...timeline, voiceover: { ...timeline.voiceover, volume } })
             }
             onVoiceoverRemove={() => setVoiceover(null)}
             onGenerateVoiceover={handleGenerateVoiceover}
             onGenerate={handleGenerate}
+            onInsertGeneration={(url, kind) => {
+              const layerId = ops.addMediaLayer(sceneIndex, { kind, url });
+              if (layerId) setSelectedLayerId(layerId);
+              else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+            }}
           />
         </section>
 
@@ -912,10 +940,13 @@ export function VideoEditor({ id }: { id: string }) {
       </div>
 
 
+      )}
+
       {/*
        * Нижняя панель — то, что тянется во времени: сцены и звук. Здесь видно, где именно
        * звучит реплика, и её можно подвинуть, а не гадать по числу в настройках.
        */}
+      {!showExportScreen && (
       <footer className="shrink-0 space-y-2 border-t border-slate-800 bg-slate-950/80 px-3 py-2 lg:px-4">
         <SceneStrip
           timeline={timeline}
@@ -935,6 +966,7 @@ export function VideoEditor({ id }: { id: string }) {
           onRemoveVoiceover={() => setVoiceover(null)}
         />
       </footer>
+      )}
 
       <input
         ref={voiceFileRef}
@@ -980,10 +1012,12 @@ function ToolBar({
   onMusicChange,
   onMusicVolume,
   onPickVoiceFile,
+  onRecordVoice,
   onVoiceoverVolume,
   onVoiceoverRemove,
   onGenerateVoiceover,
   onGenerate,
+  onInsertGeneration,
 }: {
   tool: ToolCode;
   uploading: boolean;
@@ -1002,9 +1036,11 @@ function ToolBar({
   onMusicChange: (url: string) => void;
   onMusicVolume: (volume: number) => void;
   onPickVoiceFile: () => void;
+  onRecordVoice: (file: File) => void;
   onVoiceoverVolume: (volume: number) => void;
   onVoiceoverRemove: () => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
+  onInsertGeneration: (url: string, kind: 'image' | 'video') => void;
   onGenerate: (request: SceneGenerationRequest) => void;
 }) {
   if (tool === 'media') {
@@ -1068,10 +1104,19 @@ function ToolBar({
         onMusicChange={onMusicChange}
         onMusicVolume={onMusicVolume}
         onPickVoiceFile={onPickVoiceFile}
+        onRecordVoice={onRecordVoice}
         onVoiceoverVolume={onVoiceoverVolume}
         onVoiceoverRemove={onVoiceoverRemove}
         onGenerateVoiceover={onGenerateVoiceover}
       />
+    );
+  }
+
+  if (tool === 'library') {
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+        <GenerationLibrary onInsert={onInsertGeneration} />
+      </div>
     );
   }
 

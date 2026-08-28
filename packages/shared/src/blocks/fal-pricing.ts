@@ -31,7 +31,7 @@ export const FAL_PRICING_ENDPOINTS: Record<string, string> = {
   'seedance-2-fast-omni': 'bytedance/seedance-2.0/fast/reference-to-video',
   'kling-3-omni': 'fal-ai/kling-video/v3/pro/text-to-video',
   'hailuo-2.3-text': 'fal-ai/minimax/hailuo-02/standard/text-to-video',
-  'hailuo-2.3-fast-text': 'fal-ai/minimax/hailuo-02/fast/text-to-video',
+  'hailuo-2.3-fast-text': 'fal-ai/minimax/hailuo-02/standard/text-to-video',
   'wan-2.6': 'fal-ai/wan-25-preview/text-to-video',
   'luma-ray2': 'fal-ai/luma-dream-machine/ray-2',
   // image-to-video
@@ -40,7 +40,7 @@ export const FAL_PRICING_ENDPOINTS: Record<string, string> = {
   'kling-3-std': 'fal-ai/kling-video/v3/standard/image-to-video',
   'kling-3-pro': 'fal-ai/kling-video/v3/pro/image-to-video',
   'hailuo-2.3': 'fal-ai/minimax/hailuo-02/standard/image-to-video',
-  'hailuo-2.3-fast': 'fal-ai/minimax/hailuo-02/fast/image-to-video',
+  'hailuo-2.3-fast': 'fal-ai/minimax/hailuo-02-fast/image-to-video',
   'veo-3.1-i2v': 'fal-ai/veo3.1/image-to-video',
   'veo-3.1-fast-i2v': 'fal-ai/veo3.1/fast/image-to-video',
   'seedance-2-first-last': 'bytedance/seedance-2.0/image-to-video',

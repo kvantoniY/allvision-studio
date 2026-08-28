@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
+import { VoiceRecorder } from '@/components/editor/VoiceRecorder';
 import { cn } from '@/lib/utils';
 
 export type VoiceoverRequest = {
@@ -40,6 +41,7 @@ export function AudioTools({
   onMusicChange,
   onMusicVolume,
   onPickVoiceFile,
+  onRecordVoice,
   onVoiceoverVolume,
   onVoiceoverRemove,
   onGenerateVoiceover,
@@ -53,6 +55,7 @@ export function AudioTools({
   onMusicChange: (url: string) => void;
   onMusicVolume: (volume: number) => void;
   onPickVoiceFile: () => void;
+  onRecordVoice: (file: File) => void;
   onVoiceoverVolume: (volume: number) => void;
   onVoiceoverRemove: () => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
@@ -131,10 +134,13 @@ export function AudioTools({
           </div>
         ) : (
           <>
-            <Button type="button" variant="outline" size="sm" onClick={onPickVoiceFile} disabled={uploading}>
-              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Загрузить свою запись
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={onPickVoiceFile} disabled={uploading}>
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                Загрузить запись
+              </Button>
+              <VoiceRecorder uploading={uploading} onRecorded={onRecordVoice} />
+            </div>
 
             <div className="space-y-2 border-t border-slate-800 pt-3">
               <Label className="text-xs" htmlFor="voiceover-text">

@@ -211,7 +211,16 @@ export function applyGeneratedSource(
     changed = true;
     const nextLayers = layers.map((layer) =>
       layer === target
-        ? { ...layer, source, trimStartSec: undefined, trimEndSec: undefined }
+        ? {
+          ...layer,
+          source,
+          trimStartSec: undefined,
+          trimEndSec: undefined,
+          // Метку снимаем: слой больше ничего не ждёт. Пока она оставалась, редактор
+          // считал сцену занятой прежней генерацией — заглушка висела поверх готового
+          // кадра, а следующая генерация в той же сцене вообще не отслеживалась.
+          generationProjectId: undefined,
+        }
         : layer,
     );
     return {

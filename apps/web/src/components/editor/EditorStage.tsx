@@ -28,6 +28,29 @@ import { cn } from '@/lib/utils';
  * непрерывно даже на картинках и заливках. На паузе холст редактируемый, во время
  * проигрывания — обычный плеер.
  */
+/**
+ * Держит аудио-дорожку в такт с часами ролика.
+ *
+ * Начало берётся из startAtSec (когда дорожка вступает), позиция внутри файла — из
+ * trimStartSec: те же два числа уходят в ffmpeg, поэтому предпросмотр звучит так же,
+ * как готовый файл.
+ */
+function syncTrack(
+  element: HTMLAudioElement | null,
+  track: { volume: number; startAtSec: number; trimStartSec?: number } | undefined,
+  time: number,
+  playing: boolean,
+  volumeScale: number,
+) {
+  if (!element || !track) return;
+  element.volume = Math.min(1, Math.max(0, track.volume * volumeScale));
+  const started = time >= track.startAtSec;
+  const expected = Math.max(0, time - track.startAtSec) + (track.trimStartSec ?? 0);
+  if (Math.abs(element.currentTime - expected) > 0.4) element.currentTime = expected;
+  if (playing && started && element.paused) void element.play().catch(() => undefined);
+  if ((!playing || !started) && !element.paused) element.pause();
+}
+
 export function EditorStage({
   timeline,
   selectedSceneIndex,
@@ -56,6 +79,7 @@ export function EditorStage({
   const rafRef = useRef<number | null>(null);
   const clockRef = useRef<{ startedAt: number; offset: number } | null>(null);
   const musicRef = useRef<HTMLAudioElement | null>(null);
+  const voiceRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (!playing) {
@@ -87,18 +111,14 @@ export function EditorStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, total]);
 
-  // Музыка идёт своей дорожкой и синхронизируется с общим временем.
+  // Музыка и голос идут своими дорожками и синхронизируются с общим временем ролика.
+  // Под голос музыка приглушается тем же коэффициентом, что и на экспорте, — иначе
+  // предпросмотр звучал бы не так, как готовый файл.
   useEffect(() => {
-    const element = musicRef.current;
-    if (!element || !timeline.music) return;
-    element.volume = Math.min(1, timeline.music.volume);
-    const expected = Math.max(0, time - timeline.music.startAtSec);
-    if (Math.abs(element.currentTime - expected) > 0.4) element.currentTime = expected;
-    if (playing && time >= timeline.music.startAtSec && element.paused) {
-      void element.play().catch(() => undefined);
-    }
-    if ((!playing || time < timeline.music.startAtSec) && !element.paused) element.pause();
-  }, [playing, time, timeline.music]);
+    const hasVoice = Boolean(timeline.voiceover);
+    syncTrack(musicRef.current, timeline.music, time, playing, hasVoice ? 0.35 : 1);
+    syncTrack(voiceRef.current, timeline.voiceover, time, playing, 1);
+  }, [playing, time, timeline.music, timeline.voiceover]);
 
   const frame = useMemo(() => sceneAtTime(timeline, time), [timeline, time]);
 
@@ -120,6 +140,7 @@ export function EditorStage({
   const shownScene = timeline.scenes[shownIndex];
   const incomingScene = incomingIndex === null ? null : timeline.scenes[incomingIndex];
   const musicSrc = mediaUrl(timeline.music?.url);
+  const voiceSrc = mediaUrl(timeline.voiceover?.url);
 
   useEffect(() => {
     // Переход по времени во время проигрывания подсвечивает сцену в ленте.
@@ -165,6 +186,7 @@ export function EditorStage({
         )}
 
         {musicSrc && <audio ref={musicRef} src={musicSrc} preload="auto" className="hidden" />}
+        {voiceSrc && <audio ref={voiceRef} src={voiceSrc} preload="auto" className="hidden" />}
       </div>
 
       <div className="flex shrink-0 items-center gap-3">

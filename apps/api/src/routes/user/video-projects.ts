@@ -40,6 +40,15 @@ const createSchema = z.object({
   timeline: z.unknown().optional(),
 });
 
+/**
+ * Цена сборки ролика.
+ *
+ * Склейка идёт локальным ffmpeg и внешним провайдерам ничего не стоит, но занимает CPU
+ * машины, поэтому за прогон берётся символическая плата — она же отбивает привычку
+ * пересобирать ролик по десять раз подряд вместо правки таймлайна.
+ */
+const VIDEO_EXPORT_PRICE_COINS = 2;
+
 /** Слой, который ждёт результат генерации. Остальные поля тела разбирает чатовый путь. */
 const generateTargetSchema = z.object({ layerId: z.string().trim().min(1).max(80).optional() });
 
@@ -360,25 +369,52 @@ videoProjectsRouter.post('/:id/export', async (req: Request, res: Response, next
       },
     ];
 
-    const project = await prisma.project.create({
-      data: {
-        id: projectId,
-        userId,
-        mode: 'video-export',
-        title: videoProject.title,
-        status: 'PENDING',
-        progress: 0,
-        inputImages: [],
-        tokensCost: 0,
-        pipelineSnapshot: pipelineSnapshot as never,
-        userInputs: {} as never,
-        stepProgress: [
-          { stepId: 'step_1', blockSlug: 'timeline-render', status: 'pending', progress: 0 },
-        ] as never,
-        expiresAt: generationExpiresAt(),
-      },
-      select: { id: true, status: true, progress: true, createdAt: true },
-    });
+    let project;
+    try {
+      project = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({
+          where: { id: userId, tokenBalance: { gte: VIDEO_EXPORT_PRICE_COINS } },
+          data: { tokenBalance: { decrement: VIDEO_EXPORT_PRICE_COINS } },
+          select: { tokenBalance: true },
+        });
+        const created = await tx.project.create({
+          data: {
+            id: projectId,
+            userId,
+            mode: 'video-export',
+            title: videoProject.title,
+            status: 'PENDING',
+            progress: 0,
+            inputImages: [],
+            tokensCost: VIDEO_EXPORT_PRICE_COINS,
+            pipelineSnapshot: pipelineSnapshot as never,
+            // Ролик называем в проекте: по нему собирается список прошлых сборок,
+            // иначе связь живёт только в задаче очереди и после неё теряется.
+            userInputs: { videoExport: { videoProjectId: videoProject.id } } as never,
+            stepProgress: [
+              { stepId: 'step_1', blockSlug: 'timeline-render', status: 'pending', progress: 0 },
+            ] as never,
+            expiresAt: generationExpiresAt(),
+          },
+          select: { id: true, status: true, progress: true, createdAt: true },
+        });
+        await tx.tokenTransaction.create({
+          data: {
+            reason: 'video_export',
+            amount: -VIDEO_EXPORT_PRICE_COINS,
+            balanceAfter: user.tokenBalance,
+            refId: created.id,
+            userId,
+          },
+        });
+        return created;
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2025') {
+        throw new HttpError(402, 'INSUFFICIENT_TOKENS', 'Недостаточно коинов для сборки');
+      }
+      throw err;
+    }
 
     await prisma.videoProject.update({ where: { id: videoProject.id }, data: { lastExportId: project.id } });
 
@@ -394,10 +430,27 @@ videoProjectsRouter.post('/:id/export', async (req: Request, res: Response, next
           errorMessage: 'Не удалось поставить экспорт в очередь',
         },
       });
+      // Сборка не встала в очередь — коины возвращаем: платили за файл, а не за попытку.
+      await prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({
+          where: { id: userId },
+          data: { tokenBalance: { increment: VIDEO_EXPORT_PRICE_COINS } },
+          select: { tokenBalance: true },
+        });
+        await tx.tokenTransaction.create({
+          data: {
+            reason: 'refund',
+            amount: VIDEO_EXPORT_PRICE_COINS,
+            balanceAfter: user.tokenBalance,
+            refId: project.id,
+            userId,
+          },
+        });
+      });
       throw new HttpError(503, 'QUEUE_UNAVAILABLE', 'Сервис рендера временно недоступен');
     }
 
-    res.status(202).json({ projectId: project.id, durationSec });
+    res.status(202).json({ projectId: project.id, durationSec, tokensCost: VIDEO_EXPORT_PRICE_COINS });
   } catch (err) {
     next(err);
   }
@@ -419,6 +472,42 @@ const voiceoverSchema = z.object({
  * поэтому нужны списание, очередь и возврат коинов при сбое — тот же порядок, что и у
  * генерации образа в Студии.
  */
+/**
+ * Прошлые сборки ролика.
+ *
+ * Каждая сборка — обычный проект, и её файл живёт столько же, сколько любая генерация.
+ * Список нужен, чтобы промежуточные версии не терялись: правку можно сравнить с тем,
+ * что было, и скачать любую.
+ */
+videoProjectsRouter.get('/:id/exports', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const videoProject = await ownedProject(userId, req.params.id);
+    const rows = await prisma.project.findMany({
+      where: {
+        userId,
+        mode: 'video-export',
+        userInputs: { path: ['videoExport', 'videoProjectId'], equals: videoProject.id },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: {
+        id: true,
+        status: true,
+        progress: true,
+        resultVideo: true,
+        resultThumbnail: true,
+        errorCode: true,
+        createdAt: true,
+        completedAt: true,
+      },
+    });
+    res.json({ items: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
 videoProjectsRouter.post('/:id/voiceover/generate', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id;

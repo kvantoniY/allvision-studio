@@ -73,6 +73,10 @@ export const videoProjectsApi = createApi({
       },
       invalidatesTags: (_result, _error, { id }) => [{ type: 'VideoProject', id }],
     }),
+    listVideoExports: build.query<{ items: Array<{ id: string; status: string; progress: number; resultVideo: string | null; resultThumbnail: string | null; errorCode: string | null; createdAt: string; completedAt: string | null }> }, string>({
+      query: (id) => ({ url: `/${id}/exports` }),
+      providesTags: (_r, _e, id) => [{ type: 'VideoProject', id: `exports-${id}` }],
+    }),
     generateVoiceover: build.mutation<
       { projectId: string; tokensCost: number },
       { id: string; body: { text: string; model: string; emotion?: string; speed?: number } }
@@ -84,7 +88,7 @@ export const videoProjectsApi = createApi({
         dispatch(projectsApi.util.invalidateTags(['Project']));
       },
     }),
-    exportVideoProject: build.mutation<{ projectId: string; alreadyRunning?: boolean }, string>({
+    exportVideoProject: build.mutation<{ projectId: string; alreadyRunning?: boolean; tokensCost?: number }, string>({
       query: (id) => ({ url: `/${id}/export`, method: 'POST' }),
       async onQueryStarted(_id, { dispatch, queryFulfilled }) {
         await queryFulfilled;
@@ -107,4 +111,5 @@ export const {
   useExportVideoProjectMutation,
   useGenerateSceneMutation,
   useGenerateVoiceoverMutation,
+  useListVideoExportsQuery,
 } = videoProjectsApi;
