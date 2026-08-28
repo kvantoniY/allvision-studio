@@ -28,9 +28,17 @@ export async function processServicePipeline(job: Job<ServicePipelineJobData>) {
     logger.error(`[service-pipeline] Project ${projectId} belongs to another user`);
     return;
   }
-  if (project.status !== 'PENDING') {
+  // Задача, которую очередь отдаёт повторно (worker перезапустили посреди работы —
+  // например, выкатили релиз), приходит с attemptsMade > 0. Такой проект уже висит в
+  // PROCESSING, и прежняя проверка отбивала повтор: генерация оставалась «в процессе»
+  // навсегда, коины были списаны, а страница поллила пустоту. Повтор запускаем заново.
+  const isRetryOfStalledJob = job.attemptsMade > 0 && project.status === 'PROCESSING';
+  if (project.status !== 'PENDING' && !isRetryOfStalledJob) {
     logger.warn(`[service-pipeline] Project ${projectId} already in status ${project.status}, skipping`);
     return;
+  }
+  if (isRetryOfStalledJob) {
+    logger.warn(`[service-pipeline] Project ${projectId} перезапускаем после обрыва (попытка ${job.attemptsMade + 1})`);
   }
   if (!project.pipelineSnapshot) {
     await markProjectFailed(projectId, 'Missing pipelineSnapshot', { refundTokens: true });

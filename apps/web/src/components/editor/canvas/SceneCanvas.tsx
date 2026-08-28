@@ -37,6 +37,8 @@ export type SceneCanvasProps = {
   selectedLayerId: string | null;
   onSelectLayer: (layerId: string | null) => void;
   onChangeLayer: (layerId: string, patch: Partial<MediaLayer> & Partial<TextLayer>) => void;
+  /** Слой, ожидающий генерацию: показываем на его месте рамку с прогрессом. */
+  generationOverlay?: { layerId: string; progress: number; label: string } | null;
 };
 
 export function SceneCanvas({
@@ -48,6 +50,7 @@ export function SceneCanvas({
   selectedLayerId,
   onSelectLayer,
   onChangeLayer,
+  generationOverlay,
 }: SceneCanvasProps) {
   const resolution = timelineResolution(aspect);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -181,6 +184,48 @@ export function SceneCanvas({
               />
             ) : null,
           )}
+
+          {/*
+            * Пока идёт генерация, слой пустой — и без этой рамки непонятно, куда встанет
+            * кадр и происходит ли вообще что-нибудь.
+            */}
+          {generationOverlay && (() => {
+            const target = layers.find((layer) => layer.id === generationOverlay.layerId);
+            if (!target) return null;
+            const rect = boxToRect(target.box, stageSize.width, stageSize.height);
+            const barWidth = Math.max(40, rect.width * 0.7);
+            return (
+              <Group x={rect.x} y={rect.y} listening={false}>
+                <Rect width={rect.width} height={rect.height} fill="rgba(15,10,35,0.72)" cornerRadius={6} />
+                <Rect width={rect.width} height={rect.height} stroke="#a78bfa" strokeWidth={2} dash={[8, 6]} cornerRadius={6} />
+                <Text
+                  text={`${generationOverlay.label}… ${Math.round(generationOverlay.progress)}%`}
+                  width={rect.width}
+                  y={rect.height / 2 - 22}
+                  align="center"
+                  fontFamily={TITLE_FONT_STACK}
+                  fontSize={Math.max(11, Math.min(18, rect.width / 14))}
+                  fill="#ede9fe"
+                />
+                <Rect
+                  x={(rect.width - barWidth) / 2}
+                  y={rect.height / 2 + 6}
+                  width={barWidth}
+                  height={6}
+                  cornerRadius={3}
+                  fill="rgba(148,163,184,0.35)"
+                />
+                <Rect
+                  x={(rect.width - barWidth) / 2}
+                  y={rect.height / 2 + 6}
+                  width={Math.max(4, (barWidth * Math.min(100, Math.max(2, generationOverlay.progress))) / 100)}
+                  height={6}
+                  cornerRadius={3}
+                  fill="#a78bfa"
+                />
+              </Group>
+            );
+          })()}
 
           {guides.map((guide, index) => (
             <Line

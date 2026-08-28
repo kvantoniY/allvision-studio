@@ -98,3 +98,33 @@ describe('greeting template timeline', () => {
     expect(scenes).toHaveLength(1);
   });
 });
+
+describe('сцены из редактора', () => {
+  it('не выбрасывает сцену, записанную слоями', () => {
+    // Сцена редактора не имеет поля source. Пока фильтр смотрел только на него, из
+    // ролика уходили все сцены разом и экспорт падал на «нет ни одной сцены».
+    const normalised = normaliseTimelineInput({
+      aspect: '9:16',
+      scenes: [
+        {
+          id: 'scene_1',
+          layers: [{ id: 'layer_a', kind: 'media', source: { kind: 'image', url: '/static/a.jpg' } }],
+          durationSec: 4,
+        },
+      ],
+    }) as { scenes: unknown[] };
+
+    expect(normalised.scenes).toHaveLength(1);
+  });
+
+  it('всё ещё выбрасывает пустую заливку без титра', () => {
+    const normalised = normaliseTimelineInput({
+      scenes: [
+        { id: 'blank', source: { kind: 'color', color: '#000000' }, overlays: [] },
+        { id: 'kept', source: { kind: 'image', url: '/static/a.jpg' } },
+      ],
+    }) as { scenes: Array<{ id: string }> };
+
+    expect(normalised.scenes.map((scene) => scene.id)).toEqual(['kept']);
+  });
+});

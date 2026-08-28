@@ -13,6 +13,7 @@ import {
   Loader2,
   Music,
   Redo2,
+  RotateCcw,
   Sparkles,
   Type,
   Undo2,
@@ -101,7 +102,7 @@ function mediaUrl(value?: string | null) {
  * всех настроек сразу и была тем, что делало прежнюю панель нечитаемой.
  */
 export function VideoEditor({ id }: { id: string }) {
-  const { data, isLoading, isError, refetch: refetchProject } = useGetVideoProjectQuery(id);
+  const { data, isLoading, isError, error, refetch: refetchProject } = useGetVideoProjectQuery(id);
   const [updateProject] = useUpdateVideoProjectMutation();
   const [uploadMedia, { isLoading: uploading }] = useUploadEditorMediaMutation();
   const [exportProject, { isLoading: exporting }] = useExportVideoProjectMutation();
@@ -393,9 +394,10 @@ export function VideoEditor({ id }: { id: string }) {
   );
 
   // --- генерация в слой ---
-  const runningGenerationId = currentScene
-    ? sceneMediaLayers(currentScene).find((layer) => Boolean(layer.generationProjectId))?.generationProjectId ?? null
+  const pendingLayer = currentScene
+    ? sceneMediaLayers(currentScene).find((layer) => Boolean(layer.generationProjectId)) ?? null
     : null;
+  const runningGenerationId = pendingLayer?.generationProjectId ?? null;
 
   const { data: sceneStatus } = useGetProjectStatusQuery(runningGenerationId ?? '', {
     skip: !runningGenerationId,
@@ -404,6 +406,19 @@ export function VideoEditor({ id }: { id: string }) {
   const generationRunning = sceneStatus?.status === 'PENDING' || sceneStatus?.status === 'PROCESSING';
 
   const appliedGenerationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!runningGenerationId || sceneStatus?.status !== 'FAILED') return;
+    if (appliedGenerationRef.current === runningGenerationId) return;
+    appliedGenerationRef.current = runningGenerationId;
+    // Метку снимаем: иначе слой ждёт результат, которого не будет, а поллинг не кончается.
+    if (pendingLayer) ops.changeLayer(sceneIndex, pendingLayer.id, { generationProjectId: undefined });
+    toast({
+      title: 'Генерация не получилась',
+      description: 'Коины вернулись на баланс — попробуйте другой кадр или описание.',
+      variant: 'destructive',
+    });
+  }, [runningGenerationId, sceneStatus?.status, pendingLayer, ops, sceneIndex]);
+
   useEffect(() => {
     if (!runningGenerationId || sceneStatus?.status !== 'COMPLETED') return;
     if (appliedGenerationRef.current === runningGenerationId) return;
@@ -433,6 +448,15 @@ export function VideoEditor({ id }: { id: string }) {
       }
     })();
   }, [runningGenerationId, sceneStatus?.status, refetchProject]);
+
+  /** Что показать поверх кадра, пока идёт генерация: рамка с процентом вместо пустого слоя. */
+  const generationOverlay = pendingLayer && runningGenerationId
+    ? {
+      layerId: pendingLayer.id,
+      progress: sceneStatus?.progress ?? 0,
+      label: sceneStatus?.status === 'PENDING' ? 'В очереди' : 'Генерируем',
+    }
+    : null;
 
   const handleGenerate = useCallback(
     async (request: SceneGenerationRequest) => {
@@ -607,12 +631,27 @@ export function VideoEditor({ id }: { id: string }) {
   }
 
   if (isError) {
+    // 404 — ролика правда нет. Всё остальное (сервер перезапускается, связь пропала) —
+    // временно, и говорить в таком случае «возможно, он удалён» значит пугать зря.
+    const missing = (error as { status?: number } | undefined)?.status === 404;
     return (
       <div className="container py-10">
         <Alert variant="destructive" className="max-w-2xl">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Ролик не найден</AlertTitle>
-          <AlertDescription>Возможно, он был удалён.</AlertDescription>
+          <AlertTitle>{missing ? 'Ролик не найден' : 'Не удалось открыть ролик'}</AlertTitle>
+          <AlertDescription className="flex flex-wrap items-center gap-3">
+            <span>
+              {missing
+                ? 'Возможно, он был удалён.'
+                : 'Похоже, связь с сервером пропала — ролик цел, попробуйте ещё раз.'}
+            </span>
+            {!missing && (
+              <Button type="button" variant="outline" size="sm" onClick={() => void refetchProject()}>
+                <RotateCcw className="h-4 w-4" />
+                Повторить
+              </Button>
+            )}
+          </AlertDescription>
         </Alert>
       </div>
     );
@@ -674,6 +713,25 @@ export function VideoEditor({ id }: { id: string }) {
           </Button>
         </div>
       </header>
+
+      {(exportRunning || generationOverlay) && (
+        <div className="shrink-0 space-y-1.5 border-b border-slate-800 bg-slate-900/60 px-3 py-2 lg:px-4">
+          {generationOverlay && (
+            <ProgressLine
+              label={`${generationOverlay.label} кадр — сцена ${sceneIndex + 1}`}
+              percent={generationOverlay.progress}
+              tone="violet"
+            />
+          )}
+          {exportRunning && (
+            <ProgressLine
+              label="Собираем ролик — файл появится здесь же, можно не ждать на странице"
+              percent={exportStatus?.progress ?? 0}
+              tone="amber"
+            />
+          )}
+        </div>
+      )}
 
       {issues.length > 0 && (
         <Alert variant="destructive" className="mx-3 mt-2 shrink-0 lg:mx-4">
@@ -783,6 +841,7 @@ export function VideoEditor({ id }: { id: string }) {
         <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3">
           <EditorStage
             className="min-h-0 flex-1"
+            generationOverlay={generationOverlay}
             timeline={timeline}
             selectedSceneIndex={sceneIndex}
             onSelectScene={setSceneIndex}
@@ -1138,4 +1197,35 @@ function probeDuration(file: File): Promise<number | undefined> {
     element.onerror = () => done(undefined);
     element.src = url;
   });
+}
+
+/**
+ * Полоса прогресса для длинной операции.
+ *
+ * Раньше и генерация, и сборка шли молча: кнопка меняла подпись, а понять, началось ли
+ * что-нибудь и где искать результат, было нельзя.
+ */
+function ProgressLine({
+  label,
+  percent,
+  tone,
+}: {
+  label: string;
+  percent: number;
+  tone: 'violet' | 'amber';
+}) {
+  const value = Math.max(2, Math.min(100, Math.round(percent)));
+  return (
+    <div className="flex items-center gap-3">
+      <Loader2 className={cn('h-3.5 w-3.5 shrink-0 animate-spin', tone === 'violet' ? 'text-violet-300' : 'text-amber-300')} />
+      <span className="min-w-0 flex-1 truncate text-xs text-slate-300">{label}</span>
+      <div className="h-1.5 w-40 shrink-0 overflow-hidden rounded-full bg-slate-800">
+        <div
+          className={cn('h-full rounded-full transition-all', tone === 'violet' ? 'bg-violet-400' : 'bg-amber-400')}
+          style={{ width: `${value}%` }}
+        />
+      </div>
+      <span className="w-10 shrink-0 text-right font-mono text-[11px] text-slate-400">{value}%</span>
+    </div>
+  );
 }

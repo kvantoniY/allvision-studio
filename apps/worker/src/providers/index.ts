@@ -134,7 +134,12 @@ export function getAIProvider(
     if (getFalBlocks().has(blockSlug)) return getFalProvider();
     // Не мигрированные на fal блоки остаются на PiAPI (гибрид). Требует PIAPI_API_KEY в env.
     if (PIAPI_BLOCKS.has(blockSlug)) return getPiAPIProvider();
-    return getMockProvider();
+    // Незнакомый блок в боевом режиме идёт на fal, а НЕ на mock. Прод переопределяет
+    // FAL_BLOCKS через env, и каждый новый блок оказывался вне списка: пользователь платил
+    // коины и получал чёрные заглушки, а генерация при этом считалась успешной. Молчаливая
+    // подмена результата хуже честной ошибки, после которой коины возвращаются.
+    logger.warn(`[providers] блок ${blockSlug} не перечислен в FAL_BLOCKS — идём на fal, а не в mock`);
+    return getFalProvider();
   }
 
   return getStubProvider();

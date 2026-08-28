@@ -35,6 +35,7 @@ export function EditorStage({
   selectedLayerId,
   onSelectLayer,
   onChangeLayer,
+  generationOverlay,
   className,
 }: {
   timeline: Timeline;
@@ -43,6 +44,8 @@ export function EditorStage({
   selectedLayerId: string | null;
   onSelectLayer: (layerId: string | null) => void;
   onChangeLayer: (sceneIndex: number, layerId: string, patch: Partial<MediaLayer> & Partial<TextLayer>) => void;
+  /** Слой, который ждёт генерацию: на его месте рисуется рамка с прогрессом. */
+  generationOverlay?: { layerId: string; progress: number; label: string } | null;
   className?: string;
 }) {
   const timings = useMemo(() => timelineTimings(timeline), [timeline]);
@@ -140,6 +143,7 @@ export function EditorStage({
             selectedLayerId={selectedLayerId}
             onSelectLayer={onSelectLayer}
             onChangeLayer={(layerId, patch) => onChangeLayer(shownIndex, layerId, patch)}
+            generationOverlay={shownIndex === selectedSceneIndex ? generationOverlay ?? null : null}
           />
         )}
 

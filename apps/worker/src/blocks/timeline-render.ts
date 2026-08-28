@@ -158,6 +158,12 @@ export function normaliseTimelineInput(raw: unknown, params: { clips?: unknown; 
       .filter((scene) => {
         if (!scene || typeof scene !== 'object') return false;
         const record = scene as Record<string, unknown>;
+
+        // Сцена из редактора записана слоями, и поля source у неё нет. Такую сцену
+        // выбрасывать нельзя: раньше отсюда уходили ВСЕ сцены ролика, экспорт получал
+        // пустой список и падал на разборе схемы.
+        if (Array.isArray(record.layers) && record.layers.length > 0) return true;
+
         const source = record.source as Record<string, unknown> | undefined;
         if (!source) return false;
         if (source.kind === 'color') {
