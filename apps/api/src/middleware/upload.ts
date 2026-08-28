@@ -219,6 +219,8 @@ export const uploadServiceAssets = serviceAssetsMulter.fields([
   { name: 'previewVideo', maxCount: 1 },
 ]);
 export const uploadMediaAsset = mediaAssetMulter.single('file');
+// Превью шаблона — обычная картинка, лимиты те же, что у обложек услуг.
+export const uploadStylePresetThumbnail = serviceAssetsMulter.single('file');
 export const uploadChatInput = chatInputMulter.single('file');
 export const uploadEditorMedia = editorMediaMulter.single('file');
 export const uploadSupportAttachments = supportAttachmentMulter.array('files', 5);

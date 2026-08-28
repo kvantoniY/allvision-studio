@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { Palette, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Palette, Plus, Trash2, Upload } from 'lucide-react';
+import { STYLE_PRESET_KINDS, STYLE_PRESET_KIND_TITLES, type StylePresetKind } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,9 +16,10 @@ import {
   useDeleteAdminStylePresetMutation,
   useListAdminStylePresetsQuery,
   useUpdateAdminStylePresetMutation,
+  useUploadStylePresetThumbnailMutation,
 } from '@/store/api/admin-style-presets-api';
 
-type Kind = 'user-avatar' | 'user-location';
+type Kind = StylePresetKind;
 
 const emptyDraft = {
   slug: '',
@@ -79,8 +81,9 @@ export default function AdminStylePresetsPage() {
               onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value as Kind }))}
               className="h-10 w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
             >
-              <option value="user-avatar">Аватар</option>
-              <option value="user-location">Локация</option>
+              {STYLE_PRESET_KINDS.map((item) => (
+              <option key={item} value={item}>{STYLE_PRESET_KIND_TITLES[item]}</option>
+            ))}
             </select>
           </div>
           <div className="space-y-2">
@@ -96,8 +99,11 @@ export default function AdminStylePresetsPage() {
             <Textarea value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} rows={3} required />
           </div>
           <div className="space-y-2 lg:col-span-2">
-            <Label>Thumbnail URL</Label>
-            <Input value={draft.thumbnail} onChange={(event) => setDraft((current) => ({ ...current, thumbnail: event.target.value }))} />
+            <Label>Превью шаблона</Label>
+            <ThumbnailField
+              value={draft.thumbnail}
+              onChange={(url) => setDraft((current) => ({ ...current, thumbnail: url }))}
+            />
           </div>
           <div className="space-y-2 lg:col-span-4">
             <Label>Prompt fragment</Label>
@@ -113,8 +119,7 @@ export default function AdminStylePresetsPage() {
       <div className="flex flex-wrap gap-2">
         {[
           { value: 'all' as const, label: 'Все' },
-          { value: 'user-avatar' as const, label: 'Аватары' },
-          { value: 'user-location' as const, label: 'Локации' },
+          ...STYLE_PRESET_KINDS.map((item) => ({ value: item, label: STYLE_PRESET_KIND_TITLES[item] })),
         ].map((item) => (
           <Button key={item.value} type="button" variant={kind === item.value ? 'default' : 'outline'} onClick={() => setKind(item.value)}>
             {item.label}
@@ -171,8 +176,8 @@ function PresetRow({ preset }: { preset: AdminStylePreset }) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-semibold text-white">{preset.slug}</h2>
-              <Badge className={preset.kind === 'user-avatar' ? 'bg-violet-600' : 'bg-emerald-600'}>
-                {preset.kind === 'user-avatar' ? 'Аватар' : 'Локация'}
+              <Badge className={preset.kind.startsWith('editor-') ? 'bg-sky-600' : preset.kind === 'user-avatar' ? 'bg-violet-600' : 'bg-emerald-600'}>
+                {STYLE_PRESET_KIND_TITLES[preset.kind] ?? preset.kind}
               </Badge>
               <Badge className={draft.isActive ? 'bg-emerald-600' : 'bg-zinc-700'}>{draft.isActive ? 'активен' : 'скрыт'}</Badge>
             </div>
@@ -189,8 +194,9 @@ function PresetRow({ preset }: { preset: AdminStylePreset }) {
             onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value as Kind }))}
             className="h-10 rounded-md border border-zinc-800 bg-zinc-900 px-3 text-sm text-slate-100"
           >
-            <option value="user-avatar">Аватар</option>
-            <option value="user-location">Локация</option>
+            {STYLE_PRESET_KINDS.map((item) => (
+              <option key={item} value={item}>{STYLE_PRESET_KIND_TITLES[item]}</option>
+            ))}
           </select>
           <Input type="number" value={draft.sortOrder} onChange={(event) => setDraft((current) => ({ ...current, sortOrder: Number(event.target.value) }))} />
           <label className="flex items-center gap-2 text-sm text-slate-300">
@@ -198,7 +204,12 @@ function PresetRow({ preset }: { preset: AdminStylePreset }) {
             Активен
           </label>
           <Textarea className="lg:col-span-2" value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} rows={3} />
-          <Input className="lg:col-span-2" value={draft.thumbnail} onChange={(event) => setDraft((current) => ({ ...current, thumbnail: event.target.value }))} placeholder="Thumbnail URL" />
+          <div className="lg:col-span-2">
+            <ThumbnailField
+              value={draft.thumbnail}
+              onChange={(url) => setDraft((current) => ({ ...current, thumbnail: url }))}
+            />
+          </div>
           <Textarea className="lg:col-span-4" value={draft.promptText} onChange={(event) => setDraft((current) => ({ ...current, promptText: event.target.value }))} rows={5} />
         </div>
 
@@ -207,5 +218,51 @@ function PresetRow({ preset }: { preset: AdminStylePreset }) {
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Превью шаблона.
+ *
+ * Поле принимает ссылку, но взять её руками неоткуда: картинку пришлось бы сначала залить
+ * куда-то ещё. Кнопка рядом кладёт файл в наше хранилище и подставляет ссылку сама.
+ */
+function ThumbnailField({ value, onChange }: { value: string; onChange: (url: string) => void }) {
+  const [upload, uploadState] = useUploadStylePresetThumbnailMutation();
+
+  return (
+    <div className="flex items-start gap-2">
+      {value ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={value} alt="" className="h-16 w-16 shrink-0 rounded border border-zinc-800 object-cover" />
+      ) : (
+        <div className="grid h-16 w-16 shrink-0 place-items-center rounded border border-dashed border-zinc-800 text-[10px] text-slate-600">
+          нет
+        </div>
+      )}
+      <div className="min-w-0 flex-1 space-y-2">
+        <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder="Ссылка на превью" />
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-zinc-800 px-3 py-1.5 text-xs text-slate-300 transition hover:border-zinc-600">
+          {uploadState.isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+          Загрузить картинку
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (!file) return;
+              try {
+                const result = await upload(file).unwrap();
+                onChange(result.url);
+              } catch {
+                toast({ title: 'Не удалось загрузить превью', variant: 'destructive' });
+              }
+            }}
+          />
+        </label>
+      </div>
+    </div>
   );
 }

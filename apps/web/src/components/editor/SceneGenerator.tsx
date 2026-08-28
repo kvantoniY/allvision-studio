@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useGetChatModelsQuery } from '@/store/api/user-chat-api';
+import { useGetStylePresetsQuery } from '@/store/api/public-api';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
 import { cn } from '@/lib/utils';
 
@@ -131,6 +132,14 @@ export function SceneGenerator({
       priceOverrides: pricing?.modelPriceOverrides,
     });
   }, [model, isVideo, duration, pricing?.modelPriceOverrides]);
+
+  // Шаблоны сцен ведёт владелец в админке: там же к ним прикладываются превью. Пока набор
+  // пуст, показываем встроенный список — редактор не должен остаться без подсказок.
+  const { data: scenePresetsData } = useGetStylePresetsQuery({ kind: 'editor-scene' });
+  const { data: duoPresetsData } = useGetStylePresetsQuery({ kind: 'editor-scene-duo' });
+  const managedSolo = scenePresetsData?.presets ?? [];
+  const managedDuo = duoPresetsData?.presets ?? [];
+  const hasManaged = managedSolo.length > 0 || managedDuo.length > 0;
 
   const presets = useMemo(
     () => SCENE_PRESETS.filter((preset) => (preset.needsPhoto ? hasImage : true)),
@@ -336,6 +345,17 @@ export function SceneGenerator({
         </div>
       )}
 
+      {hasManaged ? (
+        <div className="space-y-3">
+          <PresetTiles title="Сцены" presets={managedSolo} onPick={setPrompt} />
+          <PresetTiles
+            title="Совместные кадры"
+            hint="Работают, когда в сцене есть люди: прикрепите второй портрет референсом."
+            presets={managedDuo}
+            onPick={setPrompt}
+          />
+        </div>
+      ) : (
       <div className="space-y-2">
         <Label className="text-xs">Готовые сцены</Label>
         <div className="space-y-2">
@@ -365,6 +385,7 @@ export function SceneGenerator({
           })}
         </div>
       </div>
+      )}
 
       <div className="space-y-2">
         <Label className="text-xs" htmlFor="scene-prompt">
@@ -469,5 +490,53 @@ function ChoiceChip({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * Плитка шаблонов сцены.
+ *
+ * Квадрат с превью читается быстрее строки текста: по картинке сразу видно, что получится.
+ * Пока владелец не приложил превью, показываем заголовок на подложке — шаблон всё равно
+ * рабочий, просто без картинки.
+ */
+function PresetTiles({
+  title,
+  hint,
+  presets,
+  onPick,
+}: {
+  title: string;
+  hint?: string;
+  presets: Array<{ id: string; title: string; description: string; promptText: string; thumbnail: string | null }>;
+  onPick: (prompt: string) => void;
+}) {
+  if (presets.length === 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{title}</Label>
+      {hint && <p className="text-[11px] text-slate-500">{hint}</p>}
+      <div className="grid grid-cols-3 gap-1.5">
+        {presets.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            title={preset.description}
+            onClick={() => onPick(preset.promptText)}
+            className="group relative aspect-square overflow-hidden rounded-lg border border-slate-700 bg-slate-900 transition hover:border-violet-400"
+          >
+            {preset.thumbnail ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={mediaUrl(preset.thumbnail) ?? preset.thumbnail} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
+            ) : (
+              <span className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
+            )}
+            <span className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-1 py-0.5 text-[10px] leading-tight text-slate-200">
+              {preset.title}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

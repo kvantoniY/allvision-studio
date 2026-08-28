@@ -1,5 +1,5 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { contactSchema, toCategorySection, waitlistLeadSchema } from '@allvision/shared';
+import { contactSchema, isStylePresetKind, toCategorySection, waitlistLeadSchema } from '@allvision/shared';
 import type {
   PublicServiceResponse,
   PublicServicesResponse,
@@ -299,7 +299,7 @@ publicRouter.get('/home-page', async (_req: Request, res: Response, next: NextFu
 publicRouter.get('/style-presets', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const kind = typeof req.query.kind === 'string' ? req.query.kind.trim() : undefined;
-    if (kind && kind !== 'user-avatar' && kind !== 'user-location') {
+    if (kind && !isStylePresetKind(kind)) {
       throw new HttpError(400, 'INVALID_STYLE_PRESET_KIND', 'Неизвестный тип шаблона');
     }
     const presets = await prisma.stylePreset.findMany({

@@ -73,7 +73,7 @@ export const publicApi = createApi({
       },
       providesTags: ['MediaAssets'],
     }),
-    getStylePresets: build.query<PublicStylePresetsResponse, { kind?: 'user-avatar' | 'user-location' } | void>({
+    getStylePresets: build.query<PublicStylePresetsResponse, { kind?: string } | void>({
       query: (q) => {
         const params = new URLSearchParams();
         if (q?.kind) params.set('kind', q.kind);

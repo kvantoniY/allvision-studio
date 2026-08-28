@@ -1,11 +1,12 @@
 import { createApi } from '@reduxjs/toolkit/query/react';
+import type { StylePresetKind } from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 import { publicApi } from './public-api';
 
 export type AdminStylePreset = {
   id: string;
   slug: string;
-  kind: 'user-avatar' | 'user-location';
+  kind: StylePresetKind;
   title: string;
   description: string;
   promptText: string;
@@ -17,7 +18,7 @@ export type AdminStylePreset = {
 
 export type StylePresetBody = {
   slug?: string;
-  kind?: 'user-avatar' | 'user-location';
+  kind?: StylePresetKind;
   title?: string;
   description?: string;
   promptText?: string;
@@ -31,7 +32,7 @@ export const adminStylePresetsApi = createApi({
   baseQuery: createBaseQueryWithReauth('/api/admin/style-presets'),
   tagTypes: ['AdminStylePreset'],
   endpoints: (build) => ({
-    listAdminStylePresets: build.query<{ items: AdminStylePreset[] }, { kind?: 'user-avatar' | 'user-location'; isActive?: boolean } | void>({
+    listAdminStylePresets: build.query<{ items: AdminStylePreset[] }, { kind?: StylePresetKind; isActive?: boolean } | void>({
       query: (q) => {
         const params = new URLSearchParams();
         if (q?.kind) params.set('kind', q.kind);
@@ -40,6 +41,13 @@ export const adminStylePresetsApi = createApi({
         return { url: `/${query ? `?${query}` : ''}` };
       },
       providesTags: ['AdminStylePreset'],
+    }),
+    uploadStylePresetThumbnail: build.mutation<{ url: string }, File>({
+      query: (file) => {
+        const body = new FormData();
+        body.append('file', file);
+        return { url: '/thumbnail', method: 'POST', body };
+      },
     }),
     createAdminStylePreset: build.mutation<{ preset: AdminStylePreset }, Required<Pick<StylePresetBody, 'slug' | 'kind' | 'title' | 'description' | 'promptText'>> & StylePresetBody>({
       query: (body) => ({ url: '/', method: 'POST', body }),
@@ -71,6 +79,7 @@ export const adminStylePresetsApi = createApi({
 export const {
   useListAdminStylePresetsQuery,
   useCreateAdminStylePresetMutation,
+  useUploadStylePresetThumbnailMutation,
   useUpdateAdminStylePresetMutation,
   useDeleteAdminStylePresetMutation,
 } = adminStylePresetsApi;

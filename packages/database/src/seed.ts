@@ -19,6 +19,7 @@ const ServiceCategory = {
 } as const;
 import { migrateMediaAssets } from './migrate-media-assets';
 import { greetingTemplateSlugs, greetingTemplates } from './seed-greetings';
+import { editorScenePresets } from './seed-scene-presets';
 
 const BCRYPT_COST = 12;
 const SYSTEM_PASSWORD_PLACEHOLDER = 'CHANGE_ME_AT_FIRST_DEPLOY';
@@ -3675,7 +3676,7 @@ async function ensureTokenPackages() {
 async function ensureStylePresets() {
   let created = 0;
   let skipped = 0;
-  for (const preset of stylePresets) {
+  for (const preset of [...stylePresets, ...editorScenePresets]) {
     const existing = await prisma.stylePreset.findUnique({ where: { slug: preset.slug }, select: { id: true } });
     if (existing) {
       skipped += 1;

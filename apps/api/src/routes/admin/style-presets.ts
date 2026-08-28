@@ -1,15 +1,20 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, prisma } from '@allvision/database';
 import { z } from 'zod';
+import { STYLE_PRESET_KINDS } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
 import { requireAdmin } from '../../middleware/require-admin';
 import { HttpError } from '../../utils/http-error';
+import { uploadStylePresetThumbnail } from '../../middleware/upload';
+import * as fileService from '../../services/file-service';
 
 export const adminStylePresetsRouter = Router();
 
 adminStylePresetsRouter.use(requireAuth, requireAdmin);
 
-const kinds = ['user-avatar', 'user-location'] as const;
+// Список общий с публичным API и редактором — иначе новый вид пришлось бы дописывать
+// в четыре места, и где-нибудь он бы точно потерялся.
+const kinds = STYLE_PRESET_KINDS;
 
 const listQuerySchema = z.object({
   kind: z.enum(kinds).optional(),
@@ -47,6 +52,24 @@ function presetSelect() {
     createdAt: true,
   } as const;
 }
+
+/**
+ * Превью шаблона.
+ *
+ * Поле принимает URL, но руками его взять неоткуда: картинку сначала пришлось бы залить
+ * куда-то ещё. Этот маршрут кладёт файл в те же service-assets, что и обложки услуг, и
+ * возвращает готовую ссылку.
+ */
+adminStylePresetsRouter.post('/thumbnail', uploadStylePresetThumbnail, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const file = (req as Request & { file?: Express.Multer.File }).file;
+    if (!file) throw new HttpError(400, 'FILE_REQUIRED', 'Файл не получен');
+    const uploaded = await fileService.uploadServicePreview(file.buffer, file.mimetype, 'image');
+    res.status(201).json({ url: uploaded.url });
+  } catch (err) {
+    next(err);
+  }
+});
 
 adminStylePresetsRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
