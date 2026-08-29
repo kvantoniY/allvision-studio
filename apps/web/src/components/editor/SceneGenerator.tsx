@@ -107,6 +107,8 @@ export function SceneGenerator({
   // цену ниже той, что спишет сервер.
   const { data: pricing } = useGetChatModelsQuery();
   const [prompt, setPrompt] = useState('');
+  // Какой шаблон выбран: без подсветки клик по плитке выглядел как «ничего не произошло».
+  const [activePreset, setActivePreset] = useState<string | null>(null);
   const [duration, setDuration] = useState(5);
   const [modelSlug, setModelSlug] = useState<string | null>(null);
 
@@ -347,12 +349,24 @@ export function SceneGenerator({
 
       {hasManaged ? (
         <div className="space-y-3">
-          <PresetTiles title="Сцены" presets={managedSolo} onPick={setPrompt} />
+          <PresetTiles
+            title="Сцены"
+            presets={managedSolo}
+            activeId={activePreset}
+            onPick={(text, id) => {
+              setPrompt(text);
+              setActivePreset(id);
+            }}
+          />
           <PresetTiles
             title="Совместные кадры"
             hint="Работают, когда в сцене есть люди: прикрепите второй портрет референсом."
             presets={managedDuo}
-            onPick={setPrompt}
+            activeId={activePreset}
+            onPick={(text, id) => {
+              setPrompt(text);
+              setActivePreset(id);
+            }}
           />
         </div>
       ) : (
@@ -373,8 +387,16 @@ export function SceneGenerator({
                       key={preset.code}
                       type="button"
                       title={preset.description}
-                      onClick={() => setPrompt(preset.prompt)}
-                      className="rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs text-slate-300 transition hover:border-violet-400/60 hover:text-white"
+                      onClick={() => {
+                        setPrompt(preset.prompt);
+                        setActivePreset(preset.code);
+                      }}
+                      className={cn(
+                        'rounded-full border px-3 py-1 text-xs transition',
+                        activePreset === preset.code
+                          ? 'border-violet-400 bg-violet-500/20 text-violet-100'
+                          : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-violet-400/60 hover:text-white',
+                      )}
                     >
                       {preset.title}
                     </button>
@@ -387,6 +409,7 @@ export function SceneGenerator({
       </div>
       )}
 
+      <div className="sticky bottom-0 -mx-4 -mb-4 space-y-3 border-t border-violet-500/30 bg-slate-950/95 px-4 pb-4 pt-3 backdrop-blur">
       <div className="space-y-2">
         <Label className="text-xs" htmlFor="scene-prompt">
           Описание сцены
@@ -394,7 +417,10 @@ export function SceneGenerator({
         <Textarea
           id="scene-prompt"
           value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
+          onChange={(event) => {
+            setPrompt(event.target.value);
+            setActivePreset(null);
+          }}
           rows={3}
           placeholder="Что должно происходить в кадре"
           className="text-sm"
@@ -463,6 +489,7 @@ export function SceneGenerator({
         </Button>
         {!enoughCoins && <span className="text-xs text-amber-300">Не хватает коинов на балансе</span>}
       </div>
+      </div>
     </section>
   );
 }
@@ -504,12 +531,14 @@ function PresetTiles({
   title,
   hint,
   presets,
+  activeId,
   onPick,
 }: {
   title: string;
   hint?: string;
   presets: Array<{ id: string; title: string; description: string; promptText: string; thumbnail: string | null }>;
-  onPick: (prompt: string) => void;
+  activeId: string | null;
+  onPick: (prompt: string, id: string) => void;
 }) {
   if (presets.length === 0) return null;
   return (
@@ -522,8 +551,13 @@ function PresetTiles({
             key={preset.id}
             type="button"
             title={preset.description}
-            onClick={() => onPick(preset.promptText)}
-            className="group relative aspect-square overflow-hidden rounded-lg border border-slate-700 bg-slate-900 transition hover:border-violet-400"
+            onClick={() => onPick(preset.promptText, preset.id)}
+            className={cn(
+              'group relative aspect-square overflow-hidden rounded-lg border bg-slate-900 transition',
+              activeId === preset.id
+                ? 'border-violet-400 ring-2 ring-violet-400/40'
+                : 'border-slate-700 hover:border-violet-400',
+            )}
           >
             {preset.thumbnail ? (
               // eslint-disable-next-line @next/next/no-img-element

@@ -19,6 +19,7 @@ const SceneCanvas = dynamic(() => import('./canvas/SceneCanvas').then((m) => m.S
   loading: () => <div className="h-full w-full animate-pulse rounded-xl bg-slate-900" />,
 });
 import { mediaUrl } from './canvas/useMediaElements';
+import type { Playback } from '@/components/editor/usePlayback';
 import { cn } from '@/lib/utils';
 
 /**
@@ -59,6 +60,7 @@ export function EditorStage({
   onSelectLayer,
   onChangeLayer,
   generationOverlay,
+  playback,
   className,
 }: {
   timeline: Timeline;
@@ -69,47 +71,16 @@ export function EditorStage({
   onChangeLayer: (sceneIndex: number, layerId: string, patch: Partial<MediaLayer> & Partial<TextLayer>) => void;
   /** Слой, который ждёт генерацию: на его месте рисуется рамка с прогрессом. */
   generationOverlay?: { layerId: string; progress: number; label: string } | null;
+  /** Общие часы ролика: то же время показывает курсор на таймлайне. */
+  playback: Playback;
   className?: string;
 }) {
   const timings = useMemo(() => timelineTimings(timeline), [timeline]);
   const total = useMemo(() => timelineDurationSec(timeline), [timeline]);
 
-  const [playing, setPlaying] = useState(false);
-  const [time, setTime] = useState(0);
-  const rafRef = useRef<number | null>(null);
-  const clockRef = useRef<{ startedAt: number; offset: number } | null>(null);
+  const { time, playing, seek, toggle, rewind } = playback;
   const musicRef = useRef<HTMLAudioElement | null>(null);
   const voiceRef = useRef<HTMLAudioElement | null>(null);
-
-  useEffect(() => {
-    if (!playing) {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-      clockRef.current = null;
-      return;
-    }
-    clockRef.current = { startedAt: performance.now(), offset: time >= total ? 0 : time };
-
-    const tick = () => {
-      const clock = clockRef.current;
-      if (!clock) return;
-      const next = clock.offset + (performance.now() - clock.startedAt) / 1000;
-      if (next >= total) {
-        setTime(total);
-        setPlaying(false);
-        return;
-      }
-      setTime(next);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      rafRef.current = null;
-    };
-    // time меняется каждый кадр и перезапускал бы часы, поэтому его в зависимостях нет.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [playing, total]);
 
   // Музыка и голос идут своими дорожками и синхронизируются с общим временем ролика.
   // Под голос музыка приглушается тем же коэффициентом, что и на экспорте, — иначе
@@ -192,7 +163,7 @@ export function EditorStage({
       <div className="flex shrink-0 items-center gap-3">
         <button
           type="button"
-          onClick={() => setPlaying((value) => !value)}
+          onClick={toggle}
           aria-label={playing ? 'Пауза' : 'Играть'}
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-amber-400 text-slate-950 transition hover:bg-amber-300"
         >
@@ -200,10 +171,7 @@ export function EditorStage({
         </button>
         <button
           type="button"
-          onClick={() => {
-            setPlaying(false);
-            setTime(0);
-          }}
+          onClick={rewind}
           aria-label="В начало"
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
         >
@@ -216,9 +184,8 @@ export function EditorStage({
           step={0.05}
           value={Math.min(time, total)}
           onChange={(event) => {
-            setPlaying(false);
             const next = Number(event.target.value);
-            setTime(next);
+            seek(next);
             const at = sceneAtTime(timeline, next);
             if (at) onSelectScene(at.activeIndex);
           }}

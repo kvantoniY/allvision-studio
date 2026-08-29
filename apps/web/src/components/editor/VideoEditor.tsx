@@ -30,6 +30,7 @@ import {
   pushTimelineHistory,
   redoTimeline,
   undoTimeline,
+  sceneAtTime,
   sceneLayers,
   sceneMediaLayers,
   timelineDurationSec,
@@ -57,6 +58,7 @@ import { AudioTools, type VoiceoverRequest } from '@/components/editor/AudioTool
 import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
 import { ExportOverlay } from '@/components/editor/ExportOverlay';
 import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
+import { usePlayback } from '@/components/editor/usePlayback';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import {
@@ -640,6 +642,10 @@ export function VideoEditor({ id }: { id: string }) {
 
   const issues = useMemo(() => (timeline ? validateTimeline(timeline) : []), [timeline]);
   const duration = useMemo(() => (timeline ? timelineDurationSec(timeline) : 0), [timeline]);
+  // Часы общие для предпросмотра и таймлайна: курсор должен стоять на том кадре,
+  // который сейчас на экране.
+  const playback = usePlayback(duration);
+
 
   const handleExport = async () => {
     if (!timeline) return;
@@ -909,6 +915,7 @@ export function VideoEditor({ id }: { id: string }) {
           <EditorStage
             className="min-h-0 flex-1"
             generationOverlay={generationOverlay}
+            playback={playback}
             timeline={timeline}
             selectedSceneIndex={sceneIndex}
             onSelectScene={setSceneIndex}
@@ -990,11 +997,18 @@ export function VideoEditor({ id }: { id: string }) {
         <TimelineTracks
           timeline={timeline}
           totalSec={duration}
+          time={playback.time}
+          onSeek={(sec) => {
+            playback.seek(sec);
+            const at = sceneAtTime(timeline, sec);
+            if (at) setSceneIndex(at.activeIndex);
+          }}
           selectedSceneIndex={sceneIndex}
           onSelectScene={setSceneIndex}
+          onSceneDuration={(index, durationSec) => ops.patchScene(index, { durationSec })}
+          onSceneTransition={(index, transition) => ops.patchScene(index, { transition })}
           onDuplicateScene={duplicateScene}
           onRemoveScene={removeScene}
-          onMoveScene={moveScene}
           onAddScene={addScene}
           onChangeMusic={(track) => applyTimeline({ ...timeline, music: track })}
           onChangeVoiceover={(track) => applyTimeline({ ...timeline, voiceover: track })}
