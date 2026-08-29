@@ -1,5 +1,3 @@
-import { CUSTOM_ORDER_PRICE_FROM_COINS } from '@allvision/shared';
-
 /**
  * Заказные форматы.
  *
@@ -10,6 +8,15 @@ import { CUSTOM_ORDER_PRICE_FROM_COINS } from '@allvision/shared';
  * Цена — «от», итог называет менеджер после разбора брифа: заказные работы отличаются по
  * объёму в разы, и обещать точную сумму до разговора нечестно.
  */
+/**
+ * Базовая цена заказного поздравления при создании формата.
+ *
+ * Живёт здесь, а не в @allvision/shared: значение нужно только сиду — витрина и админка
+ * читают цену из БД, потому что владелец правит её в админке. Плюс @allvision/database
+ * собирается РАНЬШЕ shared (см. Dockerfile), и импорт оттуда ломает прод-сборку.
+ */
+const PRICE_FROM_COINS = 2990;
+
 export const orderTypes = [
   {
     slug: 'custom-greeting',
@@ -70,8 +77,8 @@ export const orderTypes = [
         maxPhotos: 20,
       },
     ],
-    priceFromCoins: CUSTOM_ORDER_PRICE_FROM_COINS,
-    priceToCoins: CUSTOM_ORDER_PRICE_FROM_COINS * 5,
+    priceFromCoins: PRICE_FROM_COINS,
+    priceToCoins: PRICE_FROM_COINS * 5,
     leadTimeDays: 5,
     sortOrder: 10,
     isActive: true,

@@ -712,6 +712,12 @@ trend-video-transfer переописан:
 - Windows EPERM на `prisma generate` если запущен dev-сервер — останавливать dev перед БД-операциями.
 - `next build` иногда падает с `3221225477` на Windows static worker — повторный запуск проходит, `experimental.cpus=1` в next.config.mjs минимизирует.
 - Demo-assets в `apps/api/demo-assets/` не коммитятся, восстанавливаются через `npm run demo:download`. 
+- **`packages/database` не может импортировать `@allvision/shared`**: зависимость идёт в обратную
+  сторону (shared импортирует типы Prisma из database), поэтому такой импорт — цикл. В прод-Dockerfile
+  database собирается первым, и статический импорт из shared роняет сборку с `TS2307: Cannot find module`.
+  Локально это НЕ воспроизводится: там уже лежит `packages/shared/dist` от прошлой сборки. Проверять так:
+  `mv packages/shared/dist /tmp/x && npm run build -w @allvision/database`. Нужное значение — копировать
+  в пакет database (см. `seed-order-types.ts`), а не тянуть импортом.
 ## Этап P7.1 ✅
 
 Hotfix prod: cost accuracy, timeout charges, aspect ratio, JWT auth, admin observability.

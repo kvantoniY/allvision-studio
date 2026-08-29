@@ -156,6 +156,3 @@ export const ORDER_CONTACT_CHANNEL_TITLES: Record<OrderContactChannel, string> =
   telegram: 'Telegram',
   whatsapp: 'WhatsApp',
 };
-
-/** Базовая цена заказного поздравления. Итог называет менеджер после разбора брифа. */
-export const CUSTOM_ORDER_PRICE_FROM_COINS = 2990;
