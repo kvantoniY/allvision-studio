@@ -17,6 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { AlbumsTab } from '@/components/catalog/AlbumsTab';
 import { GreetingsTab } from '@/components/catalog/GreetingsTab';
 import { OccasionChips } from '@/components/catalog/OccasionChips';
+import { CatalogHero } from '@/components/catalog/CatalogHero';
 import { PopularTab } from '@/components/catalog/PopularTab';
 import { ServiceTile } from '@/components/catalog/ServiceTile';
 import { ServicesTab } from '@/components/catalog/ServicesTab';
@@ -122,15 +123,35 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
 
   const activeSection = catalogSectionDef(tab);
 
+  /**
+   * Работа для обложки: первая избранная в текущей вкладке, иначе просто первая.
+   * У «Альбомов» своей витрины нет — там заглушка со сбором заявок.
+   */
+  const heroScope = tab === 'popular'
+    ? byOccasion
+    : tab === 'albums'
+      ? []
+      : servicesInSection(tab === 'greetings' ? 'greetings' : 'services', byOccasion);
+  const heroService = heroScope
+    .slice()
+    .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured)
+      || a.featuredOrder - b.featuredOrder
+      || a.sortOrder - b.sortOrder)[0] ?? null;
+  // В кураторской ленте работу с обложки не повторяем: она уже наверху. В остальных
+  // вкладках список по категориям должен оставаться полным.
+  const popularItems = heroService
+    ? byOccasion.filter((service) => service.id !== heroService.id)
+    : byOccasion;
+
   return (
     <div className="pb-16">
-      <section className="container pt-10 md:pt-14">
+      <section className="container pt-8 md:pt-10">
         <div className="max-w-3xl">
-          <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-4xl md:text-6xl">
+          <h1 className="text-2xl font-black leading-tight tracking-tight sm:text-3xl md:text-4xl">
             {activeSection.heading}
           </h1>
-          <p className="mt-4 text-base leading-7 text-slate-300 md:text-lg md:leading-8">{activeSection.subtitle}</p>
-          <div className="relative mt-6 max-w-xl">
+          <p className="mt-2 text-sm leading-6 text-slate-400 md:text-base">{activeSection.subtitle}</p>
+          <div className="relative mt-5 max-w-xl">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input
               type="search"
@@ -138,7 +159,7 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Поиск: оживить фото, поздравление, тренд..."
               aria-label="Поиск услуг"
-              className="h-12 border-slate-700 bg-slate-900/80 pl-10 pr-10 text-base"
+              className="h-11 border-slate-700 bg-slate-900/80 pl-10 pr-10"
             />
             {isSearching && (
               <button
@@ -154,9 +175,14 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
         </div>
       </section>
 
-      <section className="container sticky top-14 z-20 mt-6 border-b border-slate-800/80 bg-slate-950/85 py-3 backdrop-blur md:top-0">
-        <nav aria-label="Разделы каталога" className="-mx-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex min-w-max gap-2 px-1">
+      {/* Вкладки собраны в один переключатель: раньше это был ряд крупных пилюль, который
+          читался как четыре отдельные кнопки и спорил по весу с самими работами. */}
+      <section className="container sticky top-14 z-20 mt-5 py-2 md:top-0">
+        <nav
+          aria-label="Разделы каталога"
+          className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          <div className="inline-flex min-w-max gap-1 rounded-full border border-slate-800 bg-slate-900/80 p-1 backdrop-blur">
             {CATALOG_SECTION_DEFS.map((section) => {
               const Icon = iconForCategory(section.iconName);
               const isActive = tab === section.code;
@@ -167,10 +193,10 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
                   onClick={() => changeTab(section.code)}
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
-                    'inline-flex h-11 shrink-0 items-center gap-2 rounded-full border px-5 text-sm font-semibold transition',
+                    'inline-flex h-9 shrink-0 items-center gap-2 rounded-full px-4 text-sm font-medium transition',
                     isActive
-                      ? 'border-amber-400 bg-amber-400 text-slate-950'
-                      : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-600 hover:text-white',
+                      ? 'bg-slate-100 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-100',
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -195,6 +221,12 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
             <AlertTitle>Не удалось загрузить каталог</AlertTitle>
             <AlertDescription>Обновите страницу или попробуйте позже.</AlertDescription>
           </Alert>
+        </section>
+      )}
+
+      {heroService && !isSearching && (
+        <section className="container mt-6">
+          <CatalogHero service={heroService} />
         </section>
       )}
 
@@ -226,7 +258,7 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
             )}
           </section>
         ) : tab === 'popular' ? (
-          <PopularTab services={byOccasion} onBrowseAll={() => changeTab('services')} />
+          <PopularTab services={popularItems} onBrowseAll={() => changeTab('services')} />
         ) : tab === 'services' ? (
           <ServicesTab
             categories={categories.filter((item) => item.section === 'services')}

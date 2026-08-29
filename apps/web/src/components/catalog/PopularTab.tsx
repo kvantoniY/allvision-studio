@@ -1,19 +1,21 @@
 'use client';
 
-import { Flame, Sparkles } from 'lucide-react';
 import type { PublicService } from '@allvision/shared';
 import { ServiceTile } from './ServiceTile';
 
 type PopularTabProps = {
-  /** Услуги вкладки: уже отфильтрованы по выбранному поводу. */
+  /** Услуги вкладки: уже отфильтрованы по выбранному поводу и без работы с обложки. */
   services: PublicService[];
   onBrowseAll: () => void;
 };
 
 /**
  * Кураторская вкладка. Это посадочная страница рекламы, поэтому здесь нет фильтров
- * по категориям — только то, что мы сами вынесли вперёд, крупными карточками.
- * Порядок задаётся в админке через featuredOrder.
+ * по категориям — только то, что мы сами вынесли вперёд. Порядок задаётся в админке
+ * через featuredOrder.
+ *
+ * Карточки одного размера: мозаика из трёх размеров смотрелась рвано и не помогала
+ * выбирать — акцент даёт обложка наверху страницы, а не крупная плитка в середине ленты.
  */
 export function PopularTab({ services, onBrowseAll }: PopularTabProps) {
   const featured = services
@@ -40,40 +42,13 @@ export function PopularTab({ services, onBrowseAll }: PopularTabProps) {
     );
   }
 
-  const [lead, ...rest] = items;
-
   return (
-    <div className="space-y-10">
-      <section>
-        <div className="mb-5 flex items-center gap-2">
-          <Flame className="h-5 w-5 text-amber-400" />
-          <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Выбор Allvision</h2>
-        </div>
-        {/* Первая карточка крупнее остальных: на мобильном она занимает экран целиком
-            и работает как обложка вкладки. */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="sm:col-span-2 lg:col-span-2 lg:row-span-2">
-            <ServiceTile service={lead} size="large" showPrice />
-          </div>
-          {rest.slice(0, 4).map((service) => (
-            <ServiceTile key={service.id} service={service} showPrice />
-          ))}
-        </div>
-      </section>
-
-      {rest.length > 4 && (
-        <section>
-          <div className="mb-5 flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-amber-400" />
-            <h2 className="text-xl font-bold tracking-tight sm:text-2xl">Тоже часто дарят</h2>
-          </div>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {rest.slice(4).map((service) => (
-              <ServiceTile key={service.id} service={service} showPrice />
-            ))}
-          </div>
-        </section>
-      )}
+    <div className="space-y-8">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        {items.map((service) => (
+          <ServiceTile key={service.id} service={service} showPrice showFeaturedBadge={false} />
+        ))}
+      </div>
 
       <div className="flex justify-center">
         <button
