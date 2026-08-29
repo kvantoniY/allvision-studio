@@ -40,6 +40,8 @@ export const TIMELINE_LIMITS = {
   maxOverlaysPerScene: 3,
   /** Слоёв в одной сцене: больше — и коллаж превращается в кашу, а рендер в минуты. */
   maxLayersPerScene: 8,
+  /** Дорожек звука на ролик: больше — и микс превращается в кашу, а предпросмотр в тормоза. */
+  maxAudioTracks: 8,
   maxTextLength: 200,
   /** Шаблон видео-поздравления заведомо короче ролика из редактора. */
   maxTemplateScenes: 12,
@@ -127,6 +129,23 @@ export const timelineAudioTrackSchema = z.object({
 
 export type TimelineAudioTrack = z.infer<typeof timelineAudioTrackSchema>;
 
+export const AUDIO_TRACK_KINDS = ['music', 'voice'] as const;
+export type AudioTrackKind = (typeof AUDIO_TRACK_KINDS)[number];
+
+/**
+ * Дорожка в общем списке звука.
+ *
+ * `kind` не косметика: под голос музыка приглушается, и рендер должен понимать, что чем
+ * является. Идентификатор нужен редактору, чтобы двигать конкретную дорожку.
+ */
+export const timelineNamedAudioTrackSchema = timelineAudioTrackSchema.extend({
+  id: z.string().trim().min(1).max(80),
+  kind: z.enum(AUDIO_TRACK_KINDS),
+  title: z.string().trim().max(120).optional(),
+});
+
+export type TimelineNamedAudioTrack = z.infer<typeof timelineNamedAudioTrackSchema>;
+
 export const timelineSchema = z.object({
   version: z.literal(TIMELINE_VERSION).default(TIMELINE_VERSION),
   aspect: z.enum(TIMELINE_ASPECTS).default('9:16'),
@@ -138,6 +157,15 @@ export const timelineSchema = z.object({
    * иначе на телефонном динамике голос тонет в фоне.
    */
   voiceover: timelineAudioTrackSchema.optional(),
+  /**
+   * Все звуковые дорожки ролика. Музыки и голоса может быть несколько: одна реплика на
+   * ролик — это ограничение, а не замысел.
+   *
+   * Поля `music` и `voiceover` выше остались для роликов, записанных до этого списка, и
+   * для шаблонов поздравлений, где дорожка ровно одна. Читать звук нужно через
+   * `timelineAudioTracks()`, а не напрямую: тогда обе формы работают одинаково.
+   */
+  audio: z.array(timelineNamedAudioTrackSchema).max(TIMELINE_LIMITS.maxAudioTracks).optional(),
 });
 
 export type Timeline = z.infer<typeof timelineSchema>;

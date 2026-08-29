@@ -5,6 +5,8 @@ import {
   TIMELINE_TEXT_POSITIONS,
   TIMELINE_TEXT_STYLES,
   timelineSourceSchema,
+  type Timeline,
+  type TimelineNamedAudioTrack,
   type TimelineScene,
   type TimelineTextOverlay,
 } from './types';
@@ -277,5 +279,39 @@ export function layerRect(box: LayerBox, width: number, height: number) {
     y: Math.round(box.y * height),
     width: Math.max(2, Math.round(box.w * width)),
     height: Math.max(2, Math.round(box.h * height)),
+  };
+}
+
+/**
+ * Все звуковые дорожки ролика одним списком.
+ *
+ * Ролики, записанные до появления списка, держат звук в полях `music` и `voiceover` —
+ * их подмешиваем сюда же. Так рендер, предпросмотр и таймлайн работают с одной формой и
+ * не расходятся: сравнивать «а если старый ролик» в трёх местах — верный способ забыть
+ * это в четвёртом.
+ */
+export function timelineAudioTracks(timeline: Timeline): TimelineNamedAudioTrack[] {
+  if (timeline.audio && timeline.audio.length > 0) return timeline.audio;
+
+  const legacy: TimelineNamedAudioTrack[] = [];
+  if (timeline.music) legacy.push({ ...timeline.music, id: 'legacy-music', kind: 'music' });
+  if (timeline.voiceover) legacy.push({ ...timeline.voiceover, id: 'legacy-voice', kind: 'voice' });
+  return legacy;
+}
+
+/**
+ * Переводит ролик на список дорожек.
+ *
+ * Вызывается перед любой правкой звука: пока ролик живёт в старой форме, добавить вторую
+ * дорожку некуда. Легаси-поля после перевода очищаются, иначе один и тот же трек звучал бы
+ * дважды.
+ */
+export function timelineWithAudioTracks(timeline: Timeline): Timeline {
+  if (timeline.audio) return timeline;
+  return {
+    ...timeline,
+    audio: timelineAudioTracks(timeline),
+    music: undefined,
+    voiceover: undefined,
   };
 }

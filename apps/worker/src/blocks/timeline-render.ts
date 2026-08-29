@@ -15,6 +15,7 @@ import {
   sceneDurationSec,
   sceneMediaLayers,
   sceneTextLayers,
+  timelineAudioTracks,
   timelineTimings,
   validateTimeline,
   type MediaLayer,
@@ -390,19 +391,24 @@ export const timelineRenderBlock: BlockDefinition = {
         await ctx.reportProgress(15 + Math.round(((index + 1) / resolved.scenes.length) * 60));
       }
 
-      // 4. Музыка и озвучка.
-      const musicPath = resolved.music
-        ? await materialize(resolved.music.url, path.join(workDir, 'music.audio'))
-        : undefined;
-      const voiceoverPath = resolved.voiceover
-        ? await materialize(resolved.voiceover.url, path.join(workDir, 'voiceover.audio'))
-        : undefined;
+      // 4. Звуковые дорожки: музыки и голоса может быть несколько.
+      const audioTracks = timelineAudioTracks(resolved);
+      const audioPaths: string[] = [];
+      for (const [index, track] of audioTracks.entries()) {
+        try {
+          audioPaths.push(await materialize(track.url, path.join(workDir, `audio-${index}.audio`)));
+        } catch (error) {
+          // Ролик без одной дорожки лучше, чем упавший рендер: остальное уже собрано.
+          ctx.logger.warn(`[timeline-render] дорожка ${track.id} не скачалась: ${(error as Error).message}`);
+          audioPaths.push('');
+        }
+      }
       await ctx.reportProgress(80);
 
       // 5. Склейка с переходами и миксом звука.
       const outputPath = path.join(workDir, 'result.mp4');
       await ctx.providerContext.reportStage?.('Склеиваем ролик');
-      const final = planFinal({ timeline: resolved, scenePaths, musicPath, voiceoverPath, outputPath, quality });
+      const final = planFinal({ timeline: resolved, scenePaths, audioPaths, outputPath, quality });
       await runFfmpeg(final.args);
       await ctx.reportProgress(92);
 
@@ -425,8 +431,8 @@ export const timelineRenderBlock: BlockDefinition = {
           aspect: resolved.aspect,
           width,
           height,
-          hasMusic: Boolean(musicPath),
-          hasVoiceover: Boolean(voiceoverPath),
+          hasMusic: audioTracks.some((track) => track.kind === 'music'),
+          hasVoiceover: audioTracks.some((track) => track.kind === 'voice'),
           // Раскладка целиком — чтобы готовый ролик можно было открыть в редакторе и
           // доработать. По одним ссылкам на исходники титры и музыку не восстановить,
           // а шаблон без своего поздравления открывать бессмысленно.

@@ -3,10 +3,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Prisma, prisma, ProjectStatus } from '@allvision/database';
 import {
+  TIMELINE_LIMITS,
   applyGeneratedSource,
   generationExpiresAt,
   getUserFriendlyError,
   timelineSchema,
+  timelineWithAudioTracks,
   type StorageProvider,
 } from '@allvision/shared';
 import sharp from 'sharp';
@@ -687,12 +689,33 @@ export async function applyVoiceoverToProject(params: {
   const parsed = timelineSchema.safeParse(videoProject.timeline);
   if (!parsed.success) return;
 
+  // Реплика ДОБАВЛЯЕТСЯ дорожкой, а не заменяет прежнюю: их в ролике может быть несколько,
+  // и вторая озвучка не должна стирать первую.
+  const base = timelineWithAudioTracks(parsed.data);
+  const tracks = base.audio ?? [];
+  if (tracks.length >= TIMELINE_LIMITS.maxAudioTracks) return;
+
   await prisma.videoProject.update({
     where: { id: videoProject.id },
     data: {
       timeline: {
-        ...parsed.data,
-        voiceover: { url, volume: 1, fadeInSec: 0.2, fadeOutSec: 0.4, loop: false, startAtSec: 0 },
+        ...base,
+        audio: [
+          ...tracks,
+          {
+            id: `voice-${params.projectId.slice(0, 8)}`,
+            kind: 'voice',
+            title: 'Озвучка',
+            url,
+            volume: 1,
+            fadeInSec: 0.2,
+            fadeOutSec: 0.4,
+            // Реплика короче ролика должна прозвучать один раз, а не крутиться по кругу.
+            loop: false,
+            startAtSec: 0,
+            trimStartSec: 0,
+          },
+        ],
       } as never,
     },
   });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Loader2, Mic, Music, Trash2, Upload, Wand2 } from 'lucide-react';
+import { Loader2, Mic, Music, Plus, Trash2, Upload, Wand2 } from 'lucide-react';
 import {
   VOICEOVER_EMOTIONS,
   VOICEOVER_MAX_LENGTH,
@@ -38,12 +38,9 @@ export function AudioTools({
   uploading,
   voiceoverRunning,
   priceOverrides,
-  onMusicChange,
-  onMusicVolume,
+  onAddMusic,
   onPickVoiceFile,
   onRecordVoice,
-  onVoiceoverVolume,
-  onVoiceoverRemove,
   onGenerateVoiceover,
 }: {
   timeline: Timeline;
@@ -52,12 +49,9 @@ export function AudioTools({
   uploading: boolean;
   voiceoverRunning: boolean;
   priceOverrides?: Record<string, number>;
-  onMusicChange: (url: string) => void;
-  onMusicVolume: (volume: number) => void;
+  onAddMusic: (url: string, title: string) => void;
   onPickVoiceFile: () => void;
   onRecordVoice: (file: File) => void;
-  onVoiceoverVolume: (volume: number) => void;
-  onVoiceoverRemove: () => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
 }) {
   const [tab, setTab] = useState<'music' | 'voice'>('music');
@@ -74,12 +68,7 @@ export function AudioTools({
       </div>
 
       {tab === 'music' ? (
-        <MusicTab
-          timeline={timeline}
-          musicOptions={musicOptions}
-          onMusicChange={onMusicChange}
-          onMusicVolume={onMusicVolume}
-        />
+        <MusicTab musicOptions={musicOptions} onAddMusic={onAddMusic} />
       ) : (
         <VoiceTab
           timeline={timeline}
@@ -89,8 +78,6 @@ export function AudioTools({
           priceOverrides={priceOverrides}
           onPickVoiceFile={onPickVoiceFile}
           onRecordVoice={onRecordVoice}
-          onVoiceoverVolume={onVoiceoverVolume}
-          onVoiceoverRemove={onVoiceoverRemove}
           onGenerateVoiceover={onGenerateVoiceover}
         />
       )}
@@ -124,53 +111,56 @@ function TabButton({
   );
 }
 
+/**
+ * Музыка. Выбор трека ДОБАВЛЯЕТ дорожку, а не заменяет прежнюю: одна песня на ролик была
+ * ограничением. Громкость, начало и обрезка живут на самой дорожке внизу — держать те же
+ * ручки ещё и здесь значило бы иметь два места, где меняется одно и то же.
+ */
 function MusicTab({
-  timeline,
   musicOptions,
-  onMusicChange,
-  onMusicVolume,
+  onAddMusic,
 }: {
-  timeline: Timeline;
   musicOptions: Array<{ id: string; title: string; publicUrl: string }>;
-  onMusicChange: (url: string) => void;
-  onMusicVolume: (volume: number) => void;
+  onAddMusic: (url: string, title: string) => void;
 }) {
+  const [selected, setSelected] = useState('');
+
   return (
     <div className="space-y-2">
       <select
-        value={timeline.music?.url ?? ''}
-        onChange={(event) => onMusicChange(event.target.value)}
+        value={selected}
+        onChange={(event) => setSelected(event.target.value)}
         className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
-        aria-label="Музыка ролика"
+        aria-label="Трек из библиотеки"
       >
-        <option value="">Без музыки</option>
+        <option value="">Выберите трек…</option>
         {musicOptions.map((asset) => (
           <option key={asset.id} value={asset.publicUrl}>
             {asset.title}
           </option>
         ))}
       </select>
-      {musicOptions.length === 0 && <p className="text-xs text-slate-500">Библиотека музыки пока пуста.</p>}
 
-      {timeline.music && (
-        <>
-          <label className="block text-xs text-slate-400">
-            Громкость: {Math.round(timeline.music.volume * 100)}%
-            <input
-              type="range"
-              min={0}
-              max={1.5}
-              step={0.05}
-              value={timeline.music.volume}
-              onChange={(event) => onMusicVolume(Number(event.target.value))}
-              className="mt-1 w-full accent-amber-400"
-            />
-          </label>
-          <p className="text-xs text-slate-500">
-            Начало и обрезку трека двигайте на дорожке внизу. Под голос музыка приглушается сама.
-          </p>
-        </>
-      )}
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        disabled={!selected}
+        onClick={() => {
+          const asset = musicOptions.find((item) => item.publicUrl === selected);
+          if (!asset) return;
+          onAddMusic(asset.publicUrl, asset.title);
+          setSelected('');
+        }}
+      >
+        <Plus className="h-4 w-4" />
+        Добавить дорожку
+      </Button>
+
+      {musicOptions.length === 0 && <p className="text-xs text-slate-500">Библиотека музыки пока пуста.</p>}
+      <p className="text-xs text-slate-500">
+        Громкость, начало и обрезку настраивайте на дорожке внизу. Под голос музыка приглушается сама.
+      </p>
     </div>
   );
 }
@@ -183,8 +173,6 @@ function VoiceTab({
   priceOverrides,
   onPickVoiceFile,
   onRecordVoice,
-  onVoiceoverVolume,
-  onVoiceoverRemove,
   onGenerateVoiceover,
 }: {
   timeline: Timeline;
@@ -194,8 +182,6 @@ function VoiceTab({
   priceOverrides?: Record<string, number>;
   onPickVoiceFile: () => void;
   onRecordVoice: (file: File) => void;
-  onVoiceoverVolume: (volume: number) => void;
-  onVoiceoverRemove: () => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
 }) {
   const [text, setText] = useState('');
@@ -207,31 +193,6 @@ function VoiceTab({
   const enoughCoins = balance >= price;
   const tooLong = text.trim().length > VOICEOVER_MAX_LENGTH;
   const canGenerate = text.trim().length > 0 && !tooLong && !voiceoverRunning && enoughCoins;
-
-  if (timeline.voiceover) {
-    return (
-      <div className="space-y-2">
-        <audio controls src={mediaUrl(timeline.voiceover.url) ?? undefined} className="w-full" />
-        <label className="block text-xs text-slate-400">
-          Громкость: {Math.round(timeline.voiceover.volume * 100)}%
-          <input
-            type="range"
-            min={0}
-            max={1.5}
-            step={0.05}
-            value={timeline.voiceover.volume}
-            onChange={(event) => onVoiceoverVolume(Number(event.target.value))}
-            className="mt-1 w-full accent-violet-400"
-          />
-        </label>
-        <Button type="button" variant="outline" size="sm" onClick={onVoiceoverRemove}>
-          <Trash2 className="h-4 w-4" />
-          Убрать голос
-        </Button>
-        <p className="text-xs text-slate-500">Момент, с которого звучит голос, двигается на дорожке внизу.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-3">

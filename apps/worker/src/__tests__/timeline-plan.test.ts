@@ -205,7 +205,7 @@ describe('planFinal', () => {
     const final = planFinal({
       timeline,
       scenePaths: ['/tmp/0.mp4'],
-      musicPath: '/tmp/track.mp3',
+      audioPaths: ['/tmp/track.mp3'],
       outputPath: '/tmp/out.mp4',
       quality: 'balanced',
     });
@@ -214,6 +214,53 @@ describe('planFinal', () => {
     const graph = filterGraph(final.args);
     expect(graph).toContain('volume=0.600');
     expect(graph).toContain('afade=t=out:st=3.000:d=2.000');
+  });
+
+  it('mixes several music and voice tracks at once', () => {
+    // Одна реплика на ролик была ограничением, а не замыслом: теперь дорожек может быть
+    // сколько угодно, и каждая получает свою задержку и громкость.
+    const timeline = parseTimeline({
+      scenes: [videoScene()],
+      audio: [
+        { id: 'm1', kind: 'music', url: 'https://cdn.test/a.mp3', volume: 0.5, loop: false, fadeInSec: 0, fadeOutSec: 0 },
+        { id: 'v1', kind: 'voice', url: 'https://cdn.test/v1.mp3', volume: 1, startAtSec: 1, loop: false, fadeInSec: 0, fadeOutSec: 0 },
+        { id: 'v2', kind: 'voice', url: 'https://cdn.test/v2.mp3', volume: 1, startAtSec: 3, loop: false, fadeInSec: 0, fadeOutSec: 0 },
+      ],
+    });
+    const graph = filterGraph(planFinal({
+      timeline,
+      scenePaths: ['/tmp/0.mp4'],
+      audioPaths: ['/tmp/a.mp3', '/tmp/v1.mp3', '/tmp/v2.mp3'],
+      outputPath: '/tmp/out.mp4',
+      quality: 'balanced',
+    }).args);
+
+    // Сцена плюс три дорожки.
+    expect(graph).toContain('amix=inputs=4:normalize=0');
+    expect(graph).toContain('adelay=1000|1000');
+    expect(graph).toContain('adelay=3000|3000');
+    // Музыка уходит в фон, потому что в ролике есть голос.
+    expect(graph).toContain('volume=0.175');
+  });
+
+  it('skips a track whose file could not be downloaded', () => {
+    // Ролик без одной дорожки лучше, чем упавший рендер: остальное уже собрано.
+    const timeline = parseTimeline({
+      scenes: [videoScene()],
+      audio: [
+        { id: 'm1', kind: 'music', url: 'https://cdn.test/a.mp3', volume: 0.5, loop: false, fadeInSec: 0, fadeOutSec: 0 },
+        { id: 'm2', kind: 'music', url: 'https://cdn.test/b.mp3', volume: 0.5, loop: false, fadeInSec: 0, fadeOutSec: 0 },
+      ],
+    });
+    const graph = filterGraph(planFinal({
+      timeline,
+      scenePaths: ['/tmp/0.mp4'],
+      audioPaths: ['/tmp/a.mp3', ''],
+      outputPath: '/tmp/out.mp4',
+      quality: 'balanced',
+    }).args);
+
+    expect(graph).toContain('amix=inputs=2:normalize=0');
   });
 
   it('ducks the music under a voiceover', () => {
@@ -225,15 +272,14 @@ describe('planFinal', () => {
     const graph = filterGraph(planFinal({
       timeline,
       scenePaths: ['/tmp/0.mp4'],
-      musicPath: '/tmp/track.mp3',
-      voiceoverPath: '/tmp/voice.mp3',
+      audioPaths: ['/tmp/track.mp3', '/tmp/voice.mp3'],
       outputPath: '/tmp/out.mp4',
       quality: 'balanced',
     }).args);
 
     // 0.8 * 0.35 — голос должен быть слышен на телефонном динамике.
     expect(graph).toContain('volume=0.280');
-    expect(graph).toContain('[avoice]');
+    expect(graph).toContain('[atrack1]');
     expect(graph).toContain('amix=inputs=3:normalize=0');
   });
 });

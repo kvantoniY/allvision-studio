@@ -208,12 +208,6 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
         </nav>
       </section>
 
-      {tab !== 'albums' && !isSearching && (
-        <section className="container mt-5">
-          <OccasionChips value={occasion} onChange={setOccasion} available={availableOccasions} />
-        </section>
-      )}
-
       {isError && (
         <section className="container mt-8">
           <Alert variant="destructive" className="max-w-2xl">
@@ -227,6 +221,12 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
       {heroService && !isSearching && (
         <section className="container mt-6">
           <CatalogHero service={heroService} />
+        </section>
+      )}
+
+      {tab !== 'albums' && !isSearching && (
+        <section className="container mt-6">
+          <OccasionChips value={occasion} onChange={setOccasion} available={availableOccasions} />
         </section>
       )}
 

@@ -7,6 +7,7 @@ import {
   formatTimelineDuration,
   sceneAtTime,
   timelineDurationSec,
+  timelineAudioTracks,
   timelineTimings,
   type MediaLayer,
   type TextLayer,
@@ -79,17 +80,30 @@ export function EditorStage({
   const total = useMemo(() => timelineDurationSec(timeline), [timeline]);
 
   const { time, playing, seek, toggle, rewind } = playback;
-  const musicRef = useRef<HTMLAudioElement | null>(null);
-  const voiceRef = useRef<HTMLAudioElement | null>(null);
+  // По элементу на дорожку: их может быть несколько, и предпросмотр обязан звучать так же,
+  // как готовый файл — иначе добавленная дорожка была бы слышна только после сборки.
+  const audioRefs = useRef(new Map<string, HTMLAudioElement>());
+  const audioTracks = useMemo(() => timelineAudioTracks(timeline), [timeline]);
 
   // Музыка и голос идут своими дорожками и синхронизируются с общим временем ролика.
   // Под голос музыка приглушается тем же коэффициентом, что и на экспорте, — иначе
   // предпросмотр звучал бы не так, как готовый файл.
   useEffect(() => {
-    const hasVoice = Boolean(timeline.voiceover);
-    syncTrack(musicRef.current, timeline.music, time, playing, hasVoice ? 0.35 : 1);
-    syncTrack(voiceRef.current, timeline.voiceover, time, playing, 1);
-  }, [playing, time, timeline.music, timeline.voiceover]);
+    const hasVoice = audioTracks.some((track) => track.kind === 'voice');
+    for (const track of audioTracks) {
+      // Под голос музыка приглушается тем же коэффициентом, что и на экспорте.
+      const scale = track.kind === 'music' && hasVoice ? 0.35 : 1;
+      syncTrack(audioRefs.current.get(track.id) ?? null, track, time, playing, scale);
+    }
+  }, [playing, time, audioTracks]);
+
+  // Останавливаем звук, когда холст уходит с экрана: иначе дорожка продолжает играть.
+  useEffect(() => {
+    const elements = audioRefs.current;
+    return () => {
+      for (const element of elements.values()) element.pause();
+    };
+  }, []);
 
   const frame = useMemo(() => sceneAtTime(timeline, time), [timeline, time]);
 
@@ -110,8 +124,6 @@ export function EditorStage({
 
   const shownScene = timeline.scenes[shownIndex];
   const incomingScene = incomingIndex === null ? null : timeline.scenes[incomingIndex];
-  const musicSrc = mediaUrl(timeline.music?.url);
-  const voiceSrc = mediaUrl(timeline.voiceover?.url);
 
   useEffect(() => {
     // Переход по времени во время проигрывания подсвечивает сцену в ленте.
@@ -156,8 +168,22 @@ export function EditorStage({
           </div>
         )}
 
-        {musicSrc && <audio ref={musicRef} src={musicSrc} preload="auto" className="hidden" />}
-        {voiceSrc && <audio ref={voiceRef} src={voiceSrc} preload="auto" className="hidden" />}
+        {audioTracks.map((track) => {
+          const src = mediaUrl(track.url);
+          if (!src) return null;
+          return (
+            <audio
+              key={track.id}
+              ref={(element) => {
+                if (element) audioRefs.current.set(track.id, element);
+                else audioRefs.current.delete(track.id);
+              }}
+              src={src}
+              preload="auto"
+              className="hidden"
+            />
+          );
+        })}
       </div>
 
       <div className="flex shrink-0 items-center gap-3">

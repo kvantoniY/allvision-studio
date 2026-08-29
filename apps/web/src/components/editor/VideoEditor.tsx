@@ -33,7 +33,9 @@ import {
   sceneAtTime,
   sceneLayers,
   sceneMediaLayers,
+  timelineAudioTracks,
   timelineDurationSec,
+  timelineWithAudioTracks,
   validateTimeline,
   type CollageLayout,
   type MediaLayer,
@@ -41,6 +43,7 @@ import {
   type Timeline,
   type TimelineAspect,
   type TimelineHistory,
+  type TimelineNamedAudioTrack,
   type TimelineScene,
 } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -334,19 +337,70 @@ export function VideoEditor({ id }: { id: string }) {
     [id, uploadMedia],
   );
 
-  // --- озвучка ---
-  const setVoiceover = useCallback(
-    (url: string | null) => {
-      if (!timelineRef.current) return;
+  // --- звуковые дорожки ---
+  /** Добавляет дорожку в конец списка. Новая запись не заменяет прежнюю, а встаёт рядом. */
+  const addAudioTrack = useCallback(
+    (kind: 'music' | 'voice', url: string, title?: string) => {
       const current = timelineRef.current;
+      if (!current) return;
+      const base = timelineWithAudioTracks(current);
+      const tracks = base.audio ?? [];
+      if (tracks.length >= TIMELINE_LIMITS.maxAudioTracks) {
+        toast({ title: 'Больше дорожек не поместится', variant: 'destructive' });
+        return;
+      }
       applyTimeline({
-        ...current,
-        voiceover: url
-          ? { url, volume: 1, fadeInSec: 0.2, fadeOutSec: 0.4, loop: false, startAtSec: 0, trimStartSec: 0 }
-          : undefined,
+        ...base,
+        audio: [
+          ...tracks,
+          {
+            id: uid(kind),
+            kind,
+            title,
+            url,
+            volume: kind === 'voice' ? 1 : 0.7,
+            fadeInSec: kind === 'voice' ? 0.2 : 1,
+            fadeOutSec: kind === 'voice' ? 0.4 : 1.5,
+            // Голос не зацикливаем: реплика короче ролика должна прозвучать один раз.
+            loop: kind === 'music',
+            startAtSec: 0,
+            trimStartSec: 0,
+          },
+        ],
       });
     },
     [applyTimeline],
+  );
+
+  const changeAudioTrack = useCallback(
+    (trackId: string, patch: Partial<TimelineNamedAudioTrack>) => {
+      const current = timelineRef.current;
+      if (!current) return;
+      const base = timelineWithAudioTracks(current);
+      applyTimeline({
+        ...base,
+        audio: (base.audio ?? []).map((track) => (track.id === trackId ? { ...track, ...patch } : track)),
+      });
+    },
+    [applyTimeline],
+  );
+
+  const removeAudioTrack = useCallback(
+    (trackId: string) => {
+      const current = timelineRef.current;
+      if (!current) return;
+      const base = timelineWithAudioTracks(current);
+      applyTimeline({ ...base, audio: (base.audio ?? []).filter((track) => track.id !== trackId) });
+    },
+    [applyTimeline],
+  );
+
+  const setVoiceover = useCallback(
+    (url: string | null) => {
+      if (!url) return;
+      addAudioTrack('voice', url, 'Озвучка');
+    },
+    [addAudioTrack],
   );
 
   const handleVoiceUpload = useCallback(
@@ -866,31 +920,9 @@ export function VideoEditor({ id }: { id: string }) {
             }}
             onAddText={() => setSelectedLayerId(ops.addTextLayer(sceneIndex))}
             onCollage={(layout) => ops.applyCollage(sceneIndex, layout)}
-            onMusicChange={(url) =>
-              applyTimeline({
-                ...timeline,
-                music: url
-                  ? {
-                      url,
-                      volume: timeline.music?.volume ?? 0.7,
-                      fadeInSec: 1.5,
-                      fadeOutSec: 2.5,
-                      loop: true,
-                      startAtSec: 0,
-                      trimStartSec: timeline.music?.trimStartSec ?? 0,
-                    }
-                  : undefined,
-              })
-            }
-            onMusicVolume={(volume) =>
-              timeline.music && applyTimeline({ ...timeline, music: { ...timeline.music, volume } })
-            }
+            onAddMusic={(url, title) => addAudioTrack('music', url, title)}
             onPickVoiceFile={() => voiceFileRef.current?.click()}
             onRecordVoice={(file) => void handleVoiceUpload(file)}
-            onVoiceoverVolume={(volume) =>
-              timeline.voiceover && applyTimeline({ ...timeline, voiceover: { ...timeline.voiceover, volume } })
-            }
-            onVoiceoverRemove={() => setVoiceover(null)}
             onGenerateVoiceover={handleGenerateVoiceover}
             onGenerate={handleGenerate}
             onUploadReference={uploadReference}
@@ -1010,10 +1042,8 @@ export function VideoEditor({ id }: { id: string }) {
           onDuplicateScene={duplicateScene}
           onRemoveScene={removeScene}
           onAddScene={addScene}
-          onChangeMusic={(track) => applyTimeline({ ...timeline, music: track })}
-          onChangeVoiceover={(track) => applyTimeline({ ...timeline, voiceover: track })}
-          onRemoveMusic={() => applyTimeline({ ...timeline, music: undefined })}
-          onRemoveVoiceover={() => setVoiceover(null)}
+          onChangeTrack={changeAudioTrack}
+          onRemoveTrack={removeAudioTrack}
         />
       </footer>
       )}
@@ -1059,12 +1089,9 @@ function ToolBar({
   onAddColor,
   onAddText,
   onCollage,
-  onMusicChange,
-  onMusicVolume,
+  onAddMusic,
   onPickVoiceFile,
   onRecordVoice,
-  onVoiceoverVolume,
-  onVoiceoverRemove,
   onGenerateVoiceover,
   onGenerate,
   onUploadReference,
@@ -1084,12 +1111,9 @@ function ToolBar({
   onAddColor: () => void;
   onAddText: () => void;
   onCollage: (layout: CollageLayout) => void;
-  onMusicChange: (url: string) => void;
-  onMusicVolume: (volume: number) => void;
+  onAddMusic: (url: string, title: string) => void;
   onPickVoiceFile: () => void;
   onRecordVoice: (file: File) => void;
-  onVoiceoverVolume: (volume: number) => void;
-  onVoiceoverRemove: () => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
   onUploadReference: (file: File) => Promise<string | null>;
   onInsertGeneration: (url: string, kind: 'image' | 'video') => void;
@@ -1153,12 +1177,9 @@ function ToolBar({
         uploading={uploading}
         voiceoverRunning={voiceoverRunning}
         priceOverrides={priceOverrides}
-        onMusicChange={onMusicChange}
-        onMusicVolume={onMusicVolume}
+        onAddMusic={onAddMusic}
         onPickVoiceFile={onPickVoiceFile}
         onRecordVoice={onRecordVoice}
-        onVoiceoverVolume={onVoiceoverVolume}
-        onVoiceoverRemove={onVoiceoverRemove}
         onGenerateVoiceover={onGenerateVoiceover}
       />
     );

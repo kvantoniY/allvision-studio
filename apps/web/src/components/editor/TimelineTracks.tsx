@@ -6,10 +6,11 @@ import {
   TIMELINE_LIMITS,
   formatTimelineDuration,
   primaryMediaLayer,
+  timelineAudioTracks,
   timelineTimings,
   type TimelineTransition,
   type Timeline,
-  type TimelineAudioTrack,
+  type TimelineNamedAudioTrack,
 } from '@allvision/shared';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
 import { cn } from '@/lib/utils';
@@ -107,10 +108,8 @@ export function TimelineTracks({
   totalSec,
   time,
   onSeek,
-  onChangeMusic,
-  onChangeVoiceover,
-  onRemoveMusic,
-  onRemoveVoiceover,
+  onChangeTrack,
+  onRemoveTrack,
   selectedSceneIndex,
   onSelectScene,
   onSceneDuration,
@@ -125,10 +124,8 @@ export function TimelineTracks({
   /** Текущее время ролика — по нему рисуется курсор. */
   time: number;
   onSeek: (sec: number) => void;
-  onChangeMusic: (track: TimelineAudioTrack) => void;
-  onChangeVoiceover: (track: TimelineAudioTrack) => void;
-  onRemoveMusic: () => void;
-  onRemoveVoiceover: () => void;
+  onChangeTrack: (trackId: string, patch: Partial<TimelineNamedAudioTrack>) => void;
+  onRemoveTrack: (trackId: string) => void;
   selectedSceneIndex: number;
   onSelectScene: (index: number) => void;
   onSceneDuration: (index: number, durationSec: number) => void;
@@ -139,6 +136,9 @@ export function TimelineTracks({
   className?: string;
 }) {
   const total = Math.max(totalSec, 1);
+  // Читаем звук через помощник: ролики, записанные до списка дорожек, держат его в
+  // music/voiceover, и обе формы должны рисоваться одинаково.
+  const tracks = timelineAudioTracks(timeline);
   const lanesRef = useRef<HTMLDivElement | null>(null);
   const ticks = ticksFor(total);
 
@@ -173,12 +173,18 @@ export function TimelineTracks({
       {/* Подписи дорожек. Отдельной колонкой, чтобы шкала у всех дорожек была общей. */}
       <div className="flex w-20 shrink-0 flex-col gap-1.5 pt-5 text-[11px] text-slate-400">
         <span className="flex h-14 items-center">Сцены</span>
-        <span className="flex h-9 items-center gap-1.5">
-          <Music className="h-3.5 w-3.5" /> Музыка
-        </span>
-        <span className="flex h-9 items-center gap-1.5">
-          <Mic className="h-3.5 w-3.5" /> Голос
-        </span>
+        {tracks.length === 0 ? (
+          <span className="flex h-9 items-center gap-1.5 text-slate-600">
+            <Music className="h-3.5 w-3.5" /> Звук
+          </span>
+        ) : (
+          tracks.map((track) => (
+            <span key={track.id} className="flex h-9 items-center gap-1.5 truncate">
+              {track.kind === 'music' ? <Music className="h-3.5 w-3.5 shrink-0" /> : <Mic className="h-3.5 w-3.5 shrink-0" />}
+              <span className="truncate">{track.title ?? (track.kind === 'music' ? 'Музыка' : 'Голос')}</span>
+            </span>
+          ))
+        )}
       </div>
 
       <div ref={lanesRef} className="relative min-w-0 flex-1">
@@ -209,25 +215,24 @@ export function TimelineTracks({
             onTransition={onSceneTransition}
           />
 
-          <AudioLane
-            track={timeline.music}
-            total={total}
-            laneRef={lanesRef}
-            accent="amber"
-            emptyHint="Выберите трек в инструменте «Звук»"
-            onChange={onChangeMusic}
-            onRemove={onRemoveMusic}
-            loopable
-          />
-          <AudioLane
-            track={timeline.voiceover}
-            total={total}
-            laneRef={lanesRef}
-            accent="violet"
-            emptyHint="Загрузите запись или озвучьте текст в инструменте «Звук»"
-            onChange={onChangeVoiceover}
-            onRemove={onRemoveVoiceover}
-          />
+          {tracks.length === 0 ? (
+            <div className="flex h-9 items-center rounded-md border border-dashed border-slate-800 px-3 text-[11px] text-slate-600">
+              Добавьте музыку или озвучку в инструменте «Звук» — дорожек может быть несколько
+            </div>
+          ) : (
+            tracks.map((track) => (
+              <AudioLane
+                key={track.id}
+                track={track}
+                total={total}
+                laneRef={lanesRef}
+                accent={track.kind === 'music' ? 'amber' : 'violet'}
+                onChange={(patch) => onChangeTrack(track.id, patch)}
+                onRemove={() => onRemoveTrack(track.id)}
+                loopable={track.kind === 'music'}
+              />
+            ))
+          )}
         </div>
 
         {/* Курсор поверх всех дорожек: видно, какой кадр сейчас на экране. */}
@@ -473,18 +478,16 @@ function AudioLane({
   total,
   laneRef,
   accent,
-  emptyHint,
   loopable = false,
   onChange,
   onRemove,
 }: {
-  track?: TimelineAudioTrack;
+  track: TimelineNamedAudioTrack;
   total: number;
   laneRef: React.RefObject<HTMLElement>;
   accent: 'amber' | 'violet';
-  emptyHint: string;
   loopable?: boolean;
-  onChange: (track: TimelineAudioTrack) => void;
+  onChange: (patch: Partial<TimelineNamedAudioTrack>) => void;
   onRemove: () => void;
 }) {
   const duration = useAudioDuration(track?.url);
@@ -492,17 +495,16 @@ function AudioLane({
 
   const commit = useCallback(() => {
     setDraft((current) => {
-      if (current && track) onChange({ ...track, startAtSec: current.startAtSec, trimStartSec: current.trimStartSec });
+      if (current) onChange({ startAtSec: current.startAtSec, trimStartSec: current.trimStartSec });
       return null;
     });
-  }, [track, onChange]);
+  }, [onChange]);
 
   // Левая ручка режет начало файла: тянем — трек вступает с более позднего места.
   const beginTrim = useDragSeconds(
     laneRef,
     total,
     (deltaSec) => {
-      if (!track) return;
       const nextTrim = Math.max(0, Number(((track.trimStartSec ?? 0) + deltaSec).toFixed(2)));
       setDraft({
         startAtSec: draft?.startAtSec ?? track.startAtSec ?? 0,
@@ -511,14 +513,6 @@ function AudioLane({
     },
     commit,
   );
-
-  if (!track) {
-    return (
-      <div className="flex h-9 items-center rounded-md border border-dashed border-slate-800 px-3 text-[11px] text-slate-600">
-        {emptyHint}
-      </div>
-    );
-  }
 
   const startAt = draft?.startAtSec ?? track.startAtSec ?? 0;
   const trimStart = draft?.trimStartSec ?? track.trimStartSec ?? 0;
@@ -583,7 +577,7 @@ function AudioLane({
           max={1.5}
           step={0.05}
           value={track.volume}
-          onChange={(event) => onChange({ ...track, volume: Number(event.target.value) })}
+          onChange={(event) => onChange({ volume: Number(event.target.value) })}
           className={cn('w-16', accent === 'amber' ? 'accent-amber-400' : 'accent-violet-400')}
           aria-label="Громкость"
           title={`Громкость: ${Math.round(track.volume * 100)}%`}
@@ -591,7 +585,7 @@ function AudioLane({
         {loopable && (
           <button
             type="button"
-            onClick={() => onChange({ ...track, loop: !track.loop })}
+            onClick={() => onChange({ loop: !track.loop })}
             title={track.loop ? 'Повторять до конца ролика' : 'Играть один раз'}
             aria-label="Повторять трек"
             className={cn(

@@ -2,11 +2,13 @@ import {
   TIMELINE_FPS,
   sceneDurationSec,
   timelineResolution,
+  timelineAudioTracks,
   timelineTimings,
   timelineDurationSec,
   layerRect,
   type MediaLayer,
   type Timeline,
+  type TimelineNamedAudioTrack,
   type TimelineScene,
   type TimelineTransition,
 } from '@allvision/shared';
@@ -266,8 +268,11 @@ export function planScene(input: {
 export type FinalPlanInput = {
   timeline: Timeline;
   scenePaths: string[];
-  musicPath?: string;
-  voiceoverPath?: string;
+  /**
+   * Файлы звуковых дорожек в порядке timelineAudioTracks(). Пустая строка — дорожку не
+   * удалось скачать, её пропускаем: ролик без одного трека лучше, чем упавший рендер.
+   */
+  audioPaths?: string[];
   outputPath: string;
   quality: EncodeQuality;
 };
@@ -290,7 +295,11 @@ function trimStages(trimStartSec?: number): string[] {
 }
 
 export function planFinal(input: FinalPlanInput): FinalPlan {
-  const { timeline, scenePaths, musicPath, voiceoverPath, outputPath, quality } = input;
+  const { timeline, scenePaths, audioPaths = [], outputPath, quality } = input;
+  const tracks = timelineAudioTracks(timeline)
+    .map((track, index) => ({ track, path: audioPaths[index] }))
+    .filter((item): item is { track: TimelineNamedAudioTrack; path: string } => Boolean(item.path));
+  const hasVoice = tracks.some((item) => item.track.kind === 'voice');
   const timings = timelineTimings(timeline);
   const totalDurationSec = timelineDurationSec(timeline);
   const args: string[] = ['-y'];
@@ -299,18 +308,12 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
     args.push('-i', scenePath);
   }
 
-  let musicIndex = -1;
-  if (musicPath && timeline.music) {
-    if (timeline.music.loop) args.push('-stream_loop', '-1');
-    args.push('-i', musicPath);
-    musicIndex = scenePaths.length;
-  }
-
-  let voiceIndex = -1;
-  if (voiceoverPath && timeline.voiceover) {
-    args.push('-i', voiceoverPath);
-    voiceIndex = musicIndex >= 0 ? musicIndex + 1 : scenePaths.length;
-  }
+  const trackInputs = tracks.map((item, order) => {
+    // Зацикливание объявляется ПЕРЕД входом, поэтому собираем аргументы здесь же.
+    if (item.track.loop) args.push('-stream_loop', '-1');
+    args.push('-i', item.path);
+    return { ...item, inputIndex: scenePaths.length + order };
+  });
 
   const chain: string[] = [];
 
@@ -342,39 +345,27 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
     audioLabels.push(label);
   });
 
-  const hasVoice = voiceIndex >= 0;
-  if (musicIndex >= 0 && timeline.music) {
-    const music = timeline.music;
-    // Под озвучку музыка уводится в фон фиксированным коэффициентом. Это грубее
+  trackInputs.forEach((item, order) => {
+    const { track, inputIndex } = item;
+    // Под голос музыка уводится в фон фиксированным коэффициентом. Это грубее
     // сайдчейн-компрессии, но предсказуемо и не зависит от версии ffmpeg.
-    const volume = hasVoice ? music.volume * 0.35 : music.volume;
-    const stages = [...trimStages(music.trimStartSec), `volume=${fixed(volume, 3)}`];
-    if (music.startAtSec > 0) {
-      const delayMs = Math.round(music.startAtSec * 1000);
+    const volume = track.kind === 'music' && hasVoice ? track.volume * 0.35 : track.volume;
+    const stages = [...trimStages(track.trimStartSec), `volume=${fixed(volume, 3)}`];
+    if (track.startAtSec > 0) {
+      const delayMs = Math.round(track.startAtSec * 1000);
       stages.push(`adelay=${delayMs}|${delayMs}`);
     }
-    if (music.fadeInSec > 0) {
-      stages.push(`afade=t=in:st=${fixed(music.startAtSec)}:d=${fixed(music.fadeInSec)}`);
+    if (track.fadeInSec > 0) {
+      stages.push(`afade=t=in:st=${fixed(track.startAtSec)}:d=${fixed(track.fadeInSec)}`);
     }
-    if (music.fadeOutSec > 0) {
-      stages.push(`afade=t=out:st=${fixed(Math.max(0, totalDurationSec - music.fadeOutSec))}:d=${fixed(music.fadeOutSec)}`);
-    }
-    stages.push('aformat=sample_fmts=fltp:channel_layouts=stereo');
-    chain.push(`[${musicIndex}:a]${stages.join(',')}[amusic]`);
-    audioLabels.push('amusic');
-  }
-
-  if (hasVoice && timeline.voiceover) {
-    const voice = timeline.voiceover;
-    const stages = [...trimStages(voice.trimStartSec), `volume=${fixed(voice.volume, 3)}`];
-    if (voice.startAtSec > 0) {
-      const delayMs = Math.round(voice.startAtSec * 1000);
-      stages.push(`adelay=${delayMs}|${delayMs}`);
+    if (track.fadeOutSec > 0) {
+      stages.push(`afade=t=out:st=${fixed(Math.max(0, totalDurationSec - track.fadeOutSec))}:d=${fixed(track.fadeOutSec)}`);
     }
     stages.push('aformat=sample_fmts=fltp:channel_layouts=stereo');
-    chain.push(`[${voiceIndex}:a]${stages.join(',')}[avoice]`);
-    audioLabels.push('avoice');
-  }
+    const label = `atrack${order}`;
+    chain.push(`[${inputIndex}:a]${stages.join(',')}[${label}]`);
+    audioLabels.push(label);
+  });
 
   // normalize=0 — иначе amix делит громкость на число входов и ролик из десяти сцен
   // звучит в десять раз тише.
