@@ -42,6 +42,9 @@ export function AudioTools({
   onPickVoiceFile,
   onRecordVoice,
   onGenerateVoiceover,
+  recordings,
+  onAddVoiceTrack,
+  onRemoveVoiceTrack,
 }: {
   timeline: Timeline;
   musicOptions: Array<{ id: string; title: string; publicUrl: string }>;
@@ -53,6 +56,9 @@ export function AudioTools({
   onPickVoiceFile: () => void;
   onRecordVoice: (file: File) => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
+  recordings: VoiceRecording[];
+  onAddVoiceTrack: (url: string, title: string) => void;
+  onRemoveVoiceTrack: (url: string) => void;
 }) {
   const [tab, setTab] = useState<'music' | 'voice'>('music');
 
@@ -79,6 +85,9 @@ export function AudioTools({
           onPickVoiceFile={onPickVoiceFile}
           onRecordVoice={onRecordVoice}
           onGenerateVoiceover={onGenerateVoiceover}
+          recordings={recordings}
+          onAddVoiceTrack={onAddVoiceTrack}
+          onRemoveVoiceTrack={onRemoveVoiceTrack}
         />
       )}
     </div>
@@ -174,6 +183,9 @@ function VoiceTab({
   onPickVoiceFile,
   onRecordVoice,
   onGenerateVoiceover,
+  recordings,
+  onAddVoiceTrack,
+  onRemoveVoiceTrack,
 }: {
   timeline: Timeline;
   balance: number;
@@ -183,10 +195,14 @@ function VoiceTab({
   onPickVoiceFile: () => void;
   onRecordVoice: (file: File) => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
+  recordings: VoiceRecording[];
+  onAddVoiceTrack: (url: string, title: string) => void;
+  onRemoveVoiceTrack: (url: string) => void;
 }) {
   const [text, setText] = useState('');
   const [modelSlug, setModelSlug] = useState<string>(VOICEOVER_MODELS[0].slug);
   const [emotion, setEmotion] = useState<string>('happy');
+  const [section, setSection] = useState<'new' | 'saved'>('new');
 
   const model = VOICEOVER_MODELS.find((item) => item.slug === modelSlug) ?? VOICEOVER_MODELS[0];
   const price = applyModelPriceOverride(model.slug, voiceoverPriceCoins(model.slug), priceOverrides);
@@ -194,8 +210,22 @@ function VoiceTab({
   const tooLong = text.trim().length > VOICEOVER_MAX_LENGTH;
   const canGenerate = text.trim().length > 0 && !tooLong && !voiceoverRunning && enoughCoins;
 
+  if (section === 'saved') {
+    return (
+      <div className="space-y-3">
+        <VoiceSectionTabs section={section} onChange={setSection} recordedCount={recordings.length} />
+        <VoiceRecordings
+          recordings={recordings}
+          onAddToTimeline={onAddVoiceTrack}
+          onRemoveFromTimeline={onRemoveVoiceTrack}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
+      <VoiceSectionTabs section={section} onChange={setSection} recordedCount={recordings.length} />
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -274,6 +304,126 @@ function VoiceTab({
         </Button>
         {!enoughCoins && <p className="text-xs text-amber-300">Не хватает коинов на балансе</p>}
       </div>
+    </div>
+  );
+}
+
+/** Переключатель внутри «Голоса»: сделать новую запись или взять готовую. */
+function VoiceSectionTabs({
+  section,
+  onChange,
+  recordedCount,
+}: {
+  section: 'new' | 'saved';
+  onChange: (next: 'new' | 'saved') => void;
+  recordedCount: number;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-950/60 p-1">
+      <button
+        type="button"
+        onClick={() => onChange('new')}
+        className={cn(
+          'rounded-md px-2 py-1 text-[11px] font-medium transition',
+          section === 'new' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200',
+        )}
+      >
+        Новая запись
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange('saved')}
+        className={cn(
+          'rounded-md px-2 py-1 text-[11px] font-medium transition',
+          section === 'saved' ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200',
+        )}
+      >
+        Мои записи{recordedCount > 0 ? ` · ${recordedCount}` : ''}
+      </button>
+    </div>
+  );
+}
+
+export type VoiceRecording = {
+  id: string;
+  url: string;
+  title: string;
+  /** Уже стоит на дорожке ролика — тогда предлагаем снять, а не добавить второй раз. */
+  onTimeline: boolean;
+  status?: string;
+  progress?: number;
+};
+
+/**
+ * Готовые записи голоса.
+ *
+ * Дорожку можно снять с таймлайна, но сама запись остаётся здесь: за синтез уже заплачено,
+ * и человек должен видеть, что у него есть, и вернуть запись обратно одним нажатием.
+ */
+function VoiceRecordings({
+  recordings,
+  onAddToTimeline,
+  onRemoveFromTimeline,
+}: {
+  recordings: VoiceRecording[];
+  onAddToTimeline: (url: string, title: string) => void;
+  onRemoveFromTimeline: (url: string) => void;
+}) {
+  if (recordings.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-slate-800 p-3 text-xs text-slate-500">
+        Записей пока нет. Загрузите файл, запишите голос или произнесите текст — они появятся здесь.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {recordings.map((item) => {
+        const running = item.status === 'PENDING' || item.status === 'PROCESSING';
+        return (
+          <div key={item.id} className="space-y-1.5 rounded-lg border border-slate-800 bg-slate-950/50 p-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="min-w-0 truncate text-xs text-slate-200">{item.title}</span>
+              {item.onTimeline && <span className="shrink-0 text-[10px] text-violet-300">на дорожке</span>}
+            </div>
+
+            {running ? (
+              <p className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Синтезируем… {item.progress ?? 0}%
+              </p>
+            ) : (
+              <>
+                <audio controls src={mediaUrl(item.url) ?? undefined} className="h-8 w-full" />
+                {item.onTimeline ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => onRemoveFromTimeline(item.url)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Убрать с дорожки
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => onAddToTimeline(item.url, item.title)}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Добавить на дорожку
+                  </Button>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

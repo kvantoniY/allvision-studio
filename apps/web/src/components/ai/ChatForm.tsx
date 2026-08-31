@@ -652,7 +652,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   );
 
   return (
-    <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
+    <form onSubmit={submit} className="w-full">
       <div
         className={cn(
           'relative overflow-hidden rounded-lg border bg-slate-900 shadow-2xl shadow-black/20 transition',

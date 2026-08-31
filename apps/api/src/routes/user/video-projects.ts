@@ -508,6 +508,53 @@ videoProjectsRouter.get('/:id/exports', async (req: Request, res: Response, next
   }
 });
 
+/**
+ * Записи голоса, сделанные для этого ролика.
+ *
+ * Дорожку можно снять с таймлайна, но сама запись при этом никуда не девается: за синтез
+ * уже заплачено, и человек должен видеть, что у него есть, и вернуть запись обратно.
+ */
+videoProjectsRouter.get('/:id/voiceovers', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const videoProject = await ownedProject(userId, req.params.id);
+    const rows = await prisma.project.findMany({
+      where: {
+        userId,
+        mode: 'editor-voiceover',
+        userInputs: { path: ['editorVoiceover', 'videoProjectId'], equals: videoProject.id },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      select: {
+        id: true,
+        status: true,
+        progress: true,
+        resultVideo: true,
+        resultImage: true,
+        inputText: true,
+        errorCode: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({
+      items: rows.map((row) => ({
+        id: row.id,
+        status: row.status,
+        progress: row.progress,
+        // Синтез отдаёт аудио выходом типа video — исторический компромисс блока речи.
+        url: row.resultVideo ?? row.resultImage ?? null,
+        text: row.inputText ?? null,
+        errorCode: row.errorCode,
+        createdAt: row.createdAt,
+      })),
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 videoProjectsRouter.post('/:id/voiceover/generate', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = req.user!.id;

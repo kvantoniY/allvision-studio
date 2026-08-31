@@ -174,7 +174,8 @@ function AiContent() {
         </div>
 
         <div ref={threadRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-5 [scrollbar-gutter:stable_both-edges] lg:px-8">
-          <div className="mx-auto w-full max-w-3xl">
+          {/* Лента и форма одной ширины: результат был уже поля ввода, и колонка читалась рваной. */}
+          <div className="w-full">
             <ChatResultView
               messages={messages}
               isLoading={chatQuery.isLoading && !!activeChatId}

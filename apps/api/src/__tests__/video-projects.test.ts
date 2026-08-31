@@ -280,3 +280,60 @@ describe('POST /api/user/video-projects/:id/voiceover/generate', () => {
     await prisma.user.delete({ where: { id: poor.id } });
   });
 });
+
+describe('GET /api/user/video-projects/:id/voiceovers', () => {
+  it('returns the synthesis made for this roll and hides foreign rolls', async () => {
+    const roll = await prisma.videoProject.create({
+      data: { userId, title: 'С озвучкой', timeline: collageTimeline() as never },
+    });
+    const otherRoll = await prisma.videoProject.create({
+      data: { userId, title: 'Другой ролик', timeline: collageTimeline() as never },
+    });
+
+    await prisma.project.create({
+      data: {
+        userId,
+        title: 'Озвучка: С юбилеем',
+        status: 'COMPLETED',
+        progress: 100,
+        mode: 'editor-voiceover',
+        inputImages: [],
+        inputText: 'С юбилеем, мама!',
+        tokensCost: 5,
+        resultVideo: '/static/outputs/voice.mp3',
+        userInputs: { editorVoiceover: { videoProjectId: roll.id } } as never,
+        stepProgress: [] as never,
+      },
+    });
+    // Запись другого ролика в список не попадает: панель показывает записи этого ролика.
+    await prisma.project.create({
+      data: {
+        userId,
+        title: 'Озвучка: чужая',
+        status: 'COMPLETED',
+        progress: 100,
+        mode: 'editor-voiceover',
+        inputImages: [],
+        tokensCost: 5,
+        resultVideo: '/static/outputs/other.mp3',
+        userInputs: { editorVoiceover: { videoProjectId: otherRoll.id } } as never,
+        stepProgress: [] as never,
+      },
+    });
+
+    const res = await request(app)
+      .get(`/api/user/video-projects/${roll.id}/voiceovers`)
+      .set('Cookie', authCookie(userId));
+
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.items[0]).toEqual(
+      expect.objectContaining({ url: '/static/outputs/voice.mp3', text: 'С юбилеем, мама!' }),
+    );
+
+    const foreign = await request(app)
+      .get(`/api/user/video-projects/${roll.id}/voiceovers`)
+      .set('Cookie', authCookie(otherUserId));
+    expect(foreign.status).toBe(404);
+  });
+});

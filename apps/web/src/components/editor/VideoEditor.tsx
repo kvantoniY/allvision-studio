@@ -57,7 +57,7 @@ import { LayerInspector } from '@/components/editor/LayerInspector';
 import { LayerPanel } from '@/components/editor/LayerPanel';
 import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
 import { TimelineTracks } from '@/components/editor/TimelineTracks';
-import { AudioTools, type VoiceoverRequest } from '@/components/editor/AudioTools';
+import { AudioTools, type VoiceRecording, type VoiceoverRequest } from '@/components/editor/AudioTools';
 import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
 import { ExportOverlay } from '@/components/editor/ExportOverlay';
 import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
@@ -69,6 +69,7 @@ import {
   useGenerateSceneMutation,
   useGenerateVoiceoverMutation,
   useGetVideoProjectQuery,
+  useListVoiceoversQuery,
   useUpdateVideoProjectMutation,
   useUploadEditorMediaMutation,
 } from '@/store/api/video-projects-api';
@@ -120,6 +121,7 @@ export function VideoEditor({ id }: { id: string }) {
   const { data: musicData } = useGetPublicMediaAssetsQuery({ kind: 'background-music', active: true });
   // Оверрайды цен общие с чатом: показывать цену ниже той, что спишет сервер, нельзя.
   const { data: chatPricing } = useGetChatModelsQuery();
+  const voiceoverList = useListVoiceoversQuery(id);
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [title, setTitle] = useState('');
@@ -761,6 +763,29 @@ export function VideoEditor({ id }: { id: string }) {
 
   const musicOptions = musicData?.assets ?? [];
 
+  // Записи голоса: то, что стоит на дорожках, плюс синтез, снятый с них. Загруженные файлы
+  // и записи с микрофона проектов не создают, поэтому берём их из самих дорожек.
+  const voiceTracks = timeline ? timelineAudioTracks(timeline).filter((track) => track.kind === 'voice') : [];
+  const onTimelineUrls = new Set(voiceTracks.map((track) => track.url));
+  const voiceRecordings: VoiceRecording[] = [
+    ...voiceTracks.map((track) => ({
+      id: track.id,
+      url: track.url,
+      title: track.title ?? 'Запись',
+      onTimeline: true,
+    })),
+    ...(voiceoverList.data?.items ?? [])
+      .filter((item) => item.url && !onTimelineUrls.has(item.url))
+      .map((item) => ({
+        id: item.id,
+        url: item.url as string,
+        title: item.text ? item.text.slice(0, 40) : 'Озвучка',
+        onTimeline: false,
+        status: item.status,
+        progress: item.progress,
+      })),
+  ];
+
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden md:h-dvh">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-2 lg:px-4">
@@ -921,6 +946,12 @@ export function VideoEditor({ id }: { id: string }) {
             onAddText={() => setSelectedLayerId(ops.addTextLayer(sceneIndex))}
             onCollage={(layout) => ops.applyCollage(sceneIndex, layout)}
             onAddMusic={(url, title) => addAudioTrack('music', url, title)}
+            recordings={voiceRecordings}
+            onAddVoiceTrack={(url, title) => addAudioTrack('voice', url, title)}
+            onRemoveVoiceTrack={(url) => {
+              const track = voiceTracks.find((item) => item.url === url);
+              if (track) removeAudioTrack(track.id);
+            }}
             onPickVoiceFile={() => voiceFileRef.current?.click()}
             onRecordVoice={(file) => void handleVoiceUpload(file)}
             onGenerateVoiceover={handleGenerateVoiceover}
@@ -1090,6 +1121,9 @@ function ToolBar({
   onAddText,
   onCollage,
   onAddMusic,
+  recordings,
+  onAddVoiceTrack,
+  onRemoveVoiceTrack,
   onPickVoiceFile,
   onRecordVoice,
   onGenerateVoiceover,
@@ -1112,6 +1146,9 @@ function ToolBar({
   onAddText: () => void;
   onCollage: (layout: CollageLayout) => void;
   onAddMusic: (url: string, title: string) => void;
+  recordings: VoiceRecording[];
+  onAddVoiceTrack: (url: string, title: string) => void;
+  onRemoveVoiceTrack: (url: string) => void;
   onPickVoiceFile: () => void;
   onRecordVoice: (file: File) => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
@@ -1178,6 +1215,9 @@ function ToolBar({
         voiceoverRunning={voiceoverRunning}
         priceOverrides={priceOverrides}
         onAddMusic={onAddMusic}
+        recordings={recordings}
+        onAddVoiceTrack={onAddVoiceTrack}
+        onRemoveVoiceTrack={onRemoveVoiceTrack}
         onPickVoiceFile={onPickVoiceFile}
         onRecordVoice={onRecordVoice}
         onGenerateVoiceover={onGenerateVoiceover}
