@@ -926,7 +926,16 @@ export function VideoEditor({ id }: { id: string }) {
          * Панель инструмента стоит сбоку, а не под холстом. Раньше она вклинивалась между
          * кадром и лентой сцен, и рабочая область уезжала на два экрана вниз.
          */}
-        <section className="shrink-0 overflow-y-auto border-b border-slate-800 p-3 lg:w-[330px] lg:border-b-0 lg:border-r">
+        {/*
+          * Нижний отступ колонки убран для вкладки ИИ: её форма прилипает к низу, а padding
+          * скролл-контейнера поднимал бы её над краем — та самая щель под кнопкой.
+          */}
+        <section
+          className={cn(
+            'shrink-0 overflow-y-auto border-b border-slate-800 px-3 pt-3 lg:w-[330px] lg:border-b-0 lg:border-r',
+            tool === 'ai' ? 'pb-0' : 'pb-3',
+          )}
+        >
           <ToolBar
             tool={tool}
             uploading={uploading}

@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useGetChatModelsQuery } from '@/store/api/user-chat-api';
 import { useGetStylePresetsQuery } from '@/store/api/public-api';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
+import { ServiceIdeaCards } from '@/components/editor/ServiceIdeaCards';
 import { cn } from '@/lib/utils';
 
 /**
@@ -408,6 +409,10 @@ export function SceneGenerator({
         </div>
       </div>
       )}
+
+      <div className="border-t border-slate-800 pt-3">
+        <ServiceIdeaCards />
+      </div>
 
       <div className="sticky bottom-0 -mx-4 -mb-4 space-y-3 border-t border-violet-500/30 bg-slate-950/95 px-4 pb-4 pt-3 backdrop-blur">
       <div className="space-y-2">
