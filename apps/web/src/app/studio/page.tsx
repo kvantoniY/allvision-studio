@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ImageIcon, Loader2, MapPin, Plus, RotateCcw, Trash2, Upload, Video, Wand2 } from 'lucide-react';
+import { ImageIcon, Loader2, MapPin, Pencil, Plus, RotateCcw, Trash2, Upload, Video, Wand2, X } from 'lucide-react';
 import { buildStylePresetPrompt, formatTokens, getBlockCatalogItem, tokensToRub, type PublicStylePreset } from '@allvision/shared';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +13,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import {
+  useUpdateAdminStylePresetMutation,
+  useUploadStylePresetThumbnailMutation,
+} from '@/store/api/admin-style-presets-api';
 import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
 import { useGetStylePresetsQuery } from '@/store/api/public-api';
@@ -777,6 +782,16 @@ function VariationAssetModal({ asset, onClose }: { asset: UserMediaAsset; onClos
   );
 }
 
+/**
+ * Выбор шаблона.
+ *
+ * Строкой, а не плиткой: у шаблона есть и картинка, и описание, а в плитке описание
+ * обрезается до бессмысленных двух слов. Внутреннего скролла нет намеренно — окно
+ * прокручивается целиком, и полоса остаётся одна.
+ *
+ * Админ меняет картинку прямо здесь: нажал на превью, выбрал файл. Ради замены обложки
+ * уходить в админку и искать там нужный шаблон — лишние три экрана.
+ */
 function StylePresetPicker({
   presets,
   selectedSlug,
@@ -788,42 +803,90 @@ function StylePresetPicker({
   onSelect: (slug: string) => void;
   isLoading?: boolean;
 }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
+  const [uploadThumbnail] = useUploadStylePresetThumbnailMutation();
+  const [updatePreset] = useUpdateAdminStylePresetMutation();
+  const [busySlug, setBusySlug] = useState<string | null>(null);
+
+  const replaceThumbnail = async (preset: PublicStylePreset, file: File) => {
+    setBusySlug(preset.slug);
+    try {
+      const uploaded = await uploadThumbnail(file).unwrap();
+      await updatePreset({ id: preset.id, body: { thumbnail: uploaded.url } }).unwrap();
+      toast({ title: 'Обложка шаблона обновлена' });
+    } catch {
+      toast({ title: 'Не удалось загрузить обложку', variant: 'destructive' });
+    } finally {
+      setBusySlug(null);
+    }
+  };
+
   return (
     <div className="space-y-2">
       <Label>Шаблоны</Label>
-      <div className="grid max-h-72 gap-2 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/50 p-2 sm:grid-cols-2">
+      <div className="space-y-1.5">
         <button
           type="button"
           onClick={() => onSelect('none')}
           className={cn(
-            'rounded-md border p-3 text-left transition',
+            'flex w-full items-center gap-3 rounded-lg border p-2 text-left transition',
             selectedSlug === 'none' ? 'border-violet-500 bg-violet-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700',
           )}
         >
-          <div className="font-medium text-white">Без шаблона</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">Использовать только ваш промпт.</div>
+          <span className="grid h-14 w-14 shrink-0 place-items-center rounded-md border border-slate-800 bg-slate-900 text-slate-500">
+            <Wand2 className="h-5 w-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-white">Без шаблона</span>
+            <span className="mt-0.5 block text-xs leading-5 text-slate-500">Использовать только ваш промпт.</span>
+          </span>
         </button>
+
         {isLoading ? (
-          <div className="rounded-md border border-slate-800 bg-slate-950 p-3 text-sm text-slate-500">Загрузка...</div>
+          <div className="rounded-lg border border-slate-800 bg-slate-950 p-3 text-sm text-slate-500">Загрузка…</div>
         ) : presets.map((preset) => (
-          <button
+          <div
             key={preset.slug}
-            type="button"
-            onClick={() => onSelect(preset.slug)}
             className={cn(
-              'overflow-hidden rounded-md border text-left transition',
+              'flex items-center gap-3 rounded-lg border p-2 transition',
               selectedSlug === preset.slug ? 'border-violet-500 bg-violet-500/10' : 'border-slate-800 bg-slate-950 hover:border-slate-700',
             )}
           >
-            {preset.thumbnail && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={preset.thumbnail} alt="" className="aspect-video w-full object-cover" />
-            )}
-            <div className="p-3">
-              <div className="font-medium text-white">{preset.title}</div>
-              <div className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{preset.description}</div>
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md border border-slate-800 bg-slate-900">
+              {preset.thumbnail ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preset.thumbnail} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <span className="grid h-full w-full place-items-center text-slate-600">
+                  <ImageIcon className="h-4 w-4" />
+                </span>
+              )}
+              {isAdmin && (
+                <label
+                  className="absolute inset-0 grid cursor-pointer place-items-center bg-slate-950/70 text-slate-200 opacity-0 transition hover:opacity-100"
+                  title="Заменить обложку шаблона"
+                >
+                  {busySlug === preset.slug ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      event.target.value = '';
+                      if (file) void replaceThumbnail(preset, file);
+                    }}
+                  />
+                </label>
+              )}
             </div>
-          </button>
+
+            <button type="button" onClick={() => onSelect(preset.slug)} className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-sm font-medium text-white">{preset.title}</span>
+              <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-slate-500">{preset.description}</span>
+            </button>
+          </div>
         ))}
       </div>
     </div>
@@ -831,14 +894,35 @@ function StylePresetPicker({
 }
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  // Esc закрывает окно: без этого единственный выход — попасть по маленькому крестику.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 p-4">
-      <div className="my-auto flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg border border-slate-800 bg-slate-900 shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
-          <h3 className="text-lg font-semibold text-white">{title}</h3>
-          <Button type="button" variant="ghost" size="icon" onClick={onClose}>x</Button>
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 backdrop-blur-sm sm:items-center sm:p-6"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-slate-800 bg-slate-900 shadow-2xl shadow-black/60 sm:max-h-[86dvh] sm:max-w-[34rem] sm:rounded-2xl">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-5 py-3.5">
+          <h3 className="text-base font-semibold text-white">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Закрыть"
+            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-800 hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="studio-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {children}
         </div>
       </div>

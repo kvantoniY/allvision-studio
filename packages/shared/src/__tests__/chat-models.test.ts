@@ -74,8 +74,25 @@ describe('CHAT_MODELS', () => {
     expect(faceSwap?.blockSlug).toBe('face-swap-video');
     expect(faceSwap?.advancedParams.map((param) => param.key)).toEqual(expect.arrayContaining(['target_video', 'swap_faces_index', 'target_faces_index']));
 
-    const soraPro = getChatModel('sora-2-pro');
-    expect(soraPro?.supportedResolutions).toEqual(['720p', '1080p']);
+    const seedance25 = getChatModel('seedance-2.5');
+    expect(seedance25?.familySlug).toBe('seedance-2.5');
+    expect(seedance25?.supportedResolutions).toEqual(expect.arrayContaining(['720p', '1080p']));
+  });
+
+  it('keeps models the owner removed out of the picker', () => {
+    // Список моделей — это витрина, а не свалка всего, что умеет провайдер: лишние строки
+    // мешают выбрать. Владелец убрал их осознанно, и вернуться они должны только явно.
+    for (const slug of ['sora-2', 'sora-2-pro', 'grok-video', 'luma-ray2', 'luma-ray2-i2v', 'remove-watermark', 'flux-dev', 'recraft-v3', 'ideogram-v3']) {
+      expect(getChatModel(slug)).toBeUndefined();
+    }
+  });
+
+  it('gives every model a human family name', () => {
+    // Раньше семейство без правила показывалось сырым слагом — в списке висели
+    // «seedream-5-lite» и «fal-custom-video».
+    for (const model of CHAT_MODELS) {
+      expect(model.familyTitle).not.toBe(model.slug);
+    }
   });
 
   it('prices advanced resolution choices through chat cost estimation', () => {

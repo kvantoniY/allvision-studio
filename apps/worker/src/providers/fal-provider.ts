@@ -78,6 +78,7 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'gpt-image-2': { endpoint: 'openai/gpt-image-2', editEndpoint: 'openai/gpt-image-2/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.1, paramProfile: 'gpt-image' },
   'flux-schnell': { endpoint: 'fal-ai/flux/schnell', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.003 },
   'flux-dev': { endpoint: 'fal-ai/flux/dev', kind: 'image', supportsImageInput: false, estimatedCostUsd: 0.025 },
+  'seedream-5-pro': { endpoint: 'bytedance/seedream/v5/pro/text-to-image', editEndpoint: 'bytedance/seedream/v5/pro/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.07 },
   'seedream-5-lite': { endpoint: 'fal-ai/bytedance/seedream/v5/lite/text-to-image', editEndpoint: 'fal-ai/bytedance/seedream/v5/lite/edit', kind: 'image', supportsImageInput: true, estimatedCostUsd: 0.03 },
   // Seedream 4.0 / 4.5 (ByteDance): формат кадра через image_size (см. paramProfile seedream-size);
   // auto_2K/auto_4K берут формат из референса, качеством управляет param resolution 2K|4K.
@@ -96,6 +97,10 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
   'sora-2': { endpoint: 'fal-ai/sora-2/text-to-video', kind: 'text-to-video', estimatedCostUsd: 1.0 },
   'sora-2-pro': { endpoint: 'fal-ai/sora-2/text-to-video', kind: 'text-to-video', estimatedCostUsd: 2.0 },
   // Seedance 2.0 на fal живёт в неймспейсе bytedance/seedance-2.0/... (НЕ fal-ai/bytedance/seedance/v2).
+  // Seedance 2.5 живёт без префикса fal-ai/ — проверено запросом к каталогу провайдера.
+  'seedance-2.5': { endpoint: 'bytedance/seedance-2.5/text-to-video', kind: 'text-to-video', estimatedCostUsd: 2.37 },
+  'seedance-2.5-omni': { endpoint: 'bytedance/seedance-2.5/reference-to-video', kind: 'text-to-video', estimatedCostUsd: 2.37 },
+  'seedance-2.5-i2v': { endpoint: 'bytedance/seedance-2.5/image-to-video', kind: 'image-to-video', estimatedCostUsd: 2.37 },
   'seedance-2': { endpoint: 'bytedance/seedance-2.0/text-to-video', kind: 'text-to-video', estimatedCostUsd: 1.5 },
   'seedance-2-fast': { endpoint: 'bytedance/seedance-2.0/fast/text-to-video', kind: 'text-to-video', estimatedCostUsd: 0.75 },
   // omni -> отдельный reference-to-video эндпоинт Seedance (image_urls/video_urls как референсы).

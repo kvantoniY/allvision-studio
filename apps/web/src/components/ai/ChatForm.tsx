@@ -1088,33 +1088,6 @@ function DetailedSettingsControl({
               </select>
             </div>
 
-            {model.blockSlug === 'fal-generic' && (
-              <div className="rounded-lg border border-violet-800/60 bg-slate-900/60 p-2.5 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-violet-300">Своя модель fal</div>
-                <label className="block space-y-1 text-sm text-slate-100">
-                  <span className="text-[11px] text-slate-400">Endpoint (обязательно)</span>
-                  <input
-                    type="text"
-                    value={typeof advancedParams.endpoint === 'string' ? advancedParams.endpoint : ''}
-                    onChange={(event) => update('endpoint', event.target.value)}
-                    placeholder="fal-ai/veo3.1"
-                    className="h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-3 text-sm"
-                  />
-                </label>
-                <label className="block space-y-1 text-sm text-slate-100">
-                  <span className="text-[11px] text-slate-400">Доп. параметры (JSON, опц.)</span>
-                  <textarea
-                    value={typeof advancedParams.extra_params === 'string' ? advancedParams.extra_params : ''}
-                    onChange={(event) => update('extra_params', event.target.value)}
-                    placeholder='{"num_images":2}'
-                    rows={2}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-mono"
-                  />
-                </label>
-                <p className="text-[11px] text-slate-500">Список моделей и полей — на fal.ai/models.</p>
-              </div>
-            )}
-
             {!model.tool && (
             <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Основное</div>

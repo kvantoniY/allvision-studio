@@ -33,6 +33,10 @@ export const FAL_PRICING_ENDPOINTS: Record<string, string> = {
   'hailuo-2.3-text': 'fal-ai/minimax/hailuo-02/standard/text-to-video',
   'hailuo-2.3-fast-text': 'fal-ai/minimax/hailuo-02/standard/text-to-video',
   'wan-2.6': 'fal-ai/wan-25-preview/text-to-video',
+  'seedance-2.5': 'bytedance/seedance-2.5/text-to-video',
+  'seedance-2.5-omni': 'bytedance/seedance-2.5/reference-to-video',
+  'seedance-2.5-i2v': 'bytedance/seedance-2.5/image-to-video',
+  'seedream-5-pro': 'bytedance/seedream/v5/pro/text-to-image',
   'luma-ray2': 'fal-ai/luma-dream-machine/ray-2',
   // image-to-video
   'kling-std': 'fal-ai/kling-video/v2.5-turbo/standard/image-to-video',

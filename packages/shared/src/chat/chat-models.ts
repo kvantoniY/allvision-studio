@@ -156,11 +156,17 @@ function modelFamilyFor(modelSlug: string, blockSlug: string) {
   if (modelSlug === 'nano-banana') return { slug: 'nano-banana', title: 'Nano Banana 2' };
   if (modelSlug.startsWith('kling-motion-2.6') || modelSlug === 'kling-std' || modelSlug === 'kling-pro') return { slug: 'kling-2.6', title: 'Kling 2.6' };
   if (modelSlug.startsWith('kling-motion-3.0') || modelSlug.startsWith('kling-3')) return { slug: 'kling-3.0', title: 'Kling 3.0' };
+  // 2.5 проверяем ДО 2: startsWith('seedance-2') совпал бы и с ней, и новая модель
+  // спряталась бы внутри чужого семейства.
+  if (modelSlug.startsWith('seedance-2.5')) return { slug: 'seedance-2.5', title: 'Seedance 2.5' };
   if (modelSlug.startsWith('seedance-2')) return { slug: 'seedance-2', title: 'Seedance 2' };
   if (modelSlug.startsWith('hailuo-2.3')) return { slug: 'hailuo-2.3', title: 'Hailuo 2.3' };
   if (modelSlug.startsWith('veo-3.1')) return { slug: 'veo-3.1', title: 'Veo 3.1' };
   if (modelSlug.startsWith('wan-2.6')) return { slug: 'wan-2.6', title: 'Wan 2.6' };
   if (modelSlug.startsWith('sora-2')) return { slug: 'sora-2', title: 'Sora 2' };
+  if (modelSlug.startsWith('seedream-5')) return { slug: 'seedream-5', title: 'Seedream 5' };
+  if (modelSlug === 'gpt-image-2') return { slug: 'gpt-image-2', title: 'GPT Image 2' };
+  if (modelSlug === 'grok-image') return { slug: 'grok-image', title: 'Grok Image' };
   if (blockSlug === 'face-swap-video') return { slug: 'face-swap', title: 'Face Swap' };
   if (blockSlug === 'video-watermark-remove') return { slug: 'watermark-remove', title: 'Удаление watermark' };
   return { slug: modelSlug, title: modelSlug };
@@ -267,28 +273,18 @@ export const CHAT_MODELS: ChatModelOption[] = [
   }),
   fromCatalog({
     blockSlug: 'image-edit',
+    modelSlug: 'seedream-5-pro',
+    category: 'image',
+    description: 'Старшая Seedream 5: детальнее Lite, держит сложные сцены и текст на изображении.',
+    acceptsImageInput: true,
+    acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'image-edit',
     modelSlug: 'seedream-5-lite',
     category: 'image',
     description: 'Seedream 5 Lite от ByteDance — качественная модель для text-to-image и редактирования по референсу. Хорошо держит композицию, реалистичные сцены и текст на картинке, поддерживает несколько референс-фото и вывод 2K/3K.',
     acceptsImageInput: true,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['1:1', '9:16', '16:9', '4:3', '3:4'],
-  }),
-  fromCatalog({
-    blockSlug: 'image-edit',
-    modelSlug: 'flux-schnell',
-    category: 'image',
-    description: 'Flux Schnell — самая быстрая и дешёвая модель Flux. Подходит для быстрых черновиков, превью и эскизов идей. Только text-to-image.',
-    acceptsImageInput: false,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['1:1', '9:16', '16:9', '4:3', '3:4'],
-  }),
-  fromCatalog({
-    blockSlug: 'image-edit',
-    modelSlug: 'flux-dev',
-    category: 'image',
-    description: 'Flux Dev — сбалансированная text-to-image модель Flux. Хорошо детализирует лица, ткань, освещение. Подходит для аватаров и обложек.',
-    acceptsImageInput: false,
     acceptsTextOnly: true,
     supportedAspectRatios: ['1:1', '9:16', '16:9', '4:3', '3:4'],
   }),
@@ -450,6 +446,31 @@ export const CHAT_MODELS: ChatModelOption[] = [
   }),
   fromCatalog({
     blockSlug: 'text-to-video',
+    modelSlug: 'seedance-2.5',
+    category: 'video',
+    description: 'Свежее поколение Seedance: лучше держит сцену и движение. Дороже 2.0 в разы — берите, когда результат важнее себестоимости.',
+    acceptsImageInput: false,
+    acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
+    modelSlug: 'seedance-2.5-omni',
+    category: 'video',
+    description: 'Seedance 2.5 с референсами: фото персонажей и видео-референс сцены собираются в один ролик.',
+    acceptsImageInput: true,
+    acceptsVideoInput: true,
+    acceptsTextOnly: true,
+  }),
+  fromCatalog({
+    blockSlug: 'image-to-video',
+    modelSlug: 'seedance-2.5-i2v',
+    category: 'video',
+    description: 'Seedance 2.5 оживляет загруженный кадр — устойчивее к искажениям лиц и предметов, чем 2.0.',
+    acceptsImageInput: true,
+    acceptsTextOnly: false,
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-video',
     modelSlug: 'seedance-2-fast',
     category: 'video',
     description: 'Быстрый text-to-video режим Seedance 2. Создает видео только из промпта и хорошо подходит для недорогих вариантов.',
@@ -543,24 +564,6 @@ export const CHAT_MODELS: ChatModelOption[] = [
     supportedAspectRatios: ['16:9', '9:16', '1:1'],
   }),
   fromCatalog({
-    blockSlug: 'text-to-video',
-    modelSlug: 'sora-2',
-    category: 'video',
-    description: 'Sora 2 для экспериментальной text-to-video генерации. Модель доступна в каталоге, но реальные paid-вызовы еще нужно smoke-test проверить.',
-    acceptsImageInput: false,
-    acceptsTextOnly: true,
-    experimental: true,
-  }),
-  fromCatalog({
-    blockSlug: 'text-to-video',
-    modelSlug: 'sora-2-pro',
-    category: 'video',
-    description: 'Sora 2 Pro для экспериментальных Pro-видео по промпту. Помечена как бета до отдельной проверки реальных вызовов на проде.',
-    acceptsImageInput: false,
-    acceptsTextOnly: true,
-    experimental: true,
-  }),
-  fromCatalog({
     blockSlug: 'image-edit',
     modelSlug: 'grok-image',
     category: 'image',
@@ -568,92 +571,6 @@ export const CHAT_MODELS: ChatModelOption[] = [
     acceptsImageInput: true,
     acceptsTextOnly: true,
     supportedAspectRatios: ['1:1', '16:9', '9:16'],
-  }),
-  fromCatalog({
-    blockSlug: 'image-edit',
-    modelSlug: 'flux-pro-ultra',
-    category: 'image',
-    description: 'FLUX1.1 [pro] Ultra — топовая модель Flux: фотореализм, тонкая детализация, до 4MP. Только text-to-image.',
-    acceptsImageInput: false,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4'],
-  }),
-  fromCatalog({
-    blockSlug: 'image-edit',
-    modelSlug: 'recraft-v3',
-    category: 'image',
-    description: 'Recraft V3 — лучший рендер текста, логотипов и брендового/постерного дизайна. Только text-to-image.',
-    acceptsImageInput: false,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['1:1', '16:9', '9:16'],
-  }),
-  fromCatalog({
-    blockSlug: 'image-edit',
-    modelSlug: 'ideogram-v3',
-    category: 'image',
-    description: 'Ideogram V3 — сильнейший рендер надписей и текста на изображении, постеры и дизайн-макеты. Только text-to-image.',
-    acceptsImageInput: false,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['1:1', '16:9', '9:16'],
-  }),
-  fromCatalog({
-    blockSlug: 'image-to-video',
-    modelSlug: 'grok-video',
-    category: 'video',
-    description: 'Grok Imagine Video от xAI — оживляет загруженное фото в короткий динамичный ролик с живым движением.',
-    acceptsImageInput: true,
-    acceptsTextOnly: false,
-    supportedAspectRatios: ['auto', '16:9', '9:16', '1:1'],
-  }),
-  fromCatalog({
-    blockSlug: 'image-to-video',
-    modelSlug: 'luma-ray2-i2v',
-    category: 'video',
-    description: 'Luma Ray 2 — плавная кинематографичная анимация изображения с реалистичной физикой и светом.',
-    acceptsImageInput: true,
-    acceptsTextOnly: false,
-    supportedAspectRatios: ['16:9', '9:16', '1:1'],
-  }),
-  fromCatalog({
-    blockSlug: 'text-to-video',
-    modelSlug: 'luma-ray2',
-    category: 'video',
-    description: 'Luma Ray 2 — кинематографичная text-to-video модель с реалистичной физикой движения и камерой.',
-    acceptsImageInput: false,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['16:9', '9:16', '1:1'],
-  }),
-  fromCatalog({
-    blockSlug: 'fal-generic',
-    modelSlug: 'fal-custom-image',
-    category: 'image',
-    description: 'Своя модель fal: укажите endpoint-id со страницы модели на fal.ai (напр. fal-ai/recraft/v3/text-to-image) и получите картинку. Для продвинутых пользователей.',
-    acceptsImageInput: true,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', 'auto'],
-  }),
-  fromCatalog({
-    blockSlug: 'fal-generic',
-    modelSlug: 'fal-custom-video',
-    category: 'video',
-    description: 'Своя модель fal: укажите endpoint-id (напр. fal-ai/kling-video/v3/pro/image-to-video) и получите видео. Прикрепите картинку/видео, если модель их принимает. Для продвинутых пользователей.',
-    acceptsImageInput: true,
-    acceptsVideoInput: true,
-    acceptsTextOnly: true,
-    supportedAspectRatios: ['auto', '16:9', '9:16', '1:1'],
-  }),
-  fromCatalog({
-    blockSlug: 'video-watermark-remove',
-    modelSlug: 'remove-watermark',
-    category: 'video',
-    description: 'Убирает водяной знак из загруженного видео, сохраняя качество и звук. Прикрепите видео — промпт не нужен. Стоимость зависит от длительности (от 5 сек).',
-    functionTitle: 'Удаление водяного знака',
-    acceptsImageInput: false,
-    acceptsVideoInput: true,
-    acceptsTextOnly: false,
-    supportedAspectRatios: ['auto'],
-    requiresPrompt: false,
-    tool: true,
   }),
 ];
 
