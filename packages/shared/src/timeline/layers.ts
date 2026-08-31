@@ -191,13 +191,17 @@ export function sceneTextLayers(scene: TimelineScene): TextLayer[] {
 }
 
 /**
- * Слой, по которому считается длительность сцены и который считается «главным»
- * (его показывает миниатюра, он же по умолчанию идёт референсом в генерацию).
- * Это первый видео-слой, а если видео нет — первый медиа-слой вообще.
+ * Главный кадр сцены: по нему считается длительность, его показывает миниатюра, он же
+ * идёт референсом в генерацию.
+ *
+ * Заливка идёт подложкой и лежит первой в списке слоёв, поэтому брать media[0] нельзя:
+ * на превью и на шкале времени вместо фотографии показывался ровный цвет фона.
  */
 export function primaryMediaLayer(scene: TimelineScene): MediaLayer | undefined {
   const media = sceneMediaLayers(scene);
-  return media.find((layer) => layer.source.kind === 'video') ?? media[0];
+  return media.find((layer) => layer.source.kind === 'video')
+    ?? media.find((layer) => layer.source.kind === 'image')
+    ?? media[0];
 }
 
 export function newMediaLayer(input: {

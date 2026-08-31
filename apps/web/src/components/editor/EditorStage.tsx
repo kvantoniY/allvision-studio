@@ -109,7 +109,9 @@ export function EditorStage({
 
   // На паузе показываем и правим ВЫБРАННУЮ сцену, а не ту, что под курсором времени:
   // иначе выделение сцены в ленте не совпадало бы с тем, что на холсте.
-  const shownIndex = playing ? frame?.activeIndex ?? 0 : selectedSceneIndex;
+  // Что показываем — решает курсор времени, и на паузе тоже: иначе перетаскивание
+  // ползунка не меняло кадр, а он и есть главный способ найти нужное место.
+  const shownIndex = frame?.activeIndex ?? selectedSceneIndex;
   const incomingIndex = playing ? frame?.incomingIndex ?? null : null;
   const mix = playing ? frame?.mix ?? 0 : 0;
 
@@ -117,7 +119,7 @@ export function EditorStage({
     (index: number) => {
       const timing = timings[index];
       if (!timing) return 0;
-      return playing ? Math.max(0, time - timing.startSec) : 0;
+      return Math.max(0, time - timing.startSec);
     },
     [timings, time, playing],
   );

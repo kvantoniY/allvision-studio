@@ -63,6 +63,7 @@ export function SceneCanvas({
     [layers],
   );
   const elements = useMediaElements(mediaLayers);
+  const layerRef = useRef<Konva.Layer | null>(null);
 
   // Кадр вписывается в доступное место целиком: и по ширине, и по высоте. Считать только
   // по ширине нельзя — вертикальный ролик в широкой колонке уезжал вниз на два экрана.
@@ -97,14 +98,18 @@ export function SceneCanvas({
       const expected = (layer.trimStartSec ?? 0) + sceneTimeSec;
       // Подтягиваем время только при заметном расхождении: браузер не перематывает
       // по кадрам, и постоянная коррекция выглядит как дёрганье.
-      if (Math.abs(video.currentTime - expected) > 0.35) video.currentTime = expected;
+      if (Math.abs(video.currentTime - expected) > 0.35) {
+        video.currentTime = expected;
+        // На паузе цикл перерисовки не работает, а Konva рисует кадр из <video> только
+        // когда её попросят. Без этого перемотка меняла время, но не картинку.
+        if (!playing) video.addEventListener('seeked', () => layerRef.current?.batchDraw(), { once: true });
+      }
       if (playing && video.paused) void video.play().catch(() => undefined);
       if (!playing && !video.paused) video.pause();
     }
   }, [mediaLayers, elements, sceneTimeSec, playing]);
 
   // Пока играет видео, Konva должна перерисовываться каждый кадр.
-  const layerRef = useRef<Konva.Layer | null>(null);
   useEffect(() => {
     if (!playing) return;
     let frame = 0;

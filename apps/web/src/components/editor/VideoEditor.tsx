@@ -35,6 +35,7 @@ import {
   sceneMediaLayers,
   timelineAudioTracks,
   timelineDurationSec,
+  timelineTimings,
   timelineWithAudioTracks,
   validateTimeline,
   type CollageLayout,
@@ -561,7 +562,7 @@ export function VideoEditor({ id }: { id: string }) {
     : null;
 
   const handleRunService = useCallback(
-    async (service: { slug: string; title: string }) => {
+    async (service: { slug: string; title: string }, values: Record<string, string>) => {
       const scene = currentScene;
       if (!timeline || !scene) return;
       const frame = sceneMediaLayers(scene).find((layer) => layer.source.kind === 'image' || layer.source.kind === 'video');
@@ -583,7 +584,7 @@ export function VideoEditor({ id }: { id: string }) {
         const result = await generateSceneService({
           id,
           sceneId: scene.id,
-          body: { serviceSlug: service.slug, layerId, frameUrl: frame?.source.url },
+          body: { serviceSlug: service.slug, layerId, frameUrl: frame?.source.url, values },
         }).unwrap();
         ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId });
         toast({ title: `Запустили «${service.title}»`, description: `Списано ${result.tokensCost} токенов` });
@@ -741,6 +742,17 @@ export function VideoEditor({ id }: { id: string }) {
   // Часы общие для предпросмотра и таймлайна: курсор должен стоять на том кадре,
   // который сейчас на экране.
   const playback = usePlayback(duration);
+
+  /** Выбор сцены ставит курсор в её начало: холст показывает то, что под курсором. */
+  const selectScene = useCallback(
+    (index: number) => {
+      setSceneIndex(index);
+      if (!timelineRef.current) return;
+      const timing = timelineTimings(timelineRef.current)[index];
+      if (timing) playback.seek(timing.startSec);
+    },
+    [playback],
+  );
 
 
   const handleExport = async () => {
@@ -1033,7 +1045,7 @@ export function VideoEditor({ id }: { id: string }) {
             playback={playback}
             timeline={timeline}
             selectedSceneIndex={sceneIndex}
-            onSelectScene={setSceneIndex}
+            onSelectScene={selectScene}
             selectedLayerId={selectedLayerId}
             onSelectLayer={setSelectedLayerId}
             onChangeLayer={(index, layerId, patch) => ops.changeLayer(index, layerId, patch)}
@@ -1119,7 +1131,7 @@ export function VideoEditor({ id }: { id: string }) {
             if (at) setSceneIndex(at.activeIndex);
           }}
           selectedSceneIndex={sceneIndex}
-          onSelectScene={setSceneIndex}
+          onSelectScene={selectScene}
           onSceneDuration={(index, durationSec) => ops.patchScene(index, { durationSec })}
           onSceneTransition={(index, transition) => ops.patchScene(index, { transition })}
           onDuplicateScene={duplicateScene}
@@ -1210,7 +1222,7 @@ function ToolBar({
   onUploadReference: (file: File) => Promise<string | null>;
   onInsertGeneration: (url: string, kind: 'image' | 'video') => void;
   onGenerate: (request: SceneGenerationRequest) => void;
-  onRunService: (service: EditorCatalogService) => void;
+  onRunService: (service: EditorCatalogService, values: Record<string, string>) => void;
   runningServiceSlug: string | null;
   serviceProgress: number;
 }) {

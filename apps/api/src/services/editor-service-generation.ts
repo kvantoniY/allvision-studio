@@ -57,16 +57,18 @@ export async function createEditorServiceGeneration(params: {
   const blocker = editorLaunchBlocker(service.userInputForm, params.values, Boolean(params.frameUrl));
   if (blocker) throw new HttpError(400, 'SERVICE_NEEDS_FULL_FORM', blocker);
 
-  // Кадр сцены подставляем во все фото-поля: в редакторе исходник ровно один.
+  // Референсы приходят из панели по одному на поле. Кадр сцены — только запасной вариант
+  // для первого фото-поля: человек мог снять подстановку и приложить свои файлы.
   const userInputs: Record<string, unknown> = {};
+  const firstPhotoField = fields.find((field) => field.type === 'photo' || field.type === 'avatar');
   for (const field of fields) {
     if (!fieldVisible(field, params.values)) continue;
-    if ((field.type === 'photo' || field.type === 'avatar') && params.frameUrl) {
-      userInputs[field.id] = params.frameUrl;
+    const value = params.values[field.id];
+    if (value !== undefined && value !== '') {
+      userInputs[field.id] = value;
       continue;
     }
-    const value = params.values[field.id];
-    if (value !== undefined && value !== '') userInputs[field.id] = value;
+    if (field.id === firstPhotoField?.id && params.frameUrl) userInputs[field.id] = params.frameUrl;
   }
 
   const tierField = fields.find((field) => field.type === 'tier');

@@ -167,7 +167,7 @@ export function Header() {
           ) : (
             <>
               <Button asChild variant="ghost" size="sm">
-                <Link href="/login">Войти</Link>
+                <Link href="/login">Вход</Link>
               </Button>
               <Button asChild size="sm">
                 <Link href="/register">Регистрация</Link>

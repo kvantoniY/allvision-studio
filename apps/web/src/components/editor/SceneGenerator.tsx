@@ -18,9 +18,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useGetChatModelsQuery } from '@/store/api/user-chat-api';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
-import { ServiceIdeaCards, ServiceRunCard, servicePriceCoins } from '@/components/editor/ServiceIdeaCards';
+import { ServiceIdeaCards, servicePriceCoins } from '@/components/editor/ServiceIdeaCards';
+import { ServiceRunCard } from '@/components/editor/ServiceRunCard';
 import type { EditorCatalogService } from '@/store/api/editor-catalog-api';
-import { editorLaunchBlocker } from '@allvision/shared';
 import { cn } from '@/lib/utils';
 
 /**
@@ -85,7 +85,7 @@ export function SceneGenerator({
   onUploadReference: (file: File) => Promise<string | null>;
   onGenerate: (request: SceneGenerationRequest) => void;
   /** Запуск услуги прямо отсюда: результат вернётся в кадр этой же сцены. */
-  onRunService: (service: EditorCatalogService) => void;
+  onRunService: (service: EditorCatalogService, values: Record<string, string>) => void;
   runningServiceSlug?: string | null;
   serviceProgress?: number;
 }) {
@@ -195,11 +195,12 @@ export function SceneGenerator({
         <ServiceRunCard
           service={openService}
           price={servicePriceCoins(openService)}
-          blocker={editorLaunchBlocker(openService.userInputForm, {}, hasImage)}
+          sceneFrameUrl={reference?.source.url ?? null}
+          onUploadReference={onUploadReference}
           running={running}
           progress={serviceProgress ?? 0}
           onBack={() => setOpenService(null)}
-          onRun={() => onRunService(openService)}
+          onRun={(values) => onRunService(openService, values)}
         />
       </section>
     );

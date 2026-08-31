@@ -31,10 +31,6 @@ export function servicePriceCoins(service: EditorCatalogService) {
   return service.priceCoinsPro ?? service.priceCoinsStandard ?? service.priceTokens ?? 0;
 }
 
-export type ServiceLaunchRequest = {
-  service: EditorCatalogService;
-};
-
 /**
  * Подборка услуг в панели ИИ.
  *
@@ -333,85 +329,3 @@ function ServicePickerModal({
     </div>
   );
 }
-
-/**
- * Карточка выбранной услуги внутри панели: обложка, описание и запуск.
- *
- * Никаких переходов на страницу услуги: человек в середине сборки ролика не должен уходить
- * со страницы, поэтому и результат, и прогресс остаются здесь же.
- */
-export function ServiceRunCard({
-  service,
-  price,
-  blocker,
-  running,
-  progress,
-  onBack,
-  onRun,
-}: {
-  service: EditorCatalogService;
-  price: number;
-  /** Чего не хватает для запуска: услуге может быть нужна своя форма. */
-  blocker: string | null;
-  running: boolean;
-  progress: number;
-  onBack: () => void;
-  onRun: () => void;
-}) {
-  const video = service.previewMode === 'image' ? null : mediaUrl(service.previewVideo);
-  const cover = coverOf(service);
-
-  return (
-    <div className="space-y-2.5">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-xs text-slate-400 transition hover:text-slate-100"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Назад к услугам
-      </button>
-
-      <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
-        <div className="relative aspect-[16/10] bg-slate-900">
-          {video ? (
-            <video src={video} autoPlay muted loop playsInline className="h-full w-full object-cover" />
-          ) : cover ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={cover} alt={service.title} className="h-full w-full object-cover" />
-          ) : null}
-        </div>
-        <div className="space-y-2 p-3">
-          <h4 className="text-sm font-semibold text-slate-100">{service.title}</h4>
-          <p className="whitespace-pre-line text-xs leading-5 text-slate-400">
-            {service.description || service.shortDesc}
-          </p>
-        </div>
-      </div>
-
-      {running ? (
-        <div className="space-y-1.5 rounded-lg border border-violet-500/40 bg-violet-500/10 p-3">
-          <div className="flex items-center gap-2 text-xs text-violet-100">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Генерируем — {Math.round(progress)}%
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-            <div className="h-full rounded-full bg-violet-400 transition-all" style={{ width: `${Math.max(3, progress)}%` }} />
-          </div>
-          <p className="text-[11px] text-slate-400">Результат встанет в сцену и появится в истории — можно не ждать здесь.</p>
-        </div>
-      ) : blocker ? (
-        <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-[11px] leading-4 text-amber-200">
-          {blocker}
-        </p>
-      ) : (
-        <Button type="button" className="w-full" onClick={onRun}>
-          <Wand2 className="h-4 w-4" />
-          Сгенерировать за {price} токенов
-        </Button>
-      )}
-    </div>
-  );
-}
-
-export { Trash2 as ServiceIdeaTrashIcon };
