@@ -31,6 +31,8 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import { giftServicePriceFrom } from '@/lib/gift-factory';
+import { GreetingsHero } from '@/components/home/GreetingsHero';
+import { Reveal } from '@/components/home/Reveal';
 import { mergeHomeLandingContent, type HomeLandingContent, type HomeMedia, type HomeModelFamily, type HomeTrendingSlot } from '@/lib/home-landing-content';
 import { useUpdateAdminHomePageContentMutation } from '@/store/api/admin-home-page-api';
 import { useGetHomePageContentQuery, useGetTokenPackagesQuery } from '@/store/api/public-api';
@@ -165,10 +167,11 @@ export function HomePageContent() {
           onToggle={() => setEditMode((current) => !current)}
         />
       )}
+      <GreetingsHero content={content} editor={editor} />
+      <ServicesShowcase content={content} editor={editor} services={allServices} isLoading={services.isLoading} />
       <HeroLanding content={content} editor={editor} services={allServices} isAuthed={isAuthed} />
       <ChatSection content={content} editor={editor} isAuthed={isAuthed} />
       <ModelCatalogSection content={content} editor={editor} />
-      <ServicesShowcase content={content} editor={editor} services={allServices} isLoading={services.isLoading} />
       <StudioPricingSection content={content} editor={editor} isAuthed={isAuthed} starterPackage={firstPackage} />
       <FinalCta content={content} editor={editor} isAuthed={isAuthed} />
       <HomeTextEditorModal
@@ -203,6 +206,13 @@ export function HomePageContent() {
   );
 }
 
+/**
+ * Популярные сценарии.
+ *
+ * Раньше это был первый экран целиком — с заголовком, кнопками и «трендом недели». Теперь
+ * страницу открывают видео-поздравления, а здесь остаётся то, ради чего блок и был нужен:
+ * подборка готовых сценариев, которую админ собирает в редакторе главной.
+ */
 function HeroLanding({
   content,
   editor,
@@ -215,160 +225,42 @@ function HeroLanding({
   isAuthed: boolean;
 }) {
   const serviceBySlug = new Map(services.map((service) => [service.slug, service]));
-  const featuredMedia = content.hero.featuredMedia;
 
   return (
-    <section
-      className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950"
-      {...sectionAttrs(content.hero.sectionKey)}
-    >
-      <img
-        src={mediaUrl(content.hero.media.url) ?? content.hero.media.url}
-        alt={content.hero.media.alt}
-        className="absolute inset-0 h-full w-full object-cover opacity-45"
-      />
-      <div className="absolute inset-0 bg-slate-950/72" />
-      <div className="absolute inset-x-0 bottom-0 h-32 bg-slate-950" />
-      {editor?.enabled && (
-        <button
-          type="button"
-          onClick={() => {
-            editor.openMediaEditor({
-              path: ['hero', 'media'],
-              label: 'Фон первого блока',
-              media: content.hero.media,
-            });
-          }}
-          className="absolute left-4 top-4 z-30 inline-flex items-center gap-2 rounded-full border border-amber-300/50 bg-slate-950/90 px-3 py-1.5 text-xs font-semibold text-amber-100 shadow-lg shadow-black/30 backdrop-blur transition hover:bg-amber-400 hover:text-slate-950 sm:left-6 lg:left-8"
-        >
-          <ImagePlus className="h-3.5 w-3.5" />
-          Фон
-        </button>
-      )}
-
-      <div className="relative mx-auto w-full max-w-[1480px] px-4 py-10 sm:px-6 sm:py-12 lg:px-8 lg:py-14">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.92fr)_minmax(340px,0.58fr)] lg:items-center xl:gap-12">
-          <div className="max-w-3xl">
-            <h1
-              className="mt-5 max-w-3xl text-4xl font-black leading-[0.98] tracking-normal text-white sm:text-5xl xl:text-6xl"
-              {...fieldAttrs(content.hero.sectionKey, 'title')}
-            >
-              <EditableText editor={editor} path={['hero', 'title']} label="Заголовок первого блока" value={content.hero.title} multiline>
-                {content.hero.title}
+    <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950" {...sectionAttrs(content.trending.sectionKey)}>
+      <div className="pointer-events-none absolute -right-32 top-0 h-72 w-72 rounded-full bg-cyan-500/10 blur-[120px]" />
+      <div className="relative mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8">
+        <Reveal className="mb-6 flex flex-col justify-between gap-3 md:flex-row md:items-end">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl" {...fieldAttrs(content.trending.sectionKey, 'title')}>
+              <EditableText editor={editor} path={['trending', 'title']} label="Заголовок трендовых услуг" value={content.trending.title} multiline>
+                {content.trending.title}
               </EditableText>
-            </h1>
-            <p
-              className="mt-5 max-w-2xl text-base leading-7 text-slate-200 sm:text-lg"
-              {...fieldAttrs(content.hero.sectionKey, 'lead')}
-            >
-              <EditableText editor={editor} path={['hero', 'lead']} label="Описание первого блока" value={content.hero.lead} multiline>
-                {content.hero.lead}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400" {...fieldAttrs(content.trending.sectionKey, 'description')}>
+              <EditableText editor={editor} path={['trending', 'description']} label="Описание трендовых услуг" value={content.trending.description} multiline>
+                {content.trending.description}
               </EditableText>
             </p>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="h-12 bg-amber-500 px-5 text-slate-950 hover:bg-amber-400">
-                <Link href={actionHref('/ai', isAuthed)}>
-                  <Sparkles className="h-4 w-4" />
-                  <EditableText editor={editor} path={['hero', 'primaryCta']} label="Текст основной кнопки" value={content.hero.primaryCta}>
-                    {content.hero.primaryCta}
-                  </EditableText>
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="h-12 border-white/20 bg-white/10 px-5 text-white hover:bg-white/15 hover:text-white">
-                <Link href="/services">
-                  <EditableText editor={editor} path={['hero', 'secondaryCta']} label="Текст второй кнопки" value={content.hero.secondaryCta}>
-                    {content.hero.secondaryCta}
-                  </EditableText>
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-            <div className="mt-6 grid max-w-xl gap-2.5 sm:grid-cols-3">
-              {content.hero.stats.map((item, index) => (
-                <div key={item.label} className="rounded-md border border-white/10 bg-white/10 p-3 backdrop-blur" {...fieldAttrs(content.hero.sectionKey, `stat-${index}`)}>
-                  <div className="text-lg font-bold text-white">
-                    <EditableText editor={editor} path={['hero', 'stats', index, 'value']} label="Значение статистики" value={item.value}>
-                      {item.value}
-                    </EditableText>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-300">
-                    <EditableText editor={editor} path={['hero', 'stats', index, 'label']} label="Подпись статистики" value={item.label}>
-                      {item.label}
-                    </EditableText>
-                  </div>
-                </div>
-              ))}
-            </div>
           </div>
+          <Link href="/services" className="inline-flex items-center gap-2 text-sm font-medium text-amber-300 transition hover:text-amber-200">
+            Весь каталог
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Reveal>
 
-          <div className="hidden lg:block">
-            <div className="ml-auto max-w-[520px] overflow-hidden rounded-lg border border-white/15 bg-slate-950/70 shadow-2xl shadow-black/30">
-              <div className="relative aspect-[5/4] max-h-[430px] bg-slate-900">
-                {featuredMedia.type === 'video' ? (
-                  <PreviewVideo src={mediaUrl(featuredMedia.url) ?? featuredMedia.url} className="h-full w-full object-cover" />
-                ) : (
-                  <img
-                    src={mediaUrl(featuredMedia.url) ?? featuredMedia.url}
-                    alt={featuredMedia.alt}
-                    className="h-full w-full object-cover"
-                  />
-                )}
-                {editor?.enabled && (
-                  <EditableMedia editor={editor} path={['hero', 'featuredMedia']} label="Медиа тренда недели" media={featuredMedia} className="absolute inset-0 z-20">
-                    <span />
-                  </EditableMedia>
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-3 p-3.5">
-                <div>
-                  <div className="text-sm font-semibold text-white">
-                    <EditableText editor={editor} path={['hero', 'featuredTitle']} label="Заголовок тренда недели" value={content.hero.featuredTitle}>
-                      {content.hero.featuredTitle}
-                    </EditableText>
-                  </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    <EditableText editor={editor} path={['hero', 'featuredDescription']} label="Описание тренда недели" value={content.hero.featuredDescription} multiline>
-                      {content.hero.featuredDescription}
-                    </EditableText>
-                  </div>
-                </div>
-                <PlayCircle className="h-8 w-8 text-amber-300" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="relative mt-10" {...sectionAttrs(content.trending.sectionKey)}>
-          <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-end">
-            <div>
-              <h2 className="text-xl font-bold text-white sm:text-2xl" {...fieldAttrs(content.trending.sectionKey, 'title')}>
-                <EditableText editor={editor} path={['trending', 'title']} label="Заголовок трендовых услуг" value={content.trending.title} multiline>
-                  {content.trending.title}
-                </EditableText>
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300" {...fieldAttrs(content.trending.sectionKey, 'description')}>
-                <EditableText editor={editor} path={['trending', 'description']} label="Описание трендовых услуг" value={content.trending.description} multiline>
-                  {content.trending.description}
-                </EditableText>
-              </p>
-            </div>
-            <Link href="/services" className="inline-flex items-center gap-2 text-sm font-medium text-amber-300 hover:text-amber-200">
-              Весь каталог
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {content.trending.slots.map((slot, index) => (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {content.trending.slots.map((slot, index) => (
+            <Reveal key={slot.slotId} delayMs={index * 70}>
               <TrendingServiceCard
-                key={slot.slotId}
                 slot={slot}
                 slotIndex={index}
                 editor={editor}
                 service={serviceBySlug.get(slot.serviceSlug)}
                 isAuthed={isAuthed}
               />
-            ))}
-          </div>
+            </Reveal>
+          ))}
         </div>
       </div>
     </section>
@@ -448,8 +340,9 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
   const chat = content.chat;
 
   return (
-    <section className="border-b border-slate-800 bg-slate-950" {...sectionAttrs(chat.sectionKey)}>
-      <div className="mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[minmax(0,0.84fr)_minmax(420px,1fr)] lg:items-center lg:px-8 lg:py-16 xl:gap-12">
+    <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950" {...sectionAttrs(chat.sectionKey)}>
+      <div className="pointer-events-none absolute right-0 top-10 h-96 w-96 rounded-full bg-violet-600/15 blur-[140px]" />
+      <div className="relative mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[minmax(0,0.84fr)_minmax(420px,1fr)] lg:items-center lg:px-8 lg:py-16 xl:gap-12">
         <div className="max-w-xl">
           <SectionEyebrow icon={<Bot className="h-4 w-4" />} text={chat.eyebrow} section={chat.sectionKey} editor={editor} path={['chat', 'eyebrow']} label="Бейдж блока чата" />
           <h2 className="mt-4 text-3xl font-black tracking-normal text-white sm:text-4xl xl:text-5xl" {...fieldAttrs(chat.sectionKey, 'title')}>
@@ -557,7 +450,13 @@ function ModelCatalogSection({ content, editor }: { content: HomeLandingContent;
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {models.families.map((family, index) => (
-              <article key={family.key} className={cn('rounded-lg border p-4', modelAccentClasses[family.accent])} {...sectionAttrs(`${models.sectionKey}.${family.key}`)}>
+              <Reveal
+                key={family.key}
+                as="article"
+                delayMs={(index % 3) * 80}
+                className={cn('rounded-lg border p-4 transition hover:-translate-y-0.5', modelAccentClasses[family.accent])}
+                {...sectionAttrs(`${models.sectionKey}.${family.key}`)}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-base font-bold text-white" {...fieldAttrs(`${models.sectionKey}.${family.key}`, 'title')}>
                     <EditableText editor={editor} path={['models', 'families', index, 'title']} label="Название семейства моделей" value={family.title}>
@@ -578,7 +477,7 @@ function ModelCatalogSection({ content, editor }: { content: HomeLandingContent;
                     </span>
                   ))}
                 </div>
-              </article>
+              </Reveal>
             ))}
           </div>
         </div>
@@ -616,9 +515,11 @@ function ServicesShowcase({
   };
 
   return (
-    <section className="border-b border-slate-800 bg-slate-950" {...sectionAttrs(readyServices.sectionKey)}>
-      <div className="mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-        <div className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+    <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950" {...sectionAttrs(readyServices.sectionKey)}>
+      {/* Пятно света за сеткой: статичное, без пересчётов на скролле. */}
+      <div className="pointer-events-none absolute -left-40 top-24 h-96 w-96 rounded-full bg-amber-500/10 blur-[140px]" />
+      <div className="relative mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
+        <Reveal className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div className="max-w-3xl">
             <SectionEyebrow icon={<Zap className="h-4 w-4" />} text={readyServices.eyebrow} section={readyServices.sectionKey} editor={editor} path={['readyServices', 'eyebrow']} label="Бейдж блока услуг" />
             <h2 className="mt-4 text-3xl font-black tracking-normal text-white sm:text-4xl" {...fieldAttrs(readyServices.sectionKey, 'title')}>
@@ -640,7 +541,7 @@ function ServicesShowcase({
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
-        </div>
+        </Reveal>
 
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -649,21 +550,22 @@ function ServicesShowcase({
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {slugs.map((slug, index) => (
-              <ServiceShowcaseSlot
-                key={`${slug}-${index}`}
-                slug={slug}
-                index={index}
-                service={serviceBySlug.get(slug)}
-                editor={editor}
-                onRemove={() => removeAt(index)}
-                onChange={() =>
-                  editor?.openServiceSlotEditor({
-                    path: ['readyServices', 'serviceSlugs', index],
-                    label: 'Заменить услугу в блоке',
-                    value: slug,
-                  })
-                }
-              />
+              <Reveal key={`${slug}-${index}`} delayMs={(index % 3) * 90}>
+                <ServiceShowcaseSlot
+                  slug={slug}
+                  index={index}
+                  service={serviceBySlug.get(slug)}
+                  editor={editor}
+                  onRemove={() => removeAt(index)}
+                  onChange={() =>
+                    editor?.openServiceSlotEditor({
+                      path: ['readyServices', 'serviceSlugs', index],
+                      label: 'Заменить услугу в блоке',
+                      value: slug,
+                    })
+                  }
+                />
+              </Reveal>
             ))}
             {editor?.enabled && (
               <button

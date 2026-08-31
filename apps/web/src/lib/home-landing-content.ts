@@ -32,7 +32,33 @@ export type HomeStat = {
   value: string;
 };
 
+export type HomeGreetingStep = {
+  key: string;
+  title: string;
+  description: string;
+};
+
 export type HomeLandingContent = {
+  /**
+   * Первый экран: видео-поздравления. Это главный продукт, поэтому он открывает страницу,
+   * а не делит внимание с остальным каталогом.
+   */
+  greetings: {
+    sectionKey: string;
+    eyebrow: string;
+    title: string;
+    lead: string;
+    primaryCta: string;
+    secondaryCta: string;
+    /** Фон первого экрана. */
+    media: HomeMedia;
+    /** Скриншот редактора: главный аргумент «соберу сам». */
+    editorMedia: HomeMedia;
+    editorTitle: string;
+    editorLead: string;
+    steps: HomeGreetingStep[];
+    stats: HomeStat[];
+  };
   hero: {
     sectionKey: string;
     eyebrow: string;
@@ -104,6 +130,53 @@ export type HomeLandingContent = {
 };
 
 export const HOME_LANDING_CONTENT = {
+  greetings: {
+    sectionKey: 'greetings-hero',
+    eyebrow: 'Видео-поздравления',
+    title: 'Поздравление, которое пересматривают',
+    lead:
+      'Не открытка из мессенджера и не пятнадцать секунд из шаблона. Ваши фотографии оживают, '
+      + 'звучит ваш голос, а в финале — то, что вы хотели сказать. Соберите сами за вечер или '
+      + 'возьмите готовый сценарий и просто добавьте снимки.',
+    primaryCta: 'Выбрать шаблон',
+    secondaryCta: 'Собрать самому',
+    media: {
+      type: 'image',
+      url: 'https://picsum.photos/seed/allvision-greetings-stage/1800/1100',
+      alt: 'Кадр из видео-поздравления Allvision Studio',
+    } satisfies HomeMedia,
+    editorMedia: {
+      type: 'image',
+      url: 'https://picsum.photos/seed/allvision-editor-shot/1600/1000',
+      alt: 'Редактор роликов Allvision Studio',
+    } satisfies HomeMedia,
+    editorTitle: 'Редактор, в котором понятно всё',
+    editorLead:
+      'Сцены на шкале времени, титры мышкой, музыка и голос отдельными дорожками. '
+      + 'Видно, что получится, ещё до сборки.',
+    steps: [
+      {
+        key: 'photos',
+        title: 'Загрузите фотографии',
+        description: 'Хоть из семейного альбома, хоть с телефона. Порядок снимков станет порядком сцен.',
+      },
+      {
+        key: 'voice',
+        title: 'Добавьте голос и музыку',
+        description: 'Запишите поздравление сами или пусть его произнесёт синтез. Музыку выберите из библиотеки.',
+      },
+      {
+        key: 'result',
+        title: 'Заберите готовый файл',
+        description: 'Скачиваете и отправляете. Без водяных знаков и подписки — вы платите только за сборку.',
+      },
+    ] satisfies HomeGreetingStep[],
+    stats: [
+      { value: '12', label: 'готовых сценариев' },
+      { value: '3 мин', label: 'до первой сцены' },
+      { value: 'без', label: 'водяных знаков' },
+    ] satisfies HomeStat[],
+  },
   hero: {
     sectionKey: 'hero',
     eyebrow: 'Трендовые AI-услуги',
