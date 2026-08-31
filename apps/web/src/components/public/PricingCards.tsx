@@ -58,10 +58,20 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
     }
   };
 
+  const items = packages ?? [];
+  // Колонок ровно столько, сколько пакетов (но не больше четырёх), и ряд центрируется.
+  const columnsClass = items.length >= 4
+    ? 'sm:grid-cols-2 lg:grid-cols-4'
+    : items.length === 3
+      ? 'sm:grid-cols-2 lg:grid-cols-3'
+      : items.length === 2
+        ? 'sm:grid-cols-2'
+        : 'sm:grid-cols-1';
+
   if (isLoading) {
     return (
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
+      <div className="mx-auto grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, index) => (
           <Skeleton key={index} className="h-72 rounded-lg" />
         ))}
       </div>
@@ -69,8 +79,8 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
   }
 
   return (
-    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-      {(packages ?? []).map((pkg) => (
+    <div className={cn('mx-auto grid w-full gap-5', items.length <= 3 ? 'max-w-5xl' : '', columnsClass)}>
+      {items.map((pkg) => (
         <TokenPackageCard
           key={pkg.id}
           pkg={pkg}

@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, FileText, Sparkles } from 'lucide-react';
+import { ArrowRight, Clock, MessagesSquare, FileText, Sparkles } from 'lucide-react';
 import { CUSTOM_ORDER_STATUS_HINTS, CUSTOM_ORDER_STATUS_LABELS, type CustomOrderStatus } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
+import { TokenIcon } from '@/components/ui/token-icon';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useListMyOrdersQuery, useListOrderTypesQuery } from '@/store/api/orders-api';
 import { cn } from '@/lib/utils';
@@ -92,17 +93,52 @@ export function OrdersList() {
               <Link
                 key={type.id}
                 href={`/orders/new/${type.slug}`}
-                className="group flex h-full flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-5 transition hover:border-amber-400/60"
+                className="group flex h-full flex-col overflow-hidden rounded-2xl border border-amber-300/20 bg-slate-900 shadow-[0_0_35px_-18px_rgba(251,191,36,0.55)] transition duration-300 hover:-translate-y-1 hover:border-amber-300/60 hover:shadow-[0_0_45px_-12px_rgba(251,191,36,0.65)]"
               >
-                <h3 className="font-semibold text-slate-100">{type.title}</h3>
-                <p className="mt-2 flex-1 text-sm leading-6 text-slate-400">{type.shortDesc}</p>
-                <div className="mt-4 flex items-center justify-between text-sm">
-                  <span className="font-semibold text-amber-300">
-                    {type.priceFromCoins === type.priceToCoins
-                      ? `${type.priceFromCoins} токенов`
-                      : `${type.priceFromCoins}–${type.priceToCoins} токенов`}
+                {/* Обложка формата: заказ выбирают глазами, а не по названию строкой. */}
+                <div className="relative aspect-[16/9] overflow-hidden bg-slate-950">
+                  {type.coverImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={type.coverImage}
+                      alt=""
+                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <span className="grid h-full w-full place-items-center bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 text-slate-600">
+                      <Sparkles className="h-8 w-8" />
+                    </span>
+                  )}
+                  <span className="absolute left-3 top-3 rounded-full border border-amber-300/40 bg-slate-950/80 px-2.5 py-1 text-[11px] font-semibold text-amber-200 backdrop-blur">
+                    под ключ
                   </span>
-                  <span className="text-xs text-slate-500">от {type.leadTimeDays} дн.</span>
+                </div>
+
+                <div className="flex flex-1 flex-col gap-3 p-5">
+                  <h3 className="text-lg font-bold text-white">{type.title}</h3>
+                  <p className="line-clamp-3 flex-1 text-sm leading-6 text-slate-400">{type.shortDesc}</p>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-800 pt-3 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5" />
+                      от {type.leadTimeDays} дн.
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <MessagesSquare className="h-3.5 w-3.5" />
+                      цену назовёт менеджер
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="inline-flex items-baseline gap-1 text-lg font-black text-amber-300">
+                      от {type.priceFromCoins}
+                      <TokenIcon className="h-[0.8em] w-[0.8em]" />
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-3.5 py-1.5 text-xs font-semibold text-slate-950 transition group-hover:bg-amber-300">
+                      Оставить заявку
+                      <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                    </span>
+                  </div>
                 </div>
               </Link>
             ))}

@@ -533,7 +533,7 @@ function ServicesShowcase({
               </EditableText>
             </p>
           </div>
-          <Button asChild variant="outline" className="border-slate-700 bg-slate-900">
+          <Button asChild size="lg" className="h-12 bg-amber-400 px-6 text-slate-950 hover:bg-amber-300">
             <Link href="/services">
               <EditableText editor={editor} path={['readyServices', 'cta']} label="Текст кнопки услуг" value={readyServices.cta}>
                 {readyServices.cta}
@@ -548,9 +548,13 @@ function ServicesShowcase({
             {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-72 rounded-lg bg-slate-900" />)}
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
             {slugs.map((slug, index) => (
-              <Reveal key={`${slug}-${index}`} delayMs={(index % 3) * 90}>
+              <Reveal
+                key={`${slug}-${index}`}
+                delayMs={(index % 3) * 90}
+                className="w-[80%] shrink-0 snap-start sm:w-[46%] xl:w-[31%]"
+              >
                 <ServiceShowcaseSlot
                   slug={slug}
                   index={index}
@@ -655,20 +659,27 @@ function ServiceShowcaseSlot({
   return (
     <div className="group relative block min-w-0">
       {editControls}
-      <Link href={`/services/${service.slug}`} className="block">
-        <article className="h-full overflow-hidden rounded-lg border border-slate-800 bg-slate-900 transition duration-300 hover:-translate-y-1 hover:border-amber-300/60">
+      <Link href={`/services/${service.slug}`} className="block h-full">
+        {/*
+          * Свечение по краю вместо плотной рамки: карточка читается как подсвеченная
+          * работа, а не как поле формы. На наведении оно усиливается — обратная связь
+          * без движения всей сетки.
+          */}
+        <article className="flex h-full flex-col overflow-hidden rounded-xl border border-amber-300/20 bg-slate-900 shadow-[0_0_35px_-18px_rgba(251,191,36,0.55)] transition duration-300 hover:-translate-y-1 hover:border-amber-300/60 hover:shadow-[0_0_45px_-12px_rgba(251,191,36,0.65)]">
           <div className="aspect-[16/10] overflow-hidden bg-slate-950">
             <MediaBlock media={media} className="transition duration-500 group-hover:scale-105" />
           </div>
-          <div className="space-y-3 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="line-clamp-2 text-lg font-bold text-white">{service.title}</h3>
-              <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-amber-300 transition group-hover:translate-x-1" />
-            </div>
-            <p className="line-clamp-2 text-sm leading-6 text-slate-400">{service.shortDesc}</p>
-            <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="font-semibold text-amber-300">от {giftServicePriceFrom(service)} токенов</span>
-              <span className="text-slate-500">готовый flow</span>
+          <div className="flex flex-1 flex-col gap-3 p-4">
+            <h3 className="line-clamp-2 text-base font-bold text-white">{service.title}</h3>
+            <div className="mt-auto flex items-center justify-between gap-3">
+              <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-300">
+                от {giftServicePriceFrom(service)}
+                <TokenIcon className="h-[1em] w-[1em]" />
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-semibold text-slate-950 transition group-hover:bg-amber-300">
+                К услуге
+                <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+              </span>
             </div>
           </div>
         </article>
