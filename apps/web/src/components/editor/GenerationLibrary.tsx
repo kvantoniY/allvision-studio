@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Check, Loader2, Plus, RefreshCw, XCircle } from 'lucide-react';
 import { useListProjectsQuery } from '@/store/api/projects-api';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
@@ -15,9 +16,19 @@ import { cn } from '@/lib/utils';
  */
 export function GenerationLibrary({ onInsert }: { onInsert: (url: string, kind: 'image' | 'video') => void }) {
   // Пока в списке есть незавершённые генерации, обновляемся часто: прогресс должен идти.
-  const { data, isLoading, refetch } = useListProjectsQuery({ page: 1, limit: 24 });
+  const [hasRunning, setHasRunning] = useState(true);
+  const { data, isLoading, refetch } = useListProjectsQuery(
+    { page: 1, limit: 24 },
+    // Пока что-то считается — опрашиваем часто; когда всё готово, опрос прекращается,
+    // иначе вкладка дёргала бы сервер вечно.
+    { pollingInterval: hasRunning ? 3000 : 0 },
+  );
   const items = data?.items ?? [];
   const running = items.filter((item) => item.status === 'PENDING' || item.status === 'PROCESSING');
+
+  useEffect(() => {
+    setHasRunning(running.length > 0);
+  }, [running.length]);
 
   return (
     <div className="space-y-3">

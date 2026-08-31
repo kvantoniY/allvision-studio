@@ -587,6 +587,7 @@ export function VideoEditor({ id }: { id: string }) {
           body: { serviceSlug: service.slug, layerId, frameUrl: frame?.source.url, values },
         }).unwrap();
         ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId });
+        setTool('library');
         toast({ title: `Запустили «${service.title}»`, description: `Списано ${result.tokensCost} токенов` });
       } catch (error) {
         setRunningServiceSlug(null);
@@ -635,6 +636,7 @@ export function VideoEditor({ id }: { id: string }) {
         appliedGenerationRef.current = null;
         ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId, origin: 'generated' });
         setSelectedLayerId(layerId);
+        setTool('library');
         toast({ title: 'Генерация запущена', description: 'Можно закрыть страницу — кадр сам встанет в сцену.' });
       } catch (error) {
         // Убираем только тот слой, который завели ради этой генерации: чужой кадр,

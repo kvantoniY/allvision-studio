@@ -9,7 +9,9 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 400
+const TOAST_AUTO_DISMISS_MS = 4000
+const TOAST_AUTO_DISMISS_ERROR_MS = 8000
 
 type ToasterToast = ToastProps & {
   id: string
@@ -163,6 +165,9 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+
+  // Само закрытие: держать сообщение на экране до клика незачем, оно уже прочитано.
+  setTimeout(dismiss, props.variant === 'destructive' ? TOAST_AUTO_DISMISS_ERROR_MS : TOAST_AUTO_DISMISS_MS)
 
   return {
     id: id,

@@ -186,7 +186,20 @@ export function SceneGenerator({
   }, [slots, extraSlots, slotRefs, reference]);
 
   const enoughCoins = balance >= price;
-  const canGenerate = Boolean(model) && !running && enoughCoins && (!model?.requiresPrompt || prompt.trim().length > 0);
+
+  // Первый слот изображения закрывается кадром сцены, если он выбран референсом.
+  const firstImageSlot = slots.find((slot) => slot.mediaKind === 'image');
+  const missingSlot = slots.find((slot) => {
+    if (!slot.required) return false;
+    if (reference && slot.key === firstImageSlot?.key) return false;
+    return !slotRefs[slot.key];
+  });
+
+  const canGenerate = Boolean(model)
+    && !running
+    && enoughCoins
+    && !missingSlot
+    && (!model?.requiresPrompt || prompt.trim().length > 0);
 
   if (openService) {
     const running = runningServiceSlug === openService.slug;
@@ -441,6 +454,9 @@ export function SceneGenerator({
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
           {running ? 'Генерируем…' : `Сгенерировать за ${formatTokens(price)}`}
         </Button>
+        {missingSlot && (
+          <span className="text-xs text-amber-300">Прикрепите «{missingSlot.label}» — без него модель не запустится</span>
+        )}
         {!enoughCoins && <span className="text-xs text-amber-300">Не хватает токенов на балансе</span>}
       </div>
       </div>
