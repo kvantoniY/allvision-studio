@@ -18,6 +18,7 @@ import { uploadEditorMedia } from '../../middleware/upload';
 import { HttpError } from '../../utils/http-error';
 import { logger } from '../../utils/logger';
 import { createFreeChatProject } from '../../services/free-chat-generation';
+import { createEditorServiceGeneration } from '../../services/editor-service-generation';
 import { readModelPriceOverrides } from '../../services/model-pricing';
 import * as fileService from '../../services/file-service';
 import * as queues from '../../queues';
@@ -50,6 +51,14 @@ const createSchema = z.object({
 const VIDEO_EXPORT_PRICE_COINS = 2;
 
 /** Слой, который ждёт результат генерации. Остальные поля тела разбирает чатовый путь. */
+const serviceGenerateSchema = z.object({
+  serviceSlug: z.string().trim().min(1).max(120),
+  layerId: z.string().trim().max(80).optional(),
+  /** Кадр из сцены: им закрываются фото-поля услуги. */
+  frameUrl: z.string().trim().max(2000).optional(),
+  values: z.record(z.union([z.string().max(2000), z.boolean()])).optional(),
+});
+
 const generateTargetSchema = z.object({ layerId: z.string().trim().min(1).max(80).optional() });
 
 const updateSchema = z.object({
@@ -325,6 +334,43 @@ videoProjectsRouter.post('/:id/scenes/:sceneId/generate', async (req: Request, r
       tokensCost: result.project.tokensCost,
       estimatedDurationSec: result.estimatedDurationSec,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Запуск услуги прямо из редактора: результат возвращается в кадр сцены.
+ */
+videoProjectsRouter.post('/:id/scenes/:sceneId/generate-service', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const videoProject = await ownedProject(userId, req.params.id);
+    const timeline = parseDraftTimeline(videoProject.timeline);
+    const sceneIndex = timeline.scenes.findIndex((scene) => scene.id === req.params.sceneId);
+    if (sceneIndex < 0) throw new HttpError(404, 'SCENE_NOT_FOUND', 'Сцена не найдена');
+
+    const body = serviceGenerateSchema.parse(req.body ?? {});
+    const result = await createEditorServiceGeneration({
+      userId,
+      serviceSlug: body.serviceSlug,
+      frameUrl: body.frameUrl,
+      values: body.values ?? {},
+    });
+
+    // Метку ставит сервер — по ней воркер вернёт результат в нужный слой, даже если
+    // вкладку закроют до автосохранения редактора.
+    const marked = body.layerId
+      ? markLayerGeneration(timeline, req.params.sceneId, body.layerId, result.projectId)
+      : { changed: false, timeline };
+    if (marked.changed) {
+      await prisma.videoProject.update({
+        where: { id: videoProject.id },
+        data: { timeline: marked.timeline as never },
+      });
+    }
+
+    res.status(202).json(result);
   } catch (err) {
     next(err);
   }

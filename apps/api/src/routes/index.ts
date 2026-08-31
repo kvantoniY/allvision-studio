@@ -16,6 +16,7 @@ import { userChatsRouter } from './user/chats';
 import { userEventsRouter } from './user/events';
 import { videoProjectsRouter } from './user/video-projects';
 import { userOrdersRouter } from './user/orders';
+import { editorCatalogRouter } from './user/editor-catalog';
 import { adminRouter } from './admin';
 import { adminReadonlyRouter } from './admin-readonly';
 
@@ -39,5 +40,6 @@ router.use('/user/chats', userChatsRouter);
 router.use('/user/events', userEventsRouter);
 router.use('/user/video-projects', videoProjectsRouter);
 router.use('/user/orders', userOrdersRouter);
+router.use('/user/editor-catalog', editorCatalogRouter);
 router.use('/admin', adminRouter);
 router.use('/admin-readonly', adminReadonlyRouter);

@@ -61,6 +61,19 @@ export const videoProjectsApi = createApi({
         return { url: `/${id}/media`, method: 'POST', body };
       },
     }),
+    generateSceneService: build.mutation<
+      { projectId: string; tokensCost: number },
+      { id: string; sceneId: string; body: Record<string, unknown> }
+    >({
+      query: ({ id, sceneId, body }) => ({ url: `/${id}/scenes/${sceneId}/generate-service`, method: 'POST', body }),
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        await queryFulfilled;
+        // Запуск услуги списывает коины и создаёт обычный проект — баланс и список
+        // генераций должны это увидеть.
+        dispatch(projectsApi.util.invalidateTags(['Project']));
+      },
+      invalidatesTags: (_result, _error, { id }) => [{ type: 'VideoProject', id }],
+    }),
     generateScene: build.mutation<
       { projectId: string; tokensCost: number; estimatedDurationSec: number },
       { id: string; sceneId: string; body: Record<string, unknown> }
@@ -118,6 +131,7 @@ export const {
   useUploadEditorMediaMutation,
   useExportVideoProjectMutation,
   useGenerateSceneMutation,
+  useGenerateSceneServiceMutation,
   useGenerateVoiceoverMutation,
   useListVideoExportsQuery,
   useListVoiceoversQuery,

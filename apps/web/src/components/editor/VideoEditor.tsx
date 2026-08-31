@@ -59,6 +59,7 @@ import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor
 import { TimelineTracks } from '@/components/editor/TimelineTracks';
 import { AudioTools, type VoiceRecording, type VoiceoverRequest } from '@/components/editor/AudioTools';
 import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
+import type { EditorCatalogService } from '@/store/api/editor-catalog-api';
 import { ExportOverlay } from '@/components/editor/ExportOverlay';
 import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
 import { usePlayback } from '@/components/editor/usePlayback';
@@ -67,6 +68,7 @@ import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
 import {
   useExportVideoProjectMutation,
   useGenerateSceneMutation,
+  useGenerateSceneServiceMutation,
   useGenerateVoiceoverMutation,
   useGetVideoProjectQuery,
   useListVoiceoversQuery,
@@ -116,6 +118,8 @@ export function VideoEditor({ id }: { id: string }) {
   const [uploadMedia, { isLoading: uploading }] = useUploadEditorMediaMutation();
   const [exportProject, { isLoading: exporting }] = useExportVideoProjectMutation();
   const [generateScene, { isLoading: generating }] = useGenerateSceneMutation();
+  const [generateSceneService] = useGenerateSceneServiceMutation();
+  const [runningServiceSlug, setRunningServiceSlug] = useState<string | null>(null);
   const [generateVoiceover, { isLoading: generatingVoiceover }] = useGenerateVoiceoverMutation();
   const { data: me } = useGetMeQuery();
   const { data: musicData } = useGetPublicMediaAssetsQuery({ kind: 'background-music', active: true });
@@ -556,6 +560,42 @@ export function VideoEditor({ id }: { id: string }) {
     }
     : null;
 
+  const handleRunService = useCallback(
+    async (service: { slug: string; title: string }) => {
+      const scene = currentScene;
+      if (!timeline || !scene) return;
+      const frame = sceneMediaLayers(scene).find((layer) => layer.source.kind === 'image' || layer.source.kind === 'video');
+
+      // Результат должен вернуться в кадр, поэтому слой для него заводим заранее: если его
+      // не назвать, воркеру некуда будет положить готовое.
+      const layerId = selectedLayer?.kind === 'media'
+        ? selectedLayer.id
+        : ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
+      if (!layerId) {
+        toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+        return;
+      }
+
+      setRunningServiceSlug(service.slug);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      try {
+        if (timelineRef.current) await updateProject({ id, timeline: timelineRef.current }).unwrap();
+        const result = await generateSceneService({
+          id,
+          sceneId: scene.id,
+          body: { serviceSlug: service.slug, layerId, frameUrl: frame?.source.url },
+        }).unwrap();
+        ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId });
+        toast({ title: `Запустили «${service.title}»`, description: `Списано ${result.tokensCost} коинов` });
+      } catch (error) {
+        setRunningServiceSlug(null);
+        const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
+        toast({ title: 'Не удалось запустить услугу', description: message, variant: 'destructive' });
+      }
+    },
+    [currentScene, timeline, selectedLayer, ops, sceneIndex, id, updateProject, generateSceneService],
+  );
+
   const handleGenerate = useCallback(
     async (request: SceneGenerationRequest) => {
       const scene = currentScene;
@@ -965,6 +1005,9 @@ export function VideoEditor({ id }: { id: string }) {
             onRecordVoice={(file) => void handleVoiceUpload(file)}
             onGenerateVoiceover={handleGenerateVoiceover}
             onGenerate={handleGenerate}
+            onRunService={handleRunService}
+            runningServiceSlug={runningServiceSlug}
+            serviceProgress={sceneStatus?.progress ?? 0}
             onUploadReference={uploadReference}
             onInsertGeneration={(url, kind) => {
               const layerId = ops.addMediaLayer(sceneIndex, { kind, url });
@@ -1137,6 +1180,9 @@ function ToolBar({
   onRecordVoice,
   onGenerateVoiceover,
   onGenerate,
+  onRunService,
+  runningServiceSlug,
+  serviceProgress,
   onUploadReference,
   onInsertGeneration,
 }: {
@@ -1164,6 +1210,9 @@ function ToolBar({
   onUploadReference: (file: File) => Promise<string | null>;
   onInsertGeneration: (url: string, kind: 'image' | 'video') => void;
   onGenerate: (request: SceneGenerationRequest) => void;
+  onRunService: (service: EditorCatalogService) => void;
+  runningServiceSlug: string | null;
+  serviceProgress: number;
 }) {
   if (tool === 'media') {
     return (
@@ -1251,6 +1300,9 @@ function ToolBar({
       selectedLayer={selectedLayer}
       onUploadReference={onUploadReference}
       onGenerate={onGenerate}
+      onRunService={onRunService}
+      runningServiceSlug={runningServiceSlug}
+      serviceProgress={serviceProgress}
     />
   ) : null;
 }

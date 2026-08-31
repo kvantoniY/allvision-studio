@@ -4,10 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Plus, Sparkles, Wand2, X } from 'lucide-react';
 import {
   CHAT_MODELS,
-  SCENE_PRESETS,
   chatReferenceSlots,
-  SCENE_PRESET_GROUPS,
-  SCENE_PRESET_GROUP_TITLES,
   estimateChatGenerationPriceCoins,
   formatTokens,
   primaryMediaLayer,
@@ -20,9 +17,10 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useGetChatModelsQuery } from '@/store/api/user-chat-api';
-import { useGetStylePresetsQuery } from '@/store/api/public-api';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
-import { ServiceIdeaCards } from '@/components/editor/ServiceIdeaCards';
+import { ServiceIdeaCards, ServiceRunCard, servicePriceCoins } from '@/components/editor/ServiceIdeaCards';
+import type { EditorCatalogService } from '@/store/api/editor-catalog-api';
+import { editorLaunchBlocker } from '@allvision/shared';
 import { cn } from '@/lib/utils';
 
 /**
@@ -73,6 +71,9 @@ export function SceneGenerator({
   selectedLayer,
   onUploadReference,
   onGenerate,
+  onRunService,
+  runningServiceSlug,
+  serviceProgress,
 }: {
   scene: TimelineScene;
   aspect: TimelineAspect;
@@ -83,6 +84,10 @@ export function SceneGenerator({
   /** Загружает файл и возвращает публичную ссылку — тот же путь, что у материала сцены. */
   onUploadReference: (file: File) => Promise<string | null>;
   onGenerate: (request: SceneGenerationRequest) => void;
+  /** Запуск услуги прямо отсюда: результат вернётся в кадр этой же сцены. */
+  onRunService: (service: EditorCatalogService) => void;
+  runningServiceSlug?: string | null;
+  serviceProgress?: number;
 }) {
   // Референс по умолчанию — тот кадр, который человек выделил. Если не выделен ничего,
   // берём главный кадр сцены: на сцене из одного слоя это одно и то же.
@@ -91,6 +96,9 @@ export function SceneGenerator({
   const sceneRef = selectedRef?.id === primary?.id ? null : imageLayer(primary);
 
   const [refChoice, setRefChoice] = useState<ReferenceChoice | null>(null);
+  // Открытая услуга занимает панель целиком: человек смотрит обложку и описание, а не
+  // ищет их среди полей генерации.
+  const [openService, setOpenService] = useState<EditorCatalogService | null>(null);
   const [target, setTarget] = useState<SceneGenerationTarget>('new');
 
   // Сбрасываем выбор при смене выделения — и только при ней. Если завязаться на сам объект
@@ -108,8 +116,6 @@ export function SceneGenerator({
   // цену ниже той, что спишет сервер.
   const { data: pricing } = useGetChatModelsQuery();
   const [prompt, setPrompt] = useState('');
-  // Какой шаблон выбран: без подсветки клик по плитке выглядел как «ничего не произошло».
-  const [activePreset, setActivePreset] = useState<string | null>(null);
   const [duration, setDuration] = useState(5);
   const [modelSlug, setModelSlug] = useState<string | null>(null);
 
@@ -135,19 +141,6 @@ export function SceneGenerator({
       priceOverrides: pricing?.modelPriceOverrides,
     });
   }, [model, isVideo, duration, pricing?.modelPriceOverrides]);
-
-  // Шаблоны сцен ведёт владелец в админке: там же к ним прикладываются превью. Пока набор
-  // пуст, показываем встроенный список — редактор не должен остаться без подсказок.
-  const { data: scenePresetsData } = useGetStylePresetsQuery({ kind: 'editor-scene' });
-  const { data: duoPresetsData } = useGetStylePresetsQuery({ kind: 'editor-scene-duo' });
-  const managedSolo = scenePresetsData?.presets ?? [];
-  const managedDuo = duoPresetsData?.presets ?? [];
-  const hasManaged = managedSolo.length > 0 || managedDuo.length > 0;
-
-  const presets = useMemo(
-    () => SCENE_PRESETS.filter((preset) => (preset.needsPhoto ? hasImage : true)),
-    [hasImage],
-  );
 
   // Дополнительные референсы модели: столько слотов, сколько она принимает. Первый слот
   // закрывает выбранный кадр сцены, остальные человек прикрепляет сам.
@@ -194,6 +187,23 @@ export function SceneGenerator({
 
   const enoughCoins = balance >= price;
   const canGenerate = Boolean(model) && !running && enoughCoins && (!model?.requiresPrompt || prompt.trim().length > 0);
+
+  if (openService) {
+    const running = runningServiceSlug === openService.slug;
+    return (
+      <section className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
+        <ServiceRunCard
+          service={openService}
+          price={servicePriceCoins(openService)}
+          blocker={editorLaunchBlocker(openService.userInputForm, {}, hasImage)}
+          running={running}
+          progress={serviceProgress ?? 0}
+          onBack={() => setOpenService(null)}
+          onRun={() => onRunService(openService)}
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-4 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
@@ -348,70 +358,9 @@ export function SceneGenerator({
         </div>
       )}
 
-      {hasManaged ? (
-        <div className="space-y-3">
-          <PresetTiles
-            title="Сцены"
-            presets={managedSolo}
-            activeId={activePreset}
-            onPick={(text, id) => {
-              setPrompt(text);
-              setActivePreset(id);
-            }}
-          />
-          <PresetTiles
-            title="Совместные кадры"
-            hint="Работают, когда в сцене есть люди: прикрепите второй портрет референсом."
-            presets={managedDuo}
-            activeId={activePreset}
-            onPick={(text, id) => {
-              setPrompt(text);
-              setActivePreset(id);
-            }}
-          />
-        </div>
-      ) : (
-      <div className="space-y-2">
-        <Label className="text-xs">Готовые сцены</Label>
-        <div className="space-y-2">
-          {SCENE_PRESET_GROUPS.map((group) => {
-            const items = presets.filter((preset) => preset.group === group);
-            if (items.length === 0) return null;
-            return (
-              <div key={group}>
-                <div className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
-                  {SCENE_PRESET_GROUP_TITLES[group]}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {items.map((preset) => (
-                    <button
-                      key={preset.code}
-                      type="button"
-                      title={preset.description}
-                      onClick={() => {
-                        setPrompt(preset.prompt);
-                        setActivePreset(preset.code);
-                      }}
-                      className={cn(
-                        'rounded-full border px-3 py-1 text-xs transition',
-                        activePreset === preset.code
-                          ? 'border-violet-400 bg-violet-500/20 text-violet-100'
-                          : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-violet-400/60 hover:text-white',
-                      )}
-                    >
-                      {preset.title}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      )}
-
+      {/* Подборка услуг вместо прежних шаблонов сцен: владелец собирает её прямо здесь. */}
       <div className="border-t border-slate-800 pt-3">
-        <ServiceIdeaCards />
+        <ServiceIdeaCards onOpenService={setOpenService} runningSlug={runningServiceSlug ?? null} />
       </div>
 
       <div className="sticky bottom-0 -mx-4 -mb-4 space-y-3 border-t border-violet-500/30 bg-slate-950/95 px-4 pb-4 pt-3 backdrop-blur">
@@ -424,7 +373,6 @@ export function SceneGenerator({
           value={prompt}
           onChange={(event) => {
             setPrompt(event.target.value);
-            setActivePreset(null);
           }}
           rows={3}
           placeholder="Что должно происходить в кадре"
@@ -532,50 +480,3 @@ function ChoiceChip({
  * Пока владелец не приложил превью, показываем заголовок на подложке — шаблон всё равно
  * рабочий, просто без картинки.
  */
-function PresetTiles({
-  title,
-  hint,
-  presets,
-  activeId,
-  onPick,
-}: {
-  title: string;
-  hint?: string;
-  presets: Array<{ id: string; title: string; description: string; promptText: string; thumbnail: string | null }>;
-  activeId: string | null;
-  onPick: (prompt: string, id: string) => void;
-}) {
-  if (presets.length === 0) return null;
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs">{title}</Label>
-      {hint && <p className="text-[11px] text-slate-500">{hint}</p>}
-      <div className="grid grid-cols-3 gap-1.5">
-        {presets.map((preset) => (
-          <button
-            key={preset.id}
-            type="button"
-            title={preset.description}
-            onClick={() => onPick(preset.promptText, preset.id)}
-            className={cn(
-              'group relative aspect-square overflow-hidden rounded-lg border bg-slate-900 transition',
-              activeId === preset.id
-                ? 'border-violet-400 ring-2 ring-violet-400/40'
-                : 'border-slate-700 hover:border-violet-400',
-            )}
-          >
-            {preset.thumbnail ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={mediaUrl(preset.thumbnail) ?? preset.thumbnail} alt="" className="h-full w-full object-cover transition group-hover:scale-105" />
-            ) : (
-              <span className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
-            )}
-            <span className="absolute inset-x-0 bottom-0 bg-slate-950/80 px-1 py-0.5 text-[10px] leading-tight text-slate-200">
-              {preset.title}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
