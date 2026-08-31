@@ -26,6 +26,7 @@ import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL } from '@/components/dashboa
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
 import { GenerationRetentionNotice } from '@/components/generations/GenerationRetentionNotice';
+import { TokenPrice } from '@/components/ui/token-price';
 import {
   type UserMediaAsset,
   type UserMediaKind,
@@ -324,7 +325,7 @@ function StudioHistory({
                 </div>
               </Link>
               <div className="space-y-1 text-xs text-slate-500">
-                <div>{formatTokens(project.tokensCost)}</div>
+                <div><TokenPrice value={project.tokensCost} /></div>
                 {usedAssets.length > 0 && <div className="line-clamp-1">Референс: {usedAssets.join(', ')}</div>}
                 {project.errorMessage && <div className="line-clamp-2 text-amber-200">{project.errorMessage}</div>}
               </div>

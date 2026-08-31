@@ -155,6 +155,11 @@ export const userInputFieldSchema = z.object({
   minPhotos: z.coerce.number().int().min(1).max(30).optional(),
   maxPhotos: z.coerce.number().int().min(1).max(30).optional(),
   priceCoinsPerPhoto: z.coerce.number().int().min(1).optional(),
+  /**
+   * Стартовая цена услуги независимо от числа снимков: сборка ролика, титры, музыка —
+   * работа, которая делается один раз. Итог = базовая цена + цена за снимок × количество.
+   */
+  basePriceCoins: z.coerce.number().int().min(0).optional(),
 });
 
 export const userInputFormSchema = z.array(userInputFieldSchema).min(1);

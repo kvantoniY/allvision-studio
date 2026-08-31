@@ -302,7 +302,7 @@ function VoiceTab({
           {voiceoverRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
           {voiceoverRunning ? 'Записываем…' : `Озвучить за ${formatTokens(price)}`}
         </Button>
-        {!enoughCoins && <p className="text-xs text-amber-300">Не хватает коинов на балансе</p>}
+        {!enoughCoins && <p className="text-xs text-amber-300">Не хватает токенов на балансе</p>}
       </div>
     </div>
   );

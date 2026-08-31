@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TEMPLATE_CATEGORY_LABEL } from '@/components/studio/v3-labels';
 import { useListPublicScenarioTemplatesQuery } from '@/store/api/public-scenario-templates-api';
 import { cn } from '@/lib/utils';
+import { TokenPrice } from '@/components/ui/token-price';
 
 const categoryOrder = ['all', 'wedding', 'birthday', 'newyear', 'family', 'memorial', 'kids', 'pets'];
 
@@ -50,7 +51,7 @@ function TemplateCard({ template, featured = false }: { template: PublicScenario
             <Badge variant="secondary" className="bg-slate-800 text-slate-200">
               {categoryLabel(template.category)}
             </Badge>
-            <Badge className="bg-violet-600 text-white">{formatTokens(template.priceTokens)}</Badge>
+            <Badge className="bg-violet-600 text-white"><TokenPrice value={template.priceTokens} /></Badge>
           </div>
           <div>
             <h2 className="text-lg font-semibold leading-tight text-white">{template.title}</h2>

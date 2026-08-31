@@ -13,7 +13,7 @@ describe('CHAT_MODELS', () => {
   });
 
   it('enforces chat price floors: images >= 2 coins, Kling/Seedance video 12 + 1/sec over 5s', () => {
-    // Все фото-модели чата — минимум 2 коина.
+    // Все фото-модели чата — минимум 2 токена.
     for (const model of CHAT_MODELS.filter((m) => m.category === 'image')) {
       expect(estimateChatGenerationPriceCoins(model.slug)).toBeGreaterThanOrEqual(2);
     }
@@ -105,7 +105,7 @@ describe('CHAT_MODELS', () => {
     // Оверрайд выше базовой цены — поднимает цену до себя.
     const base = estimateChatGenerationPriceCoins('nano-banana');
     expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': base + 50 } })).toBe(base + 50);
-    // Оверрайд ниже пола НЕ опускает цену: картинка всё равно минимум 2 коина.
+    // Оверрайд ниже пола НЕ опускает цену: картинка всё равно минимум 2 токена.
     expect(estimateChatGenerationPriceCoins('nano-banana', { priceOverrides: { 'nano-banana': 1 } })).toBe(2);
     // Оверрайд не «замораживает» видео: длительность поднимает цену выше оверрайда.
     expect(estimateChatGenerationPriceCoins('kling-3-omni', { duration: 5, priceOverrides: { 'kling-3-omni': 12 } })).toBe(12);
@@ -114,7 +114,7 @@ describe('CHAT_MODELS', () => {
 
   it('marks up chat pricing at cost x2 but never below the chat floor', () => {
     const gptCost = estimateChatGenerationCostCoins('gpt-image-2');
-    // Картинка: max(себестоимость×2, пол 2 коина).
+    // Картинка: max(себестоимость×2, пол 2 токена).
     expect(estimateChatGenerationPriceCoins('gpt-image-2')).toBe(Math.max(2, Math.ceil(gptCost * 2)));
 
     // kling-3-omni 15с/720p: себестоимость×2 = 14, но пол Kling на 15с = 12 + 10 = 22 → берём 22.

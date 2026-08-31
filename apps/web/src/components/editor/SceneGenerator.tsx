@@ -440,7 +440,7 @@ export function SceneGenerator({
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
           {running ? 'Генерируем…' : `Сгенерировать за ${formatTokens(price)}`}
         </Button>
-        {!enoughCoins && <span className="text-xs text-amber-300">Не хватает коинов на балансе</span>}
+        {!enoughCoins && <span className="text-xs text-amber-300">Не хватает токенов на балансе</span>}
       </div>
       </div>
     </section>

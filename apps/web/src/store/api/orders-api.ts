@@ -95,7 +95,7 @@ export const ordersApi = createApi({
       query: (id) => ({ url: `/user/orders/${id}/pay`, method: 'POST' }),
       async onQueryStarted(_id, { dispatch, queryFulfilled }) {
         await queryFulfilled;
-        // Оплата списывает коины — баланс в шапке и история операций должны это увидеть.
+        // Оплата списывает токены — баланс в шапке и история операций должны это увидеть.
         dispatch(accountApi.util.invalidateTags(['User', 'Dashboard', 'Transactions']));
         dispatch(authApi.util.invalidateTags(['Me', 'User']));
       },

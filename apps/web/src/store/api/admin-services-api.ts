@@ -67,6 +67,8 @@ export type UserInputField = {
   minPhotos?: number;
   maxPhotos?: number;
   priceCoinsPerPhoto?: number;
+  /** Стартовая цена независимо от числа снимков: сборка, титры, музыка. */
+  basePriceCoins?: number;
 };
 
 export type AdminService = {

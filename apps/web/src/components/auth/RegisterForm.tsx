@@ -63,7 +63,7 @@ export function RegisterForm() {
       toast({
         title: 'Добро пожаловать!',
         description: user.tokenBalance > 0
-          ? `Вам начислено ${user.tokenBalance} коинов бонусом`
+          ? `Вам начислено ${user.tokenBalance} токенов бонусом`
           : 'Аккаунт создан — выбирайте подарок и начинайте.',
       });
       router.push('/dashboard');

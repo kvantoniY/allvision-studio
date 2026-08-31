@@ -78,7 +78,7 @@ export function GenerationLibrary({ onInsert }: { onInsert: (url: string, kind: 
                   )}
                 >
                   {failed
-                    ? 'Не получилось — коины вернулись'
+                    ? 'Не получилось — токены вернулись'
                     : done
                       ? kind === 'video' ? 'Видео' : 'Кадр'
                       : `${item.status === 'PENDING' ? 'В очереди' : 'Генерируем'} — ${item.progress}%`}

@@ -56,6 +56,7 @@ import { OpenInEditorButton } from '@/components/editor/OpenInEditorButton';
 import { cn } from '@/lib/utils';
 
 import { TokenIcon } from '@/components/ui/token-icon';
+import { TokenPrice } from '@/components/ui/token-price';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
 // Явные лимиты для юзера. Должны быть не строже серверных multer-фильтров
@@ -120,6 +121,7 @@ type UserInputField = {
   minPhotos?: number;
   maxPhotos?: number;
   priceCoinsPerPhoto?: number;
+  basePriceCoins?: number;
 };
 
 type FormValues = Record<string, string>;
@@ -235,7 +237,9 @@ function photosPrice(fields: UserInputField[], photoSets: Record<string, File[]>
   if (!field) return null;
   const count = photoSets[field.id]?.length ?? 0;
   if (count === 0) return null;
-  return field.priceCoinsPerPhoto! * count;
+  // Та же формула, что на сервере: база плюс надбавка за каждый снимок. Разойдись они —
+  // человек увидел бы одну цену, а списалась бы другая.
+  return (field.basePriceCoins ?? 0) + field.priceCoinsPerPhoto! * count;
 }
 
 function durationPrice(fields: UserInputField[], values: FormValues): number | null {
@@ -402,7 +406,7 @@ function TierSelector({
             >
               <div className="text-sm font-semibold text-slate-100">{option.label}</div>
               <div className="mt-1 text-xs font-bold text-amber-300">
-                {disabled ? 'скоро' : formatTokens(tierPrice(service, tier))}
+                {disabled ? 'скоро' : <TokenPrice value={tierPrice(service, tier)} />}
               </div>
             </button>
           );
@@ -1376,7 +1380,7 @@ function MultiSelectInput({
                 {option.hint && <span className="mt-0.5 block text-xs leading-4 text-slate-500">{option.hint}</span>}
               </span>
               {typeof option.priceCoins === 'number' && !disabled && (
-                <span className="shrink-0 text-xs font-bold text-amber-300">{formatTokens(option.priceCoins)}</span>
+                <span className="shrink-0 text-xs font-bold text-amber-300"><TokenPrice value={option.priceCoins} /></span>
               )}
             </button>
           );
@@ -2176,7 +2180,7 @@ function GenerationCard({
               </div>
               <div className="mt-1 text-xs text-slate-500">{formatDateTime(project.createdAt)}</div>
             </div>
-            <div className="shrink-0 text-xs text-slate-500 sm:text-right">{formatTokens(project.tokensCost)}</div>
+            <div className="shrink-0 text-xs text-slate-500 sm:text-right"><TokenPrice value={project.tokensCost} /></div>
           </div>
           {project.status === 'COMPLETED' && (
             <GenerationRetentionNotice expiresAt={project.expiresAt} compact className="mt-1 sm:max-w-[22rem]" />
@@ -2831,7 +2835,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
               <div className="space-y-5 px-6 pb-6">
                 <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
                   <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
-                  <div className="mt-1 text-3xl font-black text-amber-200">{formatTokens(price)}</div>
+                  <div className="mt-1 text-3xl font-black text-amber-200"><TokenPrice value={price} /></div>
                 </div>
                 <Alert className="border-slate-700 bg-slate-950">
                   <Lock className="h-4 w-4" />
@@ -2848,7 +2852,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-5 lg:pr-5">
                   <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
                     <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
-                    <div className="mt-1 text-3xl font-black text-amber-200">{formatTokens(price)}</div>
+                    <div className="mt-1 text-3xl font-black text-amber-200"><TokenPrice value={price} /></div>
                   </div>
 
                   {tierField && (
@@ -2902,7 +2906,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     <div className="flex items-center justify-between gap-3 text-sm">
                       <span className="text-slate-400">Ваш баланс</span>
                       <span className={cn('font-bold', hasEnoughCoins ? 'text-emerald-300' : 'text-amber-300')}>
-                        {formatTokens(balance)}
+                        <TokenPrice value={balance} />
                       </span>
                     </div>
                     {!hasEnoughCoins && (
@@ -2932,7 +2936,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     ) : (
                       <TokenIcon className="h-4 w-4" />
                     )}
-                    {launchStartedLock ? 'Генерация началась!' : `Создать за ${formatTokens(price)}`}
+                    {launchStartedLock ? 'Генерация началась!' : `Создать за $<TokenPrice value={price} />`}
                   </Button>
                   {blockedByForm && (
                     <p className="text-center text-xs text-amber-200/90">{validationErrors[0]}</p>

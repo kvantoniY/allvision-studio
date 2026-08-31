@@ -97,6 +97,7 @@ import { falEndpointForModel } from '@allvision/shared';
 import { SourceSelector, type AvailableSourceStep } from './SourceSelector';
 import { CoverCropper } from './CoverCropper';
 import { type CoverCrop } from '@/lib/cover-crop';
+import { TokenPrice } from '@/components/ui/token-price';
 
 // Categories are now loaded dynamically from API (ServiceCategoryDef). Form fetches the list at render time.
 
@@ -1186,7 +1187,7 @@ function ModelPriceEditor({
     <div className="mt-3 rounded-md border border-zinc-800 bg-zinc-900 p-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[180px] flex-1 space-y-1">
-          <Label htmlFor={`model-price-${model.slug}`}>Цена генерации, токены</Label>
+          <Label htmlFor={`model-price-${model.slug}`}>Цена этой модели в чате и Студии</Label>
           <Input
             id={`model-price-${model.slug}`}
             type="number"
@@ -1196,6 +1197,10 @@ function ModelPriceEditor({
             onChange={(event) => setDraft(event.target.value)}
             onBlur={() => setDraft(String(nextPrice))}
           />
+          <p className="text-[11px] leading-4 text-slate-500">
+            На цену этой услуги не влияет — она задаётся полем «Цена услуги» вверху.
+            Здесь вы ставите, сколько стоит запуск этой модели в Allvision AI и Студии.
+          </p>
         </div>
         <Button
           type="button"
@@ -1852,7 +1857,7 @@ function UserInputFormBuilder({
         ? { maxSizeMb: 20, allowedFormats: ['jpg', 'jpeg', 'png'], allowStudioAvatars: true, allowSystemLibrary: false }
         : {}),
       ...(type === 'photos'
-        ? { maxSizeMb: 15, allowedFormats: ['jpg', 'jpeg', 'png', 'webp'], minPhotos: 4, maxPhotos: 12, priceCoinsPerPhoto: 35 }
+        ? { maxSizeMb: 15, allowedFormats: ['jpg', 'jpeg', 'png', 'webp'], minPhotos: 4, maxPhotos: 12, basePriceCoins: 0, priceCoinsPerPhoto: 35 }
         : {}),
     };
     onChange([...fields, next]);
@@ -1997,7 +2002,18 @@ function UserInputFormBuilder({
                                   />
                                 </label>
                                 <label className="flex items-center gap-2">
-                                  Коинов за фото
+                                  Базовая цена
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    value={field.basePriceCoins ?? ''}
+                                    onChange={(event) => updateField(index, { basePriceCoins: event.target.value ? Number(event.target.value) : undefined })}
+                                    className="h-8 w-24"
+                                    title="Стартовая цена независимо от числа снимков: сборка, титры, музыка"
+                                  />
+                                </label>
+                                <label className="flex items-center gap-2">
+                                  Токенов за фото
                                   <Input
                                     type="number"
                                     min={1}
@@ -2368,7 +2384,7 @@ function UserInputFormBuilder({
               {servicePreview.shortDesc && <p className="mt-1 text-sm leading-6 text-slate-400">{servicePreview.shortDesc}</p>}
               <div className="mt-3 rounded-md border border-amber-400/50 bg-amber-400/10 p-3 text-center">
                 <div className="text-[11px] uppercase tracking-wide text-amber-300">Стоимость услуги</div>
-                <div className="text-xl font-black text-amber-200">{formatTokens(servicePreview.priceCoins)}</div>
+                <div className="text-xl font-black text-amber-200"><TokenPrice value={servicePreview.priceCoins} /></div>
               </div>
             </div>
           </div>
@@ -2391,7 +2407,7 @@ function UserInputFormBuilder({
                   <Upload className="mb-1 h-4 w-4" />
                   {field.minPhotos ?? 1}–{field.maxPhotos ?? 12} фото
                   {typeof field.priceCoinsPerPhoto === 'number' && (
-                    <span className="mt-1 text-xs text-amber-300/80">{field.priceCoinsPerPhoto} коинов за фото</span>
+                    <span className="mt-1 text-xs text-amber-300/80">{field.priceCoinsPerPhoto} токенов за фото</span>
                   )}
                 </div>
               )}

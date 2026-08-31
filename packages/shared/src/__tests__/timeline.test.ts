@@ -316,7 +316,7 @@ describe('generation mark on a layer', () => {
 
 describe('voiceover pricing', () => {
   it('never charges less than the floor', () => {
-    // Себестоимость синтеза копеечная, и без пола цена скатывалась бы к одному коину.
+    // Себестоимость синтеза копеечная, и без пола цена скатывалась бы к одному токену.
     expect(voiceoverPriceCoins('minimax-speech')).toBeGreaterThanOrEqual(5);
     // Неизвестная модель тарифицируется по ориентиру дешёвой, а не бесплатно.
     expect(voiceoverPriceCoins('unknown-model')).toBeGreaterThanOrEqual(5);

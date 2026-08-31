@@ -51,8 +51,8 @@ export function NewOrderPage({ slug }: { slug: string }) {
             <span className="inline-flex items-center gap-1.5 font-semibold text-amber-300">
               <Wallet className="h-4 w-4" />
               {orderType.priceFromCoins === orderType.priceToCoins
-                ? `${orderType.priceFromCoins} коинов`
-                : `${orderType.priceFromCoins}–${orderType.priceToCoins} коинов`}
+                ? `${orderType.priceFromCoins} токенов`
+                : `${orderType.priceFromCoins}–${orderType.priceToCoins} токенов`}
             </span>
             <span className="inline-flex items-center gap-1.5 text-slate-400">
               <Clock className="h-4 w-4" />

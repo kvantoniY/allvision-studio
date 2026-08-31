@@ -109,7 +109,7 @@ export function OrderDetail({ id }: { id: string }) {
         <p className="text-sm leading-6 text-slate-300">{CUSTOM_ORDER_STATUS_HINTS[order.status]}</p>
         {canPay && (
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-800 pt-4">
-            <span className="text-lg font-bold text-amber-300">{price} коинов</span>
+            <span className="text-lg font-bold text-amber-300">{price} токенов</span>
             {balance >= price ? (
               <Button type="button" onClick={onPay} disabled={paying}>
                 {paying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
@@ -123,7 +123,7 @@ export function OrderDetail({ id }: { id: string }) {
                 Пополнить баланс
               </Link>
             )}
-            <span className="text-xs text-slate-500">На балансе {balance} коинов</span>
+            <span className="text-xs text-slate-500">На балансе {balance} токенов</span>
           </div>
         )}
         {resultUrl && (

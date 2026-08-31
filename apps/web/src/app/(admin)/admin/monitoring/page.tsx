@@ -480,7 +480,7 @@ function ErrorRow({ item }: { item: MonitoringErrorItem }) {
       <div className="mt-3 space-y-3 text-xs">
         <div className="grid gap-2 sm:grid-cols-2">
           <Field label="Услуга" value={item.service?.slug ?? item.mode} />
-          <Field label="Тариф / стоимость" value={`${item.selectedTier ?? '—'} · ${item.tokensCost} коинов`} />
+          <Field label="Тариф / стоимость" value={`${item.selectedTier ?? '—'} · ${item.tokensCost} токенов`} />
           <Field label="Проект" value={item.id} href={`/admin/projects/${item.id}`} />
           <Field label="Пользователь" value={item.user?.email ?? '—'} href={item.user ? `/admin/users/${item.user.id}` : undefined} />
         </div>

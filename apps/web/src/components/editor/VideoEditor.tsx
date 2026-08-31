@@ -437,7 +437,7 @@ export function VideoEditor({ id }: { id: string }) {
     if (!voiceoverProjectId) return;
     if (voiceoverStatus?.status === 'FAILED') {
       setVoiceoverProjectId(null);
-      toast({ title: 'Озвучка не получилась', description: 'Коины вернулись на баланс.', variant: 'destructive' });
+      toast({ title: 'Озвучка не получилась', description: 'Токены вернулись на баланс.', variant: 'destructive' });
       return;
     }
     if (voiceoverStatus?.status !== 'COMPLETED') return;
@@ -494,7 +494,7 @@ export function VideoEditor({ id }: { id: string }) {
     if (pendingLayer) ops.changeLayer(sceneIndex, pendingLayer.id, { generationProjectId: undefined });
     toast({
       title: 'Генерация не получилась',
-      description: 'Коины вернулись на баланс — попробуйте другой кадр или описание.',
+      description: 'Токены вернулись на баланс — попробуйте другой кадр или описание.',
       variant: 'destructive',
     });
   }, [runningGenerationId, sceneStatus?.status, pendingLayer, ops, sceneIndex]);
@@ -586,7 +586,7 @@ export function VideoEditor({ id }: { id: string }) {
           body: { serviceSlug: service.slug, layerId, frameUrl: frame?.source.url },
         }).unwrap();
         ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId });
-        toast({ title: `Запустили «${service.title}»`, description: `Списано ${result.tokensCost} коинов` });
+        toast({ title: `Запустили «${service.title}»`, description: `Списано ${result.tokensCost} токенов` });
       } catch (error) {
         setRunningServiceSlug(null);
         const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
@@ -876,7 +876,7 @@ export function VideoEditor({ id }: { id: string }) {
           <span className="hidden font-mono text-xs text-slate-500 sm:inline">{formatTimelineDuration(duration)}</span>
           <Button type="button" onClick={handleExport} disabled={exporting || exportRunning}>
             {exporting || exportRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
-            {exportRunning ? 'Собираем…' : 'Собрать ролик за 2 коина'}
+            {exportRunning ? 'Собираем…' : 'Собрать ролик за 2 токена'}
           </Button>
         </div>
       </header>

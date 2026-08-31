@@ -158,7 +158,7 @@ function OrderPanel({ id, onClose }: { id: string; onClose: () => void }) {
               : ''}
           </p>
           <p className="text-xs text-slate-500">
-            Аккаунт: {order.user.email} · баланс {order.user.tokenBalance} коинов
+            Аккаунт: {order.user.email} · баланс {order.user.tokenBalance} токенов
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -186,7 +186,7 @@ function OrderPanel({ id, onClose }: { id: string; onClose: () => void }) {
 
       <section className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1">
-          <Label className="text-xs">Цена, коины</Label>
+          <Label className="text-xs">Цена, токены</Label>
           <Input
             type="number"
             min={1}

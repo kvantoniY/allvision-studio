@@ -83,8 +83,19 @@ export function pluralizeTokens(value: number) {
   return coinWord(Math.round(value));
 }
 
-/** "<n> токен/токена/токенов" with correct Russian pluralization. */
+/**
+ * Число токенов без слова.
+ *
+ * В интерфейсе цена — это цифра со значком токена рядом, а не «12 токенов»: значок
+ * читается быстрее слова и не ломает вёрстку узких карточек. Слово осталось только там,
+ * где человек покупает пакет и должен понимать, что именно он берёт.
+ */
 export function formatTokens(value: number) {
+  return String(Math.round(value));
+}
+
+/** «<n> токен/токена/токенов» — для страницы покупки пакета. */
+export function formatTokensWord(value: number) {
   const rounded = Math.round(value);
   return `${rounded} ${coinWord(rounded)}`;
 }

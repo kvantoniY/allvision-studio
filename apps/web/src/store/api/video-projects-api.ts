@@ -68,7 +68,7 @@ export const videoProjectsApi = createApi({
       query: ({ id, sceneId, body }) => ({ url: `/${id}/scenes/${sceneId}/generate-service`, method: 'POST', body }),
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         await queryFulfilled;
-        // Запуск услуги списывает коины и создаёт обычный проект — баланс и список
+        // Запуск услуги списывает токены и создаёт обычный проект — баланс и список
         // генераций должны это увидеть.
         dispatch(projectsApi.util.invalidateTags(['Project']));
       },
@@ -81,7 +81,7 @@ export const videoProjectsApi = createApi({
       query: ({ id, sceneId, body }) => ({ url: `/${id}/scenes/${sceneId}/generate`, method: 'POST', body }),
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         await queryFulfilled;
-        // Генерация списывает коины и создаёт обычный Project — баланс и список должны это увидеть.
+        // Генерация списывает токены и создаёт обычный Project — баланс и список должны это увидеть.
         dispatch(projectsApi.util.invalidateTags(['Project']));
       },
       invalidatesTags: (_result, _error, { id }) => [{ type: 'VideoProject', id }],
@@ -104,7 +104,7 @@ export const videoProjectsApi = createApi({
       query: ({ id, body }) => ({ url: `/${id}/voiceover/generate`, method: 'POST', body }),
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
         await queryFulfilled;
-        // Озвучка списывает коины и создаёт обычный Project — баланс должен это увидеть.
+        // Озвучка списывает токены и создаёт обычный Project — баланс должен это увидеть.
         dispatch(projectsApi.util.invalidateTags(['Project']));
       },
       invalidatesTags: (_result, _error, { id }) => [{ type: 'VideoProject', id: `voiceovers-${id}` }],

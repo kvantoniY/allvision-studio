@@ -13,6 +13,7 @@ import { useGetPublicScenarioTemplateQuery } from '@/store/api/public-scenario-t
 import { formatTokens } from '@allvision/shared';
 
 import { TokenIcon } from '@/components/ui/token-icon';
+import { TokenPrice } from '@/components/ui/token-price';
 function categoryLabel(category: string) {
   return TEMPLATE_CATEGORY_LABEL[category] ?? category;
 }
@@ -125,7 +126,7 @@ export default function ScenarioDetailPage() {
                 <TokenIcon className="h-4 w-4 text-amber-400" />
                 Цена
               </span>
-              <span className="font-semibold">{formatTokens(template.priceTokens)}</span>
+              <span className="font-semibold"><TokenPrice value={template.priceTokens} /></span>
             </div>
             <div className="flex items-center justify-between gap-3 border-b border-slate-800 pb-3">
               <span className="flex items-center gap-2 text-sm text-slate-400">

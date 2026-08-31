@@ -66,7 +66,7 @@ export function OrdersList() {
                 <p className="mt-1 text-sm leading-6 text-slate-400">{CUSTOM_ORDER_STATUS_HINTS[order.status]}</p>
                 <p className="mt-1 text-xs text-slate-600">
                   Заявка от {formatDate(order.createdAt)}
-                  {order.quotedPriceCoins ? ` · ${order.quotedPriceCoins} коинов` : ''}
+                  {order.quotedPriceCoins ? ` · ${order.quotedPriceCoins} токенов` : ''}
                 </p>
               </div>
               <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-500" />
@@ -99,8 +99,8 @@ export function OrdersList() {
                 <div className="mt-4 flex items-center justify-between text-sm">
                   <span className="font-semibold text-amber-300">
                     {type.priceFromCoins === type.priceToCoins
-                      ? `${type.priceFromCoins} коинов`
-                      : `${type.priceFromCoins}–${type.priceToCoins} коинов`}
+                      ? `${type.priceFromCoins} токенов`
+                      : `${type.priceFromCoins}–${type.priceToCoins} токенов`}
                   </span>
                   <span className="text-xs text-slate-500">от {type.leadTimeDays} дн.</span>
                 </div>

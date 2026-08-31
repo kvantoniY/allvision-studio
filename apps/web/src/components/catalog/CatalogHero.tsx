@@ -61,7 +61,7 @@ export function CatalogHero({ service }: { service: PublicService }) {
               <ArrowRight className="h-4 w-4" />
             </span>
             {price > 0 && (
-              <span className="text-sm font-semibold text-slate-300">от {price} коинов</span>
+              <span className="text-sm font-semibold text-slate-300">от {price} токенов</span>
             )}
           </div>
         </div>

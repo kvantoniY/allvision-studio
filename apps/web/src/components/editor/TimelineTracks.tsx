@@ -329,6 +329,7 @@ function SceneLane({
         const previewUrl = preview?.source.kind === 'image' || preview?.source.kind === 'video'
           ? mediaUrl(preview.source.url)
           : null;
+        const previewIsVideo = preview?.source.kind === 'video';
         const shownDuration = draft?.index === index ? draft.durationSec : timing.durationSec;
 
         return (
@@ -347,8 +348,21 @@ function SceneLane({
               className="absolute inset-0 block text-left"
             >
               {previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />
+                previewIsVideo ? (
+                  // У видео-сцены картинкой был битый <img> — отсюда и серая заглушка на
+                  // шкале. Показываем настоящий первый кадр: #t=0.1 заставляет браузер
+                  // отрисовать его, не загружая ролик целиком.
+                  <video
+                    src={`${previewUrl}#t=0.1`}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    className="absolute inset-0 h-full w-full object-cover opacity-70"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />
+                )
               ) : (
                 <span className="absolute inset-0 bg-slate-900" />
               )}

@@ -71,7 +71,7 @@ export function serviceSchema(service: PublicService): Schema {
     serviceType: 'AI media generation',
     areaServed: 'RU',
     provider: { '@type': 'Organization', name: SITE_NAME, url: SITE_URL },
-    // 1 коин ≈ 1 ₽ (см. финмодель), поэтому цену в Offer отдаём в рублях.
+    // 1 токен ≈ 1 ₽ (см. финмодель), поэтому цену в Offer отдаём в рублях.
     ...(price !== null
       ? {
           offers: {

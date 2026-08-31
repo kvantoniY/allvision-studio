@@ -79,14 +79,14 @@ describe('order emails', () => {
   const vars = {
     name: 'Ирина',
     orderTitle: 'Свадебный ролик',
-    price: '4000 коинов',
+    price: '4000 токенов',
     link: 'https://allvision-pulse.ru/orders/1',
     note: 'Уточните дату',
   };
 
   it('substitutes the values an admin can rely on', () => {
     const text = renderOrderEmail('Здравствуйте, {{name}}! По заказу «{{ orderTitle }}» цена {{price}}.', vars);
-    expect(text).toBe('Здравствуйте, Ирина! По заказу «Свадебный ролик» цена 4000 коинов.');
+    expect(text).toBe('Здравствуйте, Ирина! По заказу «Свадебный ролик» цена 4000 токенов.');
   });
 
   it('leaves unknown placeholders alone instead of blanking them', () => {

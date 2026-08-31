@@ -653,7 +653,10 @@ servicesRouter.post(
       if (pricedPhotos) {
         const uploaded = userInputs[pricedPhotos.id];
         const count = Array.isArray(uploaded) ? uploaded.length : 0;
-        if (count > 0) tokensCost = pricedPhotos.priceCoinsPerPhoto! * count;
+        // База покрывает разовую работу (сборка, титры, музыка), надбавка — каждый снимок.
+        if (count > 0) {
+          tokensCost = (pricedPhotos.basePriceCoins ?? 0) + pricedPhotos.priceCoinsPerPhoto! * count;
+        }
       }
       const inputImages = [
         ...photoFields.map((field) => assetInputs.get(field.id)?.publicUrl ?? userInputs[field.id]),

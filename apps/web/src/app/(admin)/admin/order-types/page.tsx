@@ -172,7 +172,7 @@ export default function AdminOrderTypesPage() {
                   {!item.isActive && <Badge variant="outline" className="text-[11px]">Скрыт</Badge>}
                 </div>
                 <div className="mt-0.5 text-xs text-slate-500">
-                  {item.slug} · {item.priceFromCoins}–{item.priceToCoins} коинов · от {item.leadTimeDays} дн. ·
+                  {item.slug} · {item.priceFromCoins}–{item.priceToCoins} токенов · от {item.leadTimeDays} дн. ·
                   заявок: {item.ordersCount}
                 </div>
               </div>

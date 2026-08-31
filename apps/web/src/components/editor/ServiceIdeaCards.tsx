@@ -407,7 +407,7 @@ export function ServiceRunCard({
       ) : (
         <Button type="button" className="w-full" onClick={onRun}>
           <Wand2 className="h-4 w-4" />
-          Сгенерировать за {price} коинов
+          Сгенерировать за {price} токенов
         </Button>
       )}
     </div>

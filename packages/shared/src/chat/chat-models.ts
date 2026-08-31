@@ -217,9 +217,9 @@ export function applyModelPriceOverride(modelSlug: string, costCoins: number, pr
 }
 
 /**
- * Нижний порог цены чата (коины), не зависящий от себестоимости:
- * - любое изображение — минимум 2 коина;
- * - видео Kling и Seedance — минимум 12 коинов на 5 сек, +1 коин за каждую секунду сверх 5
+ * Нижний порог цены чата (токены), не зависящий от себестоимости:
+ * - любое изображение — минимум 2 токена;
+ * - видео Kling и Seedance — минимум 12 токенов на 5 сек, +1 токен за каждую секунду сверх 5
  *   (5 сек → 12, 6 → 13, 7 → 14 …). Для более коротких/«auto» — те же 12.
  * Себестоимостная цена (× множитель) всё равно применяется, если она выше порога.
  */
@@ -244,7 +244,7 @@ export function estimateChatGenerationPriceCoins(
   const defaultPriceCoins = Math.max(floor, Math.ceil(costCoins * PRICE_MULTIPLIER));
   // Админ-оверрайд для чата — это МИНИМАЛЬНАЯ цена модели, а не фиксированная: длительность и
   // ценовой пол по-прежнему поднимают цену выше. Иначе оверрайд вроде kling-3-omni=12 «замораживал»
-  // цену на 12 при любой длительности, а oldid оверрайды картинок (=1) обходили пол в 2 коина.
+  // цену на 12 при любой длительности, а oldid оверрайды картинок (=1) обходили пол в 2 токена.
   const override = options.priceOverrides?.[modelSlug];
   if (typeof override === 'number' && Number.isFinite(override) && override >= 1) {
     return Math.max(defaultPriceCoins, Math.ceil(override));

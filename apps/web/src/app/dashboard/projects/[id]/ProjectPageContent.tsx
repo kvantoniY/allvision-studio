@@ -38,6 +38,7 @@ import {
   useGetProjectStatusQuery,
 } from '@/store/api/projects-api';
 import { cn } from '@/lib/utils';
+import { TokenPrice } from '@/components/ui/token-price';
 
 type ProjectPageContentProps = {
   id: string;
@@ -376,7 +377,7 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-wide text-slate-500">Стоимость</div>
-                  <div className="mt-1 font-semibold text-slate-100">{formatTokens(project.tokensCost)}</div>
+                  <div className="mt-1 font-semibold text-slate-100"><TokenPrice value={project.tokensCost} /></div>
                 </div>
               </div>
               <div>
