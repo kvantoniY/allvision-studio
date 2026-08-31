@@ -7,10 +7,10 @@
  *
  * Категории (`ServiceCategoryDef.section`) распределены между двумя контентными
  * вкладками — `services` и `greetings`. Вкладка `popular` кураторская: собирает
- * услуги с `isFeatured` из любых категорий. Вкладка `albums` — заглушка со сбором заявок.
+ * услуги с `isFeatured` из любых категорий.
  */
 
-export const CATALOG_SECTIONS = ['popular', 'services', 'greetings', 'albums'] as const;
+export const CATALOG_SECTIONS = ['popular', 'services', 'greetings'] as const;
 
 export type CatalogSection = (typeof CATALOG_SECTIONS)[number];
 
@@ -54,13 +54,6 @@ export const CATALOG_SECTION_DEFS: readonly CatalogSectionDef[] = [
     heading: 'Видео-поздравления',
     subtitle: 'Готовый шаблон из нескольких сцен или свой ролик в редакторе — с музыкой, титрами и переходами.',
     iconName: 'Clapperboard',
-  },
-  {
-    code: 'albums',
-    title: 'Альбомы',
-    heading: 'Фотоальбомы и печать',
-    subtitle: 'Редактор альбомов с печатью и доставкой. Готовим к запуску.',
-    iconName: 'BookOpen',
   },
 ];
 

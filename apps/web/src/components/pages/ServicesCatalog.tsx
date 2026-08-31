@@ -14,7 +14,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlbumsTab } from '@/components/catalog/AlbumsTab';
 import { GreetingsTab } from '@/components/catalog/GreetingsTab';
 import { OccasionChips } from '@/components/catalog/OccasionChips';
 import { CatalogHero } from '@/components/catalog/CatalogHero';
@@ -96,11 +95,7 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
   // Чипы поводов показываем только для тех, что реально встречаются во вкладке —
   // иначе половина фильтров ведёт в пустой экран.
   const availableOccasions = useMemo(() => {
-    const scope = tab === 'popular'
-      ? services
-      : tab === 'albums'
-        ? []
-        : servicesInSection(tab, services);
+    const scope = tab === 'popular' ? services : servicesInSection(tab, services);
     const set = new Set<string>();
     for (const service of scope) for (const tag of service.occasionTags) set.add(tag);
     return set;
@@ -129,9 +124,7 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
    */
   const heroScope = tab === 'popular'
     ? byOccasion
-    : tab === 'albums'
-      ? []
-      : servicesInSection(tab === 'greetings' ? 'greetings' : 'services', byOccasion);
+    : servicesInSection(tab === 'greetings' ? 'greetings' : 'services', byOccasion);
   const heroService = heroScope
     .slice()
     .sort((a, b) => Number(b.isFeatured) - Number(a.isFeatured)
@@ -224,7 +217,7 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
         </section>
       )}
 
-      {tab !== 'albums' && !isSearching && (
+      {!isSearching && (
         <section className="container mt-6">
           <OccasionChips value={occasion} onChange={setOccasion} available={availableOccasions} />
         </section>
@@ -266,10 +259,8 @@ export function ServicesCatalog({ initialTab, initialCategory, initialOccasion }
             category={category}
             onCategoryChange={setCategory}
           />
-        ) : tab === 'greetings' ? (
-          <GreetingsTab services={servicesInSection('greetings', byOccasion)} />
         ) : (
-          <AlbumsTab />
+          <GreetingsTab services={servicesInSection('greetings', byOccasion)} />
         )}
       </div>
     </div>

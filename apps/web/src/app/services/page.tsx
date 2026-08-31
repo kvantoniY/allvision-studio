@@ -35,12 +35,6 @@ const SECTION_METADATA: Record<string, { title: string; description: string; key
       'новогоднее видео поздравление',
     ],
   },
-  albums: {
-    title: 'Фотоальбомы с печатью — скоро в Allvision Studio',
-    description:
-      'Редактор фотоальбомов с печатью и доставкой: соберите книгу из своих фотографий и AI-кадров. Раздел готовится к запуску.',
-    keywords: ['фотокнига на заказ', 'фотоальбом с печатью', 'напечатать фотоальбом'],
-  },
 };
 
 export function generateMetadata({ searchParams }: ServicesPageProps): Metadata {

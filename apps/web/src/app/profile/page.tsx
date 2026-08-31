@@ -28,6 +28,8 @@ import type { Payment, PaymentStatus, TokenTransaction, UpdateProfileInput } fro
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { ApiRequestAlert } from '@/components/auth/ApiRequestAlert';
 import { CaptchaField } from '@/components/security/CaptchaField';
+import { ProfileIdentityCard } from '@/components/profile/ProfileIdentityCard';
+import { StudioAvatarPicker } from '@/components/profile/StudioAvatarPicker';
 import { EmptyState } from '@/components/dashboard/EmptyState';
 import { PricingCards } from '@/components/public/PricingCards';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -71,7 +73,7 @@ import { formatDate, formatDateTime, transactionDescription } from '@/components
 import { submitPaymentConfirmation, type PaymentConfirmationPayload } from '@/lib/payment-confirmation';
 import { cn } from '@/lib/utils';
 
-type ProfileTab = 'account' | 'billing' | 'transactions';
+type ProfileTab = 'account' | 'security' | 'billing' | 'transactions';
 type TxFilter = 'all' | 'topup' | 'spending' | 'payments';
 type ProfileUser = NonNullable<ReturnType<typeof useAuth>['user']>;
 
@@ -94,7 +96,7 @@ const PAYMENT_STATUS_COLOR: Record<PaymentStatus, string> = {
 const PROJECT_REASONS = new Set(['project_created', 'service_launch', 'free_chat', 'library_generation']);
 
 function normalizeProfileTab(value: string | null): ProfileTab {
-  if (value === 'billing' || value === 'transactions') return value;
+  if (value === 'security' || value === 'billing' || value === 'transactions') return value;
   return 'account';
 }
 
@@ -350,11 +352,16 @@ function ProfileContent() {
       <Tabs value={tab} onValueChange={(value) => setTab(value as ProfileTab)} className="min-w-0">
         <TabsList className="h-auto w-full max-w-full justify-start overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/80 p-1 shadow-inner [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:w-auto">
           <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="account">Аккаунт</TabsTrigger>
+          <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="security">Безопасность</TabsTrigger>
           <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="billing">Баланс</TabsTrigger>
           <TabsTrigger className="shrink-0 rounded-md px-3 py-2 text-xs data-[state=active]:bg-violet-600 data-[state=active]:text-white sm:text-sm" value="transactions">История</TabsTrigger>
         </TabsList>
         <TabsContent value="account" className="mt-5">
           <AccountSection />
+        </TabsContent>
+
+        <TabsContent value="security" className="mt-5 min-w-0">
+          <SecuritySection />
         </TabsContent>
         <TabsContent value="billing" className="mt-5">
           <BillingSection />
@@ -367,40 +374,180 @@ function ProfileContent() {
   );
 }
 
+/**
+ * Вкладка «Аккаунт»: кто я и что у меня списывалось.
+ *
+ * Слева — шапка с аватаром, именем и почтой плюс полка образов из Студии. Справа —
+ * последние операции: человек заходит в профиль в основном за этим, а не за сменой пароля.
+ * Пароль и удаление аккаунта переехали в отдельную вкладку — это редкие и опасные
+ * действия, им не место рядом с аватаром.
+ */
 function AccountSection() {
   const { user } = useAuth();
   const dispatch = useDispatch<AppDispatch>();
   const { toast } = useToast();
   const [updateProfile, { isLoading: savingProfile }] = useUpdateProfileMutation();
+  const [uploadProfileAvatar, uploadState] = useUploadProfileAvatarMutation();
+  const [requestEmailVerification, emailVerificationState] = useRequestEmailVerificationMutation();
+  const emailCaptcha = useCaptchaToken();
+  const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 12 });
+  const recent = useGetTransactionsQuery({ page: 1, limit: 6, type: 'all' });
+
+  const [previewAvatar, setPreviewAvatar] = useState<string | null>(user?.avatar ?? null);
+
+  useEffect(() => {
+    setPreviewAvatar(user?.avatar ?? null);
+  }, [user?.avatar]);
+
+  if (!user) return null;
+
+  const busy = uploadState.isLoading || savingProfile;
+
+  const setAvatar = async (avatar: string | null, title: string) => {
+    try {
+      await updateProfile({ avatar }).unwrap();
+      setPreviewAvatar(avatar);
+      dispatch(authApi.util.invalidateTags(['Me']));
+      toast({ title });
+    } catch (error) {
+      toast({ title: 'Не удалось обновить аватар', description: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const uploadAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Выберите изображение', variant: 'destructive' });
+      input.value = '';
+      return;
+    }
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      const result = await uploadProfileAvatar(form).unwrap();
+      setPreviewAvatar(result.user.avatar);
+      dispatch(authApi.util.invalidateTags(['Me']));
+      toast({ title: 'Аватар обновлён' });
+    } catch (error) {
+      toast({ title: 'Не удалось загрузить аватар', description: apiErrorMessage(error), variant: 'destructive' });
+    } finally {
+      input.value = '';
+    }
+  };
+
+  const saveName = async (value: string) => {
+    try {
+      await updateProfile({ name: value }).unwrap();
+      dispatch(authApi.util.invalidateTags(['Me']));
+      toast({ title: 'Имя обновлено' });
+    } catch (error) {
+      toast({ title: 'Ошибка', description: apiErrorMessage(error), variant: 'destructive' });
+    }
+  };
+
+  const verifyEmail = async () => {
+    try {
+      const result = await requestEmailVerification({ captchaToken: emailCaptcha.token || undefined }).unwrap();
+      dispatch(authApi.util.invalidateTags(['Me']));
+      toast({
+        title: result.alreadyVerified ? 'Email уже подтверждён' : 'Письмо отправлено',
+        description: result.alreadyVerified ? undefined : 'Проверьте почту и перейдите по ссылке подтверждения.',
+      });
+      emailCaptcha.reset();
+    } catch (error) {
+      emailCaptcha.reset();
+      toast({
+        title: 'Не удалось отправить письмо',
+        description: 'Подтверждение можно запросить на вкладке «Безопасность».',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const recentItems = recent.data?.items ?? [];
+
+  return (
+    <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+        <CardContent className="space-y-5 p-4 sm:p-6">
+          <ProfileIdentityCard
+            name={user.name ?? ''}
+            email={user.email}
+            avatar={previewAvatar}
+            initials={initialsOf(user.name, user.email)}
+            registeredAt={formatDate(user.createdAt as string | Date)}
+            emailVerified={Boolean(user.emailVerifiedAt)}
+            busy={busy}
+            savingName={savingProfile}
+            verifying={emailVerificationState.isLoading}
+            onUploadAvatar={uploadAvatar}
+            onRemoveAvatar={() => setAvatar(null, 'Аватар удалён')}
+            onSaveName={saveName}
+            onVerifyEmail={verifyEmail}
+          />
+
+          <StudioAvatarPicker
+            items={avatars.data?.items ?? []}
+            isLoading={avatars.isLoading}
+            selectedUrl={previewAvatar}
+            busy={busy}
+            onSelect={(url) => setAvatar(url, 'Аватар выбран из Студии')}
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
+        <CardHeader className="flex flex-row items-center justify-between gap-3 p-4 pb-3 sm:p-6 sm:pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg sm:text-xl">
+            <History className="h-5 w-5 text-amber-300" />
+            Последние операции
+          </CardTitle>
+          <Button asChild variant="ghost" size="sm" className="text-xs text-slate-400">
+            <Link href="/profile?tab=transactions">Вся история</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
+          {recent.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-14 rounded-lg" />)}
+            </div>
+          ) : recentItems.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-slate-800 p-6 text-center text-sm text-slate-500">
+              Операций пока не было. Здесь появятся списания и пополнения.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-800 overflow-hidden rounded-lg border border-slate-800">
+              {recentItems.map((tx) => <TransactionListItem key={tx.id} tx={tx} />)}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+/**
+ * Вкладка «Безопасность»: подтверждение почты, смена пароля и удаление аккаунта.
+ *
+ * Вынесена отдельно намеренно: это редкие действия, а удаление аккаунта — необратимое.
+ * Рядом с аватаром им не место.
+ */
+function SecuritySection() {
+  const { user } = useAuth();
+  const dispatch = useDispatch<AppDispatch>();
+  const { toast } = useToast();
   const [changePassword, { isLoading: changingPwd }] = useChangePasswordMutation();
   const [requestEmailVerification, emailVerificationState] = useRequestEmailVerificationMutation();
   const emailVerificationError = useApiErrorState(emailVerificationState.error, 'Не удалось отправить письмо');
   const emailCaptcha = useCaptchaToken();
-  const [name, setName] = useState('');
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  useEffect(() => {
-    if (!user) return;
-    setName(user.name ?? '');
-  }, [user]);
-
   if (!user) return null;
-
-  const profileDirty = name.trim() !== (user.name ?? '');
-  const canSaveProfile = profileDirty && name.trim().length >= 2;
-
-  const saveProfile = async (body: UpdateProfileInput) => {
-    try {
-      await updateProfile(body).unwrap();
-      dispatch(authApi.util.invalidateTags(['Me']));
-      toast({ title: 'Профиль обновлён' });
-    } catch (error) {
-      toast({ title: 'Ошибка', description: apiErrorMessage(error), variant: 'destructive' });
-    }
-  };
 
   const onChangePassword = async () => {
     if (newPassword !== confirmPassword) {
@@ -440,39 +587,7 @@ function AccountSection() {
   };
 
   return (
-    <div className="grid min-w-0 gap-4 sm:gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-      <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
-        <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
-          <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
-            <UserIcon className="h-5 w-5 text-violet-300" />
-            Профиль
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5 px-4 pb-4 pt-0 sm:px-6 sm:pb-6">
-          <AvatarManager user={user} />
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Имя</Label>
-              <Input id="name" value={name} onChange={(event) => setName(event.target.value)} />
-              {profileDirty && name.trim().length > 0 && name.trim().length < 2 ? (
-                <p className="text-xs text-amber-300">Минимум 2 символа.</p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" value={user.email} readOnly disabled />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-400">
-            <span>Дата регистрации</span>
-            <span className="font-medium text-slate-200">{formatDate(user.createdAt as string | Date)}</span>
-          </div>
-          <Button onClick={() => saveProfile({ name: name.trim() })} disabled={!canSaveProfile || savingProfile}>
-            {savingProfile ? 'Сохранение...' : 'Сохранить профиль'}
-          </Button>
-        </CardContent>
-      </Card>
-
+    <div className="mx-auto grid min-w-0 max-w-3xl gap-4 sm:gap-5">
       <Card className="min-w-0 overflow-hidden border-slate-800 bg-slate-900">
         <CardHeader className="p-4 pb-3 sm:p-6 sm:pb-3">
           <CardTitle className="flex items-center gap-2 text-xl sm:text-2xl">
@@ -488,6 +603,7 @@ function AccountSection() {
             captcha={emailCaptcha}
             onRequest={onRequestEmailVerification}
           />
+
           <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 sm:p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -510,141 +626,10 @@ function AccountSection() {
               </div>
             ) : null}
           </div>
+
           <DangerSection />
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function AvatarManager({ user }: { user: ProfileUser }) {
-  const dispatch = useDispatch<AppDispatch>();
-  const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 8 });
-  const [uploadProfileAvatar, uploadState] = useUploadProfileAvatarMutation();
-  const [updateProfile, avatarState] = useUpdateProfileMutation();
-  const [previewAvatar, setPreviewAvatar] = useState(user.avatar);
-  const busy = uploadState.isLoading || avatarState.isLoading;
-
-  useEffect(() => {
-    setPreviewAvatar(user.avatar);
-  }, [user.avatar]);
-
-  const setAvatar = async (avatar: string | null, title: string) => {
-    try {
-      await updateProfile({ avatar }).unwrap();
-      setPreviewAvatar(avatar);
-      dispatch(authApi.util.invalidateTags(['Me']));
-      toast({ title });
-    } catch (error) {
-      toast({ title: 'Не удалось обновить аватар', description: apiErrorMessage(error), variant: 'destructive' });
-    }
-  };
-
-  const uploadAvatar = async (event: ChangeEvent<HTMLInputElement>) => {
-    const input = event.currentTarget;
-    const file = input.files?.[0] ?? null;
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Выберите изображение', variant: 'destructive' });
-      input.value = '';
-      return;
-    }
-
-    const form = new FormData();
-    form.append('file', file);
-
-    try {
-      const result = await uploadProfileAvatar(form).unwrap();
-      setPreviewAvatar(result.user.avatar);
-      dispatch(authApi.util.invalidateTags(['Me']));
-      toast({ title: 'Аватар обновлён' });
-    } catch (error) {
-      toast({ title: 'Не удалось загрузить аватар', description: apiErrorMessage(error), variant: 'destructive' });
-    } finally {
-      input.value = '';
-    }
-  };
-
-  const studioAvatars = avatars.data?.items ?? [];
-
-  return (
-    <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-950/50 p-3 sm:p-4">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <div className="relative h-20 w-20 shrink-0">
-          <Avatar className="h-20 w-20">
-            {previewAvatar && <AvatarImage src={previewAvatar} alt={user.name ?? user.email} />}
-            <AvatarFallback className="text-xl">{initialsOf(user.name, user.email)}</AvatarFallback>
-          </Avatar>
-          <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border border-slate-700 bg-slate-900 text-violet-300">
-            <Camera className="h-4 w-4" />
-          </span>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold text-white">Аватар</div>
-          <p className="mt-1 text-sm leading-5 text-slate-400">
-            Загрузите новое фото или выберите готовый образ из Студии.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={busy}>
-              {uploadState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Загрузить фото
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setAvatar(null, 'Аватар удалён')} disabled={!previewAvatar || busy}>
-              <Trash2 className="h-4 w-4" />
-              Убрать
-            </Button>
-            <Button asChild variant="ghost">
-              <Link href="/studio">Открыть Студию</Link>
-            </Button>
-          </div>
-          <input ref={fileInputRef} className="sr-only" type="file" accept="image/*" onChange={uploadAvatar} />
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500">
-          <ImageIcon className="h-3.5 w-3.5" />
-          Из Студии
-        </div>
-        {avatars.isLoading ? (
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-            {Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="aspect-square rounded-md" />)}
-          </div>
-        ) : studioAvatars.length === 0 ? (
-          <div className="rounded-md border border-dashed border-slate-800 p-3 text-sm text-slate-500">
-            В Студии пока нет аватаров. Загруженное фото появится здесь автоматически.
-          </div>
-        ) : (
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-            {studioAvatars.map((asset) => {
-              const selected = previewAvatar === asset.publicUrl;
-              return (
-                <button
-                  key={asset.id}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setAvatar(asset.publicUrl, 'Аватар выбран из Студии')}
-                  className={cn(
-                    'group relative aspect-square overflow-hidden rounded-md border bg-slate-900 transition hover:border-violet-400',
-                    selected ? 'border-violet-400 ring-2 ring-violet-500/40' : 'border-slate-800',
-                  )}
-                  title={asset.title}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={asset.thumbnailUrl || asset.publicUrl} alt="" className="h-full w-full object-cover" />
-                  {selected ? (
-                    <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-violet-600 text-white">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

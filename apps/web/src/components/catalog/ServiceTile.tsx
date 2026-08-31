@@ -54,11 +54,7 @@ export function ServiceTile({ service, showPrice = false, showFeaturedBadge = tr
           <div className="min-w-0 flex-1 truncate text-sm font-semibold text-white drop-shadow-md">
             {service.title}
           </div>
-          {showPrice && price > 0 && (
-            <span className="shrink-0 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur">
-              {price} к
-            </span>
-          )}
+
         </div>
       </div>
     </Link>

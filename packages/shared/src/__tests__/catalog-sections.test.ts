@@ -41,7 +41,7 @@ describe('catalog sections', () => {
   });
 
   it('validates tab and occasion codes', () => {
-    expect(isCatalogSection('albums')).toBe(true);
+    expect(isCatalogSection('albums')).toBe(false);
     expect(isCatalogSection('nope')).toBe(false);
     expect(isCategorySection('services')).toBe(true);
     expect(isCategorySection('popular')).toBe(false);

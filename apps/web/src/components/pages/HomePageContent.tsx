@@ -671,11 +671,7 @@ function ServiceShowcaseSlot({
           </div>
           <div className="flex flex-1 flex-col gap-3 p-4">
             <h3 className="line-clamp-2 text-base font-bold text-white">{service.title}</h3>
-            <div className="mt-auto flex items-center justify-between gap-3">
-              <span className="inline-flex items-center gap-1 text-sm font-semibold text-amber-300">
-                от {giftServicePriceFrom(service)}
-                <TokenIcon className="h-[1em] w-[1em]" />
-              </span>
+            <div className="mt-auto flex justify-end">
               <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-semibold text-slate-950 transition group-hover:bg-amber-300">
                 К услуге
                 <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />

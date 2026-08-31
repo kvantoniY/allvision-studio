@@ -2936,7 +2936,13 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                     ) : (
                       <TokenIcon className="h-4 w-4" />
                     )}
-                    {launchStartedLock ? 'Генерация началась!' : `Создать за $<TokenPrice value={price} />`}
+                    {launchStartedLock ? (
+                      'Генерация началась!'
+                    ) : (
+                      <>
+                        Создать за <TokenPrice value={price} />
+                      </>
+                    )}
                   </Button>
                   {blockedByForm && (
                     <p className="text-center text-xs text-amber-200/90">{validationErrors[0]}</p>
