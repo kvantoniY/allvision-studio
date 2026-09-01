@@ -6,6 +6,7 @@ import { accountApi } from './api/account-api';
 import { paymentsApi } from './api/payments-api';
 import { projectsApi } from './api/projects-api';
 import { editorCatalogApi } from './api/editor-catalog-api';
+import { voicesApi } from './api/voices-api';
 import { adminTrendsApi } from './api/admin-trends-api';
 import { charactersApi } from './api/characters-api';
 import { scenesApi } from './api/scenes-api';
@@ -44,6 +45,7 @@ export const store = configureStore({
     [paymentsApi.reducerPath]: paymentsApi.reducer,
     [projectsApi.reducerPath]: projectsApi.reducer,
     [editorCatalogApi.reducerPath]: editorCatalogApi.reducer,
+    [voicesApi.reducerPath]: voicesApi.reducer,
     [adminTrendsApi.reducerPath]: adminTrendsApi.reducer,
     [charactersApi.reducerPath]: charactersApi.reducer,
     [scenesApi.reducerPath]: scenesApi.reducer,
@@ -80,6 +82,7 @@ export const store = configureStore({
       paymentsApi.middleware,
       projectsApi.middleware,
       editorCatalogApi.middleware,
+      voicesApi.middleware,
       adminTrendsApi.middleware,
       charactersApi.middleware,
       scenesApi.middleware,

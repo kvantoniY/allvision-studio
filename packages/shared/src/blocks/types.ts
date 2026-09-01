@@ -8,7 +8,8 @@ export interface ModelOption {
   tierHint: ModelTierHint;
   estimatedCostCoins: number;
   estimatedCostUsd?: number;
-  provider: 'piapi' | 'fal' | 'mock' | 'local';
+  /** Lumean — отдельный сервис озвучки со своим балансом, не часть fal. */
+  provider: 'piapi' | 'fal' | 'lumean' | 'mock' | 'local';
   providerModel?: string;
   taskType?: string;
   description?: string;

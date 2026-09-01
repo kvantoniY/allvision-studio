@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Loader2, Mic, Music, Plus, Trash2, Upload, Wand2 } from 'lucide-react';
+import { VoicePicker } from '@/components/editor/VoicePicker';
 import {
   VOICEOVER_EMOTIONS,
   VOICEOVER_MAX_LENGTH,
@@ -22,6 +23,12 @@ export type VoiceoverRequest = {
   text: string;
   model: string;
   emotion?: string;
+  /** Голос из каталога: у моделей Lumean диктора выбирает пользователь. */
+  voice?: string;
+  /** Насколько ровно диктор держит характер: ниже — живее, выше — стабильнее. */
+  stability?: number;
+  /** Скорость речи. Диапазон узкий — за его пределами сервис откажет. */
+  speed?: number;
 };
 
 /**
@@ -203,12 +210,16 @@ function VoiceTab({
   const [modelSlug, setModelSlug] = useState<string>(VOICEOVER_MODELS[0].slug);
   const [emotion, setEmotion] = useState<string>('happy');
   const [section, setSection] = useState<'new' | 'saved'>('new');
+  const [voice, setVoice] = useState<{ id: string; name: string } | null>(null);
+  const [stability, setStability] = useState(0.5);
+  const [speed, setSpeed] = useState(1);
 
   const model = VOICEOVER_MODELS.find((item) => item.slug === modelSlug) ?? VOICEOVER_MODELS[0];
   const price = applyModelPriceOverride(model.slug, voiceoverPriceCoins(model.slug), priceOverrides);
   const enoughCoins = balance >= price;
   const tooLong = text.trim().length > VOICEOVER_MAX_LENGTH;
-  const canGenerate = text.trim().length > 0 && !tooLong && !voiceoverRunning && enoughCoins;
+  const needsVoice = model.supportsVoiceCatalog && !voice;
+  const canGenerate = text.trim().length > 0 && !tooLong && !voiceoverRunning && enoughCoins && !needsVoice;
 
   if (section === 'saved') {
     return (
@@ -258,6 +269,41 @@ function VoiceTab({
           </p>
         )}
 
+        {model.supportsVoiceCatalog && (
+          <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-medium text-slate-300">Голос</span>
+              <span className="truncate text-[11px] text-violet-200">{voice?.name ?? 'не выбран'}</span>
+            </div>
+            <VoicePicker value={voice?.id ?? null} onChange={(id, name) => setVoice({ id, name })} />
+
+            <label className="block text-[11px] text-slate-400">
+              Характер: {stability < 0.35 ? 'живой' : stability > 0.7 ? 'ровный' : 'сбалансированный'}
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={stability}
+                onChange={(event) => setStability(Number(event.target.value))}
+                className="mt-1 w-full accent-violet-400"
+              />
+            </label>
+            <label className="block text-[11px] text-slate-400">
+              Скорость: {speed.toFixed(2)}×
+              <input
+                type="range"
+                min={0.7}
+                max={1.2}
+                step={0.05}
+                value={speed}
+                onChange={(event) => setSpeed(Number(event.target.value))}
+                className="mt-1 w-full accent-violet-400"
+              />
+            </label>
+          </div>
+        )}
+
         <div className="grid gap-1.5 sm:grid-cols-2">
           <select
             value={model.slug}
@@ -296,6 +342,9 @@ function VoiceTab({
               text: text.trim(),
               model: model.slug,
               emotion: model.supportsEmotion ? emotion : undefined,
+              ...(model.supportsVoiceCatalog
+                ? { voice: voice?.id, stability, speed }
+                : {}),
             })
           }
         >

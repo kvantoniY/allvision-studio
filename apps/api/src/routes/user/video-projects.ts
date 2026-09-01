@@ -11,6 +11,7 @@ import {
   timelineDurationSec,
   timelineSchema,
   validateTimeline,
+  VOICEOVER_MODELS,
   voiceoverPriceCoins,
 } from '@allvision/shared';
 import { requireAuth } from '../../middleware/auth';
@@ -504,10 +505,13 @@ videoProjectsRouter.post('/:id/export', async (req: Request, res: Response, next
 
 const voiceoverSchema = z.object({
   text: z.string().trim().min(1).max(VOICEOVER_MAX_LENGTH),
-  model: z.enum(['minimax-speech', 'elevenlabs-tts']).default('minimax-speech'),
+  model: z.string().trim().min(1).max(80).default('minimax-speech')
+    .refine((slug) => VOICEOVER_MODELS.some((item) => item.slug === slug), { message: 'Неизвестная модель озвучки' }),
   voice: z.string().trim().min(1).max(60).optional(),
   emotion: z.enum(['neutral', 'happy', 'sad', 'surprised']).optional(),
   speed: z.number().min(0.5).max(2).optional(),
+  /** Характер речи у голосов из каталога: ниже — живее, выше — ровнее. */
+  stability: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -622,7 +626,12 @@ videoProjectsRouter.post('/:id/voiceover/generate', async (req: Request, res: Re
           ...(body.voice ? { voice: body.voice } : {}),
           ...(body.emotion ? { emotion: body.emotion } : {}),
           ...(body.speed ? { speed: body.speed } : {}),
-          language: body.model === 'minimax-speech' ? 'Russian' : 'English',
+          ...(body.stability !== undefined ? { stability: body.stability } : {}),
+          // У голосов из каталога язык определяется самим голосом и текстом, поэтому
+          // навязывать его не нужно — а вот двум старым моделям он задан жёстко.
+          ...(body.model.startsWith('lumean')
+            ? {}
+            : { language: body.model === 'minimax-speech' ? 'Russian' : 'English' }),
         },
       },
     ];

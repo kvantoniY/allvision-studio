@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { getBlockCatalogItem } from '@allvision/shared';
 import type { BlockDefinition, BlockOutput } from './types';
 import { anyInputSchema, blockOutputSchema } from './utils';
+import { getLumeanProvider } from '../providers';
 
 const catalog = getBlockCatalogItem('text-to-speech');
 if (!catalog) throw new Error('Block catalog metadata missing: text-to-speech');
@@ -13,7 +14,17 @@ const paramsSchema = z.object({
   speed: z.number().min(0.5).max(2).optional(),
   emotion: z.string().optional(),
   language: z.string().optional(),
+  // Тонкие настройки голоса Lumean: у ElevenLabs это отдельные ручки характера речи.
+  stability: z.number().min(0).max(1).optional(),
+  similarity_boost: z.number().min(0).max(1).optional(),
+  style: z.number().min(0).max(1).optional(),
+  use_speaker_boost: z.boolean().optional(),
 });
+
+/** Голоса Lumean живут отдельным сервисом со своим балансом — отсюда отдельная ветка. */
+function isLumeanModel(model: string): boolean {
+  return model.startsWith('lumean');
+}
 
 const DEFAULT_MODEL = 'minimax-speech';
 
@@ -44,16 +55,31 @@ export const textToSpeechBlock: BlockDefinition = {
     const model = params.model ?? DEFAULT_MODEL;
     await ctx.reportProgress(10);
 
-    const provider = ctx.getAIProvider();
-    const result = await provider.textToSpeech({
-      text,
-      model,
-      voice: params.voice,
-      speed: params.speed,
-      emotion: params.emotion,
-      language: params.language,
-      context: ctx.providerContext,
-    });
+    const result = isLumeanModel(model)
+      ? await getLumeanProvider().textToSpeech({
+        text,
+        voice: params.voice,
+        speed: params.speed,
+        language: params.language,
+        params: {
+          stability: params.stability,
+          similarity_boost: params.similarity_boost,
+          style: params.style,
+          use_speaker_boost: params.use_speaker_boost,
+          // Slug вида lumean-eleven_multilingual_v2 несёт модель ElevenLabs после дефиса.
+          model_id: model.replace(/^lumean-?/, '') || undefined,
+        },
+        context: ctx.providerContext,
+      })
+      : await ctx.getAIProvider().textToSpeech({
+        text,
+        model,
+        voice: params.voice,
+        speed: params.speed,
+        emotion: params.emotion,
+        language: params.language,
+        context: ctx.providerContext,
+      });
     await ctx.reportProgress(100);
 
     return {

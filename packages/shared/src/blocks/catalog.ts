@@ -986,6 +986,44 @@ const speechModels: ModelOption[] = [
     requiredParams: ['text'],
     optionalParams: ['voice', 'speed', 'language'],
   },
+  // Lumean — отдельный сервис со своим балансом и каталогом из тысяч голосов ElevenLabs.
+  // Голос выбирается по voice_id из каталога, поэтому у моделей общий набор параметров.
+  {
+    slug: 'lumean-eleven_multilingual_v2',
+    title: 'Lumean · ElevenLabs Multilingual v2',
+    tierHint: 'both',
+    estimatedCostCoins: coins(0.08),
+    estimatedCostUsd: 0.08,
+    provider: 'lumean',
+    providerModel: 'eleven_multilingual_v2',
+    description: 'Тысячи голосов на выбор, ровное звучание на русском. Рабочая лошадка для поздравлений.',
+    requiredParams: ['text', 'voice'],
+    optionalParams: ['speed', 'language', 'stability', 'similarity_boost', 'style', 'use_speaker_boost'],
+  },
+  {
+    slug: 'lumean-eleven_v3',
+    title: 'Lumean · ElevenLabs v3 (эмоции)',
+    tierHint: 'pro',
+    estimatedCostCoins: coins(0.12),
+    estimatedCostUsd: 0.12,
+    provider: 'lumean',
+    providerModel: 'eleven_v3',
+    description: 'Самая выразительная модель: понимает указания диктору в квадратных скобках, например [шёпотом]. Дороже и медленнее.',
+    requiredParams: ['text', 'voice'],
+    optionalParams: ['speed', 'language', 'stability', 'similarity_boost', 'style', 'use_speaker_boost'],
+  },
+  {
+    slug: 'lumean-eleven_flash_v2_5',
+    title: 'Lumean · ElevenLabs Flash (быстро)',
+    tierHint: 'standard',
+    estimatedCostCoins: coins(0.05),
+    estimatedCostUsd: 0.05,
+    provider: 'lumean',
+    providerModel: 'eleven_flash_v2_5',
+    description: 'Быстрый и дешёвый синтез. Интонация проще, чем у Multilingual — для длинных текстов и черновиков.',
+    requiredParams: ['text', 'voice'],
+    optionalParams: ['speed', 'language', 'stability', 'similarity_boost', 'style', 'use_speaker_boost'],
+  },
 ];
 
 const timelineRenderModels: ModelOption[] = [

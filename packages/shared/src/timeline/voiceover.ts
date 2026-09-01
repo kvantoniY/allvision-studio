@@ -8,12 +8,32 @@ import { PRICING_USD_TO_RUB_DEFAULT } from '../constants/pricing';
  * понятных вариантов, а не список идентификаторов провайдера.
  */
 export const VOICEOVER_MODELS = [
+  // Голоса Lumean идут первыми: у них каталог из тысяч голосов и выбор конкретного диктора,
+  // тогда как у моделей ниже голос один и заранее задан.
+  {
+    slug: 'lumean-eleven_multilingual_v2',
+    title: 'Свой голос из каталога',
+    description: 'Тысячи голосов ElevenLabs: выбираете диктора и настраиваете манеру речи.',
+    language: 'Multilingual',
+    supportsEmotion: false,
+    /** У модели выбирается конкретный голос — интерфейс показывает каталог. */
+    supportsVoiceCatalog: true,
+  },
+  {
+    slug: 'lumean-eleven_v3',
+    title: 'Свой голос · выразительный',
+    description: 'Та же библиотека голосов, но модель заметно живее играет интонацией. Дороже.',
+    language: 'Multilingual',
+    supportsEmotion: false,
+    supportsVoiceCatalog: true,
+  },
   {
     slug: 'minimax-speech',
     title: 'Русский голос',
     description: 'MiniMax: чисто произносит русский текст и умеет эмоции.',
     language: 'Russian',
     supportsEmotion: true,
+    supportsVoiceCatalog: false,
   },
   {
     slug: 'elevenlabs-tts',
@@ -21,6 +41,7 @@ export const VOICEOVER_MODELS = [
     description: 'ElevenLabs: ровнее интонация, но на русском слышен акцент.',
     language: 'English',
     supportsEmotion: false,
+    supportsVoiceCatalog: false,
   },
 ] as const;
 

@@ -12,6 +12,7 @@ import { MockAIProvider } from './mock-ai-provider';
 import type { AIProvider as WorkerAIProvider } from './ai-provider';
 import { PiAPIProvider } from './piapi-provider';
 import { FalProvider } from './fal-provider';
+import { LumeanProvider } from './lumean-provider';
 import { R2TemporaryPublisher } from './r2-temporary-publisher';
 import { LocalPublicPublisher } from './local-public-publisher';
 import { NoopPublisher } from './noop-publisher';
@@ -29,6 +30,7 @@ let mockSingleton: MockAIProvider | undefined;
 let stubSingleton: StubAIProvider | undefined;
 let piapiSingleton: PiAPIProvider | undefined;
 let falSingleton: FalProvider | undefined;
+let lumeanSingleton: LumeanProvider | undefined;
 let publisherSingleton: FilePublisher | undefined;
 
 const MOCK_ONLY_BLOCKS = new Set(['image-restore', 'image-upscale', 'timeline-render']);
@@ -209,6 +211,25 @@ function getFalProvider(): FalProvider {
     logger,
   });
   return falSingleton;
+}
+
+/**
+ * Lumean — отдельный сервис озвучки со своим балансом и ключом, не часть fal.
+ * Поэтому он живёт вне обычной развилки провайдеров: блок озвучки обращается к нему
+ * напрямую, когда выбран голос Lumean.
+ */
+export function getLumeanProvider(): LumeanProvider {
+  if (lumeanSingleton) return lumeanSingleton;
+  lumeanSingleton = new LumeanProvider({
+    apiKey: requireEnv('LUMEAN_API_KEY'),
+    storage: getStorageProvider(),
+    logger,
+  });
+  return lumeanSingleton;
+}
+
+export function hasLumeanKey(): boolean {
+  return Boolean(process.env.LUMEAN_API_KEY);
 }
 
 function getFilePublisher(): FilePublisher {
