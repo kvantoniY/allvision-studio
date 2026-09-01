@@ -474,33 +474,34 @@ function AssetCard({ asset, onVariation }: { asset: UserMediaAsset; onVariation:
             <div className="mt-1 text-xs text-slate-500">{formatDate(selectedAsset.createdAt)} · {originLabel(selectedAsset)}</div>
           </div>
         )}
-        {variants.length > 1 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {variants.map((variant, index) => (
-              <button
-                key={variant.id}
-                type="button"
-                onClick={() => setSelectedId(variant.id)}
-                className={cn(
-                  'h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-slate-950',
-                  selectedId === variant.id ? 'border-violet-400 ring-1 ring-violet-400/50' : 'border-slate-800',
-                )}
-                title={index === 0 ? 'Основной образ' : `Вариация ${index}`}
-              >
-                <ImageWithSkeleton wrapperClassName="h-full w-full" src={variant.thumbnailUrl || variant.publicUrl} alt="" className="h-full w-full object-cover" />
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {variants.length > 1 && variants.map((variant, index) => (
+            <button
+              key={variant.id}
+              type="button"
+              onClick={() => setSelectedId(variant.id)}
+              className={cn(
+                'h-12 w-12 shrink-0 overflow-hidden rounded-md border bg-slate-950',
+                selectedId === variant.id ? 'border-violet-400 ring-1 ring-violet-400/50' : 'border-slate-800',
+              )}
+              title={index === 0 ? 'Основной образ' : `Вариация ${index}`}
+            >
+              <ImageWithSkeleton wrapperClassName="h-full w-full" src={variant.thumbnailUrl || variant.publicUrl} alt="" className="h-full w-full object-cover" />
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={onVariation}
+            title="Создать вариацию"
+            aria-label="Создать вариацию"
+            className="grid h-12 w-12 shrink-0 place-items-center rounded-md border border-dashed border-violet-500/50 bg-violet-500/10 text-violet-200 transition hover:border-violet-400 hover:bg-violet-500/20"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
         <Button type="button" variant="outline" size="sm" className="w-full" disabled>
           Использовать в услуге
         </Button>
-        <Button type="button" variant="outline" size="sm" className="w-full border-violet-500/40 bg-violet-500/10" onClick={onVariation}>
-          Создать вариацию
-        </Button>
-        {asset.variationsCount > 0 && (
-          <div className="text-xs text-violet-200">у этого образа ещё {asset.variationsCount} вариации</div>
-        )}
       </CardContent>
     </Card>
   );
