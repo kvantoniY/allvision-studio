@@ -322,10 +322,10 @@ export function ClipTimeline({
       </div>
 
       <div ref={scrollRef} className="studio-scroll relative max-h-[46vh] overflow-auto rounded-lg border border-slate-800 bg-slate-950/60">
-        <div style={{ width: laneWidth + GUTTER_PX }}>
+        <div className="relative" style={{ width: laneWidth + GUTTER_PX }}>
           {/* Линейка. По ней перематывают, как в любой монтажке. */}
           <div className="sticky top-0 z-20 flex bg-slate-950/95 backdrop-blur">
-            <div style={{ width: GUTTER_PX }} className="shrink-0 border-r border-slate-800" />
+            <div style={{ width: GUTTER_PX }} className="sticky left-0 z-10 shrink-0 border-r border-slate-800 bg-slate-950/95" />
             <div onPointerDown={startScrub} className="relative h-6 flex-1 cursor-pointer select-none border-b border-slate-800">
               {ticksFor(total, pxPerSec).map((at) => (
                 <span
@@ -341,7 +341,7 @@ export function ClipTimeline({
 
           {tracks.map((track, trackIndex) => (
             <div key={track.id} className="flex border-b border-slate-900" style={{ height: TRACK_HEIGHT_PX }}>
-              <div style={{ width: GUTTER_PX }} className="flex shrink-0 items-center gap-1 border-r border-slate-800 px-2">
+              <div style={{ width: GUTTER_PX }} className="sticky left-0 z-10 flex shrink-0 items-center gap-1 border-r border-slate-800 bg-slate-950 px-2">
                 <span className="min-w-0 flex-1 truncate text-[11px] text-slate-400">
                   {trackIndex === 0 ? 'Основная' : track.title ?? `Слой ${trackIndex + 1}`}
                 </span>
@@ -451,7 +451,7 @@ export function ClipTimeline({
 
           {audioTracks.map((track) => (
             <div key={track.id} className="flex border-b border-slate-900" style={{ height: AUDIO_HEIGHT_PX }}>
-              <div style={{ width: GUTTER_PX }} className="flex shrink-0 items-center gap-1.5 border-r border-slate-800 px-2">
+              <div style={{ width: GUTTER_PX }} className="sticky left-0 z-10 flex shrink-0 items-center gap-1.5 border-r border-slate-800 bg-slate-950 px-2">
                 {track.kind === 'music' ? <Music className="h-3 w-3 shrink-0 text-slate-500" /> : <Mic className="h-3 w-3 shrink-0 text-slate-500" />}
                 <span className="min-w-0 flex-1 truncate text-[11px] text-slate-400">
                   {track.title ?? (track.kind === 'music' ? 'Музыка' : 'Голос')}
@@ -471,7 +471,7 @@ export function ClipTimeline({
 
           {audioTracks.length === 0 && (
             <div className="flex" style={{ height: AUDIO_HEIGHT_PX }}>
-              <div style={{ width: GUTTER_PX }} className="shrink-0 border-r border-slate-800" />
+              <div style={{ width: GUTTER_PX }} className="sticky left-0 z-10 shrink-0 border-r border-slate-800 bg-slate-950" />
               <p className="flex flex-1 items-center px-3 text-[11px] text-slate-600">
                 Музыку и озвучку добавляют в инструменте «Звук» — дорожек может быть несколько
               </p>
@@ -769,7 +769,10 @@ function AudioClip({
         />
       </div>
 
-      <div className="sticky right-1 z-10 float-right flex h-full items-center gap-1 pr-1">
+      <div
+        className="pointer-events-auto absolute inset-y-1 z-10 flex items-center gap-1 rounded bg-slate-950/85 px-1"
+        style={{ left: (startAt + barSeconds) * pxPerSec + 6 }}
+      >
         <input
           type="range"
           min={0}
