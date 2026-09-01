@@ -32,20 +32,20 @@ let falSingleton: FalProvider | undefined;
 let publisherSingleton: FilePublisher | undefined;
 
 const MOCK_ONLY_BLOCKS = new Set(['image-restore', 'image-upscale', 'timeline-render']);
-const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit', 'text-to-video', 'motion-transfer', 'trend-video-transfer', 'scene-transfer', 'carousel-slides', 'product-card', 'photo-2017', 'talking-avatar', 'video-effect', 'video-watermark-remove', 'video-upscale']);
+const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit', 'text-to-video', 'motion-transfer', 'trend-video-transfer', 'scene-transfer', 'carousel-slides', 'product-card', 'photo-2017', 'video-effect', 'video-watermark-remove', 'video-upscale']);
 
 // Блоки, которые в режиме PROVIDER_MODE=fal идут через FalProvider. Остальные блоки из
-// PIAPI_BLOCKS (face-swap, motion-transfer, video-effect, talking-avatar, watermark, upscale)
+// PIAPI_BLOCKS (video-effect, watermark, upscale)
 // в fal пока не реализованы и остаются на PiAPI (гибрид). Можно переопределить env-ом
 // FAL_BLOCKS="image-edit,text-to-video" чтобы мигрировать поблочно и точечно откатывать.
 // motion-transfer/face-swap/trend/scene реализованы на fal (Kling/Wan motion, Wan Animate Replace,
 // omni). Прод переопределяет env-ом FAL_BLOCKS — туда тоже нужно добавить trend-video-transfer и
 // scene-transfer, чтобы тренд-услуги пошли через fal (Wan Motion для животных).
 const DEFAULT_FAL_BLOCKS = 'image-edit,text-to-video,image-to-video,motion-transfer,face-swap-video,trend-video-transfer,scene-transfer,carousel-slides,product-card,photo-2017,fal-generic,text-to-speech';
-// Синтез речи в список из env добавляется всегда. Откат блока на mock означает не «дешевле
+// Синтез речи и лип-синк добавляются в список из env всегда. Откат блока на mock означает не «дешевле
 // и проще», а тишину вместо голоса — и в редакторе человек уже заплатил именно за голос.
 // Полезного mock-поведения у платной озвучки нет, поэтому выключать её нечем.
-const ALWAYS_FAL_BLOCKS = ['text-to-speech'];
+const ALWAYS_FAL_BLOCKS = ['text-to-speech', 'talking-avatar'];
 function getFalBlocks(): Set<string> {
   const raw = process.env.FAL_BLOCKS ?? DEFAULT_FAL_BLOCKS;
   return new Set([...raw.split(','), ...ALWAYS_FAL_BLOCKS].map((s) => s.trim()).filter(Boolean));

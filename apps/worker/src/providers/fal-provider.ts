@@ -148,6 +148,34 @@ const FAL_MODELS: Record<string, FalModelConfig> = {
 };
 
 // Движки motion transfer: slug -> fal endpoint + стиль payload + цена/сек (из fal pricing).
+/**
+ * Лип-синк на fal.
+ *
+ * Две разные задачи под одним блоком:
+ *  - `photo` — фотография персонажа плюс звук: персонаж оживает и говорит;
+ *  - `video` — готовое видео плюс звук: переозвучиваем, губы попадают в новую дорожку.
+ *
+ * Различие принципиально: у первых на вход идёт image_url, у вторых video_url, и перепутать
+ * их нельзя — модель просто откажет.
+ */
+const LIPSYNC_ENGINES: Record<string, {
+  endpoint: string;
+  drive: 'photo' | 'video';
+  perSec: number;
+  /** Модель требует непустой промпт (InfiniTalk). */
+  needsPrompt?: boolean;
+  resolutions?: string[];
+}> = {
+  'omnihuman-1.5': { endpoint: 'fal-ai/bytedance/omnihuman/v1.5', drive: 'photo', perSec: 0.14, resolutions: ['720p', '1080p'] },
+  'omnihuman': { endpoint: 'fal-ai/bytedance/omnihuman', drive: 'photo', perSec: 0.1 },
+  'kling-ai-avatar': { endpoint: 'fal-ai/kling-video/v1/pro/ai-avatar', drive: 'photo', perSec: 0.14 },
+  'infinitalk': { endpoint: 'fal-ai/infinitalk', drive: 'photo', perSec: 0.08, needsPrompt: true, resolutions: ['480p', '720p'] },
+  'hunyuan-avatar': { endpoint: 'fal-ai/hunyuan-avatar', drive: 'photo', perSec: 0.1 },
+  'sync-lipsync-2': { endpoint: 'fal-ai/sync-lipsync/v2', drive: 'video', perSec: 0.06 },
+  'sync-lipsync-2-pro': { endpoint: 'fal-ai/sync-lipsync/v2', drive: 'video', perSec: 0.1 },
+  'latentsync': { endpoint: 'fal-ai/latentsync', drive: 'video', perSec: 0.04 },
+};
+
 const MOTION_ENGINES: Record<string, { endpoint: string; perSec: number; style: 'kling' | 'wan-motion' | 'wan-animate' | 'dreamactor' | 'scail' }> = {
   'kling-motion-3.0-pro': { endpoint: 'fal-ai/kling-video/v3/pro/motion-control', perSec: 0.168, style: 'kling' },
   'kling-motion-3.0-std': { endpoint: 'fal-ai/kling-video/v3/standard/motion-control', perSec: 0.126, style: 'kling' },
@@ -911,8 +939,65 @@ export class FalProvider implements AIProvider {
   async videoEffect(): Promise<ProviderResult> {
     throw new ProviderError('FAL_NOT_IMPLEMENTED', 'video-effect not implemented on fal yet');
   }
-  async talkingAvatar(): Promise<ProviderResult> {
-    throw new ProviderError('FAL_NOT_IMPLEMENTED', 'talking-avatar not implemented on fal yet');
+  async talkingAvatar(input: {
+    imageUrl: string;
+    audioUrl: string;
+    prompt?: string;
+    model: string;
+    params?: Record<string, unknown>;
+    context: ProviderRunContext;
+  }): Promise<ProviderResult> {
+    const engine = LIPSYNC_ENGINES[input.model] ?? LIPSYNC_ENGINES['omnihuman-1.5'];
+    const falInput: Record<string, unknown> = { audio_url: input.audioUrl };
+
+    if (engine.drive === 'video') {
+      // Переозвучка: на вход нужно готовое видео. Кадр вместо него модель не примет,
+      // поэтому отказываем сразу и понятным текстом, а не ждём 422 от провайдера.
+      const videoUrl = readString(input.params, 'video_url') ?? readString(input.params, 'source_video');
+      if (!videoUrl) {
+        throw new ProviderError(
+          'LIPSYNC_VIDEO_REQUIRED',
+          'Этой модели нужно готовое видео: приложите ролик, губы в нём будут переозвучены.',
+        );
+      }
+      falInput.video_url = videoUrl;
+      if (engine.endpoint.includes('sync-lipsync')) {
+        falInput.model = input.model === 'sync-lipsync-2-pro' ? 'lipsync-2-pro' : 'lipsync-2';
+        const syncMode = readString(input.params, 'sync_mode');
+        if (syncMode) falInput.sync_mode = syncMode;
+      }
+    } else {
+      falInput.image_url = input.imageUrl;
+      const prompt = input.prompt?.trim();
+      if (prompt) falInput.prompt = prompt;
+      // InfiniTalk требует непустой промпт по схеме: без него запрос не пройдёт валидацию.
+      if (engine.needsPrompt && !prompt) {
+        falInput.prompt = 'The person speaks naturally to the camera with lively facial expression and natural head motion.';
+      }
+      if (engine.resolutions) {
+        const wanted = readString(input.params, 'resolution')?.replace(/[^0-9]/g, '');
+        const match = engine.resolutions.find((value) => value.replace(/[^0-9]/g, '') === wanted);
+        falInput.resolution = match ?? engine.resolutions[0];
+      }
+      const turbo = readBoolean(input.params, 'turbo_mode') ?? readBoolean(input.params, 'fast_mode');
+      if (turbo !== undefined && /omnihuman|hunyuan/.test(engine.endpoint)) falInput.turbo_mode = turbo;
+    }
+
+    mergePassthrough(falInput, input.params);
+
+    // Длительность задаёт звук, а не параметр: сколько говорит дорожка, столько и видео.
+    const estimatedSeconds = Math.max(5, Number(readString(input.params, 'estimatedSeconds') ?? '') || 10);
+    return this.run({
+      endpoint: engine.endpoint,
+      falInput,
+      model: input.model,
+      kind: 'image-to-video',
+      ext: 'mp4',
+      estimatedCost: engine.perSec * estimatedSeconds,
+      context: input.context,
+      timeoutMs: VIDEO_TIMEOUT_MS,
+      expectedDurationMs: 8 * 60 * 1000,
+    });
   }
   async removeWatermark(): Promise<ProviderResult> {
     throw new ProviderError('FAL_NOT_IMPLEMENTED', 'remove-watermark not implemented on fal yet');
