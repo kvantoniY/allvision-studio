@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ArrowRight, Clapperboard, ImagePlus, Play, Sparkles } from 'lucide-react';
+import { ArrowRight, ImagePlus, Play, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EditableText, type HomeEditorController } from '@/components/pages/HomePageInlineEditor';
 import { Reveal } from '@/components/home/Reveal';
@@ -75,41 +75,8 @@ export function GreetingsHero({
       )}
 
       <div className="relative mx-auto w-full max-w-[1480px] px-4 py-12 sm:px-6 sm:py-14 lg:px-8 lg:py-16">
-        <Reveal className="mx-auto max-w-3xl text-center">
-          <span
-            className="inline-flex items-center gap-2 rounded-full border border-violet-400/40 bg-violet-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-200"
-            data-home-section={block.sectionKey}
-            data-home-field="eyebrow"
-          >
-            <Clapperboard className="h-3.5 w-3.5" />
-            <EditableText editor={editor} path={['greetings', 'eyebrow']} label="Надзаголовок" value={block.eyebrow}>
-              {block.eyebrow}
-            </EditableText>
-          </span>
-
-          <h1
-            className="mt-5 text-4xl font-black leading-[1.02] tracking-tight text-white sm:text-5xl xl:text-6xl"
-            data-home-section={block.sectionKey}
-            data-home-field="title"
-          >
-            <EditableText editor={editor} path={['greetings', 'title']} label="Заголовок" value={block.title} multiline>
-              {block.title}
-            </EditableText>
-          </h1>
-
-          <p
-            className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg"
-            data-home-section={block.sectionKey}
-            data-home-field="lead"
-          >
-            <EditableText editor={editor} path={['greetings', 'lead']} label="Описание" value={block.lead} multiline>
-              {block.lead}
-            </EditableText>
-          </p>
-        </Reveal>
-
         {templates.length > 0 && (
-          <Reveal delayMs={100} className="mt-10">
+          <Reveal delayMs={100}>
             <h2 className="mb-5 text-center text-lg font-bold tracking-tight text-white sm:text-xl">
               Готовые видео-поздравления
             </h2>
