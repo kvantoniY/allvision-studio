@@ -79,6 +79,8 @@ export const userInputFieldSchema = z.object({
     'duration',
     'aspect_ratio',
     'music-select',
+    // Диктор из каталога голосов: значение — voice_id, его понимает блок озвучки.
+    'voice-select',
     'slides',
     'multiselect',
     'checkbox',

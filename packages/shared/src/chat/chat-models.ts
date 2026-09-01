@@ -3,7 +3,7 @@ import { costUsdToCoins, estimateModelCostUsd } from '../blocks/pricing';
 import type { BlockCatalogItem, ModelOption } from '../blocks/types';
 import { capabilityDurationOptions, getPiAPIModelCapability, type PiAPIParamCapability } from '../piapi/capabilities';
 
-export type ChatCategory = 'image' | 'video';
+export type ChatCategory = 'image' | 'video' | 'audio';
 export type ChatAspectRatio = '1:1' | '9:16' | '16:9' | '4:3' | '3:4' | '21:9' | '9:21' | 'auto';
 export type ModelPriceOverrides = Record<string, number>;
 
@@ -167,6 +167,8 @@ function modelFamilyFor(modelSlug: string, blockSlug: string) {
   if (modelSlug.startsWith('seedream-5')) return { slug: 'seedream-5', title: 'Seedream 5' };
   if (modelSlug === 'gpt-image-2') return { slug: 'gpt-image-2', title: 'GPT Image 2' };
   if (modelSlug === 'grok-image') return { slug: 'grok-image', title: 'Grok Image' };
+  // Все голоса Lumean — одно семейство: пользователь выбирает диктора, а не движок.
+  if (modelSlug.startsWith('lumean')) return { slug: 'lumean-voice', title: 'Озвучка голосом' };
   if (blockSlug === 'face-swap-video') return { slug: 'face-swap', title: 'Face Swap' };
   if (blockSlug === 'video-watermark-remove') return { slug: 'watermark-remove', title: 'Удаление watermark' };
   return { slug: modelSlug, title: modelSlug };
@@ -562,6 +564,25 @@ export const CHAT_MODELS: ChatModelOption[] = [
     acceptsAudioInput: true,
     acceptsTextOnly: true,
     supportedAspectRatios: ['16:9', '9:16', '1:1'],
+  }),
+  // Озвучка. Голос выбирается из каталога — модель здесь задаёт только движок и цену.
+  fromCatalog({
+    blockSlug: 'text-to-speech',
+    modelSlug: 'lumean-eleven_multilingual_v2',
+    category: 'audio',
+    description: 'Озвучка текста живым голосом: тысячи дикторов на выбор, ровное звучание на русском.',
+    acceptsImageInput: false,
+    acceptsTextOnly: true,
+    supportedAspectRatios: ['auto'],
+  }),
+  fromCatalog({
+    blockSlug: 'text-to-speech',
+    modelSlug: 'lumean-eleven_v3',
+    category: 'audio',
+    description: 'Выразительная озвучка: модель заметно живее играет интонацией. Дороже и медленнее.',
+    acceptsImageInput: false,
+    acceptsTextOnly: true,
+    supportedAspectRatios: ['auto'],
   }),
   fromCatalog({
     blockSlug: 'image-edit',

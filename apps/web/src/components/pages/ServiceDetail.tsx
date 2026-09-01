@@ -38,6 +38,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { ResultMedia } from '@/components/ui/result-media';
 import { PhotoFramingTip } from '@/components/services/PhotoFramingTip';
+import { VoicePicker } from '@/components/editor/VoicePicker';
 import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
@@ -87,7 +88,7 @@ type UserInputOption = {
 
 type UserInputField = {
   id: string;
-  type: 'text' | 'textarea' | 'photo' | 'photos' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'slides' | 'multiselect' | 'checkbox';
+  type: 'text' | 'textarea' | 'photo' | 'photos' | 'video' | 'select' | 'media-select' | 'avatar' | 'tier' | 'audio' | 'duration' | 'aspect_ratio' | 'music-select' | 'voice-select' | 'slides' | 'multiselect' | 'checkbox';
   label?: string;
   required?: boolean;
   requiredWhen?: { field: string; value: string };
@@ -349,7 +350,7 @@ function parseFields(value: unknown): UserInputField[] {
             }))
         : undefined,
     }))
-    .filter((item) => item.id && ['text', 'textarea', 'photo', 'photos', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'slides', 'multiselect', 'checkbox'].includes(item.type));
+    .filter((item) => item.id && ['text', 'textarea', 'photo', 'photos', 'video', 'select', 'media-select', 'avatar', 'tier', 'audio', 'duration', 'aspect_ratio', 'music-select', 'voice-select', 'slides', 'multiselect', 'checkbox'].includes(item.type));
 }
 
 function servicePrice(service: PublicService) {
@@ -518,6 +519,10 @@ function validateClient(
     }
     if (field.type === 'avatar') {
       if (required && !values[field.id]?.trim()) errors.push(`Выберите аватар: ${field.label ?? field.id}`);
+      continue;
+    }
+    if (field.type === 'voice-select') {
+      if (required && !values[field.id]?.trim()) errors.push(`Выберите голос: ${field.label ?? field.id}`);
       continue;
     }
     if (field.type === 'slides') {
@@ -1699,6 +1704,20 @@ function FieldControl({
         onValueChange={onValueChange}
         onFileChange={onFileChange}
       />
+    );
+  }
+
+  if (field.type === 'voice-select') {
+    return (
+      <div className="space-y-2">
+        <Label>
+          {label} {required}
+        </Label>
+        {field.hint && <p className="text-xs text-slate-500">{field.hint}</p>}
+        <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-2">
+          <VoicePicker value={value || null} onChange={(voiceId) => onValueChange(field.id, voiceId)} />
+        </div>
+      </div>
     );
   }
 

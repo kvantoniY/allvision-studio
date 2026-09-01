@@ -1,5 +1,5 @@
 import { Prisma, prisma } from '@allvision/database';
-import { CHAT_PROMPT_MAX_LENGTH, estimateChatGenerationPriceCoins, generationExpiresAt, getChatModel, type ChatAspectRatio } from '@allvision/shared';
+import { CHAT_PROMPT_MAX_LENGTH, estimateChatGenerationPriceCoins, generationExpiresAt, getChatModel, type ChatAspectRatio, type ChatCategory } from '@allvision/shared';
 import { z } from 'zod';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
@@ -183,7 +183,8 @@ export async function resolveInputRef(value: string, userId: string): Promise<In
   throw new HttpError(400, 'INVALID_INPUT_REF', 'Выберите файл из Студии, библиотеки сайта или загрузите новый');
 }
 
-function estimateDurationSec(category: 'image' | 'video') {
+function estimateDurationSec(category: ChatCategory) {
+  if (category === 'audio') return 120;
   return category === 'video' ? 600 : 180;
 }
 
@@ -217,6 +218,11 @@ function buildPipeline(params: {
   }
   if (params.blockSlug === 'text-to-video' && baseParams.mode === undefined) {
     baseParams.mode = params.modelSlug.includes('-omni') ? 'omni_reference' : 'text_to_video';
+  }
+  if (params.blockSlug === 'text-to-speech') {
+    baseParams.text = params.prompt;
+    // Формат кадра к звуку отношения не имеет и только сбил бы валидацию блока.
+    delete baseParams.aspect_ratio;
   }
   if (params.blockSlug === 'fal-generic' && baseParams.kind === undefined) {
     baseParams.kind = params.modelSlug === 'fal-custom-image' ? 'image' : 'video';

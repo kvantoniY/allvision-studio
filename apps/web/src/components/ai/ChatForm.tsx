@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Check, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Mic, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
 import { CHAT_MODELS, CHAT_PROMPT_MAX_LENGTH, chatReferenceSlots, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type ChatReferenceSlot, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -40,6 +40,7 @@ type ChatAdvancedParams = Record<string, string | number | boolean | string[] | 
 const categoryLabels: Record<ChatCategory, string> = {
   image: 'Фото',
   video: 'Видео',
+  audio: 'Голос',
 };
 
 // Человекочитаемые русские названия параметров (каталог хранит технические английские ключи).
@@ -892,10 +893,10 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
 function CategoryControl({ category, onChange }: { category: ChatCategory; onChange: (value: ChatCategory) => void }) {
   return (
-    <div className="inline-grid h-8 grid-cols-2 rounded-md border border-slate-700 bg-slate-950 p-0.5">
-      {(['image', 'video'] as const).map((item) => {
+    <div className="inline-grid h-8 grid-cols-3 rounded-md border border-slate-700 bg-slate-950 p-0.5">
+      {(['image', 'video', 'audio'] as const).map((item) => {
         const active = category === item;
-        const Icon = item === 'image' ? ImageIcon : Video;
+        const Icon = item === 'image' ? ImageIcon : item === 'video' ? Video : Mic;
         return (
           <button
             key={item}

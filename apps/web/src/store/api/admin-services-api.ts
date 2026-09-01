@@ -30,6 +30,7 @@ export type UserInputField = {
     | 'duration'
     | 'aspect_ratio'
     | 'music-select'
+    | 'voice-select'
     | 'slides'
     | 'multiselect'
     | 'checkbox';
