@@ -95,7 +95,6 @@ const TOOLS = [
   { code: 'text', label: 'Текст', icon: Type },
   { code: 'audio', label: 'Звук', icon: Music },
   { code: 'ai', label: 'ИИ', icon: Sparkles },
-  { code: 'library', label: 'Мои', icon: Images },
 ] as const;
 
 type ToolCode = (typeof TOOLS)[number]['code'];
@@ -133,6 +132,8 @@ export function VideoEditor({ id }: { id: string }) {
   const [sceneIndex, setSceneIndex] = useState(0);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [tool, setTool] = useState<ToolCode>('media');
+  // Внутри инструмента ИИ две подвкладки: сама генерация и её результаты.
+  const [aiTab, setAiTab] = useState<'generate' | 'library'>('generate');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [exportId, setExportId] = useState<string | null>(null);
   const [showExportScreen, setShowExportScreen] = useState(false);
@@ -587,7 +588,8 @@ export function VideoEditor({ id }: { id: string }) {
           body: { serviceSlug: service.slug, layerId, frameUrl: frame?.source.url, values },
         }).unwrap();
         ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId });
-        setTool('library');
+        setTool('ai');
+        setAiTab('library');
         toast({ title: `Запустили «${service.title}»`, description: `Списано ${result.tokensCost} токенов` });
       } catch (error) {
         setRunningServiceSlug(null);
@@ -636,7 +638,8 @@ export function VideoEditor({ id }: { id: string }) {
         appliedGenerationRef.current = null;
         ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId, origin: 'generated' });
         setSelectedLayerId(layerId);
-        setTool('library');
+        setTool('ai');
+        setAiTab('library');
         toast({ title: 'Генерация запущена', description: 'Можно закрыть страницу — кадр сам встанет в сцену.' });
       } catch (error) {
         // Убираем только тот слой, который завели ради этой генерации: чужой кадр,
@@ -992,6 +995,8 @@ export function VideoEditor({ id }: { id: string }) {
         >
           <ToolBar
             tool={tool}
+            aiTab={aiTab}
+            onAiTabChange={setAiTab}
             uploading={uploading}
             musicOptions={musicOptions}
             timeline={timeline}
@@ -1173,6 +1178,8 @@ export function VideoEditor({ id }: { id: string }) {
 
 function ToolBar({
   tool,
+  aiTab,
+  onAiTabChange,
   uploading,
   musicOptions,
   timeline,
@@ -1201,6 +1208,8 @@ function ToolBar({
   onInsertGeneration,
 }: {
   tool: ToolCode;
+  aiTab: 'generate' | 'library';
+  onAiTabChange: (tab: 'generate' | 'library') => void;
   uploading: boolean;
   musicOptions: Array<{ id: string; title: string; publicUrl: string }>;
   timeline: Timeline;
@@ -1297,15 +1306,41 @@ function ToolBar({
     );
   }
 
-  if (tool === 'library') {
+  const aiTabs = (
+    <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-950/60 p-1">
+      {([
+        { code: 'generate', title: 'Сгенерировать' },
+        { code: 'library', title: 'Мои генерации' },
+      ] as const).map((item) => (
+        <button
+          key={item.code}
+          type="button"
+          onClick={() => onAiTabChange(item.code)}
+          className={cn(
+            'rounded-md px-2 py-1.5 text-xs font-medium transition',
+            aiTab === item.code ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:text-slate-200',
+          )}
+        >
+          {item.title}
+        </button>
+      ))}
+    </div>
+  );
+
+  if (aiTab === 'library') {
     return (
-      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-        <GenerationLibrary onInsert={onInsertGeneration} />
+      <div>
+        {aiTabs}
+        <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+          <GenerationLibrary onInsert={onInsertGeneration} />
+        </div>
       </div>
     );
   }
 
   return scene ? (
+    <div>
+      {aiTabs}
     <SceneGenerator
       scene={scene}
       aspect={timeline.aspect}
@@ -1317,7 +1352,8 @@ function ToolBar({
       onRunService={onRunService}
       runningServiceSlug={runningServiceSlug}
       serviceProgress={serviceProgress}
-    />
+      />
+    </div>
   ) : null;
 }
 

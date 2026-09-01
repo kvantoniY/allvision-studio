@@ -33,13 +33,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { ResultMedia } from '@/components/ui/result-media';
 import { PhotoFramingTip } from '@/components/services/PhotoFramingTip';
 import { VoicePicker } from '@/components/editor/VoicePicker';
-import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -1859,14 +1857,6 @@ function isActiveProjectStatus(status?: ProjectStatus) {
   return status === 'PENDING' || status === 'PROCESSING';
 }
 
-function creativeProgressMessage(progress: number) {
-  if (progress < 12) return 'Нейронка раскладывает идею по пикселям...';
-  if (progress < 32) return 'Ищем лучший свет и настроение...';
-  if (progress < 58) return 'Собираем детали в цельный кадр...';
-  if (progress < 82) return 'Полируем результат без лишнего шума...';
-  return 'Финальные штрихи, почти готово...';
-}
-
 function isVideoUrl(url: string) {
   return /\.(mp4|webm|mov)(\?|$)/i.test(url);
 }
@@ -2063,33 +2053,35 @@ function currentStage(project: ProjectListItem): string | null {
   return typeof stage === 'string' && stage.trim().length > 0 ? stage.trim() : null;
 }
 
+/**
+ * Ход генерации на странице услуги.
+ *
+ * Процента здесь намеренно нет. Он рисовался сглаженной анимацией поверх редких обновлений
+ * и на длинных генерациях подолгу стоял на месте — выглядело как зависание, хотя всё шло.
+ * К тому же страница услуги не место ожидания: человек может тут же запустить эту же услугу
+ * ещё раз. Поэтому здесь только факт «идёт работа», а точный прогресс — в разделе генераций.
+ */
 function GenerationProgress({ project, compact = false }: { project: ProjectListItem; compact?: boolean }) {
   const active = isActiveProjectStatus(project.status);
-  const progress = useLivelyProgress(project.progress ?? 0, active, project.id);
-  const stuck = useStuckHint(progress, active);
   const stage = currentStage(project);
   return (
     <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
       <div className="flex items-start justify-between gap-3 text-sm">
         <span className={cn('flex min-w-0 items-start gap-2 font-medium', compact ? 'text-amber-200' : 'text-slate-100')}>
           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
-          <span className={compact ? 'line-clamp-2 min-w-0' : 'min-w-0'}>{creativeProgressMessage(progress)}</span>
+          <span className={compact ? 'line-clamp-2 min-w-0' : 'min-w-0'}>
+            {active ? 'Генерация идёт — можно закрыть страницу или запустить ещё одну' : 'Готовим результат'}
+          </span>
         </span>
-        <span className="shrink-0 text-slate-400">{progress}%</span>
       </div>
-      <Progress value={progress} />
       {stage && (
         <p className={cn('text-slate-400', compact ? 'text-xs' : 'text-sm')}>{stage}</p>
       )}
-      {stuck ? (
-        <p className={cn('leading-6 text-amber-300/90', compact ? 'text-xs' : 'text-sm')}>
-          Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно закрыть, результат появится тут автоматически.
-        </p>
-      ) : !compact ? (
+      {!compact && (
         <p className="text-sm leading-6 text-slate-400">
           Можно закрыть страницу: генерация продолжится, а результат появится здесь автоматически.
         </p>
-      ) : null}
+      )}
     </div>
   );
 }

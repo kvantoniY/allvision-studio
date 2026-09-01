@@ -29,6 +29,16 @@ function fieldVisible(field: UserInputFieldInput, values: EditorServiceInputs): 
   return values[field.visibleWhen.field] === field.visibleWhen.value;
 }
 
+/** Приводит значение поля формы к типу, который ждёт параметр шага пайплайна. */
+function coerceFieldValue(field: UserInputFieldInput, value: string | boolean): string | number | boolean {
+  if (field.type === 'duration') {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : value;
+  }
+  if (field.type === 'checkbox') return value === true || value === 'true';
+  return value;
+}
+
 export async function createEditorServiceGeneration(params: {
   userId: string;
   serviceSlug: string;
@@ -65,7 +75,10 @@ export async function createEditorServiceGeneration(params: {
     if (!fieldVisible(field, params.values)) continue;
     const value = params.values[field.id];
     if (value !== undefined && value !== '') {
-      userInputs[field.id] = value;
+      // Форма отдаёт всё строками, а параметры шага типизированы: длительность объявлена
+      // числом, и строка «5» роняла пайплайн на разборе схемы. Витринный запуск услуги
+      // приводит типы у себя — здесь нужно то же самое.
+      userInputs[field.id] = coerceFieldValue(field, value);
       continue;
     }
     if (field.id === firstPhotoField?.id && params.frameUrl) userInputs[field.id] = params.frameUrl;

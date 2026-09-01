@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Plus, Sparkles, Wand2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { ImageIcon, Loader2, Plus, Settings2, Sparkles, Video, Wand2, X } from 'lucide-react';
 import {
   CHAT_MODELS,
   chatReferenceSlots,
@@ -9,6 +10,7 @@ import {
   formatTokens,
   primaryMediaLayer,
   type ChatAspectRatio,
+  type ChatCategory,
   type MediaLayer,
   type TimelineAspect,
   type TimelineScene,
@@ -21,6 +23,13 @@ import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
 import { ServiceIdeaCards, servicePriceCoins } from '@/components/editor/ServiceIdeaCards';
 import { ServiceRunCard } from '@/components/editor/ServiceRunCard';
 import type { EditorCatalogService } from '@/store/api/editor-catalog-api';
+import {
+  AdvancedParamField,
+  advancedParamSections,
+  defaultAdvancedParams,
+  normaliseAdvancedParams,
+  type ChatAdvancedParams,
+} from '@/components/ai/advanced-params';
 import { cn } from '@/lib/utils';
 
 /**
@@ -119,14 +128,24 @@ export function SceneGenerator({
   const [duration, setDuration] = useState(5);
   const [modelSlug, setModelSlug] = useState<string | null>(null);
 
+  // Категория как в Allvision AI: сначала «что делаем» — фото или видео, и только потом
+  // модель. Полтора десятка моделей вперемешку читать невозможно, а выбор здесь всегда один
+  // из двух: получить кадр или получить ролик.
+  const [category, setCategory] = useState<Exclude<ChatCategory, 'audio'>>('video');
+  // Расширенные настройки живут в модалке: в панели им места нет, а у части моделей их
+  // полтора десятка. Значения по умолчанию берём из каталога, чтобы окно не было пустым.
+  const [advanced, setAdvanced] = useState<ChatAdvancedParams>({});
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const models = useMemo(() => {
     return CHAT_MODELS.filter((model) => {
       if (model.experimental) return false;
+      if (model.category !== category) return false;
       // Кадр в сцене — это референс: подходят модели, умеющие принимать изображение.
       if (hasImage) return model.acceptsImageInput;
       return model.acceptsTextOnly;
     });
-  }, [hasImage]);
+  }, [hasImage, category]);
 
   const model = useMemo(
     () => models.find((item) => item.slug === modelSlug) ?? models[0],
@@ -154,6 +173,17 @@ export function SceneGenerator({
   useEffect(() => {
     setSlotRefs({});
   }, [model?.slug]);
+
+  // Ключи параметров у моделей свои: перенести настройки от прошлой модели значит отправить
+  // провайдеру поля, которых он не знает.
+  const modelKey = model?.slug ?? null;
+  useEffect(() => {
+    const next = CHAT_MODELS.find((item) => item.slug === modelKey);
+    setAdvanced(next ? defaultAdvancedParams(next) : {});
+    setAdvancedOpen(false);
+  }, [modelKey]);
+
+  const advancedSections = useMemo(() => (model ? advancedParamSections(model) : []), [model]);
 
   const extraSlots = useMemo(() => {
     // Первый слот изображения занимает кадр сцены, если он выбран референсом.
@@ -394,20 +424,57 @@ export function SceneGenerator({
         />
       </div>
 
+      <div className="flex gap-1.5">
+        {([
+          { code: 'image', title: 'Фото', icon: ImageIcon },
+          { code: 'video', title: 'Видео', icon: Video },
+        ] as const).map((option) => (
+          <button
+            key={option.code}
+            type="button"
+            onClick={() => {
+              setCategory(option.code);
+              setModelSlug(null);
+            }}
+            className={cn(
+              'flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border text-sm transition',
+              category === option.code
+                ? 'border-violet-400 bg-violet-500/20 text-violet-100'
+                : 'border-slate-700 text-slate-300 hover:border-slate-500',
+            )}
+          >
+            <option.icon className="h-3.5 w-3.5" />
+            {option.title}
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="text-xs text-slate-400">
           Модель
-          <select
-            value={model?.slug ?? ''}
-            onChange={(event) => setModelSlug(event.target.value)}
-            className="mt-1 h-9 w-full rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
-          >
-            {models.map((item) => (
-              <option key={item.slug} value={item.slug}>
-                {item.title}
-              </option>
-            ))}
-          </select>
+          <div className="mt-1 flex gap-1.5">
+            <select
+              value={model?.slug ?? ''}
+              onChange={(event) => setModelSlug(event.target.value)}
+              className="h-9 min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
+            >
+              {models.map((item) => (
+                <option key={item.slug} value={item.slug}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen(true)}
+              disabled={advancedSections.length === 0}
+              title={advancedSections.length === 0 ? 'У этой модели нет дополнительных настроек' : 'Расширенные настройки'}
+              aria-label="Расширенные настройки"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-700 text-slate-300 transition hover:border-violet-400 hover:text-white disabled:opacity-40"
+            >
+              <Settings2 className="h-4 w-4" />
+            </button>
+          </div>
         </label>
 
         {isVideo && (
@@ -446,7 +513,10 @@ export function SceneGenerator({
               aspectRatio: aspectForTimeline(aspect),
               duration: isVideo ? duration : undefined,
               imageInputRef: reference?.source.url ?? slotRefs.main,
-              params: Object.keys(slotParams).length > 0 ? slotParams : undefined,
+              // Слоты кладём последними: прикреплённый референс важнее значения из настроек.
+              params: Object.keys({ ...normaliseAdvancedParams(advanced), ...slotParams }).length > 0
+                ? { ...normaliseAdvancedParams(advanced), ...slotParams }
+                : undefined,
               target: selectedLayer ? target : 'new',
             })
           }
@@ -460,6 +530,64 @@ export function SceneGenerator({
         {!enoughCoins && <span className="text-xs text-amber-300">Не хватает токенов на балансе</span>}
       </div>
       </div>
+
+      {advancedOpen && model && typeof document !== 'undefined' && createPortal((
+        // Снизу шторкой на телефоне, окном по центру на большом экране — как в чате.
+        <div
+          className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 backdrop-blur-sm md:items-center md:p-4"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setAdvancedOpen(false)}
+        >
+          <div
+            className="max-h-[85dvh] w-full space-y-3 overflow-y-auto rounded-t-2xl border border-slate-800 bg-slate-950 p-4 text-slate-100 shadow-2xl shadow-black/40 md:max-w-md md:rounded-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 shrink-0 text-violet-300" />
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-white">Расширенные настройки</div>
+                <div className="truncate text-[11px] text-slate-500">{model.title}</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen(false)}
+                aria-label="Закрыть"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-slate-400 transition hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {advancedSections.map((section) => (
+              <div key={section.key} className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{section.title}</div>
+                <div className="grid gap-2.5">
+                  {section.params.map((param) => (
+                    <AdvancedParamField
+                      key={param.key}
+                      param={param}
+                      value={advanced[param.key]}
+                      onChange={(next) => setAdvanced((current) => ({ ...current, [param.key]: next }))}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <div className="flex justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setAdvanced(defaultAdvancedParams(model))}
+                className="text-xs text-slate-500 transition hover:text-slate-200"
+              >
+                Сбросить
+              </button>
+              <Button type="button" size="sm" onClick={() => setAdvancedOpen(false)}>Готово</Button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
     </section>
   );
 }
