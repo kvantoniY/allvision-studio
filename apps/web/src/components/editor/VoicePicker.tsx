@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, Loader2, Play, Search, Square } from 'lucide-react';
+import { Check, Loader2, Play, Search, Square, Upload, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { useListVoicesQuery } from '@/store/api/voices-api';
+import { useListVoicesQuery, useSearchVoiceBySampleMutation, type CatalogVoice } from '@/store/api/voices-api';
+import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 /**
@@ -25,13 +26,23 @@ export function VoicePicker({
   const [gender, setGender] = useState<'male' | 'female' | null>(null);
   const [language, setLanguage] = useState<string | null>('ru');
   const [playing, setPlaying] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [loaded, setLoaded] = useState<CatalogVoice[]>([]);
+  const [similar, setSimilar] = useState<CatalogVoice[] | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sampleRef = useRef<HTMLInputElement | null>(null);
+  const [searchBySample, sampleState] = useSearchVoiceBySampleMutation();
 
   // Запрос на каждое нажатие клавиши положил бы и наш прокси, и лимит запросов Lumean.
   useEffect(() => {
     const timer = setTimeout(() => setDebounced(search.trim()), 400);
     return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    setPage(0);
+    setLoaded([]);
+  }, [debounced, gender, language]);
 
   useEffect(() => () => {
     audioRef.current?.pause();
@@ -41,8 +52,19 @@ export function VoicePicker({
     search: debounced || undefined,
     gender: gender ?? undefined,
     language: language ?? undefined,
+    page,
     pageSize: 24,
   });
+
+  // Копим страницы в своём списке: RTK отдаёт их по одной, а человеку нужен сплошной каталог.
+  useEffect(() => {
+    if (!data) return;
+    setLoaded((current) => {
+      const known = new Set(current.map((voice) => voice.voiceId));
+      const fresh = data.voices.filter((voice) => !known.has(voice.voiceId));
+      return page === 0 ? data.voices : [...current, ...fresh];
+    });
+  }, [data, page]);
 
   const preview = (voiceId: string, url: string | null) => {
     if (!url) return;
@@ -58,7 +80,21 @@ export function VoicePicker({
     setPlaying(voiceId);
   };
 
-  const voices = data?.voices ?? [];
+  const voices = similar ?? loaded;
+
+  const findSimilar = async (file: File) => {
+    try {
+      const result = await searchBySample(file).unwrap();
+      setSimilar(result.voices);
+      if (result.voices.length === 0) {
+        toast({ title: 'Похожих голосов не нашлось', description: 'Попробуйте запись подлиннее и почище.' });
+      } else if (!result.exactMatch) {
+        toast({ title: 'Точного совпадения нет', description: 'Показали самые близкие голоса.' });
+      }
+    } catch {
+      toast({ title: 'Не удалось найти голос', variant: 'destructive' });
+    }
+  };
 
   return (
     <div className="space-y-2">
@@ -69,6 +105,39 @@ export function VoicePicker({
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Поиск голоса"
           className="h-8 border-slate-700 bg-slate-950 pl-8 text-xs"
+        />
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => sampleRef.current?.click()}
+          disabled={sampleState.isLoading}
+          className="inline-flex items-center gap-1.5 rounded-full border border-slate-700 px-2.5 py-1 text-[11px] text-slate-300 transition hover:border-violet-400 hover:text-white disabled:opacity-50"
+        >
+          {sampleState.isLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+          {sampleState.isLoading ? 'Ищем похожий…' : 'Найти по записи'}
+        </button>
+        {similar && (
+          <button
+            type="button"
+            onClick={() => setSimilar(null)}
+            className="inline-flex items-center gap-1 text-[11px] text-slate-500 transition hover:text-slate-200"
+          >
+            <X className="h-3 w-3" />
+            весь каталог
+          </button>
+        )}
+        <input
+          ref={sampleRef}
+          type="file"
+          accept="audio/*"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void findSimilar(file);
+          }}
         />
       </div>
 
@@ -142,9 +211,12 @@ export function VoicePicker({
                 >
                   <span className="block truncate text-xs text-slate-100">{voice.name}</span>
                   <span className="block truncate text-[10px] text-slate-500">
-                    {[voice.gender === 'female' ? 'женский' : voice.gender === 'male' ? 'мужской' : null, voice.accent, voice.language]
-                      .filter(Boolean)
-                      .join(' · ')}
+                    {[
+                      typeof voice.similarity === 'number' ? `похож на ${voice.similarity}%` : null,
+                      voice.gender === 'female' ? 'женский' : voice.gender === 'male' ? 'мужской' : null,
+                      voice.accent,
+                      voice.language,
+                    ].filter(Boolean).join(' · ')}
                   </span>
                 </button>
 
@@ -152,6 +224,16 @@ export function VoicePicker({
               </div>
             );
           })
+        )}
+        {!similar && data?.hasMore && (
+          <button
+            type="button"
+            onClick={() => setPage((current) => current + 1)}
+            disabled={isFetching}
+            className="w-full rounded-lg border border-slate-800 py-1.5 text-[11px] text-slate-400 transition hover:border-slate-600 hover:text-slate-200 disabled:opacity-50"
+          >
+            {isFetching ? 'Загружаем…' : 'Показать ещё'}
+          </button>
         )}
       </div>
     </div>

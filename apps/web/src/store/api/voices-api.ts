@@ -10,6 +10,8 @@ export type CatalogVoice = {
   accent: string | null;
   previewUrl: string | null;
   description: string | null;
+  /** Насколько похож на присланный образец, в процентах. Есть только у поиска по записи. */
+  similarity?: number | null;
 };
 
 export type VoicesQuery = {
@@ -38,7 +40,14 @@ export const voicesApi = createApi({
       // Каталог живёт долго — не дёргаем сервис на каждое открытие панели.
       keepUnusedDataFor: 600,
     }),
+    searchVoiceBySample: build.mutation<{ exactMatch: boolean; truncated: boolean; voices: CatalogVoice[] }, File>({
+      query: (file) => {
+        const body = new FormData();
+        body.append('file', file);
+        return { url: '/search', method: 'POST', body };
+      },
+    }),
   }),
 });
 
-export const { useListVoicesQuery } = voicesApi;
+export const { useListVoicesQuery, useSearchVoiceBySampleMutation } = voicesApi;

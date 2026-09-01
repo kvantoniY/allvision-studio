@@ -29,6 +29,10 @@ export type VoiceoverRequest = {
   stability?: number;
   /** Скорость речи. Диапазон узкий — за его пределами сервис откажет. */
   speed?: number;
+  /** Насколько близко держаться оригинального тембра. */
+  similarity?: number;
+  /** Выразительность: выше — больше игры интонацией. */
+  style?: number;
 };
 
 /**
@@ -213,6 +217,8 @@ function VoiceTab({
   const [voice, setVoice] = useState<{ id: string; name: string } | null>(null);
   const [stability, setStability] = useState(0.5);
   const [speed, setSpeed] = useState(1);
+  const [similarity, setSimilarity] = useState(0.75);
+  const [style, setStyle] = useState(0);
 
   const model = VOICEOVER_MODELS.find((item) => item.slug === modelSlug) ?? VOICEOVER_MODELS[0];
   const price = applyModelPriceOverride(model.slug, voiceoverPriceCoins(model.slug), priceOverrides);
@@ -290,6 +296,30 @@ function VoiceTab({
               />
             </label>
             <label className="block text-[11px] text-slate-400">
+              Похожесть на оригинал: {Math.round(similarity * 100)}%
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={similarity}
+                onChange={(event) => setSimilarity(Number(event.target.value))}
+                className="mt-1 w-full accent-violet-400"
+              />
+            </label>
+            <label className="block text-[11px] text-slate-400">
+              Выразительность: {Math.round(style * 100)}%
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.05}
+                value={style}
+                onChange={(event) => setStyle(Number(event.target.value))}
+                className="mt-1 w-full accent-violet-400"
+              />
+            </label>
+            <label className="block text-[11px] text-slate-400">
               Скорость: {speed.toFixed(2)}×
               <input
                 type="range"
@@ -343,7 +373,7 @@ function VoiceTab({
               model: model.slug,
               emotion: model.supportsEmotion ? emotion : undefined,
               ...(model.supportsVoiceCatalog
-                ? { voice: voice?.id, stability, speed }
+                ? { voice: voice?.id, stability, speed, similarity, style }
                 : {}),
             })
           }

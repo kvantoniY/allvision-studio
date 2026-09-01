@@ -512,6 +512,10 @@ const voiceoverSchema = z.object({
   speed: z.number().min(0.5).max(2).optional(),
   /** Характер речи у голосов из каталога: ниже — живее, выше — ровнее. */
   stability: z.number().min(0).max(1).optional(),
+  /** Насколько близко держаться оригинального тембра голоса. */
+  similarity: z.number().min(0).max(1).optional(),
+  /** Выразительность: выше — больше игры интонацией. */
+  style: z.number().min(0).max(1).optional(),
 });
 
 /**
@@ -627,6 +631,8 @@ videoProjectsRouter.post('/:id/voiceover/generate', async (req: Request, res: Re
           ...(body.emotion ? { emotion: body.emotion } : {}),
           ...(body.speed ? { speed: body.speed } : {}),
           ...(body.stability !== undefined ? { stability: body.stability } : {}),
+          ...(body.similarity !== undefined ? { similarity_boost: body.similarity } : {}),
+          ...(body.style !== undefined ? { style: body.style } : {}),
           // У голосов из каталога язык определяется самим голосом и текстом, поэтому
           // навязывать его не нужно — а вот двум старым моделям он задан жёстко.
           ...(body.model.startsWith('lumean')

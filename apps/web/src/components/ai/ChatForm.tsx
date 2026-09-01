@@ -24,6 +24,7 @@ import { cn } from '@/lib/utils';
 import { useGetMeQuery } from '@/store/api/auth-api';
 import { useCreateChatMessageMutation, useGetChatModelsQuery, useUploadChatInputMutation } from '@/store/api/user-chat-api';
 import { InputSourcePicker, type SelectedInputSource } from './InputSourcePicker';
+import { VoicePicker } from '@/components/editor/VoicePicker';
 import { ReferenceLightbox } from './ReferenceLightbox';
 
 type ChatFormProps = {
@@ -213,6 +214,7 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const [createMessage, createMessageState] = useCreateChatMessageMutation();
   const [uploadInput, uploadInputState] = useUploadChatInputMutation();
   const [category, setCategory] = useState<ChatCategory>('image');
+  const [chatVoice, setChatVoice] = useState<{ id: string; name: string } | null>(null);
   const [modelSlug, setModelSlug] = useState(defaultModel('image').slug);
   const [prompt, setPrompt] = useState('');
   const [aspectRatio, setAspectRatio] = useState<ChatAspectRatio>('1:1');
@@ -298,7 +300,17 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
     if (imageUrlsList.length) params.image_urls = imageUrlsList;
     return params;
   }, [source, extraSlots, extraRefs]);
-  const mergedParams = useMemo(() => ({ ...cleanedAdvancedParams, ...slotParams }), [cleanedAdvancedParams, slotParams]);
+  // Голос для озвучки: у моделей категории «Голос» диктора выбирает пользователь, и без
+  // него сервис озвучил бы всё одним дефолтным голосом.
+  const isVoiceModel = selectedModel.category === 'audio';
+  const mergedParams = useMemo(
+    () => ({
+      ...cleanedAdvancedParams,
+      ...slotParams,
+      ...(isVoiceModel && chatVoice ? { voice: chatVoice.id } : {}),
+    }),
+    [cleanedAdvancedParams, slotParams, isVoiceModel, chatVoice],
+  );
   const missingAdvanced = missingAdvancedRequirement(selectedModel, mergedParams);
   const estimatedCostCoins = estimateChatGenerationPriceCoins(selectedModel.slug, {
     // При «auto» считаем цену по дефолтной длительности модели (передаём undefined).
@@ -310,7 +322,9 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   const canPay = balance >= estimatedCostCoins;
   const promptLength = prompt.length;
   const promptTooLong = promptLength > CHAT_PROMPT_MAX_LENGTH;
-  const canSubmit = (!requiresPrompt || prompt.trim().length > 0) && !promptTooLong && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !requiredExtraMissing && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
+  // Без диктора озвучка ушла бы дефолтным голосом — это не то, что человек выбирал.
+  const needsVoice = isVoiceModel && !chatVoice;
+  const canSubmit = !needsVoice && (!requiresPrompt || prompt.trim().length > 0) && !promptTooLong && canPay && (!needsInput || !!source) && (!dualInput || !!audioSource) && !requiredExtraMissing && !referenceUnsupported && !missingAdvanced && !createMessageState.isLoading && !uploadInputState.isLoading;
 
   useEffect(() => {
     const next = defaultModel(category);
@@ -738,6 +752,19 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
               </div>
             )}
             {selectedModel.experimental && <Badge className="bg-amber-500/15 text-amber-200">Бета</Badge>}
+          </div>
+        )}
+
+        {isVoiceModel && (
+          <div className="mb-2 space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-slate-300">Голос диктора</span>
+              <span className="truncate text-xs text-violet-200">{chatVoice?.name ?? 'не выбран'}</span>
+            </div>
+            <VoicePicker value={chatVoice?.id ?? null} onChange={(id, name) => setChatVoice({ id, name })} />
+            <p className="text-[11px] text-slate-500">
+              Текст запроса и будет озвучен. Паузу задавайте разметкой {'{{pause=1.5}}'} — она бесплатна.
+            </p>
           </div>
         )}
 
