@@ -290,3 +290,52 @@ describe('timelineRenderShape', () => {
     expect(timelineRenderShape(timeline)).toEqual({ width: 1080, height: 1080, totalDurationSec: 10 });
   });
 });
+
+/**
+ * Ролик, собранный дорожками, доходит до ffmpeg через ту же цепочку, что и ролик из сцен:
+ * дорожки раскладываются в сцены на чтении. Проверяем именно стык — что планировщик видит
+ * разложенные клипы, а не пустой список.
+ */
+describe('ролик на дорожках', () => {
+  function trackTimeline() {
+    return parseTimeline({
+      aspect: '9:16',
+      scenes: [],
+      tracks: [
+        {
+          id: 'main',
+          clips: [
+            {
+              id: 'c1',
+              startSec: 0,
+              durationSec: 4,
+              transition: 'dissolve',
+              layer: { id: 'c1_l', kind: 'media', source: { kind: 'image', url: 'https://cdn.test/1.jpg' } },
+            },
+            {
+              id: 'c2',
+              startSec: 3.5,
+              durationSec: 4,
+              layer: { id: 'c2_l', kind: 'media', source: { kind: 'image', url: 'https://cdn.test/2.jpg' } },
+            },
+          ],
+        },
+      ],
+    });
+  }
+
+  it('длительность считается по позициям клипов, а не по сумме длин', () => {
+    // 4 + 4 с наложением 0.5 = 7.5, а не 8.
+    expect(timelineRenderShape(trackTimeline()).totalDurationSec).toBeCloseTo(7.5, 3);
+  });
+
+  it('склейка получает переход на той же секунде, где стоит клип', () => {
+    const graph = filterGraph(planFinal({
+      timeline: trackTimeline(),
+      scenePaths: ['/tmp/s0.mp4', '/tmp/s1.mp4'],
+      outputPath: '/tmp/out.mp4',
+      quality: 'balanced',
+    }).args);
+    expect(graph).toContain('xfade=transition=fade:duration=0.500:offset=3.500');
+  });
+});

@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { Loader2, Scissors } from 'lucide-react';
-import { sceneLayers, type Timeline } from '@allvision/shared';
+import { sceneLayers, timelineScenes, type Timeline } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -29,8 +29,9 @@ function probeUrlDuration(url: string): Promise<number | undefined> {
  * сцена схлопнулась бы до четырёх секунд по умолчанию, и экспорт обрезал бы ролик.
  */
 async function withMeasuredDuration(timeline: Timeline): Promise<Timeline | null> {
-  if (timeline.scenes.length !== 1) return null;
-  const scene = timeline.scenes[0];
+  const scenes = timelineScenes(timeline);
+  if (scenes.length !== 1) return null;
+  const scene = scenes[0];
   if (typeof scene.durationSec === 'number') return null;
   const layer = sceneLayers(scene).find((item) => item.kind === 'media');
   if (!layer || layer.kind !== 'media' || layer.source.kind !== 'video' || !layer.source.url) return null;

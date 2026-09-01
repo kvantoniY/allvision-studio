@@ -10,6 +10,8 @@ import {
   markLayerGeneration,
   timelineDurationSec,
   timelineSchema,
+  timelineScenes,
+  timelineTracks,
   validateTimeline,
   VOICEOVER_MODELS,
   voiceoverPriceCoins,
@@ -107,6 +109,22 @@ function parseRenderableTimeline(value: unknown) {
     throw new HttpError(400, 'INVALID_TIMELINE', issues.map((issue) => issue.message).join(' '));
   }
   return timeline;
+}
+
+/**
+ * Позиция сцены по её id. Для ролика на дорожках сценой считается клип: редактор
+ * присылает именно его id, а разложенные сцены живут только внутри рендера.
+ */
+function sceneIndexById(timeline: ReturnType<typeof parseDraftTimeline>, id: string): number {
+  const tracks = timelineTracks(timeline);
+  if (tracks.length > 0) {
+    for (const track of tracks) {
+      const index = track.clips.findIndex((clip) => clip.id === id);
+      if (index >= 0) return index;
+    }
+    return -1;
+  }
+  return timeline.scenes.findIndex((scene) => scene.id === id);
 }
 
 async function ownedProject(userId: string, id: string) {
@@ -303,7 +321,7 @@ videoProjectsRouter.post('/:id/scenes/:sceneId/generate', async (req: Request, r
     const userId = req.user!.id;
     const videoProject = await ownedProject(userId, req.params.id);
     const timeline = parseDraftTimeline(videoProject.timeline);
-    const sceneIndex = timeline.scenes.findIndex((scene) => scene.id === req.params.sceneId);
+    const sceneIndex = sceneIndexById(timeline, req.params.sceneId);
     if (sceneIndex < 0) throw new HttpError(404, 'SCENE_NOT_FOUND', 'Сцена не найдена');
     const { layerId } = generateTargetSchema.parse(req.body ?? {});
 
@@ -315,19 +333,20 @@ videoProjectsRouter.post('/:id/scenes/:sceneId/generate', async (req: Request, r
     // Метку пишем сразу и именно в тот слой, который ждёт результат: между запуском и
     // автосохранением редактора есть окно, и если пользователь закроет вкладку внутри
     // него, оплаченная генерация всё равно доедет — воркер найдёт её по этой метке.
-    const marked = layerId
-      ? markLayerGeneration(timeline, req.params.sceneId, layerId, result.projectId)
-      : { changed: false, timeline };
-    const scenes = marked.changed
-      ? marked.timeline.scenes
-      // Слой не назвали — помечаем сцену: так работают ролики прежней формы, где
-      // кадр у сцены ровно один.
-      : timeline.scenes.map((scene, index) =>
-        index === sceneIndex ? { ...scene, generationProjectId: result.projectId, origin: 'generated' as const } : scene,
-      );
+    // Слой не назвали — на дорожках метку примет сам клип (его id тоже подходит),
+    // а в прежней записи пометим сцену: кадр у неё ровно один.
+    const marked = markLayerGeneration(timeline, req.params.sceneId, layerId ?? req.params.sceneId, result.projectId);
+    const next = marked.changed
+      ? marked.timeline
+      : {
+        ...timeline,
+        scenes: timeline.scenes.map((scene, index) =>
+          index === sceneIndex ? { ...scene, generationProjectId: result.projectId, origin: 'generated' as const } : scene,
+        ),
+      };
     await prisma.videoProject.update({
       where: { id: videoProject.id },
-      data: { timeline: { ...timeline, scenes } as never },
+      data: { timeline: next as never },
     });
 
     res.status(202).json({
@@ -348,7 +367,7 @@ videoProjectsRouter.post('/:id/scenes/:sceneId/generate-service', async (req: Re
     const userId = req.user!.id;
     const videoProject = await ownedProject(userId, req.params.id);
     const timeline = parseDraftTimeline(videoProject.timeline);
-    const sceneIndex = timeline.scenes.findIndex((scene) => scene.id === req.params.sceneId);
+    const sceneIndex = sceneIndexById(timeline, req.params.sceneId);
     if (sceneIndex < 0) throw new HttpError(404, 'SCENE_NOT_FOUND', 'Сцена не найдена');
 
     const body = serviceGenerateSchema.parse(req.body ?? {});
@@ -361,9 +380,7 @@ videoProjectsRouter.post('/:id/scenes/:sceneId/generate-service', async (req: Re
 
     // Метку ставит сервер — по ней воркер вернёт результат в нужный слой, даже если
     // вкладку закроют до автосохранения редактора.
-    const marked = body.layerId
-      ? markLayerGeneration(timeline, req.params.sceneId, body.layerId, result.projectId)
-      : { changed: false, timeline };
+    const marked = markLayerGeneration(timeline, req.params.sceneId, body.layerId ?? req.params.sceneId, result.projectId);
     if (marked.changed) {
       await prisma.videoProject.update({
         where: { id: videoProject.id },
@@ -391,7 +408,7 @@ videoProjectsRouter.post('/:id/export', async (req: Request, res: Response, next
     if (durationSec <= 0) {
       throw new HttpError(400, 'EMPTY_TIMELINE', 'В ролике нет ни одной сцены');
     }
-    if (timeline.scenes.length > TIMELINE_LIMITS.maxScenes) {
+    if (timelineScenes(timeline).length > TIMELINE_LIMITS.maxScenes) {
       throw new HttpError(400, 'TOO_MANY_SCENES', `Сцен больше ${TIMELINE_LIMITS.maxScenes}`);
     }
 

@@ -16,6 +16,7 @@ import {
   sceneMediaLayers,
   sceneTextLayers,
   timelineAudioTracks,
+  timelineScenes,
   timelineTimings,
   validateTimeline,
   type MediaLayer,
@@ -331,7 +332,7 @@ export const timelineRenderBlock: BlockDefinition = {
       // 1. Складываем на диск исходники КАЖДОГО слоя и уточняем длительности.
       const layersByScene: LayerInput[][] = [];
       const scenes: TimelineScene[] = [];
-      for (const [index, rawScene] of timeline.scenes.entries()) {
+      for (const [index, rawScene] of timelineScenes(timeline).entries()) {
         let scene = rawScene;
         const inputs: LayerInput[] = [];
         const primary = primaryMediaLayer(rawScene);
@@ -359,7 +360,9 @@ export const timelineRenderBlock: BlockDefinition = {
         scenes.push(scene);
       }
 
-      const resolved: Timeline = { ...timeline, scenes };
+      // Дорожки уже разложены в сцены выше; оставить их здесь значило бы разложить
+      // ещё раз и потерять уточнённые длительности.
+      const resolved: Timeline = { ...timeline, tracks: undefined, scenes };
       const { width, height, totalDurationSec } = timelineRenderShape(resolved);
       await ctx.reportProgress(10);
 

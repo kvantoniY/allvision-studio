@@ -8,6 +8,7 @@ import {
   primaryMediaLayer,
   timelineDurationSec,
   type Timeline,
+  timelineScenes,
 } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
@@ -31,7 +32,7 @@ function formatDate(value: string) {
  * чёрный прямоугольник вместо превью бессмысленно. Видео браузер сам покажет первым кадром.
  */
 function coverOf(timeline: Timeline): { url: string; isVideo: boolean } | null {
-  for (const scene of timeline.scenes) {
+  for (const scene of timelineScenes(timeline)) {
     const layer = primaryMediaLayer(scene);
     const source = layer?.source;
     if (!source?.url) continue;
@@ -128,7 +129,7 @@ export function VideoProjectList() {
                   <div className="p-4">
                     <h2 className="truncate font-semibold text-slate-100">{project.title}</h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      {project.timeline.scenes.length} сцен · {formatDate(project.updatedAt)}
+                      {timelineScenes(project.timeline).length} сцен · {formatDate(project.updatedAt)}
                     </p>
                   </div>
                 </Link>

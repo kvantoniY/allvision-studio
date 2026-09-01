@@ -12,6 +12,7 @@ import {
   type MediaLayer,
   type TextLayer,
   type Timeline,
+  timelineScenes,
 } from '@allvision/shared';
 // Konva работает только с DOM, поэтому холст грузим на клиенте: серверный рендер
 // страницы не должен его касаться.
@@ -124,8 +125,9 @@ export function EditorStage({
     [timings, time, playing],
   );
 
-  const shownScene = timeline.scenes[shownIndex];
-  const incomingScene = incomingIndex === null ? null : timeline.scenes[incomingIndex];
+  const scenes = timelineScenes(timeline);
+  const shownScene = scenes[shownIndex];
+  const incomingScene = incomingIndex === null ? null : scenes[incomingIndex];
 
   useEffect(() => {
     // Переход по времени во время проигрывания подсвечивает сцену в ленте.

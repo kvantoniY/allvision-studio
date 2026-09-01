@@ -6,6 +6,7 @@ import {
   type TimelineTextOverlay,
 } from './types';
 import { primaryMediaLayer, sceneLayers, sceneWithLayers, type SceneLayer } from './layers';
+import { timelineScenes, timelineTracks, type TimelineClip, type TimelineTrack } from './tracks';
 
 export type TimelineResolution = { width: number; height: number };
 
@@ -88,9 +89,10 @@ export type SceneTiming = {
 export function timelineTimings(timeline: Timeline): SceneTiming[] {
   const timings: SceneTiming[] = [];
   let cursor = 0;
-  timeline.scenes.forEach((scene, index) => {
+  const scenes = timelineScenes(timeline);
+  scenes.forEach((scene, index) => {
     const duration = sceneDurationSec(scene);
-    const transitionOut = transitionDurationSec(scene, timeline.scenes[index + 1]);
+    const transitionOut = transitionDurationSec(scene, scenes[index + 1]);
     timings.push({ scene, index, startSec: cursor, durationSec: duration, transitionOutSec: transitionOut });
     cursor += duration - transitionOut;
   });
@@ -199,6 +201,12 @@ export function applyGeneratedSource(
 ): { timeline: Timeline; changed: boolean } {
   let changed = false;
 
+  // Ролик на дорожках правится на дорожках: если записать сюда разложенные сцены,
+  // монтаж схлопнется в плоский список и человек потеряет расстановку клипов.
+  if (timelineTracks(timeline).length > 0) {
+    return applyGeneratedSourceToTracks(timeline, generationProjectId, source);
+  }
+
   const scenes = timeline.scenes.map((scene) => {
     // Новая форма: метку несёт конкретный слой, и материал встаёт именно в него —
     // остальные слои коллажа трогать нельзя.
@@ -256,6 +264,10 @@ export function markLayerGeneration(
 ): { timeline: Timeline; changed: boolean } {
   let changed = false;
 
+  if (timelineTracks(timeline).length > 0) {
+    return markClipGeneration(timeline, layerId, generationProjectId);
+  }
+
   const scenes = timeline.scenes.map((scene) => {
     if (scene.id !== sceneId) return scene;
     const layered = sceneWithLayers(scene);
@@ -286,15 +298,16 @@ export function validateTimeline(timeline: Timeline, options?: { maxScenes?: num
   const issues: TimelineIssue[] = [];
   const maxScenes = options?.maxScenes ?? TIMELINE_LIMITS.maxScenes;
 
-  if (timeline.scenes.length > maxScenes) {
+  const scenes = timelineScenes(timeline);
+  if (scenes.length > maxScenes) {
     issues.push({
       code: 'TOO_MANY_SCENES',
-      message: `Сцен больше допустимого: ${timeline.scenes.length} из ${maxScenes}.`,
+      message: `Сцен больше допустимого: ${scenes.length} из ${maxScenes}.`,
     });
   }
 
   const seen = new Set<string>();
-  for (const scene of timeline.scenes) {
+  for (const scene of scenes) {
     if (seen.has(scene.id)) {
       issues.push({ code: 'DUPLICATE_SCENE_ID', message: `Повторяющийся id сцены: ${scene.id}.`, sceneId: scene.id });
     }
@@ -357,4 +370,59 @@ export function formatTimelineDuration(seconds: number): string {
   const minutes = Math.floor(total / 60);
   const rest = total % 60;
   return `${minutes}:${String(rest).padStart(2, '0')}`;
+}
+
+/**
+ * Готовый материал в клип дорожки.
+ *
+ * То же правило, что и у сцен: клип ищем по метке, а не по позиции — пока шла генерация,
+ * человек мог двигать клипы по времени и менять дорожки местами. Метку снимаем, иначе
+ * редактор продолжит показывать заглушку поверх готового кадра.
+ */
+function applyGeneratedSourceToTracks(
+  timeline: Timeline,
+  generationProjectId: string,
+  source: { kind: 'video' | 'image'; url: string },
+): { timeline: Timeline; changed: boolean } {
+  let changed = false;
+  const tracks = timelineTracks(timeline).map((track: TimelineTrack) => ({
+    ...track,
+    clips: track.clips.map((clip: TimelineClip) => {
+      const layer = clip.layer;
+      if (layer.kind !== 'media' || layer.generationProjectId !== generationProjectId) return clip;
+      changed = true;
+      return {
+        ...clip,
+        layer: {
+          ...layer,
+          source,
+          trimStartSec: undefined,
+          trimEndSec: undefined,
+          generationProjectId: undefined,
+        },
+      };
+    }),
+  }));
+
+  return { timeline: changed ? { ...timeline, tracks } : timeline, changed };
+}
+
+/** Помечает клип ожидающим генерацию: ищем по id слоя, его и знает редактор. */
+function markClipGeneration(
+  timeline: Timeline,
+  layerId: string,
+  generationProjectId: string,
+): { timeline: Timeline; changed: boolean } {
+  let changed = false;
+  const tracks = timelineTracks(timeline).map((track: TimelineTrack) => ({
+    ...track,
+    clips: track.clips.map((clip: TimelineClip) => {
+      if (clip.layer.kind !== 'media') return clip;
+      if (clip.layer.id !== layerId && clip.id !== layerId) return clip;
+      changed = true;
+      return { ...clip, layer: { ...clip.layer, generationProjectId, origin: 'generated' as const } };
+    }),
+  }));
+
+  return { timeline: changed ? { ...timeline, tracks } : timeline, changed };
 }

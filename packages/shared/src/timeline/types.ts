@@ -149,7 +149,17 @@ export type TimelineNamedAudioTrack = z.infer<typeof timelineNamedAudioTrackSche
 export const timelineSchema = z.object({
   version: z.literal(TIMELINE_VERSION).default(TIMELINE_VERSION),
   aspect: z.enum(TIMELINE_ASPECTS).default('9:16'),
-  scenes: z.array(timelineSceneSchema).min(1).max(TIMELINE_LIMITS.maxScenes),
+  /**
+   * Прежняя форма записи: кадры друг за другом. Пусто, если ролик собран дорожками.
+   * Читать сцены нужно через timelineScenes(), а не отсюда: тогда обе формы работают.
+   */
+  scenes: z.array(timelineSceneSchema).max(TIMELINE_LIMITS.maxScenes).default([]),
+  /**
+   * Дорожки с клипами на своих секундах — то, как ролик собирают в редакторе.
+   * Схема лежит в ./tracks, а не здесь, чтобы не было кольцевого импорта: там она
+   * ссылается на схему слоёв, а слои — на этот файл.
+   */
+  tracks: z.array(z.unknown()).max(8).optional(),
   /** Фоновая музыка на весь ролик. */
   music: timelineAudioTrackSchema.optional(),
   /**
@@ -166,7 +176,15 @@ export const timelineSchema = z.object({
    * `timelineAudioTracks()`, а не напрямую: тогда обе формы работают одинаково.
    */
   audio: z.array(timelineNamedAudioTrackSchema).max(TIMELINE_LIMITS.maxAudioTracks).optional(),
-});
+})
+  // Ролик обязан быть записан хоть как-то: пустой таймлайн нечего ни показывать, ни собирать.
+  .superRefine((value, ctx) => {
+    const hasScenes = value.scenes.length > 0;
+    const hasTracks = Array.isArray(value.tracks) && value.tracks.length > 0;
+    if (!hasScenes && !hasTracks) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['scenes'], message: 'В ролике нет ни одной сцены.' });
+    }
+  });
 
 export type Timeline = z.infer<typeof timelineSchema>;
 
