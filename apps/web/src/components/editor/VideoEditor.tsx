@@ -11,41 +11,42 @@ import {
   Image as ImageIcon,
   LayoutGrid,
   Loader2,
-  Images,
   Music,
   Redo2,
   RotateCcw,
   Sparkles,
   Type,
   Undo2,
-  Upload,
 } from 'lucide-react';
 import {
   COLLAGE_LAYOUT_TITLES,
   TIMELINE_ASPECTS,
   TIMELINE_LIMITS,
   applyGeneratedSource,
+  clipEndSec,
+  collageBoxes,
   createTimelineHistory,
   formatTimelineDuration,
   pushTimelineHistory,
   redoTimeline,
-  undoTimeline,
   sceneAtTime,
-  sceneLayers,
   sceneMediaLayers,
   timelineAudioTracks,
   timelineDurationSec,
-  timelineTimings,
+  timelineScenes,
   timelineWithAudioTracks,
+  undoTimeline,
   validateTimeline,
   type CollageLayout,
   type MediaLayer,
   type SceneLayer,
   type Timeline,
   type TimelineAspect,
+  type TimelineClip,
   type TimelineHistory,
   type TimelineNamedAudioTrack,
   type TimelineScene,
+  type TimelineTransition,
 } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -53,16 +54,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
+import { ClipTimeline } from '@/components/editor/ClipTimeline';
 import { EditorStage } from '@/components/editor/EditorStage';
 import { LayerInspector } from '@/components/editor/LayerInspector';
-import { LayerPanel } from '@/components/editor/LayerPanel';
+import { MediaLibraryPanel, type MediaLibraryItem } from '@/components/editor/MediaLibraryPanel';
 import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
-import { TimelineTracks } from '@/components/editor/TimelineTracks';
 import { AudioTools, type VoiceRecording, type VoiceoverRequest } from '@/components/editor/AudioTools';
 import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
 import type { EditorCatalogService } from '@/store/api/editor-catalog-api';
 import { ExportOverlay } from '@/components/editor/ExportOverlay';
-import { newScene, uid, useEditorOperations, type LayerPatch } from '@/components/editor/useEditorTimeline';
+import { timelineWithTracks, uid, useTrackEditor, type LayerPatch } from '@/components/editor/useTrackEditor';
 import { usePlayback } from '@/components/editor/usePlayback';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
@@ -108,9 +109,14 @@ function mediaUrl(value?: string | null) {
 /**
  * Редактор ролика.
  *
- * Раскладка повторяет то, к чему приучили монтажки: инструменты слева, холст в центре,
- * лента сцен под ним, а справа — слои и настройки того, что выделено. Постоянная стопка
- * всех настроек сразу и была тем, что делало прежнюю панель нечитаемой.
+ * Ролик — это дорожки, на которых клипы стоят на своих секундах. Инструменты слева, холст
+ * в центре, справа настройки выделенного, снизу монтажная шкала. Прежняя модель «кадры друг
+ * за другом» не позволяла ни подвинуть клип, ни оставить паузу, ни положить подпись поверх
+ * двух кадров — и правками интерфейса это не лечилось.
+ *
+ * Ролик, записанный сценами (в том числе шаблон поздравления), переводится на дорожки при
+ * открытии: перевод считается из тех же таймингов, по которым ролик рендерится, поэтому
+ * ничего не смещается.
  */
 export function VideoEditor({ id }: { id: string }) {
   const { data, isLoading, isError, error, refetch: refetchProject } = useGetVideoProjectQuery(id);
@@ -129,8 +135,8 @@ export function VideoEditor({ id }: { id: string }) {
 
   const [timeline, setTimeline] = useState<Timeline | null>(null);
   const [title, setTitle] = useState('');
-  const [sceneIndex, setSceneIndex] = useState(0);
-  const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [activeTrackIndex, setActiveTrackIndex] = useState(0);
   const [tool, setTool] = useState<ToolCode>('media');
   // Внутри инструмента ИИ две подвкладки: сама генерация и её результаты.
   const [aiTab, setAiTab] = useState<'generate' | 'library'>('generate');
@@ -139,15 +145,13 @@ export function VideoEditor({ id }: { id: string }) {
   const [showExportScreen, setShowExportScreen] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRef = useRef(false);
-  const uploadTargetRef = useRef<{ sceneIndex: number; layerId: string | null } | null>(null);
+  const uploadTargetRef = useRef<{ clipId: string | null } | null>(null);
   const addFileRef = useRef<HTMLInputElement | null>(null);
   const voiceFileRef = useRef<HTMLInputElement | null>(null);
   const timelineRef = useRef<Timeline | null>(null);
-  // Буфер обмена слоями живёт в ref: он переживает переход между сценами и не должен
-  // перерисовывать редактор при копировании.
-  const clipboardRef = useRef<SceneLayer | null>(null);
-  // История живёт в ref: её глубина нужна только кнопкам, а перерисовывать редактор
-  // на каждую запись незачем.
+  // Буфер обмена живёт в ref: он переживает перерисовку и не должен её вызывать.
+  const clipboardRef = useRef<TimelineClip | null>(null);
+  // История тоже в ref: её глубина нужна только кнопкам.
   const historyRef = useRef<TimelineHistory>(createTimelineHistory());
   const [historyDepth, setHistoryDepth] = useState({ past: 0, future: 0 });
 
@@ -156,7 +160,7 @@ export function VideoEditor({ id }: { id: string }) {
   useEffect(() => {
     if (!data?.project || loadedRef.current) return;
     loadedRef.current = true;
-    setTimeline(data.project.timeline);
+    setTimeline(timelineWithTracks(data.project.timeline));
     setTitle(data.project.title);
     setExportId(data.project.lastExportId);
   }, [data]);
@@ -230,106 +234,84 @@ export function VideoEditor({ id }: { id: string }) {
     applyWithoutHistory(result.timeline);
   }, [applyWithoutHistory]);
 
-  const ops = useEditorOperations(timeline, applyTimeline);
+  const ops = useTrackEditor(timeline, applyTimeline);
+  const tracks = ops.tracks;
 
-  const currentScene: TimelineScene | undefined =
-    timeline?.scenes[Math.min(sceneIndex, (timeline?.scenes.length ?? 1) - 1)];
-  const layers: SceneLayer[] = useMemo(() => (currentScene ? sceneLayers(currentScene) : []), [currentScene]);
-  const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) ?? null;
+  const duration = useMemo(() => (timeline ? timelineDurationSec(timeline) : 0), [timeline]);
+  // Часы общие для предпросмотра и шкалы: курсор должен стоять на том кадре,
+  // который сейчас на экране.
+  const playback = usePlayback(duration);
 
-  // Выделение живёт внутри сцены: при переходе на другую оно должно сбрасываться.
-  useEffect(() => {
-    setSelectedLayerId(null);
-  }, [sceneIndex]);
+  const located = selectedClipId ? ops.locate(selectedClipId) : null;
+  const selectedClip = located?.clip ?? null;
+  const selectedLayer: SceneLayer | null = selectedClip?.layer ?? null;
 
-  // --- сцены ---
-  const addScene = useCallback(() => {
-    if (!timeline) return;
-    if (timeline.scenes.length >= TIMELINE_LIMITS.maxScenes) {
-      toast({ title: `Больше ${TIMELINE_LIMITS.maxScenes} сцен не поместится`, variant: 'destructive' });
-      return;
-    }
-    applyTimeline({ ...timeline, scenes: [...timeline.scenes, newScene()] });
-    setSceneIndex(timeline.scenes.length);
-  }, [timeline, applyTimeline]);
+  // Сцена под курсором нужна панели генерации: она берёт оттуда кадр-референс.
+  const scenes = useMemo(() => (timeline ? timelineScenes(timeline) : []), [timeline]);
+  const sceneIndex = useMemo(() => {
+    if (!timeline) return 0;
+    return sceneAtTime(timeline, playback.time)?.activeIndex ?? 0;
+  }, [timeline, playback.time]);
+  const currentScene: TimelineScene | undefined = scenes[sceneIndex];
 
-  const moveScene = useCallback(
-    (index: number, direction: -1 | 1) => {
-      if (!timeline) return;
-      const target = index + direction;
-      if (target < 0 || target >= timeline.scenes.length) return;
-      const scenes = [...timeline.scenes];
-      [scenes[index], scenes[target]] = [scenes[target], scenes[index]];
-      applyTimeline({ ...timeline, scenes });
-      setSceneIndex(target);
-    },
-    [timeline, applyTimeline],
-  );
-
-  const duplicateScene = useCallback(
-    (index: number) => {
-      if (!timeline || timeline.scenes.length >= TIMELINE_LIMITS.maxScenes) return;
-      const source = timeline.scenes[index];
-      // У копии новые идентификаторы: иначе метка генерации и выделение указывали бы
-      // сразу на две сцены.
-      const copy: TimelineScene = {
-        ...source,
-        id: uid('scene'),
-        layers: sceneLayers(source).map((layer) => ({ ...layer, id: uid('layer'), generationProjectId: undefined })),
-        source: undefined,
-        overlays: [],
-      };
-      const scenes = [...timeline.scenes];
-      scenes.splice(index + 1, 0, copy);
-      applyTimeline({ ...timeline, scenes });
-      setSceneIndex(index + 1);
-    },
-    [timeline, applyTimeline],
-  );
-
-  const removeScene = useCallback(
-    (index: number) => {
-      if (!timeline || timeline.scenes.length <= 1) return;
-      applyTimeline({ ...timeline, scenes: timeline.scenes.filter((_, i) => i !== index) });
-      setSceneIndex(Math.max(0, index - 1));
-    },
-    [timeline, applyTimeline],
+  /** Куда класть новый клип: под курсор на активную дорожку. */
+  const placement = useCallback(
+    () => ({ trackIndex: Math.min(activeTrackIndex, Math.max(0, tracks.length - 1)), startSec: playback.time }),
+    [activeTrackIndex, tracks.length, playback.time],
   );
 
   // --- загрузка файлов ---
   const handleUpload = useCallback(
     async (file: File) => {
-      const target = uploadTargetRef.current ?? { sceneIndex, layerId: selectedLayerId };
+      const target = uploadTargetRef.current;
       uploadTargetRef.current = null;
       try {
         const uploaded = await uploadMedia({ id, file }).unwrap();
         const kind = uploaded.mediaKind === 'video' ? ('video' as const) : ('image' as const);
-        // Длительность меряет браузер: ffprobe на сервере нет, а рендер всё равно
-        // перемерит файл сам — здесь это нужно, чтобы сцена сразу была нужной длины.
+        // Длительность меряет браузер: ffprobe на сервере нет, а клип обязан сразу встать
+        // нужной длины — иначе короткое видео дотянется замершим кадром.
         const durationSec = kind === 'video' ? await probeDuration(file) : undefined;
 
-        if (target.layerId) {
-          ops.changeLayer(target.sceneIndex, target.layerId, {
+        if (target?.clipId) {
+          ops.patchClipLayer(target.clipId, {
             source: { kind, url: uploaded.url },
             trimStartSec: undefined,
             trimEndSec: undefined,
-          });
-        } else {
-          const layerId = ops.addMediaLayer(target.sceneIndex, { kind, url: uploaded.url });
-          if (layerId) setSelectedLayerId(layerId);
+          } as Partial<SceneLayer>);
+          if (durationSec) ops.patchClip(target.clipId, { durationSec: Number(durationSec.toFixed(2)) });
+          return;
         }
-        if (kind === 'video' && durationSec) ops.patchScene(target.sceneIndex, { durationSec });
+
+        const clipId = ops.addMediaClip({ kind, url: uploaded.url }, { ...placement(), durationSec });
+        if (clipId) setSelectedClipId(clipId);
+        else toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
       } catch {
         toast({ title: 'Не удалось загрузить файл', description: 'Проверьте формат и размер.', variant: 'destructive' });
       }
     },
-    [id, uploadMedia, ops, sceneIndex, selectedLayerId],
+    [id, uploadMedia, ops, placement],
   );
 
-  const pickFileFor = (layerId: string | null) => {
-    uploadTargetRef.current = { sceneIndex, layerId };
+  const pickFileFor = (clipId: string | null) => {
+    uploadTargetRef.current = { clipId };
     addFileRef.current?.click();
   };
+
+  /** Ставит материал из медиатеки на дорожку. */
+  const addFromLibrary = useCallback(
+    async (item: MediaLibraryItem, target?: { trackIndex: number; startSec: number }) => {
+      const durationSec = item.kind === 'video'
+        ? await probeUrlDurationSec(mediaUrl(item.url) ?? item.url)
+        : undefined;
+      const clipId = ops.addMediaClip(
+        { kind: item.kind, url: item.url },
+        { ...(target ?? placement()), durationSec },
+      );
+      if (clipId) setSelectedClipId(clipId);
+      else toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
+    },
+    [ops, placement],
+  );
 
   /** Загружает файл-референс для генерации и отдаёт публичную ссылку. */
   const uploadReference = useCallback(
@@ -348,23 +330,23 @@ export function VideoEditor({ id }: { id: string }) {
   // --- звуковые дорожки ---
   /** Добавляет дорожку в конец списка. Новая запись не заменяет прежнюю, а встаёт рядом. */
   const addAudioTrack = useCallback(
-    (kind: 'music' | 'voice', url: string, title?: string) => {
+    (kind: 'music' | 'voice', url: string, trackTitle?: string) => {
       const current = timelineRef.current;
       if (!current) return;
       const base = timelineWithAudioTracks(current);
-      const tracks = base.audio ?? [];
-      if (tracks.length >= TIMELINE_LIMITS.maxAudioTracks) {
+      const audio = base.audio ?? [];
+      if (audio.length >= TIMELINE_LIMITS.maxAudioTracks) {
         toast({ title: 'Больше дорожек не поместится', variant: 'destructive' });
         return;
       }
       applyTimeline({
         ...base,
         audio: [
-          ...tracks,
+          ...audio,
           {
             id: uid(kind),
             kind,
-            title,
+            title: trackTitle,
             url,
             volume: kind === 'voice' ? 1 : 0.7,
             fadeInSec: kind === 'voice' ? 0.2 : 1,
@@ -450,7 +432,8 @@ export function VideoEditor({ id }: { id: string }) {
     void (async () => {
       try {
         const fresh = await refetchProject().unwrap();
-        const url = fresh.project.timeline.voiceover?.url;
+        const url = fresh.project.timeline.voiceover?.url
+          ?? timelineAudioTracks(fresh.project.timeline).find((track) => track.kind === 'voice')?.url;
         if (url) {
           setVoiceover(url);
           toast({ title: 'Голос записан' });
@@ -467,19 +450,25 @@ export function VideoEditor({ id }: { id: string }) {
         const result = await generateVoiceover({ id, body: request }).unwrap();
         setVoiceoverProjectId(result.projectId);
         toast({ title: 'Озвучка запущена', description: 'Голос сам встанет в ролик.' });
-      } catch (error) {
-        const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
+      } catch (err) {
+        const message = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
         toast({ title: 'Не удалось запустить озвучку', description: message, variant: 'destructive' });
       }
     },
     [generateVoiceover, id],
   );
 
-  // --- генерация в слой ---
-  const pendingLayer = currentScene
-    ? sceneMediaLayers(currentScene).find((layer) => Boolean(layer.generationProjectId)) ?? null
+  // --- генерация в клип ---
+  const pendingClip = useMemo(
+    () =>
+      tracks
+        .flatMap((track) => track.clips)
+        .find((clip) => clip.layer.kind === 'media' && Boolean(clip.layer.generationProjectId)) ?? null,
+    [tracks],
+  );
+  const runningGenerationId = pendingClip && pendingClip.layer.kind === 'media'
+    ? pendingClip.layer.generationProjectId ?? null
     : null;
-  const runningGenerationId = pendingLayer?.generationProjectId ?? null;
 
   const { data: sceneStatus } = useGetProjectStatusQuery(runningGenerationId ?? '', {
     skip: !runningGenerationId,
@@ -492,14 +481,14 @@ export function VideoEditor({ id }: { id: string }) {
     if (!runningGenerationId || sceneStatus?.status !== 'FAILED') return;
     if (appliedGenerationRef.current === runningGenerationId) return;
     appliedGenerationRef.current = runningGenerationId;
-    // Метку снимаем: иначе слой ждёт результат, которого не будет, а поллинг не кончается.
-    if (pendingLayer) ops.changeLayer(sceneIndex, pendingLayer.id, { generationProjectId: undefined });
+    // Метку снимаем: иначе клип ждёт результат, которого не будет, а поллинг не кончается.
+    if (pendingClip) ops.patchClipLayer(pendingClip.id, { generationProjectId: undefined } as Partial<SceneLayer>);
     toast({
       title: 'Генерация не получилась',
       description: 'Токены вернулись на баланс — попробуйте другой кадр или описание.',
       variant: 'destructive',
     });
-  }, [runningGenerationId, sceneStatus?.status, pendingLayer, ops, sceneIndex]);
+  }, [runningGenerationId, sceneStatus?.status, pendingClip, ops]);
 
   useEffect(() => {
     if (!runningGenerationId || sceneStatus?.status !== 'COMPLETED') return;
@@ -510,9 +499,9 @@ export function VideoEditor({ id }: { id: string }) {
       try {
         const fresh = await refetchProject().unwrap();
         // Воркер уже вписал результат в свою копию ролика — забираем оттуда только
-        // материал готового слоя, а не весь таймлайн: правки, сделанные во время
+        // материал готового клипа, а не весь таймлайн: правки, сделанные во время
         // генерации, затирать нельзя.
-        const generatedLayer = fresh.project.timeline.scenes
+        const generatedLayer = timelineScenes(fresh.project.timeline)
           .flatMap((scene) => sceneMediaLayers(scene))
           .find((layer) => layer.generationProjectId === runningGenerationId);
         const url = generatedLayer?.source.url;
@@ -520,7 +509,7 @@ export function VideoEditor({ id }: { id: string }) {
         if (!url || (kind !== 'image' && kind !== 'video')) {
           // Воркер не нашёл, куда положить кадр. Берём его копию ролика целиком: иначе
           // наше следующее автосохранение затрёт результат, за который уже заплачено.
-          applyWithoutHistory(fresh.project.timeline);
+          applyWithoutHistory(timelineWithTracks(fresh.project.timeline));
           toast({ title: 'Кадр готов', description: 'Ролик обновлён с сервера.' });
           return;
         }
@@ -528,24 +517,29 @@ export function VideoEditor({ id }: { id: string }) {
         const current = timelineRef.current;
         if (!current) return;
         const applied = applyGeneratedSource(current, runningGenerationId, { kind, url });
-        // Сцена подстраивается под длину клипа: иначе короткое видео дотягивается замершим
-        // кадром, и переход происходит по застывшей картинке.
-        if (applied.changed && kind === 'video') {
+        if (!applied.changed) return;
+
+        // Клип подстраивается под длину видео: иначе короткий ролик дотягивается замершим
+        // кадром, и переход идёт уже по застывшей картинке.
+        let next = applied.timeline;
+        if (kind === 'video') {
           const measured = await probeUrlDurationSec(mediaUrl(url) ?? url);
           if (measured) {
-            applied.timeline = {
-              ...applied.timeline,
-              scenes: applied.timeline.scenes.map((scene) =>
-                sceneMediaLayers(scene).some((layer) => layer.source.url === url)
-                  ? { ...scene, durationSec: Number(measured.toFixed(2)) }
-                  : scene,
-              ),
+            next = {
+              ...next,
+              tracks: (next.tracks as Array<{ clips: TimelineClip[] }> | undefined)?.map((track) => ({
+                ...track,
+                clips: track.clips.map((clip) =>
+                  clip.layer.kind === 'media' && clip.layer.source.url === url
+                    ? { ...clip, durationSec: Number(measured.toFixed(2)) }
+                    : clip,
+                ),
+              })),
             };
           }
         }
-        // Сохраняем сразу: подстановка снимает метку со слоя, и обе копии ролика должны
-        // сойтись. Иначе сервер продолжит считать, что слой ждёт генерацию.
-        if (applied.changed) applyWithoutHistory(applied.timeline);
+        // Сохраняем сразу: подстановка снимает метку, и обе копии ролика должны сойтись.
+        applyWithoutHistory(next);
         toast({ title: 'Кадр готов' });
       } catch {
         toast({ title: 'Генерация готова', description: 'Обновите страницу, если кадр не появился.' });
@@ -554,29 +548,41 @@ export function VideoEditor({ id }: { id: string }) {
   }, [runningGenerationId, sceneStatus?.status, refetchProject, applyWithoutHistory]);
 
   /** Что показать поверх кадра, пока идёт генерация: рамка с процентом вместо пустого слоя. */
-  const generationOverlay = pendingLayer && runningGenerationId
+  const generationOverlay = pendingClip && runningGenerationId
     ? {
-      layerId: pendingLayer.id,
+      layerId: pendingClip.layer.id,
       progress: sceneStatus?.progress ?? 0,
       label: sceneStatus?.status === 'PENDING' ? 'В очереди' : 'Генерируем',
     }
     : null;
 
+  /**
+   * Клип, в который встанет результат генерации.
+   *
+   * По умолчанию заводим НОВЫЙ клип под курсором: подменять то, что человек уже разложил,
+   * без спроса нельзя. Заменить выделенный можно, но только явно.
+   */
+  const targetClipForGeneration = useCallback(
+    (replaceSelected: boolean) => {
+      if (replaceSelected && selectedClip && selectedClip.layer.kind === 'media') return selectedClip.id;
+      return ops.addMediaClip({ kind: 'color', color: '#0b1020' }, placement());
+    },
+    [selectedClip, ops, placement],
+  );
+
   const handleRunService = useCallback(
     async (service: { slug: string; title: string }, values: Record<string, string>) => {
-      const scene = currentScene;
-      if (!timeline || !scene) return;
-      const frame = sceneMediaLayers(scene).find((layer) => layer.source.kind === 'image' || layer.source.kind === 'video');
+      if (!timeline) return;
+      const frame = currentScene
+        ? sceneMediaLayers(currentScene).find((layer) => layer.source.kind === 'image' || layer.source.kind === 'video')
+        : undefined;
 
-      // Результат должен вернуться в кадр, поэтому слой для него заводим заранее: если его
-      // не назвать, воркеру некуда будет положить готовое.
-      const layerId = selectedLayer?.kind === 'media'
-        ? selectedLayer.id
-        : ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
-      if (!layerId) {
-        toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+      const clipId = targetClipForGeneration(false);
+      if (!clipId) {
+        toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
         return;
       }
+      const layerId = ops.locate(clipId)?.clip.layer.id ?? clipId;
 
       setRunningServiceSlug(service.slug);
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -584,45 +590,41 @@ export function VideoEditor({ id }: { id: string }) {
         if (timelineRef.current) await updateProject({ id, timeline: timelineRef.current }).unwrap();
         const result = await generateSceneService({
           id,
-          sceneId: scene.id,
+          sceneId: clipId,
           body: { serviceSlug: service.slug, layerId, frameUrl: frame?.source.url, values },
         }).unwrap();
-        ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId });
+        ops.patchClipLayer(clipId, { generationProjectId: result.projectId } as Partial<SceneLayer>);
         setTool('ai');
         setAiTab('library');
         toast({ title: `Запустили «${service.title}»`, description: `Списано ${result.tokensCost} токенов` });
-      } catch (error) {
+      } catch (err) {
         setRunningServiceSlug(null);
-        const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
+        ops.removeClip(clipId);
+        const message = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
         toast({ title: 'Не удалось запустить услугу', description: message, variant: 'destructive' });
       }
     },
-    [currentScene, timeline, selectedLayer, ops, sceneIndex, id, updateProject, generateSceneService],
+    [timeline, currentScene, targetClipForGeneration, ops, id, updateProject, generateSceneService],
   );
 
   const handleGenerate = useCallback(
     async (request: SceneGenerationRequest) => {
-      const scene = currentScene;
-      if (!timeline || !scene) return;
-
-      // По умолчанию результат встаёт в НОВЫЙ слой поверх сцены: подменять то, что человек
-      // уже разложил, без спроса нельзя. Заменить выделенный слой можно, но только явно.
-      const replaceSelected = request.target === 'selected' && selectedLayer?.kind === 'media';
-      const layerId = replaceSelected
-        ? selectedLayer!.id
-        : ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
-      if (!layerId) {
-        toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+      if (!timeline) return;
+      const replaceSelected = request.target === 'selected' && selectedClip?.layer.kind === 'media';
+      const clipId = targetClipForGeneration(Boolean(replaceSelected));
+      if (!clipId) {
+        toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
         return;
       }
+      const layerId = ops.locate(clipId)?.clip.layer.id ?? clipId;
 
       if (saveTimer.current) clearTimeout(saveTimer.current);
       try {
-        // Сервер ищет сцену в своей копии таймлайна, поэтому сначала досохраняем.
+        // Сервер ищет клип в своей копии таймлайна, поэтому сначала досохраняем.
         if (timelineRef.current) await updateProject({ id, timeline: timelineRef.current }).unwrap();
         const result = await generateScene({
           id,
-          sceneId: scene.id,
+          sceneId: clipId,
           body: {
             modelSlug: request.modelSlug,
             prompt: request.prompt,
@@ -636,25 +638,28 @@ export function VideoEditor({ id }: { id: string }) {
           },
         }).unwrap();
         appliedGenerationRef.current = null;
-        ops.changeLayer(sceneIndex, layerId, { generationProjectId: result.projectId, origin: 'generated' });
-        setSelectedLayerId(layerId);
+        ops.patchClipLayer(clipId, {
+          generationProjectId: result.projectId,
+          origin: 'generated',
+        } as Partial<SceneLayer>);
+        setSelectedClipId(clipId);
         setTool('ai');
         setAiTab('library');
-        toast({ title: 'Генерация запущена', description: 'Можно закрыть страницу — кадр сам встанет в сцену.' });
-      } catch (error) {
-        // Убираем только тот слой, который завели ради этой генерации: чужой кадр,
+        toast({ title: 'Генерация запущена', description: 'Можно закрыть страницу — кадр сам встанет в ролик.' });
+      } catch (err) {
+        // Убираем только тот клип, который завели ради этой генерации: чужой кадр,
         // выбранный пользователем, из-за нашей ошибки исчезать не должен.
-        if (!replaceSelected) ops.removeLayer(sceneIndex, layerId);
-        const message = (error as { data?: { error?: { message?: string } } })?.data?.error?.message;
+        if (!replaceSelected) ops.removeClip(clipId);
+        const message = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
         toast({ title: 'Не удалось запустить генерацию', description: message, variant: 'destructive' });
       }
     },
-    [timeline, currentScene, ops, sceneIndex, id, updateProject, generateScene, selectedLayer],
+    [timeline, selectedClip, targetClipForGeneration, ops, id, updateProject, generateScene],
   );
 
   // --- клавиатура ---
-  // Горячие клавиши редактора. Ловим на окне, потому что фокус чаще всего на холсте Konva,
-  // а он обычный canvas и о клавишах ничего не знает.
+  // Ловим на окне, потому что фокус чаще всего на холсте Konva, а он обычный canvas и
+  // о клавишах ничего не знает.
   useEffect(() => {
     const isTyping = (target: EventTarget | null) => {
       const node = target as HTMLElement | null;
@@ -664,7 +669,6 @@ export function VideoEditor({ id }: { id: string }) {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      // Пока человек пишет титр или название, клавиши принадлежат полю, а не редактору.
       if (isTyping(event.target)) return;
       const mod = event.ctrlKey || event.metaKey;
       // Сравниваем ФИЗИЧЕСКУЮ клавишу, а не символ: в русской раскладке Ctrl+Z даёт «я»,
@@ -684,35 +688,50 @@ export function VideoEditor({ id }: { id: string }) {
       }
       if (mod && code === 'KeyD') {
         event.preventDefault();
-        if (!selectedLayerId) return;
-        const copyId = ops.duplicateLayer(sceneIndex, selectedLayerId);
-        if (copyId) setSelectedLayerId(copyId);
-        else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+        if (!selectedClipId) return;
+        const copyId = ops.duplicateClip(selectedClipId);
+        if (copyId) setSelectedClipId(copyId);
+        else toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
         return;
       }
       if (mod && code === 'KeyC') {
-        if (!selectedLayer) return;
+        if (!selectedClip) return;
         event.preventDefault();
-        clipboardRef.current = selectedLayer;
-        toast({ title: 'Слой скопирован' });
+        clipboardRef.current = selectedClip;
+        toast({ title: 'Клип скопирован' });
         return;
       }
       if (mod && code === 'KeyV') {
-        if (!clipboardRef.current) return;
+        const copied = clipboardRef.current;
+        if (!copied) return;
         event.preventDefault();
-        const pastedId = ops.pasteLayer(sceneIndex, clipboardRef.current);
-        if (pastedId) setSelectedLayerId(pastedId);
-        else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
+        const pastedId = ops.addClip(
+          { ...copied.layer, id: uid('layer'), generationProjectId: undefined } as SceneLayer,
+          { ...placement(), durationSec: copied.durationSec },
+        );
+        if (pastedId) setSelectedClipId(pastedId);
+        else toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
+        return;
+      }
+      if (code === 'KeyS' && !mod && selectedClipId) {
+        event.preventDefault();
+        const tailId = ops.splitClip(selectedClipId, playback.time);
+        if (tailId) setSelectedClipId(tailId);
         return;
       }
       if (event.key === 'Escape') {
-        setSelectedLayerId(null);
+        setSelectedClipId(null);
         return;
       }
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedLayerId) {
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedClipId) {
         event.preventDefault();
-        ops.removeLayer(sceneIndex, selectedLayerId);
-        setSelectedLayerId(null);
+        ops.removeClip(selectedClipId);
+        setSelectedClipId(null);
+        return;
+      }
+      if (code === 'Space') {
+        event.preventDefault();
+        playback.toggle();
         return;
       }
 
@@ -724,15 +743,23 @@ export function VideoEditor({ id }: { id: string }) {
         ArrowDown: [0, step],
       };
       const delta = nudge[event.key];
-      if (delta && selectedLayerId) {
+      if (delta && selectedClip) {
         event.preventDefault();
-        ops.nudgeLayer(sceneIndex, selectedLayerId, delta[0], delta[1]);
+        const box = selectedClip.layer.box;
+        ops.patchClipLayer(selectedClip.id, {
+          box: {
+            ...box,
+            // Рамку держим в кадре: уехавший за край слой уже не выделить обратно.
+            x: Math.min(1 - box.w / 2, Math.max(-box.w / 2, box.x + delta[0])),
+            y: Math.min(1 - box.h / 2, Math.max(-box.h / 2, box.y + delta[1])),
+          },
+        } as Partial<SceneLayer>);
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [ops, sceneIndex, selectedLayerId, selectedLayer, undo, redo]);
+  }, [ops, selectedClipId, selectedClip, undo, redo, playback, placement]);
 
   // --- экспорт ---
   const { data: exportStatus } = useGetProjectStatusQuery(exportId ?? '', {
@@ -743,22 +770,6 @@ export function VideoEditor({ id }: { id: string }) {
   const exportUrl = exportStatus?.status === 'COMPLETED' ? mediaUrl(exportStatus.resultVideo) : null;
 
   const issues = useMemo(() => (timeline ? validateTimeline(timeline) : []), [timeline]);
-  const duration = useMemo(() => (timeline ? timelineDurationSec(timeline) : 0), [timeline]);
-  // Часы общие для предпросмотра и таймлайна: курсор должен стоять на том кадре,
-  // который сейчас на экране.
-  const playback = usePlayback(duration);
-
-  /** Выбор сцены ставит курсор в её начало: холст показывает то, что под курсором. */
-  const selectScene = useCallback(
-    (index: number) => {
-      setSceneIndex(index);
-      if (!timelineRef.current) return;
-      const timing = timelineTimings(timelineRef.current)[index];
-      if (timing) playback.seek(timing.startSec);
-    },
-    [playback],
-  );
-
 
   const handleExport = async () => {
     if (!timeline) return;
@@ -822,7 +833,7 @@ export function VideoEditor({ id }: { id: string }) {
 
   // Записи голоса: то, что стоит на дорожках, плюс синтез, снятый с них. Загруженные файлы
   // и записи с микрофона проектов не создают, поэтому берём их из самих дорожек.
-  const voiceTracks = timeline ? timelineAudioTracks(timeline).filter((track) => track.kind === 'voice') : [];
+  const voiceTracks = timelineAudioTracks(timeline).filter((track) => track.kind === 'voice');
   const onTimelineUrls = new Set(voiceTracks.map((track) => track.url));
   const voiceRecordings: VoiceRecording[] = [
     ...voiceTracks.map((track) => ({
@@ -902,7 +913,7 @@ export function VideoEditor({ id }: { id: string }) {
         <div className="shrink-0 space-y-1.5 border-b border-slate-800 bg-slate-900/60 px-3 py-2 lg:px-4">
           {generationOverlay && (
             <ProgressLine
-              label={`${generationOverlay.label} кадр — сцена ${sceneIndex + 1}`}
+              label={`${generationOverlay.label} кадр — результат встанет в свой клип`}
               percent={generationOverlay.progress}
               tone="violet"
             />
@@ -980,13 +991,9 @@ export function VideoEditor({ id }: { id: string }) {
         </nav>
 
         {/*
-         * Панель инструмента стоит сбоку, а не под холстом. Раньше она вклинивалась между
-         * кадром и лентой сцен, и рабочая область уезжала на два экрана вниз.
+         * Панель инструмента стоит сбоку, а не под холстом: иначе она вклинивается между
+         * кадром и шкалой, и рабочая область уезжает на два экрана вниз.
          */}
-        {/*
-          * Нижний отступ колонки убран для вкладки ИИ: её форма прилипает к низу, а padding
-          * скролл-контейнера поднимал бы её над краем — та самая щель под кнопкой.
-          */}
         <section
           className={cn(
             'shrink-0 overflow-y-auto border-b border-slate-800 px-3 pt-3 lg:w-[330px] lg:border-b-0 lg:border-r',
@@ -1007,15 +1014,37 @@ export function VideoEditor({ id }: { id: string }) {
             voiceoverRunning={Boolean(voiceoverRunning)}
             priceOverrides={chatPricing?.modelPriceOverrides}
             onPickFile={() => pickFileFor(null)}
+            onAddFromLibrary={(item) => void addFromLibrary(item)}
             onAddColor={() => {
-              const layerId = ops.addMediaLayer(sceneIndex, { kind: 'color', color: '#0b1020' });
-              if (layerId) setSelectedLayerId(layerId);
+              const clipId = ops.addMediaClip({ kind: 'color', color: '#0b1020' }, placement());
+              if (clipId) setSelectedClipId(clipId);
             }}
-            onAddText={() => setSelectedLayerId(ops.addTextLayer(sceneIndex))}
-            onCollage={(layout) => ops.applyCollage(sceneIndex, layout)}
-            onAddMusic={(url, title) => addAudioTrack('music', url, title)}
+            onAddText={() => {
+              const clipId = ops.addTextClip(placement());
+              if (clipId) setSelectedClipId(clipId);
+              else toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
+            }}
+            onCollage={(layout) => {
+              // Коллаж расставляет по рамкам то, что видно ПОД КУРСОРОМ: на дорожках
+              // «сцена» — это набор клипов, идущих в одну секунду.
+              const boxes = collageBoxes(layout);
+              const active = tracks
+                .flatMap((track) => track.clips)
+                .filter((clip) => clip.layer.kind === 'media')
+                .filter((clip) => playback.time >= clip.startSec && playback.time < clipEndSec(clip));
+              active.forEach((clip, index) => {
+                const box = layout === 'single' ? boxes[0] : boxes[index];
+                if (!box) return;
+                ops.patchClipLayer(clip.id, {
+                  box,
+                  fit: layout === 'single' ? 'contain' : 'cover',
+                  rotation: 0,
+                } as Partial<SceneLayer>);
+              });
+            }}
+            onAddMusic={(url, trackTitle) => addAudioTrack('music', url, trackTitle)}
             recordings={voiceRecordings}
-            onAddVoiceTrack={(url, title) => addAudioTrack('voice', url, title)}
+            onAddVoiceTrack={(url, trackTitle) => addAudioTrack('voice', url, trackTitle)}
             onRemoveVoiceTrack={(url) => {
               const track = voiceTracks.find((item) => item.url === url);
               if (track) removeAudioTrack(track.id);
@@ -1026,21 +1055,9 @@ export function VideoEditor({ id }: { id: string }) {
             onGenerate={handleGenerate}
             onRunService={handleRunService}
             runningServiceSlug={runningServiceSlug}
-            serviceProgress={sceneStatus?.progress ?? 0}
             onUploadReference={uploadReference}
             onInsertGeneration={(url, kind) => {
-              const layerId = ops.addMediaLayer(sceneIndex, { kind, url });
-              if (!layerId) {
-                toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
-                return;
-              }
-              setSelectedLayerId(layerId);
-              // Длину сцены подгоняем под клип: короткое видео иначе дотянется замершим кадром.
-              if (kind === 'video') {
-                void probeUrlDurationSec(mediaUrl(url) ?? url).then((measured) => {
-                  if (measured) ops.patchScene(sceneIndex, { durationSec: Number(measured.toFixed(2)) });
-                });
-              }
+              void addFromLibrary({ id: url, title: 'Генерация', url, kind, group: 'upload' });
             }}
           />
         </section>
@@ -1052,100 +1069,94 @@ export function VideoEditor({ id }: { id: string }) {
             playback={playback}
             timeline={timeline}
             selectedSceneIndex={sceneIndex}
-            onSelectScene={selectScene}
-            selectedLayerId={selectedLayerId}
-            onSelectLayer={setSelectedLayerId}
-            onChangeLayer={(index, layerId, patch) => ops.changeLayer(index, layerId, patch)}
+            onSelectScene={() => undefined}
+            selectedLayerId={selectedLayer?.id ?? null}
+            onSelectLayer={(layerId) => setSelectedClipId(ops.clipIdByLayerId(layerId))}
+            onChangeLayer={(_index, layerId, patch) => ops.patchLayerById(layerId, patch as Partial<SceneLayer>)}
           />
-
           {/* Про горячие клавиши на холсте догадаться нельзя — подсказываем строкой. */}
           <p className="hidden shrink-0 text-[11px] text-slate-600 xl:block">
-            Ctrl+Z — отменить · Ctrl+C/Ctrl+V — копировать слой · Ctrl+D — дублировать · Delete — удалить ·
-            стрелки — сдвинуть (с Shift — крупнее) · Esc — снять выделение
+            Пробел — играть · Ctrl+Z — отменить · Ctrl+C/Ctrl+V — копировать клип · Ctrl+D — дублировать ·
+            S — разрезать под курсором · Delete — удалить · стрелки — сдвинуть кадр (с Shift — крупнее)
           </p>
         </main>
 
         <aside className="shrink-0 space-y-3 overflow-y-auto border-t border-slate-800 p-3 lg:w-[330px] lg:border-l lg:border-t-0">
-          {currentScene && (
-            <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-100">Слои сцены</h3>
-                <span className="text-[11px] text-slate-500">
-                  {layers.length} из {TIMELINE_LIMITS.maxLayersPerScene}
-                </span>
-              </div>
-              <LayerPanel
-                scene={currentScene}
-                selectedLayerId={selectedLayerId}
-                onSelect={setSelectedLayerId}
-                onMove={(layerId, direction) => ops.moveLayer(sceneIndex, layerId, direction)}
-                onDuplicate={(layerId) => {
-                  const copyId = ops.duplicateLayer(sceneIndex, layerId);
-                  if (copyId) setSelectedLayerId(copyId);
-                  else toast({ title: 'В сцене слишком много слоёв', variant: 'destructive' });
-                }}
-                onRemove={(layerId) => {
-                  ops.removeLayer(sceneIndex, layerId);
-                  if (layerId === selectedLayerId) setSelectedLayerId(null);
-                }}
-                onChange={(layerId, patch) => ops.changeLayer(sceneIndex, layerId, patch)}
-              />
-            </section>
-          )}
-
           <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-            {selectedLayer ? (
-              <>
-                <h3 className="mb-3 text-sm font-semibold text-slate-100">Настройки слоя</h3>
-                <LayerInspector
-                  layer={selectedLayer}
-                  uploading={uploading}
-                  onChange={(patch: LayerPatch) => ops.changeLayer(sceneIndex, selectedLayer.id, patch)}
-                  onReplaceFile={() => pickFileFor(selectedLayer.id)}
-                />
-              </>
+            {selectedClip ? (
+              <ClipInspector
+                clip={selectedClip}
+                uploading={uploading}
+                onPatchClip={(patch) => ops.patchClip(selectedClip.id, patch)}
+                onPatchLayer={(patch) => ops.patchClipLayer(selectedClip.id, patch as Partial<SceneLayer>)}
+                onReplaceFile={() => pickFileFor(selectedClip.id)}
+                onTransition={(value) => ops.setTransition(selectedClip.id, value)}
+                onSplit={() => {
+                  const tailId = ops.splitClip(selectedClip.id, playback.time);
+                  if (tailId) setSelectedClipId(tailId);
+                  else toast({ title: 'Поставьте курсор внутри клипа', variant: 'destructive' });
+                }}
+                onRemove={() => {
+                  ops.removeClip(selectedClip.id);
+                  setSelectedClipId(null);
+                }}
+              />
             ) : (
-              currentScene && (
-                <SceneSettings
-                  scene={currentScene}
-                  isLast={sceneIndex >= timeline.scenes.length - 1}
-                  aspect={timeline.aspect}
-                  onSceneChange={(patch) => ops.patchScene(sceneIndex, patch)}
-                  onAspectChange={(aspect) => applyTimeline({ ...timeline, aspect })}
-                />
-              )
+              <RollSettings
+                aspect={timeline.aspect}
+                onAspectChange={(aspect) => applyTimeline({ ...timeline, aspect })}
+              />
             )}
           </section>
         </aside>
       </div>
-
-
       )}
 
       {/*
-       * Нижняя панель — то, что тянется во времени: сцены и звук. Здесь видно, где именно
-       * звучит реплика, и её можно подвинуть, а не гадать по числу в настройках.
+       * Нижняя панель — монтажная шкала. Здесь видно, где стоит каждый клип и где именно
+       * звучит реплика, и всё это можно подвинуть, а не гадать по числам в настройках.
        */}
       {!showExportScreen && (
-      <footer className="shrink-0 space-y-2 border-t border-slate-800 bg-slate-950/80 px-3 py-2 lg:px-4">
-        <TimelineTracks
+      <footer className="shrink-0 border-t border-slate-800 bg-slate-950/80 px-3 py-2 lg:px-4">
+        <ClipTimeline
           timeline={timeline}
-          totalSec={duration}
+          tracks={tracks}
           time={playback.time}
-          onSeek={(sec) => {
-            playback.seek(sec);
-            const at = sceneAtTime(timeline, sec);
-            if (at) setSceneIndex(at.activeIndex);
+          onSeek={playback.seek}
+          selectedClipId={selectedClipId}
+          onSelectClip={(clipId) => {
+            setSelectedClipId(clipId);
+            const found = clipId ? ops.locate(clipId) : null;
+            if (found) setActiveTrackIndex(found.trackIndex);
           }}
-          selectedSceneIndex={sceneIndex}
-          onSelectScene={selectScene}
-          onSceneDuration={(index, durationSec) => ops.patchScene(index, { durationSec })}
-          onSceneTransition={(index, transition) => ops.patchScene(index, { transition })}
-          onDuplicateScene={duplicateScene}
-          onRemoveScene={removeScene}
-          onAddScene={addScene}
-          onChangeTrack={changeAudioTrack}
-          onRemoveTrack={removeAudioTrack}
+          onMoveClip={(clipId, target) => {
+            ops.moveClip(clipId, target);
+            if (typeof target.trackIndex === 'number') setActiveTrackIndex(target.trackIndex);
+          }}
+          onTrimClip={ops.trimClip}
+          onDuplicateClip={(clipId) => {
+            const copyId = ops.duplicateClip(clipId);
+            if (copyId) setSelectedClipId(copyId);
+            else toast({ title: 'На дорожке больше нет места', variant: 'destructive' });
+          }}
+          onRemoveClip={(clipId) => {
+            ops.removeClip(clipId);
+            if (clipId === selectedClipId) setSelectedClipId(null);
+          }}
+          onSplitClip={(clipId, atSec) => {
+            const tailId = ops.splitClip(clipId, atSec);
+            if (tailId) setSelectedClipId(tailId);
+            else toast({ title: 'Поставьте курсор внутри клипа', variant: 'destructive' });
+          }}
+          onTransition={ops.setTransition}
+          onAddTrack={() => {
+            if (!ops.addTrack()) toast({ title: 'Больше дорожек не поместится', variant: 'destructive' });
+          }}
+          onRemoveTrack={ops.removeTrack}
+          onPatchTrack={ops.patchTrack}
+          onChangeAudio={changeAudioTrack}
+          onRemoveAudio={removeAudioTrack}
+          onDropMedia={(trackIndex, startSec, item) => void addFromLibrary(item, { trackIndex, startSec })}
         />
       </footer>
       )}
@@ -1190,6 +1201,7 @@ function ToolBar({
   voiceoverRunning,
   priceOverrides,
   onPickFile,
+  onAddFromLibrary,
   onAddColor,
   onAddText,
   onCollage,
@@ -1203,7 +1215,6 @@ function ToolBar({
   onGenerate,
   onRunService,
   runningServiceSlug,
-  serviceProgress,
   onUploadReference,
   onInsertGeneration,
 }: {
@@ -1220,6 +1231,7 @@ function ToolBar({
   voiceoverRunning: boolean;
   priceOverrides?: Record<string, number>;
   onPickFile: () => void;
+  onAddFromLibrary: (item: MediaLibraryItem) => void;
   onAddColor: () => void;
   onAddText: () => void;
   onCollage: (layout: CollageLayout) => void;
@@ -1235,20 +1247,14 @@ function ToolBar({
   onGenerate: (request: SceneGenerationRequest) => void;
   onRunService: (service: EditorCatalogService, values: Record<string, string>) => void;
   runningServiceSlug: string | null;
-  serviceProgress: number;
 }) {
   if (tool === 'media') {
     return (
       <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onPickFile} disabled={uploading}>
-            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-            Добавить фото или видео
-          </Button>
-          <Button type="button" variant="outline" size="sm" onClick={onAddColor}>
-            Добавить заливку
-          </Button>
-        </div>
+        <MediaLibraryPanel uploading={uploading} onPickFile={onPickFile} onAdd={onAddFromLibrary} />
+        <Button type="button" variant="outline" size="sm" className="w-full" onClick={onAddColor}>
+          Добавить заливку
+        </Button>
         <div>
           <Label className="text-xs">Разложить коллажем</Label>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -1265,7 +1271,7 @@ function ToolBar({
             ))}
           </div>
           <p className="mt-1.5 text-xs text-slate-500">
-            Расставит кадры сцены по сетке. Слои, которым не хватило места, останутся как были.
+            Расставит по сетке кадры, которые видны под курсором.
           </p>
         </div>
       </div>
@@ -1280,7 +1286,8 @@ function ToolBar({
           Добавить титр
         </Button>
         <p className="mt-2 text-xs text-slate-500">
-          Титр появится поверх сцены — его можно двигать и растягивать прямо на холсте.
+          Титр встанет отдельным клипом на дорожку поверх кадра — его можно двигать по времени
+          и растягивать прямо на холсте.
         </p>
       </div>
     );
@@ -1341,82 +1348,137 @@ function ToolBar({
   return scene ? (
     <div>
       {aiTabs}
-    <SceneGenerator
-      scene={scene}
-      aspect={timeline.aspect}
-      balance={balance}
-      running={generating}
-      selectedLayer={selectedLayer}
-      onUploadReference={onUploadReference}
-      onGenerate={onGenerate}
-      onRunService={onRunService}
-      runningServiceSlug={runningServiceSlug}
-      serviceProgress={serviceProgress}
+      <SceneGenerator
+        scene={scene}
+        aspect={timeline.aspect}
+        balance={balance}
+        running={generating}
+        selectedLayer={selectedLayer}
+        onUploadReference={onUploadReference}
+        onGenerate={onGenerate}
+        onRunService={onRunService}
+        runningServiceSlug={runningServiceSlug}
       />
     </div>
   ) : null;
 }
 
-function SceneSettings({
-  scene,
-  isLast,
-  aspect,
-  onSceneChange,
-  onAspectChange,
-}: {
-  scene: TimelineScene;
-  isLast: boolean;
-  aspect: TimelineAspect;
-  onSceneChange: (patch: Partial<TimelineScene>) => void;
-  onAspectChange: (aspect: TimelineAspect) => void;
-}) {
-  const transitions: Array<{ code: TimelineScene['transition']; label: string }> = [
-    { code: 'cut', label: 'Встык' },
-    { code: 'dissolve', label: 'Растворение' },
-    { code: 'fade-black', label: 'Через чёрный' },
-    { code: 'slide', label: 'Сдвиг' },
-  ];
+const TRANSITION_LABELS: Array<{ code: TimelineTransition; label: string }> = [
+  { code: 'cut', label: 'Встык' },
+  { code: 'dissolve', label: 'Растворение' },
+  { code: 'fade-black', label: 'Через чёрный' },
+  { code: 'slide', label: 'Сдвиг' },
+];
 
+/**
+ * Настройки выделенного клипа.
+ *
+ * Сначала то, что про клип целиком — когда он идёт и сколько длится, — а ниже настройки
+ * самого кадра. Порядок повторяет вопросы, которые возникают у человека.
+ */
+function ClipInspector({
+  clip,
+  uploading,
+  onPatchClip,
+  onPatchLayer,
+  onReplaceFile,
+  onTransition,
+  onSplit,
+  onRemove,
+}: {
+  clip: TimelineClip;
+  uploading: boolean;
+  onPatchClip: (patch: Partial<Omit<TimelineClip, 'id' | 'layer'>>) => void;
+  onPatchLayer: (patch: LayerPatch) => void;
+  onReplaceFile: () => void;
+  onTransition: (value: TimelineTransition) => void;
+  onSplit: () => void;
+  onRemove: () => void;
+}) {
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-slate-100">Сцена и ролик</h3>
-
-      <label className="block text-xs text-slate-400">
-        Длительность сцены, сек
-        <Input
-          type="number"
-          min={TIMELINE_LIMITS.minSceneDurationSec}
-          max={TIMELINE_LIMITS.maxSceneDurationSec}
-          step={0.5}
-          value={scene.durationSec ?? 4}
-          onChange={(event) => onSceneChange({ durationSec: Number(event.target.value) })}
-          className="mt-1 h-9"
-        />
-      </label>
-
-      {!isLast && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Переход к следующей</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {transitions.map((item) => (
-              <button
-                key={item.code}
-                type="button"
-                onClick={() => onSceneChange({ transition: item.code })}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs transition',
-                  scene.transition === item.code
-                    ? 'border-amber-400 bg-amber-400/15 text-amber-200'
-                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-100">
+          {clip.layer.kind === 'text' ? 'Титр' : 'Клип'}
+        </h3>
+        <div className="flex gap-1.5">
+          <Button type="button" variant="outline" size="sm" onClick={onSplit}>Разрезать</Button>
+          <Button type="button" variant="outline" size="sm" onClick={onRemove}>Удалить</Button>
         </div>
-      )}
+      </div>
 
+      <div className="grid grid-cols-2 gap-2">
+        <label className="block text-xs text-slate-400">
+          Начало, сек
+          <Input
+            type="number"
+            min={0}
+            step={0.1}
+            value={Number(clip.startSec.toFixed(2))}
+            onChange={(event) => onPatchClip({ startSec: Math.max(0, Number(event.target.value)) })}
+            className="mt-1 h-9"
+          />
+        </label>
+        <label className="block text-xs text-slate-400">
+          Длительность, сек
+          <Input
+            type="number"
+            min={0.2}
+            max={TIMELINE_LIMITS.maxSceneDurationSec}
+            step={0.1}
+            value={Number(clip.durationSec.toFixed(2))}
+            onChange={(event) => onPatchClip({ durationSec: Math.max(0.2, Number(event.target.value)) })}
+            className="mt-1 h-9"
+          />
+        </label>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs">Переход к следующему клипу</Label>
+        <div className="flex flex-wrap gap-1.5">
+          {TRANSITION_LABELS.map((item) => (
+            <button
+              key={item.code}
+              type="button"
+              onClick={() => onTransition(item.code)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition',
+                clip.transition === item.code
+                  ? 'border-amber-400 bg-amber-400/15 text-amber-200'
+                  : 'border-slate-700 text-slate-300 hover:border-slate-500',
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-slate-500">
+          Переход — это наложение соседних клипов: следующий сдвинется навстречу этому.
+        </p>
+      </div>
+
+      <div className="border-t border-slate-800 pt-3">
+        <LayerInspector
+          layer={clip.layer}
+          uploading={uploading}
+          onChange={onPatchLayer}
+          onReplaceFile={onReplaceFile}
+        />
+      </div>
+    </div>
+  );
+}
+
+function RollSettings({
+  aspect,
+  onAspectChange,
+}: {
+  aspect: TimelineAspect;
+  onAspectChange: (aspect: TimelineAspect) => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-slate-100">Ролик</h3>
       <div className="space-y-1.5">
         <Label className="text-xs">Формат кадра</Label>
         <div className="flex flex-wrap gap-1.5">
@@ -1437,29 +1499,19 @@ function SceneSettings({
           ))}
         </div>
       </div>
-
-      <label className="block text-xs text-slate-400">
-        Цвет подложки
-        <input
-          type="color"
-          value={scene.background ?? '#000000'}
-          onChange={(event) => onSceneChange({ background: event.target.value })}
-          className="mt-1 h-9 w-full cursor-pointer rounded border border-slate-700 bg-transparent"
-        />
-      </label>
-
-      <p className="text-xs text-slate-500">Выделите слой на холсте, чтобы настроить его отдельно.</p>
+      <p className="text-xs leading-5 text-slate-500">
+        Выделите клип на шкале или кадр на холсте, чтобы настроить его отдельно. Между клипами
+        можно оставить паузу — там останется фон.
+      </p>
     </div>
   );
 }
 
-/** Длительность видео из самого файла: браузер знает её сразу после чтения метаданных. */
 /**
  * Длительность видео по ссылке.
  *
- * Нужна, когда кадр приехал из генерации: сцена сохраняет прежнюю длину, и если клип
- * короче, ffmpeg дотягивает сцену последним кадром — видео «застывает» и переход идёт уже
- * по замершей картинке. Ровно на это и жаловались.
+ * Нужна, когда кадр приехал из генерации или из медиатеки: клип сохраняет прежнюю длину, и
+ * если материал короче, ffmpeg дотягивает его последним кадром — видео «застывает».
  */
 function probeUrlDurationSec(url: string): Promise<number | undefined> {
   return new Promise((resolve) => {

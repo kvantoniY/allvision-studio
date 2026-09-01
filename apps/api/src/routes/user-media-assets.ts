@@ -21,7 +21,9 @@ export const userMediaAssetsRouter = Router();
 
 userMediaAssetsRouter.use(requireAuth);
 
-const USER_MEDIA_KINDS = ['user-avatar', 'user-location'] as const;
+// 'user-upload' — личная медиатека: всё, что человек загрузил в редактор. Отдельный вид,
+// а не смешение с аватарами: в Студии показываются образы, а не сырые файлы.
+const USER_MEDIA_KINDS = ['user-avatar', 'user-location', 'user-upload'] as const;
 type UserMediaKind = (typeof USER_MEDIA_KINDS)[number];
 
 const listQuerySchema = z.object({

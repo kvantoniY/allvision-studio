@@ -3,7 +3,8 @@ import { createBaseQueryWithReauth } from './base-query';
 import { authApi } from './auth-api';
 import { projectsApi } from './projects-api';
 
-export type UserMediaKind = 'user-avatar' | 'user-location';
+/** 'user-upload' — личная медиатека редактора: сырые файлы, а не образы Студии. */
+export type UserMediaKind = 'user-avatar' | 'user-location' | 'user-upload';
 
 export type UserMediaAsset = {
   id: string;

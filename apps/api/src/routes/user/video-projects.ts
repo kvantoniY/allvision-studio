@@ -299,7 +299,28 @@ videoProjectsRouter.post('/:id/media', uploadEditorMedia, async (req: Request, r
     if (!file) throw new HttpError(400, 'FILE_REQUIRED', 'Файл не получен');
 
     const uploaded = await fileService.uploadEditorMedia(req.user!.id, req.params.id, file);
+
+    // Запоминаем файл в личной медиатеке. Без записи загруженное существовало бы только
+    // внутри той сцены, куда его положили: перезагрузил вкладку — и найти файл, чтобы
+    // поставить его во второй раз, уже негде.
+    const asset = await prisma.mediaAsset.create({
+      data: {
+        kind: 'user-upload',
+        ownerUserId: req.user!.id,
+        title: file.originalname?.slice(0, 160) || 'Загруженный файл',
+        tags: [uploaded.mediaKind],
+        storageKey: uploaded.key,
+        publicUrl: uploaded.url,
+        width: uploaded.dimensions?.width,
+        height: uploaded.dimensions?.height,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+      },
+      select: { id: true },
+    });
+
     res.status(201).json({
+      id: asset.id,
       url: uploaded.url,
       mediaKind: uploaded.mediaKind,
       ...(uploaded.dimensions ? { dimensions: uploaded.dimensions } : {}),

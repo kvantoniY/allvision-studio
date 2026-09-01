@@ -82,7 +82,6 @@ export function SceneGenerator({
   onGenerate,
   onRunService,
   runningServiceSlug,
-  serviceProgress,
 }: {
   scene: TimelineScene;
   aspect: TimelineAspect;
@@ -96,7 +95,6 @@ export function SceneGenerator({
   /** Запуск услуги прямо отсюда: результат вернётся в кадр этой же сцены. */
   onRunService: (service: EditorCatalogService, values: Record<string, string>) => void;
   runningServiceSlug?: string | null;
-  serviceProgress?: number;
 }) {
   // Референс по умолчанию — тот кадр, который человек выделил. Если не выделен ничего,
   // берём главный кадр сцены: на сцене из одного слоя это одно и то же.
@@ -241,7 +239,6 @@ export function SceneGenerator({
           sceneFrameUrl={reference?.source.url ?? null}
           onUploadReference={onUploadReference}
           running={running}
-          progress={serviceProgress ?? 0}
           onBack={() => setOpenService(null)}
           onRun={(values) => onRunService(openService, values)}
         />

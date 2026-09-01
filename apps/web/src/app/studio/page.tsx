@@ -40,7 +40,11 @@ import {
 type Tab = 'avatars' | 'locations' | 'history';
 type ModalKind = null | { action: 'upload' | 'generate'; kind: UserMediaKind } | { action: 'variation'; asset: UserMediaAsset };
 
-const kindLabels: Record<UserMediaKind, { title: string; empty: string; icon: typeof ImageIcon }> = {
+// Студия показывает образы, а не сырые файлы: личная медиатека редактора ('user-upload')
+// живёт в самом редакторе и своей вкладки здесь не имеет.
+type StudioKind = Extract<UserMediaKind, 'user-avatar' | 'user-location'>;
+
+const kindLabels: Record<StudioKind, { title: string; empty: string; icon: typeof ImageIcon }> = {
   'user-avatar': {
     title: 'Аватары',
     empty: 'Сохраните фото лица, персонажа или будущего героя.',
@@ -362,7 +366,7 @@ function AssetSection({
   onGenerate,
   onVariation,
 }: {
-  kind: UserMediaKind;
+  kind: StudioKind;
   items: UserMediaAsset[];
   isLoading: boolean;
   onUpload: () => void;

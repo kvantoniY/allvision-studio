@@ -2,6 +2,7 @@ import { createApi } from '@reduxjs/toolkit/query/react';
 import type { Timeline } from '@allvision/shared';
 import { createBaseQueryWithReauth } from './base-query';
 import { projectsApi } from './projects-api';
+import { userMediaAssetsApi } from './user-media-assets-api';
 
 export type VideoProjectSummary = {
   id: string;
@@ -13,6 +14,8 @@ export type VideoProjectSummary = {
 };
 
 export type EditorMediaUpload = {
+  /** Запись в личной медиатеке: загруженное остаётся доступным и после перезагрузки. */
+  id?: string;
   url: string;
   mediaKind: 'image' | 'video' | 'audio';
   dimensions?: { width: number; height: number };
@@ -59,6 +62,12 @@ export const videoProjectsApi = createApi({
         const body = new FormData();
         body.append('file', file);
         return { url: `/${id}/media`, method: 'POST', body };
+      },
+      async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
+        await queryFulfilled;
+        // Загруженный файл попадает в личную медиатеку — вкладка «Медиа» должна его увидеть
+        // сразу, а не после перезагрузки страницы.
+        dispatch(userMediaAssetsApi.util.invalidateTags(['UserMediaAsset']));
       },
     }),
     generateSceneService: build.mutation<

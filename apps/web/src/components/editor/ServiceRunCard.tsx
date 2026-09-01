@@ -51,7 +51,6 @@ export function ServiceRunCard({
   service,
   price,
   running,
-  progress,
   sceneFrameUrl,
   onUploadReference,
   onBack,
@@ -60,7 +59,6 @@ export function ServiceRunCard({
   service: EditorCatalogService;
   price: number;
   running: boolean;
-  progress: number;
   /** Кадр выделенного слоя: подставляется в первый слот, пока его не сняли. */
   sceneFrameUrl?: string | null;
   onUploadReference: (file: File) => Promise<string | null>;
@@ -252,19 +250,16 @@ export function ServiceRunCard({
       ))}
 
       {running ? (
+        // Процента здесь нет намеренно: карточка услуги — не место ожидания, отсюда сразу
+        // запускают ещё одну генерацию. Ход работы показывает вкладка «Мои генерации».
         <div className="space-y-1.5 rounded-lg border border-violet-500/40 bg-violet-500/10 p-3">
           <div className="flex items-center gap-2 text-xs text-violet-100">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Генерируем — {Math.round(progress)}%
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-800">
-            <div
-              className="h-full rounded-full bg-violet-400 transition-all"
-              style={{ width: `${Math.max(3, Math.min(100, progress))}%` }}
-            />
+            Генерация запущена
           </div>
           <p className="text-[11px] text-slate-400">
-            Результат встанет в сцену и появится в истории — можно не ждать здесь.
+            Результат встанет в клип и появится в «Моих генерациях» — можно не ждать здесь и
+            запустить ещё одну.
           </p>
         </div>
       ) : blocker ? (
