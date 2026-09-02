@@ -704,6 +704,30 @@ export function VideoEditor({ id }: { id: string }) {
     [timeline, currentScene, targetClipForGeneration, ops, id, updateProject, generateSceneService],
   );
 
+  /**
+   * Предзагрузка кадров всего ролика.
+   *
+   * Холст держит элементы только текущей сцены, поэтому при перемотке следующая сцена
+   * начинала грузиться с нуля — отсюда ощущение, что кадры «догружаются». Картинки
+   * дешёвые, их прогреваем целиком: браузер положит их в кэш, и переключение станет
+   * мгновенным. Видео не трогаем — десяток роликов в предзагрузке съест канал.
+   */
+  const prefetchedRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!timeline) return;
+    for (const scene of timelineScenes(timeline)) {
+      for (const layer of sceneMediaLayers(scene)) {
+        if (layer.source.kind !== 'image' || !layer.source.url) continue;
+        const url = mediaUrl(layer.source.url);
+        if (!url || prefetchedRef.current.has(url)) continue;
+        prefetchedRef.current.add(url);
+        const image = new window.Image();
+        image.decoding = 'async';
+        image.src = url;
+      }
+    }
+  }, [timeline]);
+
   // --- шаблон поздравления ---
   const template = timeline?.template;
 
@@ -1285,9 +1309,9 @@ export function VideoEditor({ id }: { id: string }) {
          */}
         <section className={cn(
           'shrink-0 overflow-y-auto p-3',
-          'fixed inset-x-0 bottom-[68px] z-40 max-h-[54dvh] rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/60 transition-transform duration-200',
-          mobileSheet && mobileSheet !== 'clip' ? 'translate-y-0' : 'pointer-events-none translate-y-[120%]',
-          'lg:pointer-events-auto lg:static lg:z-auto lg:max-h-none lg:w-[330px] lg:translate-y-0 lg:rounded-none lg:border-0 lg:border-r lg:border-slate-800 lg:shadow-none',
+          'fixed inset-x-0 bottom-[68px] z-40 max-h-[54dvh] rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/60 transition-[transform,opacity] duration-200',
+          mobileSheet && mobileSheet !== 'clip' ? 'translate-y-0' : 'pointer-events-none translate-y-[calc(100%+96px)] opacity-0',
+          'lg:pointer-events-auto lg:static lg:z-auto lg:max-h-none lg:w-[330px] lg:translate-y-0 lg:opacity-100 lg:rounded-none lg:border-0 lg:border-r lg:border-slate-800 lg:shadow-none',
         )}>
           <ToolBar
             tool={tool}
@@ -1373,9 +1397,9 @@ export function VideoEditor({ id }: { id: string }) {
 
         <aside className={cn(
           'shrink-0 space-y-3 overflow-y-auto p-3',
-          'fixed inset-x-0 bottom-[68px] z-40 max-h-[54dvh] rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/60 transition-transform duration-200',
-          mobileSheet === 'clip' ? 'translate-y-0' : 'pointer-events-none translate-y-[120%]',
-          'lg:pointer-events-auto lg:static lg:z-auto lg:max-h-none lg:w-[330px] lg:translate-y-0 lg:rounded-none lg:border-0 lg:border-l lg:border-slate-800 lg:shadow-none',
+          'fixed inset-x-0 bottom-[68px] z-40 max-h-[54dvh] rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/60 transition-[transform,opacity] duration-200',
+          mobileSheet === 'clip' ? 'translate-y-0' : 'pointer-events-none translate-y-[calc(100%+96px)] opacity-0',
+          'lg:pointer-events-auto lg:static lg:z-auto lg:max-h-none lg:w-[330px] lg:translate-y-0 lg:opacity-100 lg:rounded-none lg:border-0 lg:border-l lg:border-slate-800 lg:shadow-none',
         )}>
           <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
             {selectedClip ? (

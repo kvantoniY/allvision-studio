@@ -36,12 +36,22 @@ async function computePeaks(src: string): Promise<number[] | null> {
     const decoded = await context.decodeAudioData(buffer);
     const channel = decoded.getChannelData(0);
     const perBucket = Math.max(1, Math.floor(channel.length / BUCKETS));
+    /*
+     * Внутри корзины идём с шагом, а не по каждому сэмплу.
+     *
+     * У трёхминутного трека сэмплов почти девять миллионов, и полный проход — это десятки
+     * миллисекунд синхронной работы в главном потоке: ровно тот микрофриз, который видно
+     * при открытии редактора. Для картинки высотой в сорок пикселей каждый шестнадцатый
+     * сэмпл даёт неотличимую форму.
+     */
+    const stride = Math.max(1, Math.floor(perBucket / 32));
     const peaks: number[] = [];
     let max = 0;
     for (let bucket = 0; bucket < BUCKETS; bucket += 1) {
       const from = bucket * perBucket;
+      const to = Math.min(from + perBucket, channel.length);
       let peak = 0;
-      for (let i = from; i < from + perBucket && i < channel.length; i += 1) {
+      for (let i = from; i < to; i += stride) {
         const value = Math.abs(channel[i]);
         if (value > peak) peak = value;
       }

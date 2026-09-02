@@ -64,6 +64,12 @@ export function SceneCanvas({
     [layers],
   );
   const elements = useMediaElements(mediaLayers);
+  /*
+   * Кадры подгружаются после открытия редактора, и до этого холст пуст.
+   * Пустой холст читается как поломка, поэтому говорим прямо: идёт загрузка.
+   */
+  const awaited = mediaLayers.filter((layer) => layer.source.kind !== 'color' && layer.source.url);
+  const loading = awaited.some((layer) => !elements.has(layer.id));
   const layerRef = useRef<Konva.Layer | null>(null);
 
   // Кадр вписывается в доступное место целиком: и по ширине, и по высоте. Считать только
@@ -144,7 +150,13 @@ export function SceneCanvas({
   }
 
   return (
-    <div ref={containerRef} className="flex h-full w-full items-center justify-center">
+    <div ref={containerRef} className="relative flex h-full w-full items-center justify-center">
+      {loading && (
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center">
+          <span className="rounded-full bg-slate-950/80 px-3 py-1 text-xs text-slate-300">Загружаем кадры…</span>
+        </div>
+      )}
+
       <Stage
         width={stageSize.width}
         height={stageSize.height}

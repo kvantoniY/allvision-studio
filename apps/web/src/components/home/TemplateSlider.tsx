@@ -74,7 +74,9 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
     (direction: -1 | 0 | 1) => {
       if (settleRef.current) clearTimeout(settleRef.current);
       setDragging(false);
-      setProgress(direction);
+      // Лента едет ПРОТИВ направления перехода: чтобы показать следующую карточку
+      // (direction +1), полосу надо увести влево, то есть в минус.
+      setProgress(-direction);
       settleRef.current = setTimeout(() => {
         if (direction !== 0) setIndex((current) => ((current + direction) % total + total) % total);
         setProgress(0);
@@ -150,7 +152,10 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
       >
         {slots.map(({ service, slot, key }) => {
           // Одна величина на всё: и положение, и размер, и цвет.
-          const position = slot - progress;
+          // Плюс, а не минус: содержимое обязано ехать ЗА пальцем. С минусом лента шла в
+          // одну сторону, а доводка после отпускания — в другую, и получался прыжок через
+          // карточку.
+          const position = slot + progress;
           const distance = Math.abs(position);
           const centered = distance < 0.5;
           return (

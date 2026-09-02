@@ -189,6 +189,13 @@ export function ClipTimeline({
   const [trim, setTrim] = useState<{ clipId: string; edge: 'start' | 'end'; deltaSec: number } | null>(null);
   const [menuJointId, setMenuJointId] = useState<string | null>(null);
   const playheadRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * Секунда, к которой прилип край во время жеста.
+   *
+   * Прилипание было и раньше, но происходило вслепую: край сам собой вставал вровень с
+   * соседом, а понять, к чему именно он привязался, было нельзя. Линия показывает стык.
+   */
+  const [snapLineSec, setSnapLineSec] = useState<number | null>(null);
   /** Точное время для прилипания: читаем в момент жеста, а не держим в состоянии. */
   const timeRef = useRef(time);
 
@@ -215,6 +222,8 @@ export function ClipTimeline({
   const startScrub = useCallback(
     (event: React.PointerEvent) => {
       event.preventDefault();
+      event.stopPropagation();
+      (event.target as Element).setPointerCapture?.(event.pointerId);
       onSeek(pointerSec(event.clientX));
       const move = (moveEvent: PointerEvent) => onSeek(pointerSec(moveEvent.clientX));
       const up = () => {
@@ -394,7 +403,7 @@ function JointMark({
   }, [tracks]);
 
   const snap = useCallback(
-    (sec: number, ignoreClipId: string) => {
+    (sec: number, ignoreClipId: string, showGuide = true) => {
       const tolerance = SNAP_PX / pxPerSec;
       const ignored = tracks
         .flatMap((track) => track.clips)
@@ -410,7 +419,10 @@ function JointMark({
           bestDistance = distance;
         }
       }
-      return Math.max(0, Number(best.toFixed(3)));
+      const snapped = Math.max(0, Number(best.toFixed(3)));
+      // Направляющую показываем только когда прилипание реально сработало.
+      if (showGuide) setSnapLineSec(Math.abs(snapped - sec) > 0.0005 ? snapped : null);
+      return snapped;
     },
     [snapPoints, pxPerSec, tracks],
   );
@@ -419,6 +431,7 @@ function JointMark({
     (event: React.PointerEvent, clip: TimelineClip, trackIndex: number) => {
       event.preventDefault();
       event.stopPropagation();
+      (event.target as Element).setPointerCapture?.(event.pointerId);
       onSelectClip(clip.id);
       const fromX = event.clientX;
       const fromY = event.clientY;
@@ -440,6 +453,7 @@ function JointMark({
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         setDrag(null);
+        setSnapLineSec(null);
         if (moved) onMoveClip(clip.id, next);
       };
       window.addEventListener('pointermove', move);
@@ -452,24 +466,34 @@ function JointMark({
     (event: React.PointerEvent, clip: TimelineClip, edge: 'start' | 'end') => {
       event.preventDefault();
       event.stopPropagation();
+      (event.target as Element).setPointerCapture?.(event.pointerId);
       onSelectClip(clip.id);
       const fromX = event.clientX;
+      const origin = edge === 'end' ? clipEndSec(clip) : clip.startSec;
       let deltaSec = 0;
 
       const move = (moveEvent: PointerEvent) => {
-        deltaSec = (moveEvent.clientX - fromX) / pxPerSec;
+        const raw = origin + (moveEvent.clientX - fromX) / pxPerSec;
+        /*
+         * Край тоже прилипает к соседям — и к клипам на ДРУГИХ дорожках тоже.
+         * Ровно этого не хватало, когда надо растянуть кадр до той же секунды, где
+         * кончается подпись сверху: попасть мышью в секунду нельзя, а на глаз видно
+         * только после экспорта.
+         */
+        deltaSec = snap(raw, clip.id) - origin;
         setTrim({ clipId: clip.id, edge, deltaSec });
       };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         setTrim(null);
+        setSnapLineSec(null);
         if (Math.abs(deltaSec) > 0.01) onTrimClip(clip.id, edge, deltaSec);
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
     },
-    [onSelectClip, onTrimClip, pxPerSec],
+    [onSelectClip, onTrimClip, pxPerSec, snap],
   );
 
   const shownClip = useCallback(
@@ -536,7 +560,11 @@ function JointMark({
           {/* Линейка. По ней перематывают, как в любой монтажке. */}
           <div className="sticky top-0 z-20 flex bg-slate-950/95 backdrop-blur">
             <div style={{ width: GUTTER_PX }} className="sticky left-0 z-10 shrink-0 border-r border-slate-800 bg-slate-950/95" />
-            <div onPointerDown={startScrub} className="relative h-6 flex-1 cursor-pointer select-none border-b border-slate-800">
+            <div
+              onPointerDown={startScrub}
+              style={{ touchAction: 'none' }}
+              className="relative h-6 flex-1 cursor-pointer select-none border-b border-slate-800"
+            >
               {ticksFor(total, pxPerSec).map((at) => (
                 <span
                   key={at}
@@ -719,13 +747,41 @@ function JointMark({
             </div>
           )}
 
-          {/* Курсор поверх всех дорожек: видно, какой кадр сейчас на экране. */}
+          {/*
+            * Направляющая прилипания: показывает стык, к которому привязался край.
+            * Живёт только во время жеста, поэтому не мешает читать шкалу.
+            */}
+          {snapLineSec != null && (
+            <div
+              className="pointer-events-none absolute bottom-0 top-6 z-20 w-px bg-cyan-300/80"
+              style={{ left: GUTTER_PX + secToPx(snapLineSec) }}
+            />
+          )}
+
+          {/*
+            * Курсор поверх всех дорожек: видно, какой кадр сейчас на экране.
+            *
+            * Тянется за саму линию, а не только за квадратик сверху: попасть в
+            * восьмипиксельный маркер на телефоне почти невозможно. Хват шириной в палец
+            * даёт зона по бокам линии, сама линия остаётся волосяной.
+            */}
           <div
             ref={playheadRef}
             className="pointer-events-none absolute bottom-0 top-6 z-30 w-px bg-amber-300"
             style={{ left: GUTTER_PX, transform: `translateX(${secToPx(time)}px)` }}
           >
-            <span className="absolute -left-[5px] -top-2 h-2.5 w-2.5 rounded-sm bg-amber-300" />
+            <span
+              onPointerDown={startScrub}
+              role="slider"
+              aria-label="Курсор времени"
+              aria-valuenow={Math.round(time * 100) / 100}
+              aria-valuemin={0}
+              aria-valuemax={Math.round(total * 100) / 100}
+              tabIndex={0}
+              style={{ touchAction: 'none' }}
+              className="pointer-events-auto absolute -left-3 top-0 h-full w-6 cursor-ew-resize"
+            />
+            <span className="pointer-events-none absolute -left-[5px] -top-2 h-2.5 w-2.5 rounded-sm bg-amber-300" />
           </div>
         </div>
       </div>
@@ -777,9 +833,16 @@ function ClipBlock({
       )}
       style={{ left, width }}
     >
+      {/*
+        * touch-action: none обязателен для пальца.
+        *
+        * Дорожки лежат в прокручиваемой области, и без этого браузер забирает жест себе
+        * как прокрутку: на мыши перетаскивание работало, на телефоне — нет.
+        */}
       <div
         onPointerDown={onPointerDown}
-        className="absolute inset-0 cursor-grab overflow-hidden rounded active:cursor-grabbing"
+        style={{ touchAction: 'none' }}
+        className="absolute inset-0 cursor-grab touch-none overflow-hidden rounded active:cursor-grabbing"
       >
         {preview ? (
           isVideo ? (
@@ -837,17 +900,20 @@ function ClipBlock({
         )
       )}
 
+      {/* Ручки шире на телефоне: в два пикселя пальцем не попасть. */}
       <span
         onPointerDown={onTrimStart}
         role="separator"
         aria-label="Обрезать начало клипа"
-        className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize transition group-hover:bg-amber-400/40"
+        style={{ touchAction: 'none' }}
+        className="absolute inset-y-0 left-0 z-10 w-3 cursor-col-resize transition group-hover:bg-amber-400/40 lg:w-2"
       />
       <span
         onPointerDown={onTrimEnd}
         role="separator"
         aria-label="Обрезать конец клипа"
-        className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize transition group-hover:bg-amber-400/40"
+        style={{ touchAction: 'none' }}
+        className="absolute inset-y-0 right-0 z-10 w-3 cursor-col-resize transition group-hover:bg-amber-400/40 lg:w-2"
       />
 
       {/*
@@ -975,6 +1041,7 @@ function AudioClip({
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    (event.target as Element).setPointerCapture?.(event.pointerId);
     const fromX = event.clientX;
     const move = (moveEvent: PointerEvent) => onDelta((moveEvent.clientX - fromX) / pxPerSec);
     const up = () => {
@@ -1040,7 +1107,12 @@ function AudioClip({
           'group absolute inset-y-1 cursor-grab overflow-hidden rounded border active:cursor-grabbing',
           accent === 'amber' ? 'border-amber-400/50 bg-amber-400/15' : 'border-violet-400/50 bg-violet-400/15',
         )}
-        style={{ left: startAt * pxPerSec, width: Math.max(20, barSeconds * pxPerSec) }}
+        style={{
+          left: startAt * pxPerSec,
+          width: Math.max(20, barSeconds * pxPerSec),
+          // Палец тянет дорожку, а не прокручивает шкалу.
+          touchAction: 'none',
+        }}
       >
         <Waveform
           src={source}
@@ -1058,13 +1130,15 @@ function AudioClip({
           onPointerDown={beginTrimStart}
           role="separator"
           aria-label="Обрезать начало"
-          className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize transition group-hover:bg-white/30"
+          style={{ touchAction: 'none' }}
+          className="absolute inset-y-0 left-0 z-10 w-3 cursor-col-resize transition group-hover:bg-white/30 lg:w-2"
         />
         <span
           onPointerDown={beginTrimEnd}
           role="separator"
           aria-label="Обрезать конец"
-          className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize transition group-hover:bg-white/30"
+          style={{ touchAction: 'none' }}
+          className="absolute inset-y-0 right-0 z-10 w-3 cursor-col-resize transition group-hover:bg-white/30 lg:w-2"
         />
       </div>
 
