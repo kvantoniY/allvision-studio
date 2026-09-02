@@ -44,6 +44,8 @@ export type LayerPatch = Partial<MediaLayer> & Partial<TextLayer>;
 export type ClipPlacement = { trackIndex: number; startSec: number };
 
 export const DEFAULT_CLIP_SEC = 4;
+/** Стандартная длина перехода: столько же по умолчанию предлагают монтажки. */
+export const DEFAULT_TRANSITION_SEC = 0.5;
 
 /**
  * Дорожки ролика для редактора.
@@ -87,6 +89,26 @@ function freeSlotSec(track: TimelineTrack, wantedSec: number, durationSec: numbe
     if (overlaps) start = clipEndSec(clip);
   }
   return Number(start.toFixed(3));
+}
+
+/**
+ * Сколько ещё осталось в исходнике после уже срезанного начала.
+ *
+ * null — ограничения нет: у картинки и заливки нет «конца записи», их можно держать в
+ * кадре сколько угодно.
+ */
+export function clipSourceLimitSec(clip: TimelineClip): number | null {
+  if (clip.layer.kind !== 'media' || clip.layer.source.kind !== 'video') return null;
+  const source = clip.layer.sourceDurationSec;
+  if (!source || source <= 0) return null;
+  return Math.max(TRACK_LIMITS.minClipDurationSec, source - (clip.layer.trimStartSec ?? 0));
+}
+
+/** На сколько левый край можно увести влево: дальше начала записи показывать нечего. */
+export function clipHeadRoomSec(clip: TimelineClip): number | null {
+  if (clip.layer.kind !== 'media' || clip.layer.source.kind !== 'video') return null;
+  if (!clip.layer.sourceDurationSec) return null;
+  return Math.max(0, clip.layer.trimStartSec ?? 0);
 }
 
 export type TrackEditorOps = ReturnType<typeof useTrackEditor>;
@@ -144,7 +166,15 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
     (
       input: { kind: 'image' | 'video' | 'color'; url?: string; color?: string },
       placement?: Partial<ClipPlacement> & { durationSec?: number },
-    ) => addClip(newMediaLayer({ id: uid('layer'), ...input }), placement),
+    ) => addClip(
+      // Измеренную длину записи кладём на слой: по ней потом ограничивается обрезка.
+      newMediaLayer({
+        id: uid('layer'),
+        ...input,
+        sourceDurationSec: input.kind === 'video' ? placement?.durationSec : undefined,
+      }),
+      placement,
+    ),
     [addClip],
   );
 
@@ -227,7 +257,18 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
 
       if (toIndex === found.trackIndex) {
         const slot = freeSlotSec(tracks[toIndex], startSec, found.clip.durationSec, clipId);
-        patchClip(clipId, { startSec: slot });
+        const clips = sortedClips(tracks[toIndex]);
+        const wasAfter = clips[clips.findIndex((clip) => clip.id === clipId) - 1];
+        mapTrack(toIndex, (track) => ({
+          ...track,
+          clips: track.clips.map((clip) => {
+            if (clip.id === clipId) return { ...clip, startSec: slot, transition: 'cut' as TimelineTransition };
+            // Переход принадлежит стыку. Уехал клип — стыка больше нет, и наложение,
+            // оставшееся от перехода, читалось бы как случайно надвинутый кадр.
+            if (wasAfter && clip.id === wasAfter.id) return { ...clip, transition: 'cut' as TimelineTransition };
+            return clip;
+          }),
+        }));
         return;
       }
 
@@ -235,7 +276,9 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
       setTracks(
         tracks.map((track, index) => {
           if (index === found.trackIndex) return { ...track, clips: track.clips.filter((clip) => clip.id !== clipId) };
-          if (index === toIndex) return { ...track, clips: [...track.clips, { ...found.clip, startSec: slot }] };
+          if (index === toIndex) {
+            return { ...track, clips: [...track.clips, { ...found.clip, startSec: slot, transition: 'cut' as TimelineTransition }] };
+          }
           return track;
         }),
       );
@@ -259,7 +302,10 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
       const speed = clip.layer.kind === 'media' ? layerSpeed(clip.layer) : 1;
 
       if (edge === 'end') {
-        const durationSec = clampDuration(clip.durationSec + deltaSec);
+        const limit = clipSourceLimitSec(clip);
+        const wanted = clampDuration(clip.durationSec + deltaSec);
+        // Правый край режет КОНЕЦ записи и не может показать того, чего в файле нет.
+        const durationSec = limit === null ? wanted : Math.min(wanted, limit / speed);
         const patch: Partial<TimelineClip> = { durationSec };
         if (isVideo && clip.layer.kind === 'media') {
           const trimStart = clip.layer.trimStartSec ?? 0;
@@ -269,8 +315,11 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
         return;
       }
 
-      // Левый край двигает и позицию, и длину: клип «укорачивается спереди».
-      const rawStart = Math.max(0, clip.startSec + deltaSec);
+      // Левый край режет НАЧАЛО записи: двигает и позицию, и точку входа в файл.
+      // Левее начала записи уходить некуда — там ничего не снято.
+      const headRoom = clipHeadRoomSec(clip);
+      const earliest = headRoom === null ? 0 : Math.max(0, clip.startSec - headRoom / speed);
+      const rawStart = Math.max(earliest, clip.startSec + deltaSec);
       const end = clipEndSec(clip);
       const durationSec = clampDuration(end - rawStart);
       const startSec = Number((end - durationSec).toFixed(3));
@@ -405,49 +454,83 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
     [locate, patchClip, patchClipLayer],
   );
 
+  /**
+   * Переход на стыке двух клипов.
+   *
+   * Переход — это наложение: следующий клип заходит на предыдущий, и ffmpeg растворяет
+   * один в другом. Поэтому смена перехода двигает соседа И ВЕСЬ ХВОСТ дорожки: иначе за
+   * соседом оставалась бы дыра, а ролик не укорачивался бы на длину перехода — в любой
+   * монтажке он укорачивается.
+   *
+   * Требование «клипы должны стоять вплотную» живёт в интерфейсе: плашка стыка просто не
+   * появляется там, где между клипами пауза. Накладывать далеко стоящие клипы значило бы
+   * молча стирать кусок ролика.
+   */
   const setTransition = useCallback(
-    (clipId: string, transition: TimelineTransition) => {
+    (clipId: string, transition: TimelineTransition, durationSec = DEFAULT_TRANSITION_SEC) => {
       const found = locate(clipId);
       if (!found) return;
       const track = tracks[found.trackIndex];
       const clips = sortedClips(track);
       const position = clips.findIndex((clip) => clip.id === clipId);
-      const next = clips[position + 1];
+      const nextClip = clips[position + 1];
+      if (!nextClip) return;
 
-      // Переход — это наложение. Просто пометить клип мало: если соседи стоят встык,
-      // накладываться нечему, и человек увидел бы «переход есть, а на экране склейка».
-      if (transition !== 'cut' && next) {
-        const overlap = Math.min(0.6, found.clip.durationSec / 2, next.durationSec / 2);
-        const shifted = Number((clipEndSec(found.clip) - overlap).toFixed(3));
-        mapTrack(found.trackIndex, (item) => ({
-          ...item,
-          clips: item.clips.map((clip) => {
-            if (clip.id === clipId) return { ...clip, transition };
-            if (clip.id === next.id) return { ...clip, startSec: shifted };
-            return clip;
-          }),
-        }));
-        return;
-      }
+      const wanted = transition === 'cut'
+        ? 0
+        : Math.min(
+            durationSec,
+            TIMELINE_LIMITS.maxTransitionDurationSec,
+            found.clip.durationSec / 2,
+            nextClip.durationSec / 2,
+          );
+      // Куда сосед обязан встать: конец предыдущего минус длина наложения. Пауза при этом
+      // закрывается сама — переход без стыка не бывает.
+      const targetStart = Math.max(0, clipEndSec(found.clip) - wanted);
+      const shift = Number((nextClip.startSec - targetStart).toFixed(3));
 
-      // Убираем переход — возвращаем соседа встык, иначе наложение осталось бы обрезкой.
-      if (transition === 'cut' && next && next.startSec < clipEndSec(found.clip)) {
-        mapTrack(found.trackIndex, (item) => ({
-          ...item,
-          clips: item.clips.map((clip) => {
-            if (clip.id === clipId) return { ...clip, transition };
-            if (clip.id === next.id) return { ...clip, startSec: clipEndSec(found.clip) };
-            return clip;
-          }),
-        }));
-        return;
-      }
-
-      patchClip(clipId, { transition });
+      mapTrack(found.trackIndex, (item) => ({
+        ...item,
+        clips: item.clips.map((clip) => {
+          if (clip.id === clipId) return { ...clip, transition };
+          const order = clips.findIndex((entry) => entry.id === clip.id);
+          // Хвост едет вместе с соседом: стык остаётся стыком, а не превращается в дыру.
+          if (order > position) return { ...clip, startSec: Math.max(0, Number((clip.startSec - shift).toFixed(3))) };
+          return clip;
+        }),
+      }));
     },
-    [locate, tracks, mapTrack, patchClip],
+    [locate, tracks, mapTrack],
   );
 
+  /**
+   * Придвинуть клип вплотную к предыдущему.
+   *
+   * Пауза между кадрами — законный приём, но чаще она случайна: клип не дотащили пару
+   * пикселей. Без этой кнопки попасть в стык мышью почти невозможно, а без стыка нельзя
+   * поставить переход.
+   */
+  const snapToPrevious = useCallback(
+    (clipId: string) => {
+      const found = locate(clipId);
+      if (!found) return;
+      const clips = sortedClips(tracks[found.trackIndex]);
+      const position = clips.findIndex((clip) => clip.id === clipId);
+      const previous = clips[position - 1];
+      if (!previous) return;
+      const shift = Number((found.clip.startSec - clipEndSec(previous)).toFixed(3));
+      if (Math.abs(shift) < 0.01) return;
+      mapTrack(found.trackIndex, (item) => ({
+        ...item,
+        clips: item.clips.map((clip) => {
+          const order = clips.findIndex((entry) => entry.id === clip.id);
+          if (order < position) return clip;
+          return { ...clip, startSec: Math.max(0, Number((clip.startSec - shift).toFixed(3))) };
+        }),
+      }));
+    },
+    [locate, tracks, mapTrack],
+  );
   const addTrack = useCallback(() => {
     if (tracks.length >= TRACK_LIMITS.maxTracks) return false;
     setTracks([...tracks, { id: uid('track'), title: `Слой ${tracks.length + 1}`, clips: [], hidden: false, muted: false }]);
@@ -483,6 +566,7 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
     moveClip,
     trimClip,
     setClipSpeed,
+    snapToPrevious,
     removeClip,
     duplicateClip,
     splitClip,

@@ -236,10 +236,12 @@ describe('planFinal', () => {
     });
     const graph = filterGraph(final.args);
 
-    expect(graph).toContain('[0:v][1:v]concat=n=2:v=1:a=0[vx1]');
+    expect(graph).toContain('[sv0][sv1]concat=n=2:v=1:a=0[vx1]');
     // Вторая сцена уходит в третью через растворение, начиная с её позиции в ролике.
     expect(graph).toContain('xfade=transition=fade:duration=1.000:offset=9.000');
     expect(final.totalDurationSec).toBe(14);
+    // Общая шкала времени у всех входов: без неё xfade после concat отказывается работать.
+    expect(graph).toContain('[2:v]settb=AVTB');
   });
 
   it('places each scene audio at its own second and keeps the mix at full volume', () => {

@@ -64,7 +64,13 @@ import { AudioTools, type VoiceRecording, type VoiceoverRequest } from '@/compon
 import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
 import type { EditorCatalogService } from '@/store/api/editor-catalog-api';
 import { ExportOverlay } from '@/components/editor/ExportOverlay';
-import { timelineWithTracks, uid, useTrackEditor, type LayerPatch } from '@/components/editor/useTrackEditor';
+import {
+  clipSourceLimitSec,
+  timelineWithTracks,
+  uid,
+  useTrackEditor,
+  type LayerPatch,
+} from '@/components/editor/useTrackEditor';
 import { usePlayback } from '@/components/editor/usePlayback';
 import { useGetProjectStatusQuery } from '@/store/api/projects-api';
 import { useGetPublicMediaAssetsQuery } from '@/store/api/public-api';
@@ -279,6 +285,7 @@ export function VideoEditor({ id }: { id: string }) {
             source: { kind, url: uploaded.url },
             trimStartSec: undefined,
             trimEndSec: undefined,
+            sourceDurationSec: kind === 'video' ? durationSec : undefined,
           } as Partial<SceneLayer>);
           if (durationSec) ops.patchClip(target.clipId, { durationSec: Number(durationSec.toFixed(2)) });
           return;
@@ -1226,6 +1233,7 @@ export function VideoEditor({ id }: { id: string }) {
           }}
           onRemoveTrack={ops.removeTrack}
           onPatchTrack={ops.patchTrack}
+          onSnapToPrevious={ops.snapToPrevious}
           onChangeAudio={changeAudioTrack}
           onRemoveAudio={removeAudioTrack}
           onSplitAudio={splitAudioTrack}
@@ -1530,7 +1538,12 @@ function ClipInspector({
             max={TIMELINE_LIMITS.maxSceneDurationSec}
             step={0.1}
             value={Number(clip.durationSec.toFixed(2))}
-            onChange={(event) => onPatchClip({ durationSec: Math.max(0.2, Number(event.target.value)) })}
+            onChange={(event) => {
+              // Та же граница, что и у ручки края: показать больше, чем есть в записи, нельзя.
+              const limit = clipSourceLimitSec(clip);
+              const wanted = Math.max(0.2, Number(event.target.value));
+              onPatchClip({ durationSec: limit === null ? wanted : Math.min(wanted, limit) });
+            }}
             className="mt-1 h-9"
           />
         </label>

@@ -76,6 +76,14 @@ export const mediaLayerSchema = z.object({
   /** Обрезка исходного видео по времени. */
   trimStartSec: z.number().min(0).max(3600).optional(),
   trimEndSec: z.number().min(0).max(3600).optional(),
+  /**
+   * Полная длина исходного файла в секундах — её измеряет браузер при добавлении.
+   *
+   * Без неё ручка правого края тянула кадр дальше конца записи: на шкале клип рос, а в
+   * готовом файле ffmpeg дотягивал сцену застывшим последним кадром. Здесь она нужна
+   * только редактору, на рендер не влияет.
+   */
+  sourceDurationSec: z.number().min(0).max(3600).optional(),
   muted: z.boolean().default(false),
   volume: z.number().min(0).max(2).default(1),
   /**
@@ -233,6 +241,8 @@ export function newMediaLayer(input: {
   url?: string;
   color?: string;
   box?: LayerBox;
+  /** Длина записи, если её уже измерили: по ней ограничивается обрезка. */
+  sourceDurationSec?: number;
 }): MediaLayer {
   return mediaLayerSchema.parse({
     id: input.id,
@@ -240,6 +250,7 @@ export function newMediaLayer(input: {
     source: { kind: input.kind, url: input.url, color: input.color },
     box: input.box ?? FULL_FRAME_BOX,
     fit: input.kind === 'color' ? 'cover' : 'contain',
+    sourceDurationSec: input.sourceDurationSec,
   });
 }
 

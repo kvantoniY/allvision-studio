@@ -359,17 +359,30 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
 
   const chain: string[] = [];
 
+  /*
+   * Каждую сцену приводим к общей шкале времени ПЕРЕД склейкой.
+   *
+   * xfade отказывается работать, если у двух его входов разный timebase, а именно это и
+   * получалось на смешанной цепочке: выход concat идёт с AVTB (1/1000000), а следующий
+   * файл — со своей шкалой (1/15360). Ролик, где встык и переход стоят рядом, падал целиком
+   * («First input link main timebase do not match»). Ролики только со встыками или только
+   * с переходами при этом собирались, поэтому дефект и дожил до продакшена.
+   */
+  scenePaths.forEach((_, index) => {
+    chain.push(`[${index}:v]settb=AVTB,fps=${TIMELINE_FPS},setsar=1,format=yuv420p[sv${index}]`);
+  });
+
   // Видео: накопительная цепочка слева направо.
-  let videoLabel = '0:v';
+  let videoLabel = 'sv0';
   for (let i = 1; i < scenePaths.length; i += 1) {
     const previous = timings[i - 1];
     const label = `vx${i}`;
     if (previous.transitionOutSec <= 0) {
-      chain.push(`[${videoLabel}][${i}:v]concat=n=2:v=1:a=0[${label}]`);
+      chain.push(`[${videoLabel}][sv${i}]concat=n=2:v=1:a=0[${label}]`);
     } else {
       const transition = XFADE_BY_TRANSITION[previous.scene.transition as Exclude<TimelineTransition, 'cut'>] ?? 'fade';
       chain.push(
-        `[${videoLabel}][${i}:v]xfade=transition=${transition}:duration=${fixed(previous.transitionOutSec)}:offset=${fixed(timings[i].startSec)}[${label}]`,
+        `[${videoLabel}][sv${i}]xfade=transition=${transition}:duration=${fixed(previous.transitionOutSec)}:offset=${fixed(timings[i].startSec)}[${label}]`,
       );
     }
     videoLabel = label;

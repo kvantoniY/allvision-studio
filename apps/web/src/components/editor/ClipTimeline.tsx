@@ -10,6 +10,8 @@ import {
   Music,
   Plus,
   Repeat,
+  ArrowLeftRight,
+  ChevronsLeftRight,
   Scissors,
   SplitSquareHorizontal,
   Trash2,
@@ -31,6 +33,7 @@ import {
   type TimelineTrack,
   type TimelineTransition,
 } from '@allvision/shared';
+import { DEFAULT_TRANSITION_SEC, clipHeadRoomSec, clipSourceLimitSec } from '@/components/editor/useTrackEditor';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
 import { Waveform } from '@/components/editor/Waveform';
 import type { MediaLibraryItem } from '@/components/editor/MediaLibraryPanel';
@@ -47,6 +50,11 @@ import { cn } from '@/lib/utils';
  * Шкала общая для всех дорожек, включая звук: иначе нельзя понять, на каком кадре вступает
  * реплика.
  */
+
+/** Ближе этого клипы считаются стоящими вплотную: попасть мышью в идеальный ноль нельзя. */
+const JOINT_TOLERANCE_SEC = 0.08;
+/** Длины перехода на выбор — те же ступени, что предлагают монтажки. */
+const TRANSITION_LENGTHS = [0.3, 0.5, 1] as const;
 
 const TRANSITION_TITLES: Record<TimelineTransition, string> = {
   cut: 'Встык',
@@ -107,7 +115,9 @@ export type ClipTimelineProps = {
   onDuplicateClip: (clipId: string) => void;
   onRemoveClip: (clipId: string) => void;
   onSplitClip: (clipId: string, atSec: number) => void;
-  onTransition: (clipId: string, transition: TimelineTransition) => void;
+  onTransition: (clipId: string, transition: TimelineTransition, durationSec?: number) => void;
+  /** Придвигает клип вплотную к предыдущему: без стыка переход невозможен. */
+  onSnapToPrevious: (clipId: string) => void;
   onAddTrack: () => void;
   onRemoveTrack: (trackIndex: number) => void;
   onPatchTrack: (trackIndex: number, patch: { hidden?: boolean; muted?: boolean }) => void;
@@ -133,6 +143,7 @@ export function ClipTimeline({
   onRemoveClip,
   onSplitClip,
   onTransition,
+  onSnapToPrevious,
   onAddTrack,
   onRemoveTrack,
   onPatchTrack,
@@ -150,7 +161,7 @@ export function ClipTimeline({
   // значило бы засыпать историю правок и слать автосохранение без остановки.
   const [drag, setDrag] = useState<{ clipId: string; startSec: number; trackIndex: number } | null>(null);
   const [trim, setTrim] = useState<{ clipId: string; edge: 'start' | 'end'; deltaSec: number } | null>(null);
-  const [menuClipId, setMenuClipId] = useState<string | null>(null);
+  const [menuJointId, setMenuJointId] = useState<string | null>(null);
 
   const laneWidth = Math.max(320, (total + 4) * pxPerSec);
   const secToPx = useCallback((sec: number) => sec * pxPerSec, [pxPerSec]);
@@ -181,7 +192,133 @@ export function ClipTimeline({
     [onSeek, pointerSec],
   );
 
-  /** Точки, к которым клип прилипает: края соседей, ноль и курсор. */
+  /**
+ * Плашка стыка двух клипов.
+ *
+ * Переход возможен только там, где кадры стоят вплотную: наложить далеко стоящие клипы
+ * значило бы молча стереть кусок ролика. Поэтому у паузы плашки перехода нет — вместо неё
+ * кнопка «придвинуть вплотную», которая объясняет, чего не хватает.
+ *
+ * Когда переход стоит, наложение видно полосой: это и есть те секунды, в которые один кадр
+ * растворяется в другом, и на шкале они занимают ровно столько же, сколько в готовом файле.
+ */
+function JointMark({
+  prevClip,
+  jointPx,
+  overlapPx,
+  overlapSec,
+  gapSec,
+  open,
+  onToggle,
+  onPick,
+  onSnap,
+}: {
+  prevClip: TimelineClip;
+  jointPx: number;
+  overlapPx: number;
+  overlapSec: number;
+  gapSec: number;
+  open: boolean;
+  onToggle: () => void;
+  onPick: (transition: TimelineTransition, durationSec: number) => void;
+  onSnap: () => void;
+}) {
+  const active = overlapSec > 0.01 && prevClip.transition !== 'cut';
+  const apart = gapSec > JOINT_TOLERANCE_SEC;
+
+  if (apart) {
+    return (
+      <button
+        type="button"
+        onClick={onSnap}
+        title="Между клипами пауза — переход невозможен. Нажмите, чтобы придвинуть вплотную"
+        aria-label="Придвинуть клип вплотную"
+        className="absolute top-1/2 z-20 grid h-5 w-5 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-dashed border-slate-600 bg-slate-950 text-slate-500 transition hover:border-slate-400 hover:text-slate-200"
+        style={{ left: jointPx }}
+      >
+        <ChevronsLeftRight className="h-2.5 w-2.5" />
+      </button>
+    );
+  }
+
+  return (
+    <>
+      {active && overlapPx > 2 && (
+        <span
+          className="pointer-events-none absolute inset-y-1 z-10 rounded-sm border border-amber-400/50 bg-[repeating-linear-gradient(45deg,rgba(251,191,36,0.25)_0_4px,transparent_4px_8px)]"
+          style={{ left: jointPx - overlapPx / 2, width: overlapPx }}
+        />
+      )}
+
+      <button
+        type="button"
+        onClick={onToggle}
+        title={`Переход: ${TRANSITION_TITLES[prevClip.transition]}${active ? ` · ${overlapSec.toFixed(1)}с` : ''}`}
+        aria-label="Переход между клипами"
+        className={cn(
+          'absolute top-1/2 z-20 flex h-5 -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full border px-1.5 text-[10px] transition',
+          active
+            ? 'border-amber-400/70 bg-slate-950 text-amber-300'
+            : 'border-slate-600 bg-slate-950 text-slate-500 hover:border-slate-400 hover:text-slate-200',
+        )}
+        style={{ left: jointPx }}
+      >
+        <ArrowLeftRight className="h-2.5 w-2.5" />
+        {active && <span className="font-mono">{overlapSec.toFixed(1)}с</span>}
+      </button>
+
+      {open && (
+        <div
+          className="absolute bottom-full z-40 mb-2 w-52 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-1.5 shadow-xl"
+          style={{ left: jointPx }}
+        >
+          <div className="px-1 pb-1 text-[10px] uppercase tracking-wide text-slate-500">Переход</div>
+          {TRANSITION_ORDER.map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => onPick(option, overlapSec > 0.01 ? overlapSec : DEFAULT_TRANSITION_SEC)}
+              className={cn(
+                'block w-full rounded px-2 py-1.5 text-left text-xs transition',
+                prevClip.transition === option ? 'bg-amber-400/15 text-amber-200' : 'text-slate-300 hover:bg-slate-800',
+              )}
+            >
+              {TRANSITION_TITLES[option]}
+              {option === 'cut' && <span className="ml-1 text-slate-500">— без перехода</span>}
+            </button>
+          ))}
+
+          <div className="mt-1 border-t border-slate-800 pt-1.5">
+            <div className="px-1 pb-1 text-[10px] uppercase tracking-wide text-slate-500">Длительность</div>
+            <div className="flex gap-1 px-1">
+              {TRANSITION_LENGTHS.map((length) => (
+                <button
+                  key={length}
+                  type="button"
+                  disabled={prevClip.transition === 'cut'}
+                  onClick={() => onPick(prevClip.transition, length)}
+                  className={cn(
+                    'flex-1 rounded border px-1 py-1 text-[11px] transition disabled:opacity-40',
+                    Math.abs(overlapSec - length) < 0.05
+                      ? 'border-amber-400/70 text-amber-200'
+                      : 'border-slate-700 text-slate-400 hover:border-slate-500',
+                  )}
+                >
+                  {length}с
+                </button>
+              ))}
+            </div>
+            <p className="px-1 pt-1.5 text-[10px] leading-4 text-slate-500">
+              Переход — это наложение: ролик станет короче на его длину.
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Точки, к которым клип прилипает: края соседей, ноль и курсор. */
   const snapPoints = useMemo(() => {
     const points = new Set<number>([0, Number(time.toFixed(3))]);
     for (const track of tracks) {
@@ -282,10 +419,15 @@ export function ClipTimeline({
         row = drag.trackIndex;
       }
       if (trim?.clipId === clip.id) {
-        if (trim.edge === 'end') durationSec = Math.max(0.2, clip.durationSec + trim.deltaSec);
-        else {
+        if (trim.edge === 'end') {
+          const limit = clipSourceLimitSec(clip);
+          const wanted = Math.max(0.2, clip.durationSec + trim.deltaSec);
+          durationSec = limit === null ? wanted : Math.min(wanted, limit);
+        } else {
           const end = clipEndSec(clip);
-          startSec = Math.min(end - 0.2, Math.max(0, clip.startSec + trim.deltaSec));
+          const headRoom = clipHeadRoomSec(clip);
+          const earliest = headRoom === null ? 0 : Math.max(0, clip.startSec - headRoom);
+          startSec = Math.min(end - 0.2, Math.max(earliest, clip.startSec + trim.deltaSec));
           durationSec = end - startSec;
         }
       }
@@ -412,7 +554,6 @@ export function ClipTimeline({
                   const shown = shownClip(clip, trackIndex);
                   if (shown.row !== trackIndex) return null;
                   const selected = clip.id === selectedClipId;
-                  const next = sortedClips(track)[position + 1];
                   return (
                     <ClipBlock
                       key={clip.id}
@@ -420,13 +561,6 @@ export function ClipTimeline({
                       left={secToPx(shown.startSec)}
                       width={Math.max(14, secToPx(shown.durationSec))}
                       selected={selected}
-                      showTransition={trackIndex === 0 && Boolean(next)}
-                      menuOpen={menuClipId === clip.id}
-                      onToggleMenu={() => setMenuClipId((current) => (current === clip.id ? null : clip.id))}
-                      onTransition={(value) => {
-                        onTransition(clip.id, value);
-                        setMenuClipId(null);
-                      }}
                       onPointerDown={(event) => beginClipDrag(event, clip, trackIndex)}
                       onTrimStart={(event) => beginTrim(event, clip, 'start')}
                       onTrimEnd={(event) => beginTrim(event, clip, 'end')}
@@ -437,6 +571,36 @@ export function ClipTimeline({
                     />
                   );
                 })}
+                {/*
+                  * Стыки живут отдельным слоем поверх клипов: переход принадлежит ПАРЕ
+                  * кадров, а не одному из них, и рисовать его на краю клипа значило бы
+                  * показывать половину стыка при наложении.
+                  */}
+                {trackIndex === 0 && !drag && !trim && sortedClips(track).slice(0, -1).map((clip, position) => {
+                  const nextClip = sortedClips(track)[position + 1];
+                  const jointSec = (clipEndSec(clip) + nextClip.startSec) / 2;
+                  const overlapSec = Math.max(0, clipEndSec(clip) - nextClip.startSec);
+                  const gapSec = Math.max(0, nextClip.startSec - clipEndSec(clip));
+                  const jointId = `${clip.id}->${nextClip.id}`;
+                  return (
+                    <JointMark
+                      key={jointId}
+                      prevClip={clip}
+                      jointPx={secToPx(jointSec)}
+                      overlapPx={secToPx(overlapSec)}
+                      overlapSec={overlapSec}
+                      gapSec={gapSec}
+                      open={menuJointId === jointId}
+                      onToggle={() => setMenuJointId((current) => (current === jointId ? null : jointId))}
+                      onPick={(value, durationSec) => {
+                        onTransition(clip.id, value, durationSec);
+                        setMenuJointId(null);
+                      }}
+                      onSnap={() => onSnapToPrevious(nextClip.id)}
+                    />
+                  );
+                })}
+
                 {/* Клип, который тянут на ЭТУ дорожку с другой: он должен быть виден здесь. */}
                 {drag && drag.trackIndex === trackIndex
                   && !track.clips.some((clip) => clip.id === drag.clipId)
@@ -503,11 +667,7 @@ function ClipBlock({
   left,
   width,
   selected,
-  showTransition,
-  menuOpen,
   splitAvailable,
-  onToggleMenu,
-  onTransition,
   onPointerDown,
   onTrimStart,
   onTrimEnd,
@@ -519,11 +679,7 @@ function ClipBlock({
   left: number;
   width: number;
   selected: boolean;
-  showTransition: boolean;
-  menuOpen: boolean;
   splitAvailable: boolean;
-  onToggleMenu: () => void;
-  onTransition: (value: TimelineTransition) => void;
   onPointerDown: (event: React.PointerEvent) => void;
   onTrimStart: (event: React.PointerEvent) => void;
   onTrimEnd: (event: React.PointerEvent) => void;
@@ -602,42 +758,6 @@ function ClipBlock({
         </div>
       )}
 
-      {showTransition && (
-        <div className="absolute -right-2.5 inset-y-0 z-20">
-          <button
-            type="button"
-            onClick={onToggleMenu}
-            title={`Переход: ${TRANSITION_TITLES[clip.transition]}`}
-            aria-label="Переход к следующему клипу"
-            className={cn(
-              'absolute top-1/2 grid h-5 w-5 -translate-y-1/2 place-items-center rounded-full border transition',
-              clip.transition === 'cut'
-                ? 'border-slate-600 bg-slate-900 text-slate-500 hover:text-slate-200'
-                : 'border-amber-400/70 bg-slate-950 text-amber-300',
-            )}
-          >
-            <Scissors className="h-2.5 w-2.5" />
-          </button>
-          {menuOpen && (
-            <div className="absolute bottom-full left-1/2 z-40 mb-2 w-44 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-1 shadow-xl">
-              {TRANSITION_ORDER.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => onTransition(option)}
-                  className={cn(
-                    'block w-full rounded px-2 py-1.5 text-left text-xs transition',
-                    clip.transition === option ? 'bg-amber-400/15 text-amber-200' : 'text-slate-300 hover:bg-slate-800',
-                  )}
-                >
-                  {TRANSITION_TITLES[option]}
-                  {option === 'cut' && <span className="ml-1 text-slate-500">— без перехода</span>}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
