@@ -16,6 +16,7 @@ import {
   RotateCcw,
   Sparkles,
   Type,
+  SlidersHorizontal,
   Undo2,
 } from 'lucide-react';
 import {
@@ -151,6 +152,14 @@ export function VideoEditor({ id }: { id: string }) {
   const [tool, setTool] = useState<ToolCode>('media');
   // Внутри инструмента ИИ две подвкладки: сама генерация и её результаты.
   const [aiTab, setAiTab] = useState<EditorAiTab>('generate');
+  /**
+   * Открытый лист настроек на телефоне.
+   *
+   * Отдельно от выбранного инструмента: на большом экране панель видна всегда, а на
+   * телефоне она появляется только по нажатию и перекрывает шкалу, поэтому закрывать её
+   * надо уметь, не меняя выбранный инструмент.
+   */
+  const [mobileSheet, setMobileSheet] = useState<ToolCode | 'clip' | null>(null);
   const [hintOpen, setHintOpen] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -1074,7 +1083,7 @@ export function VideoEditor({ id }: { id: string }) {
   ];
 
   return (
-    <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col lg:h-dvh lg:overflow-hidden">
+    <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden lg:h-dvh">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-2 lg:px-4">
         <Link
           href="/editor"
@@ -1207,16 +1216,49 @@ export function VideoEditor({ id }: { id: string }) {
         />
       ) : (
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        {/* Лента инструментов. На узком экране становится горизонтальной строкой. */}
-        <nav className="order-1 flex shrink-0 gap-2 overflow-x-auto border-b border-slate-800 p-2 lg:order-none lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r">
+        {/*
+         * Лента инструментов.
+         *
+         * На телефоне это закреплённая полоса у нижнего края, как в монтажках: кадр сверху,
+         * под ним шкала, инструменты под большим пальцем. Нажатие открывает лист с
+         * настройками поверх — панель не вклинивается между кадром и шкалой и не уводит
+         * рабочую область за пределы экрана.
+         */}
+        <nav className={cn(
+          'fixed inset-x-0 bottom-0 z-40 flex shrink-0 gap-2 overflow-x-auto border-t border-slate-800 bg-slate-950/95 p-2 backdrop-blur',
+          'lg:static lg:z-auto lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-r lg:border-t-0 lg:bg-transparent lg:backdrop-blur-none',
+        )}>
+          {/*
+            * Настройки на телефоне тоже живут в листе. Кнопка одна и меняет смысл по
+            * выделению: выделен клип — его настройки, ничего не выделено — настройки ролика.
+            * Иначе формат кадра на телефоне было бы негде поменять.
+            */}
+          <button
+            type="button"
+            onClick={() => setMobileSheet((current) => (current === 'clip' ? null : 'clip'))}
+            className={cn(
+              'flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-[11px] font-medium transition lg:hidden',
+              mobileSheet === 'clip'
+                ? 'border-amber-400 bg-amber-400/10 text-amber-200'
+                : 'border-slate-800 bg-slate-900/60 text-slate-400',
+            )}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {selectedClip ? 'Клип' : 'Ролик'}
+          </button>
           {TOOLS.map((item) => (
             <button
               key={item.code}
               type="button"
-              onClick={() => setTool(item.code)}
+              onClick={() => {
+                setTool(item.code);
+                // Повторное нажатие по открытому инструменту закрывает лист — так быстрее
+                // вернуться к шкале, чем искать крестик.
+                setMobileSheet((current) => (current === item.code ? null : item.code));
+              }}
               className={cn(
                 'flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-[11px] font-medium transition lg:w-full',
-                tool === item.code
+                tool === item.code && (mobileSheet === item.code || mobileSheet === null)
                   ? 'border-amber-400 bg-amber-400/10 text-amber-200'
                   : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200',
               )}
@@ -1227,11 +1269,26 @@ export function VideoEditor({ id }: { id: string }) {
           ))}
         </nav>
 
+        {/* Подложка листа: клик мимо закрывает, как у любой шторки. */}
+        {mobileSheet && (
+          <button
+            type="button"
+            aria-label="Закрыть панель"
+            onClick={() => setMobileSheet(null)}
+            className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          />
+        )}
+
         {/*
          * Панель инструмента стоит сбоку, а не под холстом: иначе она вклинивается между
          * кадром и шкалой, и рабочая область уезжает на два экрана вниз.
          */}
-        <section className="order-3 shrink-0 overflow-y-auto border-b border-slate-800 p-3 lg:order-none lg:w-[330px] lg:border-b-0 lg:border-r">
+        <section className={cn(
+          'shrink-0 overflow-y-auto p-3',
+          'fixed inset-x-0 bottom-[68px] z-40 max-h-[54dvh] rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/60 transition-transform duration-200',
+          mobileSheet && mobileSheet !== 'clip' ? 'translate-y-0' : 'pointer-events-none translate-y-[120%]',
+          'lg:pointer-events-auto lg:static lg:z-auto lg:max-h-none lg:w-[330px] lg:translate-y-0 lg:rounded-none lg:border-0 lg:border-r lg:border-slate-800 lg:shadow-none',
+        )}>
           <ToolBar
             tool={tool}
             aiTab={aiTab}
@@ -1295,7 +1352,7 @@ export function VideoEditor({ id }: { id: string }) {
           />
         </section>
 
-        <main className="order-2 flex h-[46dvh] min-h-0 min-w-0 shrink-0 flex-col gap-2 p-3 lg:order-none lg:h-auto lg:flex-1">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3">
           <EditorStage
             className="min-h-0 flex-1"
             generationOverlay={generationOverlay}
@@ -1314,7 +1371,12 @@ export function VideoEditor({ id }: { id: string }) {
           </p>
         </main>
 
-        <aside className="order-4 shrink-0 space-y-3 overflow-y-auto border-t border-slate-800 p-3 lg:order-none lg:w-[330px] lg:border-l lg:border-t-0">
+        <aside className={cn(
+          'shrink-0 space-y-3 overflow-y-auto p-3',
+          'fixed inset-x-0 bottom-[68px] z-40 max-h-[54dvh] rounded-t-2xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/60 transition-transform duration-200',
+          mobileSheet === 'clip' ? 'translate-y-0' : 'pointer-events-none translate-y-[120%]',
+          'lg:pointer-events-auto lg:static lg:z-auto lg:max-h-none lg:w-[330px] lg:translate-y-0 lg:rounded-none lg:border-0 lg:border-l lg:border-slate-800 lg:shadow-none',
+        )}>
           <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
             {selectedClip ? (
               <ClipInspector
@@ -1351,7 +1413,7 @@ export function VideoEditor({ id }: { id: string }) {
        * звучит реплика, и всё это можно подвинуть, а не гадать по числам в настройках.
        */}
       {!showExportScreen && (
-      <footer className="shrink-0 border-t border-slate-800 bg-slate-950/80 px-3 py-2 lg:px-4">
+      <footer className="shrink-0 border-t border-slate-800 bg-slate-950/80 px-3 pb-[76px] pt-2 lg:px-4 lg:pb-2">
         <ClipTimeline
           timeline={timeline}
           tracks={tracks}

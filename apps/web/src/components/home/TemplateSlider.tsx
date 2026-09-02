@@ -14,33 +14,33 @@ function mediaUrl(value?: string | null) {
   return value;
 }
 
-/** Доля ширины, после которой отпускание листает, а не возвращает слайд на место. */
-const COMMIT_RATIO = 0.22;
+/** Доля ширины, после которой отпускание докручивает карусель, а не возвращает её назад. */
+const COMMIT_RATIO = 0.18;
 /** Длительность доводки после отпускания — столько же живёт CSS-переход. */
-const SETTLE_MS = 300;
+const SETTLE_MS = 340;
+/** Сколько соседей держим по каждую сторону: дальше карточки всё равно за краем экрана. */
+const NEIGHBOURS = 2;
 
 /**
- * Слайдер готовых шаблонов.
+ * Карусель готовых шаблонов.
  *
- * Листание сделано перекрёстным затуханием, привязанным к пальцу: чем дальше протянули,
- * тем сильнее проявляется соседний слайд и тем прозрачнее становится текущий. Раньше лента
- * просто сдвигалась целиком на несколько десятков пикселей — жест был, а ощущения листания
- * не возникало: ничего не появлялось и не исчезало.
+ * Ключевое здесь — непрерывность. У каждой карточки есть позиция относительно центра
+ * (−2, −1, 0, 1, 2), к которой во время жеста прибавляется дробный сдвиг пальца. Из этой
+ * ОДНОЙ величины считается всё: смещение, масштаб, прозрачность и обесцвечивание. Поэтому
+ * при медленной протяжке соседняя карточка не «переключается», а едет к центру, набирая
+ * цвет и размер, — лента вращается, а не мигает.
  *
- * Отпускание либо доводит начатое до конца, либо возвращает слайд на место — решает
- * пройденная доля ширины, а не абсолютные пиксели: на телефоне и на широком мониторе
- * «половина экрана» должна значить одно и то же.
- *
- * Стрелок нет намеренно: соседние слайды видны по краям и кликабельны, этого достаточно,
- * чтобы понять, что лента продолжается.
+ * Прежняя версия растворяла центральную карточку в соседней на месте: жест был, а ощущения
+ * прокрутки не возникало — ничего никуда не ехало.
  */
 export function TemplateSlider({ services }: { services: PublicService[] }) {
   const [index, setIndex] = useState(0);
   const [soundOn, setSoundOn] = useState(false);
-  /** −1 — тянем влево (проявляется следующий), +1 — вправо (предыдущий). */
+  /** Дробный сдвиг ленты в карточках: −1 — ушли на одну вправо, +1 — влево. */
   const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState<'idle' | 'drag' | 'settle'>('idle');
-  const dragRef = useRef<{ startX: number } | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [width, setWidth] = useState(0);
+  const dragRef = useRef<{ startX: number; moved: boolean } | null>(null);
   const boxRef = useRef<HTMLDivElement | null>(null);
   const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -50,25 +50,34 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
     setIndex(0);
   }, [total]);
 
+  // Ширина нужна и для перевода пикселей жеста в доли карточки, и для раскладки соседей.
+  useEffect(() => {
+    const node = boxRef.current;
+    if (!node) return;
+    const update = () => setWidth(node.clientWidth);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => () => {
     if (settleRef.current) clearTimeout(settleRef.current);
   }, []);
 
   /**
-   * Доводка: сначала докручиваем затухание до конца, и только потом меняем активный слайд.
+   * Доводка: сначала докручиваем ленту до соседней карточки, и только потом меняем индекс.
    *
-   * Если поменять индекс сразу, новый слайд появится с полной непрозрачностью — вместо
-   * плавного проявления получится скачок.
+   * Если поменять индекс сразу, лента прыгнет: карточка окажется в центре без движения.
    */
   const settle = useCallback(
     (direction: -1 | 0 | 1) => {
       if (settleRef.current) clearTimeout(settleRef.current);
-      setPhase('settle');
-      setProgress(direction === 0 ? 0 : direction > 0 ? -1 : 1);
+      setDragging(false);
+      setProgress(direction);
       settleRef.current = setTimeout(() => {
         if (direction !== 0) setIndex((current) => ((current + direction) % total + total) % total);
         setProgress(0);
-        setPhase('idle');
       }, SETTLE_MS);
     },
     [total],
@@ -76,27 +85,24 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
 
   if (total === 0) return null;
 
-  const active = services[index];
-  const prev = services[(index - 1 + total) % total];
-  const next = services[(index + 1) % total];
-
-  const shift = Math.abs(progress);
-  // Кто проявляется: тянем влево — следующий, вправо — предыдущий.
-  const incoming = progress < 0 ? next : prev;
-  const showIncoming = shift > 0.002 && total > 1;
+  // Карточка шириной чуть больше половины ленты: соседи должны заглядывать с обеих сторон.
+  const cardWidth = Math.min(520, Math.max(220, width * 0.62));
+  const step = cardWidth * 0.78;
 
   const beginDrag = (clientX: number) => {
     if (settleRef.current) clearTimeout(settleRef.current);
-    dragRef.current = { startX: clientX };
-    setPhase('drag');
+    dragRef.current = { startX: clientX, moved: false };
+    setDragging(true);
   };
 
   const moveDrag = (clientX: number) => {
     const drag = dragRef.current;
     if (!drag) return;
-    const width = boxRef.current?.clientWidth ?? 1;
-    const delta = (clientX - drag.startX) / Math.max(1, width);
-    setProgress(Math.max(-1, Math.min(1, delta)));
+    const deltaPx = clientX - drag.startX;
+    if (Math.abs(deltaPx) > 4) drag.moved = true;
+    // Жест меряем в карточках, а не в пикселях: на телефоне и на мониторе «одна карточка»
+    // должна означать одно и то же расстояние пальца.
+    setProgress(Math.max(-1.2, Math.min(1.2, deltaPx / step)));
   };
 
   const endDrag = () => {
@@ -110,14 +116,17 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
     settle(progress < 0 ? 1 : -1);
   };
 
-  /** Клик по соседнему слайду листает — но только если это был именно клик, а не протяжка. */
-  const clickSide = (direction: -1 | 1) => {
-    if (Math.abs(progress) > 0.01) return;
-    settle(direction);
-  };
+  const dragged = () => Math.abs(progress) > 0.02;
 
-  const animate = phase !== 'drag';
-  const transition = animate ? `opacity ${SETTLE_MS}ms ease-out, transform ${SETTLE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none';
+  /** Видимые карточки: центральная плюс соседи. Индексы закольцованы. */
+  const slots = [] as Array<{ service: PublicService; slot: number; key: string }>;
+  const span = Math.min(NEIGHBOURS, Math.max(0, Math.floor((total - 1) / 2)));
+  for (let slot = -span; slot <= span; slot += 1) {
+    const serviceIndex = ((index + slot) % total + total) % total;
+    slots.push({ service: services[serviceIndex], slot, key: `${serviceIndex}-${slot}` });
+  }
+
+  const transition = dragging ? 'none' : `transform ${SETTLE_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${SETTLE_MS}ms ease-out, filter ${SETTLE_MS}ms ease-out`;
 
   return (
     <div className="relative select-none">
@@ -125,7 +134,9 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
       <div className="pointer-events-none absolute inset-x-0 -top-10 mx-auto h-64 max-w-3xl rounded-[100%] bg-amber-400/10 blur-[90px]" />
 
       <div
-        className="relative flex touch-pan-y items-center justify-center gap-3"
+        ref={boxRef}
+        className="relative touch-pan-y overflow-hidden"
+        style={{ height: cardWidth * 0.72 }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture?.(event.pointerId);
           beginDrag(event.clientX);
@@ -137,54 +148,41 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
           settle(0);
         }}
       >
-        <SideSlide
-          service={prev}
-          side="left"
-          onClick={() => clickSide(-1)}
-          // Слайд, который вот-вот встанет в центр, по дороге растворяется.
-          fade={progress > 0 ? shift : 0}
-        />
-
-        <div ref={boxRef} className="relative w-full max-w-[520px] shrink-0">
-          <div className="relative aspect-[4/5] sm:aspect-[16/11]">
-            {showIncoming && (
-              <SlideCard
-                key={`incoming-${incoming.id}`}
-                service={incoming}
-                muted
-                dragging={phase === 'drag'}
-                style={{
-                  opacity: shift,
-                  transform: `translateX(${(1 - shift) * (progress < 0 ? 12 : -12)}%) scale(${0.94 + shift * 0.06})`,
-                  transition,
-                }}
-              />
-            )}
-
-            <SlideCard
-              key={`active-${active.id}`}
-              service={active}
-              muted={!soundOn}
-              dragging={phase === 'drag'}
-              interactive
-              soundOn={soundOn}
-              onToggleSound={() => setSoundOn((value) => !value)}
-              blockLink={Math.abs(progress) > 0.01}
+        {slots.map(({ service, slot, key }) => {
+          // Одна величина на всё: и положение, и размер, и цвет.
+          const position = slot - progress;
+          const distance = Math.abs(position);
+          const centered = distance < 0.5;
+          return (
+            <div
+              key={key}
+              className="absolute left-1/2 top-1/2"
               style={{
-                opacity: 1 - shift,
-                transform: `translateX(${progress * 12}%) scale(${1 - shift * 0.06})`,
+                width: cardWidth,
+                height: cardWidth * 0.68,
+                transform: `translate(-50%, -50%) translateX(${position * step}px) scale(${Math.max(0.68, 1 - distance * 0.16)})`,
+                // Дальние карточки уходят в тень и обесцвечиваются — центр всегда читается первым.
+                opacity: Math.max(0, 1 - distance * 0.42),
+                filter: `brightness(${Math.max(0.35, 1 - distance * 0.5)}) saturate(${Math.max(0.25, 1 - distance * 0.6)})`,
+                zIndex: 10 - Math.round(distance * 10),
                 transition,
               }}
-            />
-          </div>
-        </div>
-
-        <SideSlide
-          service={next}
-          side="right"
-          onClick={() => clickSide(1)}
-          fade={progress < 0 ? shift : 0}
-        />
+            >
+              <SlideCard
+                service={service}
+                centered={centered}
+                soundOn={soundOn}
+                dragging={dragging}
+                onToggleSound={() => setSoundOn((value) => !value)}
+                onSideClick={() => {
+                  if (dragged()) return;
+                  settle(position > 0 ? 1 : -1);
+                }}
+                blockLink={dragged()}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div className="mt-4 flex justify-center gap-1.5">
@@ -195,7 +193,7 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
             onClick={() => {
               if (settleRef.current) clearTimeout(settleRef.current);
               setProgress(0);
-              setPhase('idle');
+              setDragging(false);
               setIndex(dotIndex);
             }}
             aria-label={`Шаблон ${dotIndex + 1}`}
@@ -210,40 +208,44 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
   );
 }
 
-/** Карточка слайда. Лежит в общем боксе абсолютом, поэтому слайды могут накладываться. */
+/**
+ * Карточка ленты.
+ *
+ * Кнопка звука и ссылка есть только у центральной: на боковой они бы ловили клики, которыми
+ * ленту листают.
+ */
 function SlideCard({
   service,
-  muted,
+  centered,
+  soundOn,
   dragging,
-  interactive = false,
-  soundOn = false,
   onToggleSound,
-  blockLink = false,
-  style,
+  onSideClick,
+  blockLink,
 }: {
   service: PublicService;
-  muted: boolean;
+  centered: boolean;
+  soundOn: boolean;
   dragging: boolean;
-  /** Только у активного слайда есть звук и ссылка: у проявляющегося они бы мешали. */
-  interactive?: boolean;
-  soundOn?: boolean;
-  onToggleSound?: () => void;
-  blockLink?: boolean;
-  style: React.CSSProperties;
+  onToggleSound: () => void;
+  onSideClick: () => void;
+  blockLink: boolean;
 }) {
   return (
     <div
+      onClick={centered ? undefined : onSideClick}
       className={cn(
-        'absolute inset-0 overflow-hidden rounded-2xl border border-amber-300/30 bg-slate-950',
-        'shadow-[0_0_60px_-12px_rgba(251,191,36,0.35)]',
-        !dragging && interactive && 'hover:shadow-[0_0_80px_-10px_rgba(251,191,36,0.5)]',
+        'relative h-full w-full overflow-hidden rounded-2xl border bg-slate-950',
+        centered
+          ? 'border-amber-300/40 shadow-[0_0_60px_-12px_rgba(251,191,36,0.35)]'
+          : 'cursor-pointer border-white/10',
+        !dragging && centered && 'transition-shadow hover:shadow-[0_0_80px_-10px_rgba(251,191,36,0.5)]',
       )}
-      style={style}
     >
-      <SlideMedia service={service} muted={muted} playing />
+      <SlideMedia service={service} muted={!centered || !soundOn} playing={centered} />
       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-transparent" />
 
-      {interactive && (
+      {centered && (
         <button
           type="button"
           onClick={onToggleSound}
@@ -257,11 +259,11 @@ function SlideCard({
       <div className="absolute inset-x-0 bottom-0 p-4">
         <h3 className="text-lg font-bold text-white drop-shadow sm:text-xl">{service.title}</h3>
         <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{service.shortDesc}</p>
-        {interactive && (
+        {centered && (
           <Link
             href={`/services/${service.slug}`}
-            // Ссылку открываем только по настоящему клику: иначе свайп, начатый
-            // с карточки, уводил бы со страницы.
+            // Ссылку открываем только по настоящему клику: иначе свайп, начатый с карточки,
+            // уводил бы со страницы.
             onClick={(event) => {
               if (blockLink) event.preventDefault();
             }}
@@ -273,40 +275,6 @@ function SlideCard({
         )}
       </div>
     </div>
-  );
-}
-
-/** Боковой слайд: уменьшенный, растворяется к краю и листает ленту по клику. */
-function SideSlide({
-  service,
-  side,
-  onClick,
-  fade,
-}: {
-  service: PublicService;
-  side: 'left' | 'right';
-  onClick: () => void;
-  /** 0..1 — насколько слайд уже «уехал» в центр во время протяжки. */
-  fade: number;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={side === 'left' ? 'Предыдущий шаблон' : 'Следующий шаблон'}
-      className="relative hidden h-[220px] w-[180px] shrink-0 overflow-hidden rounded-xl border border-white/10 transition hover:opacity-70 lg:block"
-      style={{ opacity: 0.45 * (1 - fade) }}
-    >
-      <SlideMedia service={service} muted playing={false} />
-      <div
-        className={cn(
-          'absolute inset-0',
-          side === 'left'
-            ? 'bg-gradient-to-r from-slate-950 via-slate-950/40 to-transparent'
-            : 'bg-gradient-to-l from-slate-950 via-slate-950/40 to-transparent',
-        )}
-      />
-    </button>
   );
 }
 
@@ -324,7 +292,7 @@ function SlideMedia({ service, muted, playing }: { service: PublicService; muted
         loop
         playsInline
         draggable={false}
-        // Боковые слайды не грузим целиком: на главной их два, и трафик ни к чему.
+        // Боковые карточки целиком не грузим: их на экране несколько, и трафик ни к чему.
         preload={playing ? 'auto' : 'metadata'}
         className="pointer-events-none absolute inset-0 h-full w-full object-cover"
       />
