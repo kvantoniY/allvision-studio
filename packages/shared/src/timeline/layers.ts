@@ -78,6 +78,14 @@ export const mediaLayerSchema = z.object({
   trimEndSec: z.number().min(0).max(3600).optional(),
   muted: z.boolean().default(false),
   volume: z.number().min(0).max(2).default(1),
+  /**
+   * Скорость воспроизведения видео. 1 — как снято, 2 — вдвое быстрее, 0.5 — вдвое медленнее.
+   *
+   * Границы взяты из того, что ffmpeg умеет без артефактов: звук ускоряется фильтром atempo,
+   * а он работает в пределах вдвое за проход, поэтому 0.25 и 4 — это две ступени подряд.
+   * Дальше видео рассыпается на кадры, а голос перестаёт быть голосом.
+   */
+  speed: z.number().min(0.25).max(4).default(1),
   /** Скругление углов в долях меньшей стороны рамки — для коллажей. */
   cornerRadius: z.number().min(0).max(0.5).default(0),
   /** Откуда слой взялся: нужно интерфейсу, на рендер не влияет. */
@@ -179,6 +187,21 @@ export function sceneWithLayers(scene: TimelineScene): TimelineScene {
     trimStartSec: undefined,
     trimEndSec: undefined,
   };
+}
+
+/** Границы скорости — те же, что в схеме: за ними ffmpeg перестаёт справляться со звуком. */
+export const LAYER_SPEED_LIMITS = { min: 0.25, max: 4 } as const;
+
+/**
+ * Скорость слоя с оглядкой на старые ролики.
+ *
+ * У роликов, записанных до появления скорости, поля нет вовсе, а через схему проходит не
+ * каждый прочитанный слой. Поэтому единственное место, где скорость превращается в число.
+ */
+export function layerSpeed(layer: SceneLayer | undefined | null): number {
+  const value = layer && layer.kind === 'media' ? layer.speed : undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 1;
+  return Math.min(LAYER_SPEED_LIMITS.max, Math.max(LAYER_SPEED_LIMITS.min, value));
 }
 
 /** Медиа-слои сцены в порядке отрисовки (снизу вверх). */

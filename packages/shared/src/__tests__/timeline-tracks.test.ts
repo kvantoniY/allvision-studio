@@ -135,6 +135,60 @@ describe('flattenTracks', () => {
   });
 });
 
+describe('скорость клипа', () => {
+  function videoClip(id: string, startSec: number, durationSec: number, speed: number, trimStartSec = 0): TimelineClip {
+    const base = clip(id, startSec, durationSec);
+    return {
+      ...base,
+      layer: {
+        ...(base.layer as MediaLayer),
+        source: { kind: 'video', url: `https://example.ru/${id}.mp4` },
+        speed,
+        trimStartSec,
+        trimEndSec: trimStartSec + durationSec * speed,
+      },
+    } as TimelineClip;
+  }
+
+  it('ускоренный клип занимает на дорожке столько, сколько поставили', () => {
+    const scenes = flattenTracks([track('main', [videoClip('a', 0, 4, 2)])]);
+    expect(scenes[0].durationSec).toBe(4);
+    // Четыре секунды экрана при двойной скорости — восемь секунд записи.
+    const layer = sceneLayers(scenes[0])[0] as MediaLayer;
+    expect(layer.trimEndSec! - layer.trimStartSec!).toBeCloseTo(8, 3);
+  });
+
+  it('разрез ускоренного клипа приходится на нужную секунду файла', () => {
+    // Клип поверх стыка основной дорожки режется на две сцены; вторая обязана продолжить
+    // файл с той секунды, где кончилась первая, — с поправкой на скорость.
+    const scenes = flattenTracks([
+      track('main', [clip('a', 0, 2), clip('b', 2, 2)]),
+      track('over', [videoClip('v', 0, 4, 2)]),
+    ]);
+    const first = sceneLayers(scenes[0]).find((layer) => layer.id === 'v_layer') as MediaLayer;
+    const second = sceneLayers(scenes[1]).find((layer) => layer.id === 'v_layer') as MediaLayer;
+    expect(first.trimEndSec).toBeCloseTo(4, 3);
+    expect(second.trimStartSec).toBeCloseTo(4, 3);
+    expect(second.trimEndSec).toBeCloseTo(8, 3);
+  });
+
+  it('замедленный клип растягивает тот же кусок записи', () => {
+    const scenes = flattenTracks([track('main', [videoClip('a', 0, 6, 0.5)])]);
+    const layer = sceneLayers(scenes[0])[0] as MediaLayer;
+    expect(scenes[0].durationSec).toBe(6);
+    expect(layer.trimEndSec! - layer.trimStartSec!).toBeCloseTo(3, 3);
+  });
+
+  it('ролик из ускоренных клипов считает длительность по шкале, а не по файлу', () => {
+    const timeline = parseTimeline({
+      version: 1,
+      aspect: '9:16',
+      tracks: [track('main', [videoClip('a', 0, 4, 2), videoClip('b', 4, 4, 0.5)])],
+    });
+    expect(timelineDurationSec(timeline)).toBeCloseTo(8, 3);
+  });
+});
+
 describe('clipTransitionSec', () => {
   it('без наложения перехода нет', () => {
     expect(clipTransitionSec(clip('a', 0, 3, { transition: 'dissolve' }), clip('b', 3, 3))).toBe(0);

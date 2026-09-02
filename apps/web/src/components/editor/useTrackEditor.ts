@@ -2,9 +2,11 @@
 
 import { useCallback, useMemo } from 'react';
 import {
+  LAYER_SPEED_LIMITS,
   TIMELINE_LIMITS,
   TRACK_LIMITS,
   clipEndSec,
+  layerSpeed,
   newMediaLayer,
   newTextLayer,
   sortedClips,
@@ -253,13 +255,15 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
       if (!found) return;
       const { clip } = found;
       const isVideo = clip.layer.kind === 'media' && clip.layer.source.kind === 'video';
+      // Ручку тянут по секундам ролика, а обрезка живёт в секундах записи.
+      const speed = clip.layer.kind === 'media' ? layerSpeed(clip.layer) : 1;
 
       if (edge === 'end') {
         const durationSec = clampDuration(clip.durationSec + deltaSec);
         const patch: Partial<TimelineClip> = { durationSec };
         if (isVideo && clip.layer.kind === 'media') {
           const trimStart = clip.layer.trimStartSec ?? 0;
-          patchClipLayer(clipId, { trimStartSec: trimStart, trimEndSec: trimStart + durationSec } as Partial<SceneLayer>);
+          patchClipLayer(clipId, { trimStartSec: trimStart, trimEndSec: trimStart + durationSec * speed } as Partial<SceneLayer>);
         }
         patchClip(clipId, patch);
         return;
@@ -271,8 +275,8 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
       const durationSec = clampDuration(end - rawStart);
       const startSec = Number((end - durationSec).toFixed(3));
       if (isVideo && clip.layer.kind === 'media') {
-        const trimStart = Math.max(0, (clip.layer.trimStartSec ?? 0) + (startSec - clip.startSec));
-        patchClipLayer(clipId, { trimStartSec: trimStart, trimEndSec: trimStart + durationSec } as Partial<SceneLayer>);
+        const trimStart = Math.max(0, (clip.layer.trimStartSec ?? 0) + (startSec - clip.startSec) * speed);
+        patchClipLayer(clipId, { trimStartSec: trimStart, trimEndSec: trimStart + durationSec * speed } as Partial<SceneLayer>);
       }
       patchClip(clipId, { startSec, durationSec });
     },
@@ -330,6 +334,9 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
 
       const isVideo = clip.layer.kind === 'media' && clip.layer.source.kind === 'video';
       const trimStart = isVideo && clip.layer.kind === 'media' ? clip.layer.trimStartSec ?? 0 : 0;
+      // Разрез на дорожке приходится на другую секунду файла, если клип ускорен.
+      const speed = clip.layer.kind === 'media' ? layerSpeed(clip.layer) : 1;
+      const sourceOffset = offset * speed;
       const tailId = uid('clip');
 
       mapTrack(found.trackIndex, (item) => ({
@@ -340,7 +347,7 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
             ...current,
             durationSec: Number(offset.toFixed(3)),
             layer: isVideo && current.layer.kind === 'media'
-              ? { ...current.layer, trimStartSec: trimStart, trimEndSec: trimStart + offset }
+              ? { ...current.layer, trimStartSec: trimStart, trimEndSec: trimStart + sourceOffset }
               : current.layer,
           };
           const tail: TimelineClip = {
@@ -354,7 +361,7 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
               id: uid('layer'),
               generationProjectId: undefined,
               ...(isVideo
-                ? { trimStartSec: trimStart + offset, trimEndSec: trimStart + current.durationSec }
+                ? { trimStartSec: trimStart + sourceOffset, trimEndSec: trimStart + current.durationSec * speed }
                 : {}),
             } as SceneLayer,
           };
@@ -364,6 +371,38 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
       return tailId;
     },
     [locate, tracks, mapTrack],
+  );
+
+  /**
+   * Скорость клипа.
+   *
+   * Кусок записи остаётся тем же — меняется только то, за сколько он проигрывается,
+   * поэтому клип на дорожке становится короче или длиннее. Так это работает в любой
+   * монтажке: ускорил вдвое — занял вдвое меньше места.
+   */
+  const setClipSpeed = useCallback(
+    (clipId: string, speed: number) => {
+      const found = locate(clipId);
+      if (!found) return;
+      const { clip } = found;
+      if (clip.layer.kind !== 'media') return;
+      const next = Math.min(LAYER_SPEED_LIMITS.max, Math.max(LAYER_SPEED_LIMITS.min, speed));
+      const current = layerSpeed(clip.layer);
+      if (Math.abs(next - current) < 0.001) return;
+
+      const durationSec = clampDuration((clip.durationSec * current) / next);
+      patchClipLayer(clipId, { speed: next } as Partial<SceneLayer>);
+      if (clip.layer.source.kind === 'video') {
+        const trimStart = clip.layer.trimStartSec ?? 0;
+        patchClipLayer(clipId, {
+          speed: next,
+          trimStartSec: trimStart,
+          trimEndSec: trimStart + durationSec * next,
+        } as Partial<SceneLayer>);
+      }
+      patchClip(clipId, { durationSec });
+    },
+    [locate, patchClip, patchClipLayer],
   );
 
   const setTransition = useCallback(
@@ -443,6 +482,7 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
     patchLayerById,
     moveClip,
     trimClip,
+    setClipSpeed,
     removeClip,
     duplicateClip,
     splitClip,

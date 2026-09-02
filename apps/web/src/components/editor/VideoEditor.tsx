@@ -27,6 +27,7 @@ import {
   collageBoxes,
   createTimelineHistory,
   formatTimelineDuration,
+  layerSpeed,
   pushTimelineHistory,
   redoTimeline,
   sceneAtTime,
@@ -1091,6 +1092,7 @@ export function VideoEditor({ id }: { id: string }) {
                 onPatchLayer={(patch) => ops.patchClipLayer(selectedClip.id, patch as Partial<SceneLayer>)}
                 onReplaceFile={() => pickFileFor(selectedClip.id)}
                 onTransition={(value) => ops.setTransition(selectedClip.id, value)}
+                onSpeed={(value) => ops.setClipSpeed(selectedClip.id, value)}
                 onSplit={() => {
                   const tailId = ops.splitClip(selectedClip.id, playback.time);
                   if (tailId) setSelectedClipId(tailId);
@@ -1363,6 +1365,9 @@ function ToolBar({
   ) : null;
 }
 
+/** Ступени скорости: те же, что в любой монтажке, и все укладываются в границы ffmpeg. */
+const CLIP_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 4] as const;
+
 const TRANSITION_LABELS: Array<{ code: TimelineTransition; label: string }> = [
   { code: 'cut', label: 'Встык' },
   { code: 'dissolve', label: 'Растворение' },
@@ -1383,6 +1388,7 @@ function ClipInspector({
   onPatchLayer,
   onReplaceFile,
   onTransition,
+  onSpeed,
   onSplit,
   onRemove,
 }: {
@@ -1392,9 +1398,11 @@ function ClipInspector({
   onPatchLayer: (patch: LayerPatch) => void;
   onReplaceFile: () => void;
   onTransition: (value: TimelineTransition) => void;
+  onSpeed: (value: number) => void;
   onSplit: () => void;
   onRemove: () => void;
 }) {
+  const speed = layerSpeed(clip.layer);
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
@@ -1432,6 +1440,33 @@ function ClipInspector({
           />
         </label>
       </div>
+
+      {clip.layer.kind === 'media' && clip.layer.source.kind === 'video' && (
+        <div className="space-y-1.5">
+          <Label className="text-xs">Скорость</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {CLIP_SPEEDS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => onSpeed(value)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs transition',
+                  Math.abs(speed - value) < 0.001
+                    ? 'border-amber-400 bg-amber-400/15 text-amber-200'
+                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
+                )}
+              >
+                {value}×
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Кусок записи остаётся тем же — меняется, за сколько он проигрывается, поэтому
+            клип на дорожке станет короче или длиннее. Звук ускоряется вместе с картинкой.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label className="text-xs">Переход к следующему клипу</Label>

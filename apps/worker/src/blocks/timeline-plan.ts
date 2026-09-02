@@ -6,6 +6,7 @@ import {
   timelineTimings,
   timelineDurationSec,
   layerRect,
+  layerSpeed,
   type MediaLayer,
   type Timeline,
   type TimelineNamedAudioTrack,
@@ -91,6 +92,29 @@ function boxRect(layer: MediaLayer, width: number, height: number) {
 }
 
 /**
+ * Ускорение звука.
+ *
+ * atempo меняет темп не больше чем вдвое за проход, поэтому крайние значения набираются
+ * двумя ступенями. Именно из этого взяты границы скорости 0.25–4: дальше пришлось бы
+ * городить третью ступень, а голос к тому моменту уже перестаёт быть голосом.
+ */
+function atempoStages(speed: number): string[] {
+  if (Math.abs(speed - 1) < 0.001) return [];
+  const stages: string[] = [];
+  let rest = speed;
+  while (rest > 2.001) {
+    stages.push('atempo=2.0');
+    rest /= 2;
+  }
+  while (rest < 0.499) {
+    stages.push('atempo=0.5');
+    rest *= 2;
+  }
+  stages.push(`atempo=${fixed(rest, 4)}`);
+  return stages;
+}
+
+/**
  * Цепочка подготовки одного слоя: обрезка источника, вписывание в рамку, поворот.
  *
  * cover заполняет рамку и срезает лишнее, contain вписывает целиком — то же различие,
@@ -98,6 +122,12 @@ function boxRect(layer: MediaLayer, width: number, height: number) {
  */
 function layerFilter(input: LayerInput, box: { w: number; h: number }, durationSec: number, photoMotion: boolean): string {
   const stages: string[] = [];
+  const speed = layerSpeed(input.layer);
+  if (input.kind === 'video' && Math.abs(speed - 1) >= 0.001) {
+    // Кадры не выбрасываем и не дублируем — только пересчитываем метки времени;
+    // ровный fps ниже приводит результат к частоте ролика.
+    stages.push(`setpts=${fixed(1 / speed, 5)}*PTS`);
+  }
   const crop = input.layer.crop;
   if (crop && (crop.x > 0 || crop.y > 0 || crop.w < 1 || crop.h < 1)) {
     stages.push(`crop=iw*${fixed(crop.w)}:ih*${fixed(crop.h)}:iw*${fixed(crop.x)}:ih*${fixed(crop.y)}`);
@@ -173,7 +203,7 @@ export function planScene(input: {
     if (item.kind === 'video') {
       const trimStart = item.layer.trimStartSec ?? 0;
       if (trimStart > 0) args.push('-ss', fixed(trimStart));
-      args.push('-t', fixed(durationSec), '-i', item.path ?? '');
+      args.push('-t', fixed(durationSec * layerSpeed(item.layer)), '-i', item.path ?? '');
     } else if (item.kind === 'image') {
       args.push('-loop', '1', '-t', fixed(durationSec), '-i', item.path ?? '');
     } else {
@@ -231,9 +261,13 @@ export function planScene(input: {
     const labels: string[] = [];
     audioLayers.forEach(({ item, inputIndex }, position) => {
       const label = `la${position}`;
-      chain.push(
-        `[${inputIndex}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,volume=${fixed(item.layer.volume, 2)}[${label}]`,
-      );
+      const stages = [
+        'aresample=48000',
+        'aformat=sample_fmts=fltp:channel_layouts=stereo',
+        ...atempoStages(layerSpeed(item.layer)),
+        `volume=${fixed(item.layer.volume, 2)}`,
+      ];
+      chain.push(`[${inputIndex}:a]${stages.join(',')}[${label}]`);
       labels.push(label);
     });
     if (labels.length === 1) {

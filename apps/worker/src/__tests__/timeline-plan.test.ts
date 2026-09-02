@@ -49,6 +49,34 @@ function scenePlan(layers: LayerInput[], sceneOverrides: Record<string, unknown>
   });
 }
 
+describe('planScene: скорость слоя', () => {
+  it('ускоренный слой читает из файла пропорционально больше и сжимает метки времени', () => {
+    const plan = scenePlan([layerInput({ speed: 2, trimStartSec: 1 })], { durationSec: 4 });
+    // Первый -t принадлежит подложке, поэтому смотрим тот, что стоит у самого файла.
+    const fileIndex = plan.args.indexOf('/tmp/clip.mp4');
+    // Четыре секунды экрана при двойной скорости — восемь секунд записи.
+    expect(plan.args[fileIndex - 2]).toBe('8.000');
+    expect(argAfter(plan.args, '-ss')).toBe('1.000');
+    expect(filterGraph(plan.args)).toContain('setpts=0.50000*PTS');
+  });
+
+  it('звук ускоряется вместе с картинкой, иначе разъедется с губами', () => {
+    const graph = filterGraph(scenePlan([layerInput({ speed: 2 })]).args);
+    expect(graph).toContain('atempo=2.0000');
+  });
+
+  it('крайняя скорость набирается двумя ступенями atempo', () => {
+    const graph = filterGraph(scenePlan([layerInput({ speed: 0.25 })]).args);
+    expect(graph.match(/atempo=0.5/g)?.length).toBe(2);
+  });
+
+  it('обычный слой команду не меняет', () => {
+    const graph = filterGraph(scenePlan([layerInput()]).args);
+    expect(graph).not.toContain('setpts=');
+    expect(graph).not.toContain('atempo=');
+  });
+});
+
 describe('planScene', () => {
   it('always starts from a full-frame background so layers have a stable base', () => {
     const plan = scenePlan([layerInput()]);

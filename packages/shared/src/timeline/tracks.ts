@@ -8,6 +8,7 @@ import {
 } from './types';
 import {
   FULL_FRAME_BOX,
+  layerSpeed,
   mediaLayerSchema,
   sceneLayerSchema,
   sceneLayers,
@@ -122,12 +123,17 @@ function withTiming(layer: SceneLayer, startSec: number, endSec: number, segment
  * У видео сдвигается и обрезка: если подпись или вставка попала на стык основной дорожки,
  * её придётся разрезать на две сцены, и вторая половина обязана начинаться с той же секунды
  * файла, на которой закончилась первая. Иначе видео на стыке дёрнется в начало.
+ *
+ * Обрезка считается в секундах ФАЙЛА, а окно — в секундах ролика, поэтому ускоренный клип
+ * съедает пропорционально больше исходника: секунда на дорожке при скорости 2 — это две
+ * секунды записи.
  */
 function sliceLayer(layer: SceneLayer, offsetSec: number, lengthSec: number): SceneLayer {
   if (layer.kind !== 'media' || layer.source.kind !== 'video') return layer;
   const media = layer as MediaLayer;
-  const trimStart = (media.trimStartSec ?? 0) + Math.max(0, offsetSec);
-  return { ...media, trimStartSec: trimStart, trimEndSec: trimStart + lengthSec };
+  const speed = layerSpeed(media);
+  const trimStart = (media.trimStartSec ?? 0) + Math.max(0, offsetSec) * speed;
+  return { ...media, trimStartSec: trimStart, trimEndSec: trimStart + lengthSec * speed };
 }
 
 type Segment = { startSec: number; endSec: number; clip: TimelineClip | null };

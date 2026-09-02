@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Text, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import {
+  layerSpeed,
   layoutOverlay,
   sceneLayers,
   timelineResolution,
@@ -95,7 +96,11 @@ export function SceneCanvas({
       const video = media.element as HTMLVideoElement;
       video.muted = layer.muted || !playing;
       video.volume = Math.min(1, layer.volume);
-      const expected = (layer.trimStartSec ?? 0) + sceneTimeSec;
+      // Скорость слоя браузер отыгрывает сам, но время в файле всё равно считаем мы:
+      // при скорости 2 секунда сцены — это две секунды записи.
+      const speed = layerSpeed(layer);
+      video.playbackRate = speed;
+      const expected = (layer.trimStartSec ?? 0) + sceneTimeSec * speed;
       // Подтягиваем время только при заметном расхождении: браузер не перематывает
       // по кадрам, и постоянная коррекция выглядит как дёрганье.
       if (Math.abs(video.currentTime - expected) > 0.35) {

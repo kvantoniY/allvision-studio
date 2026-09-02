@@ -5,7 +5,7 @@ import {
   type TimelineScene,
   type TimelineTextOverlay,
 } from './types';
-import { primaryMediaLayer, sceneLayers, sceneWithLayers, type SceneLayer } from './layers';
+import { layerSpeed, primaryMediaLayer, sceneLayers, sceneWithLayers, type SceneLayer } from './layers';
 import { timelineScenes, timelineTracks, type TimelineClip, type TimelineTrack } from './tracks';
 
 export type TimelineResolution = { width: number; height: number };
@@ -44,7 +44,8 @@ export function sceneDurationSec(scene: TimelineScene): number {
     const start = primary.trimStartSec ?? 0;
     const end = primary.trimEndSec;
     if (typeof end === 'number' && end > start) {
-      return clampSceneDuration(end - start);
+      // Обрезка задана в секундах файла: ускоренный кусок занимает на экране меньше.
+      return clampSceneDuration((end - start) / layerSpeed(primary));
     }
   }
   if (typeof scene.durationSec === 'number' && scene.durationSec > 0) {
@@ -153,8 +154,9 @@ export function sourceTimeAt(timeline: Timeline, sceneIndex: number, seconds: nu
   const timing = timelineTimings(timeline)[sceneIndex];
   if (!timing) return 0;
   const primary = primaryMediaLayer(timing.scene);
-  const trimStart = primary?.source.kind === 'video' ? primary.trimStartSec ?? 0 : 0;
-  return trimStart + Math.max(0, seconds - timing.startSec);
+  if (primary?.source.kind !== 'video') return 0;
+  const trimStart = primary.trimStartSec ?? 0;
+  return trimStart + Math.max(0, seconds - timing.startSec) * layerSpeed(primary);
 }
 
 export type OverlayTiming = {
