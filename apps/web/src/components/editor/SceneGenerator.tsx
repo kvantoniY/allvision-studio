@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ImageIcon, Loader2, Plus, Settings2, Sparkles, Video, Wand2, X } from 'lucide-react';
+import { ImageIcon, Loader2, Plus, Settings2, Video, Wand2, X } from 'lucide-react';
 import {
   CHAT_MODELS,
   chatReferenceSlots,
@@ -16,7 +16,6 @@ import {
   type TimelineScene,
 } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useGetChatModelsQuery } from '@/store/api/user-chat-api';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
@@ -78,6 +77,7 @@ export function SceneGenerator({
   balance,
   running,
   selectedLayer,
+  tab = 'generate',
   onUploadReference,
   onGenerate,
   onRunService,
@@ -89,6 +89,13 @@ export function SceneGenerator({
   running: boolean;
   /** Выделенный на холсте медиа-слой: он же по умолчанию и референс, и место результата. */
   selectedLayer: MediaLayer | null;
+  /**
+   * Что показываем: форму генерации или подборку готовых услуг.
+   *
+   * Раньше услуги висели прямо в форме и съедали половину панели, из-за чего собственная
+   * генерация не помещалась на экран. Это два разных занятия, и вкладка честнее.
+   */
+  tab?: 'generate' | 'services';
   /** Загружает файл и возвращает публичную ссылку — тот же путь, что у материала сцены. */
   onUploadReference: (file: File) => Promise<string | null>;
   onGenerate: (request: SceneGenerationRequest) => void;
@@ -246,126 +253,147 @@ export function SceneGenerator({
     );
   }
 
-  return (
-    <section className="space-y-4 rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-violet-300" />
-        <h3 className="font-semibold text-slate-100">Сгенерировать нейросетью</h3>
-      </div>
+  // Одна строка вместо трёх блоков: что за референс и сколько их принимает модель.
+  const captionParts: string[] = [];
+  if (reference) {
+    captionParts.push(activeChoice === 'selected' ? 'Референс — выделенный слой' : 'Референс — главный кадр сцены');
+  } else if (slots.length === 0) {
+    captionParts.push('Референса нет — генерация по одному описанию');
+  }
+  if (slots.length > 1) {
+    captionParts.push(`модель принимает ${slots.length} референса`);
+  }
 
-      <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/40 p-2.5">
-        <div className="flex items-start gap-3">
-          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-slate-700 bg-slate-900">
-            {reference?.source.url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={mediaUrl(reference.source.url) ?? ''} alt="" className="h-full w-full object-cover" />
-            ) : (
+  if (tab === 'services') {
+    return (
+      <section className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+        <ServiceIdeaCards onOpenService={setOpenService} runningSlug={runningServiceSlug ?? null} />
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+      {/*
+       * Референсы — одной строкой квадратов. Главный кадр и слоты модели отвечают на один
+       * и тот же вопрос «от чего считаем», и разводить их по двум блокам с заголовками
+       * значило выталкивать саму форму за нижний край панели.
+       */}
+      <div className="space-y-1.5">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          {reference && (
+            <button
+              type="button"
+              onClick={() => setRefChoice('none')}
+              title="Убрать референс"
+              className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-violet-400"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={mediaUrl(reference.source.url ?? '') ?? ''} alt="" className="h-full w-full object-cover" />
+              <span className="absolute right-0.5 top-0.5 grid h-4 w-4 place-items-center rounded-full bg-slate-950/80 text-slate-200">
+                <X className="h-3 w-3" />
+              </span>
+            </button>
+          )}
+
+          {extraSlots.map((slot) => {
+            const ref = slotRefs[slot.key];
+            return (
               <button
+                key={slot.key}
                 type="button"
                 onClick={() => {
-                  // Прикрепляем в первый слот изображения: у моделей без слотов он же и есть
-                  // единственный вход, поэтому кнопка работает одинаково везде.
-                  const firstImage = slots.find((slot) => slot.mediaKind === 'image');
-                  pendingSlotRef.current = firstImage?.key ?? 'main';
+                  if (ref) {
+                    setSlotRefs((current) => {
+                      const next = { ...current };
+                      delete next[slot.key];
+                      return next;
+                    });
+                    return;
+                  }
+                  pendingSlotRef.current = slot.key;
                   fileInputRef.current?.click();
                 }}
-                title="Прикрепить файл-референс"
-                className="grid h-full w-full place-items-center gap-0.5 text-[10px] text-slate-500 transition hover:text-slate-300"
+                title={ref ? `Убрать: ${slot.label}` : `Прикрепить: ${slot.label}`}
+                className={cn(
+                  'relative h-14 w-14 shrink-0 overflow-hidden rounded-lg border text-[10px] transition',
+                  ref ? 'border-violet-400' : 'border-dashed border-slate-700 text-slate-500 hover:border-slate-500',
+                )}
               >
-                <Plus className="h-3.5 w-3.5" />
-                файл
+                {slotBusy === slot.key ? (
+                  <Loader2 className="mx-auto h-4 w-4 animate-spin text-violet-300" />
+                ) : ref ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={mediaUrl(ref) ?? ''} alt="" className="h-full w-full object-cover" />
+                    <span className="absolute right-0.5 top-0.5 grid h-4 w-4 place-items-center rounded-full bg-slate-950/80 text-slate-200">
+                      <X className="h-3 w-3" />
+                    </span>
+                  </>
+                ) : (
+                  <span className="flex h-full flex-col items-center justify-center gap-0.5 px-1 leading-tight">
+                    <Plus className="h-3.5 w-3.5" />
+                    {slot.label}
+                    {slot.required && <span className="text-amber-300">обяз.</span>}
+                  </span>
+                )}
               </button>
-            )}
-          </div>
-          <div className="min-w-0 text-xs leading-5 text-slate-400">
-            {reference ? (
-              <>
-                <span className="text-slate-200">
-                  {activeChoice === 'selected' ? 'Референс: выделенный слой' : 'Референс: главный кадр сцены'}
-                </span>
-                <br />
-                Нейросеть оживит именно этот кадр.
-              </>
-            ) : (
-              'Референса нет — генерация пойдёт по одному описанию.'
-            )}
-          </div>
+            );
+          })}
+
+          {/* Модель без слотов всё равно должна принимать файл: иначе прикрепить нечем. */}
+          {!reference && slots.length === 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                pendingSlotRef.current = 'main';
+                fileInputRef.current?.click();
+              }}
+              title="Прикрепить файл-референс"
+              className="grid h-14 w-14 shrink-0 place-items-center gap-0.5 rounded-lg border border-dashed border-slate-700 text-[10px] text-slate-500 transition hover:border-slate-500"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              файл
+            </button>
+          )}
         </div>
 
-        {(selectedRef || sceneRef) && (
-          <div className="flex flex-wrap gap-1.5">
+        {captionParts.length > 0 && (
+          <p className="text-[11px] leading-4 text-slate-500">{captionParts.join(' · ')}</p>
+        )}
+
+        {/* Чипы выбора стоят там же, где сами референсы: это уточнение к строке выше. */}
+        {(selectedRef || sceneRef || selectedLayer) && (
+          <div className="flex flex-wrap items-center gap-1">
             {selectedRef && (
               <ChoiceChip active={activeChoice === 'selected'} onClick={() => setRefChoice('selected')}>
-                Выделенный слой
+                Выделенный
               </ChoiceChip>
             )}
             {sceneRef && (
               <ChoiceChip active={activeChoice === 'scene'} onClick={() => setRefChoice('scene')}>
-                Главный кадр сцены
+                Кадр сцены
               </ChoiceChip>
             )}
-            <ChoiceChip active={activeChoice === 'none'} onClick={() => setRefChoice('none')}>
-              Без референса
-            </ChoiceChip>
+            {(selectedRef || sceneRef) && (
+              <ChoiceChip active={activeChoice === 'none'} onClick={() => setRefChoice('none')}>
+                Без референса
+              </ChoiceChip>
+            )}
+            {selectedLayer && (
+              <>
+                <span className="mx-0.5 text-[11px] text-slate-600">→</span>
+                <ChoiceChip active={target === 'new'} onClick={() => setTarget('new')}>
+                  Новым слоем
+                </ChoiceChip>
+                <ChoiceChip active={target === 'selected'} onClick={() => setTarget('selected')}>
+                  Заменить
+                </ChoiceChip>
+              </>
+            )}
           </div>
         )}
       </div>
-
-      {extraSlots.length > 0 && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Ещё референсы для модели</Label>
-          <div className="flex flex-wrap gap-2">
-            {extraSlots.map((slot) => {
-              const ref = slotRefs[slot.key];
-              return (
-                <button
-                  key={slot.key}
-                  type="button"
-                  onClick={() => {
-                    if (ref) {
-                      setSlotRefs((current) => {
-                        const next = { ...current };
-                        delete next[slot.key];
-                        return next;
-                      });
-                      return;
-                    }
-                    pendingSlotRef.current = slot.key;
-                    fileInputRef.current?.click();
-                  }}
-                  title={ref ? 'Убрать референс' : `Прикрепить: ${slot.label}`}
-                  className={cn(
-                    'relative h-16 w-16 overflow-hidden rounded-lg border text-[10px] transition',
-                    ref ? 'border-violet-400' : 'border-dashed border-slate-700 text-slate-500 hover:border-slate-500',
-                  )}
-                >
-                  {slotBusy === slot.key ? (
-                    <Loader2 className="mx-auto h-4 w-4 animate-spin text-violet-300" />
-                  ) : ref ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={mediaUrl(ref) ?? ''} alt="" className="h-full w-full object-cover" />
-                      <span className="absolute right-0.5 top-0.5 grid h-4 w-4 place-items-center rounded-full bg-slate-950/80 text-slate-200">
-                        <X className="h-3 w-3" />
-                      </span>
-                    </>
-                  ) : (
-                    <span className="flex h-full flex-col items-center justify-center gap-1 px-1">
-                      <Plus className="h-3.5 w-3.5" />
-                      {slot.label}
-                      {slot.required && <span className="text-amber-300">обяз.</span>}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[11px] text-slate-500">
-            Модель принимает {slots.length} референс{slots.length > 4 ? 'ов' : slots.length > 1 ? 'а' : ''}:
-            например, объединить два фото в один кадр.
-          </p>
-        </div>
-      )}
 
       <input
         ref={fileInputRef}
@@ -385,122 +413,96 @@ export function SceneGenerator({
         }}
       />
 
-      {selectedLayer && (
-        <div className="space-y-1.5">
-          <Label className="text-xs">Куда положить результат</Label>
-          <div className="flex flex-wrap gap-1.5">
-            <ChoiceChip active={target === 'new'} onClick={() => setTarget('new')}>
-              Новый слой поверх
-            </ChoiceChip>
-            <ChoiceChip active={target === 'selected'} onClick={() => setTarget('selected')}>
-              Заменить выделенный
-            </ChoiceChip>
-          </div>
-        </div>
-      )}
-
-      {/* Подборка услуг вместо прежних шаблонов сцен: владелец собирает её прямо здесь. */}
-      <div className="border-t border-slate-800 pt-3">
-        <ServiceIdeaCards onOpenService={setOpenService} runningSlug={runningServiceSlug ?? null} />
-      </div>
-
-      <div className="sticky bottom-0 -mx-4 -mb-4 space-y-3 border-t border-violet-500/30 bg-slate-950/95 px-4 pb-4 pt-3 backdrop-blur">
       <div className="space-y-2">
-        <Label className="text-xs" htmlFor="scene-prompt">
-          Описание сцены
-        </Label>
         <Textarea
           id="scene-prompt"
           value={prompt}
           onChange={(event) => {
             setPrompt(event.target.value);
           }}
-          rows={3}
+          rows={2}
           placeholder="Что должно происходить в кадре"
           className="text-sm"
         />
-      </div>
 
-      <div className="flex gap-1.5">
-        {([
-          { code: 'image', title: 'Фото', icon: ImageIcon },
-          { code: 'video', title: 'Видео', icon: Video },
-        ] as const).map((option) => (
-          <button
-            key={option.code}
-            type="button"
-            onClick={() => {
-              setCategory(option.code);
-              setModelSlug(null);
-            }}
-            className={cn(
-              'flex h-9 flex-1 items-center justify-center gap-1.5 rounded-md border text-sm transition',
-              category === option.code
-                ? 'border-violet-400 bg-violet-500/20 text-violet-100'
-                : 'border-slate-700 text-slate-300 hover:border-slate-500',
-            )}
-          >
-            <option.icon className="h-3.5 w-3.5" />
-            {option.title}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-2">
-        <label className="text-xs text-slate-400">
-          Модель
-          <div className="mt-1 flex gap-1.5">
-            <select
-              value={model?.slug ?? ''}
-              onChange={(event) => setModelSlug(event.target.value)}
-              className="h-9 min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
-            >
-              {models.map((item) => (
-                <option key={item.slug} value={item.slug}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
+        {/*
+         * Категория, модель и настройки — одной строкой. Тремя блоками с подписями они
+         * занимали половину панели, хотя выбор в каждом короткий.
+         */}
+        <div className="flex items-center gap-1.5">
+          {([
+            { code: 'image', title: 'Фото', icon: ImageIcon },
+            { code: 'video', title: 'Видео', icon: Video },
+          ] as const).map((option) => (
             <button
+              key={option.code}
               type="button"
-              onClick={() => setAdvancedOpen(true)}
-              disabled={advancedSections.length === 0}
-              title={advancedSections.length === 0 ? 'У этой модели нет дополнительных настроек' : 'Расширенные настройки'}
-              aria-label="Расширенные настройки"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-700 text-slate-300 transition hover:border-violet-400 hover:text-white disabled:opacity-40"
+              onClick={() => {
+                setCategory(option.code);
+                setModelSlug(null);
+              }}
+              title={option.title}
+              aria-label={option.title}
+              className={cn(
+                'grid h-9 w-9 shrink-0 place-items-center rounded-md border transition',
+                category === option.code
+                  ? 'border-violet-400 bg-violet-500/20 text-violet-100'
+                  : 'border-slate-700 text-slate-400 hover:border-slate-500',
+              )}
             >
-              <Settings2 className="h-4 w-4" />
+              <option.icon className="h-4 w-4" />
             </button>
-          </div>
-        </label>
+          ))}
+
+          <select
+            value={model?.slug ?? ''}
+            onChange={(event) => setModelSlug(event.target.value)}
+            aria-label="Модель"
+            className="h-9 min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 text-sm text-slate-100"
+          >
+            {models.map((item) => (
+              <option key={item.slug} value={item.slug}>
+                {item.title}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen(true)}
+            disabled={advancedSections.length === 0}
+            title={advancedSections.length === 0 ? 'У этой модели нет дополнительных настроек' : 'Расширенные настройки'}
+            aria-label="Расширенные настройки"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-slate-700 text-slate-300 transition hover:border-violet-400 hover:text-white disabled:opacity-40"
+          >
+            <Settings2 className="h-4 w-4" />
+          </button>
+        </div>
 
         {isVideo && (
-          <label className="text-xs text-slate-400">
-            Длительность
-            <div className="mt-1 flex gap-1.5">
-              {DURATION_OPTIONS.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => setDuration(option)}
-                  className={cn(
-                    'h-9 flex-1 rounded-md border text-sm transition',
-                    duration === option
-                      ? 'border-violet-400 bg-violet-500/20 text-violet-100'
-                      : 'border-slate-700 text-slate-300 hover:border-slate-500',
-                  )}
-                >
-                  {option}с
-                </button>
-              ))}
-            </div>
-          </label>
+          <div className="flex items-center gap-1.5">
+            <span className="shrink-0 text-[11px] text-slate-500">Длина</span>
+            {DURATION_OPTIONS.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setDuration(option)}
+                className={cn(
+                  'h-8 flex-1 rounded-md border text-xs transition',
+                  duration === option
+                    ? 'border-violet-400 bg-violet-500/20 text-violet-100'
+                    : 'border-slate-700 text-slate-300 hover:border-slate-500',
+                )}
+              >
+                {option}с
+              </button>
+            ))}
+          </div>
         )}
-      </div>
 
-      <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
+          className="w-full"
           disabled={!canGenerate}
           onClick={() =>
             model &&
@@ -519,13 +521,13 @@ export function SceneGenerator({
           }
         >
           {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-          {running ? 'Генерируем…' : `Сгенерировать за ${formatTokens(price)}`}
+          {running ? 'Генерируем…' : <>Сгенерировать за {formatTokens(price)}</>}
         </Button>
+
         {missingSlot && (
-          <span className="text-xs text-amber-300">Прикрепите «{missingSlot.label}» — без него модель не запустится</span>
+          <p className="text-[11px] text-amber-300">Прикрепите «{missingSlot.label}» — без него модель не запустится</p>
         )}
-        {!enoughCoins && <span className="text-xs text-amber-300">Не хватает токенов на балансе</span>}
-      </div>
+        {!enoughCoins && <p className="text-[11px] text-amber-300">Не хватает токенов на балансе</p>}
       </div>
 
       {advancedOpen && model && typeof document !== 'undefined' && createPortal((

@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import dynamic from 'next/dynamic';
-import { Pause, Play, RotateCcw } from 'lucide-react';
+import { Maximize2, Minimize2, Pause, Play, RotateCcw } from 'lucide-react';
 import {
   formatTimelineDuration,
   sceneAtTime,
@@ -77,6 +78,9 @@ export function EditorStage({
   playback: Playback;
   className?: string;
 }) {
+  // На весь экран — единственный способ разглядеть кадр на телефоне, где превью
+  // приходится держать небольшим, чтобы шкала и настройки оставались доступны.
+  const [fullscreen, setFullscreen] = useState(false);
   const timings = useMemo(() => timelineTimings(timeline), [timeline]);
   const total = useMemo(() => timelineDurationSec(timeline), [timeline]);
 
@@ -125,6 +129,16 @@ export function EditorStage({
     [timings, time, playing],
   );
 
+  // Из полного экрана выходят Esc — это ожидаемо везде, где что-то развернули.
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
+
   const scenes = timelineScenes(timeline);
   const shownScene = scenes[shownIndex];
   const incomingScene = incomingIndex === null ? null : scenes[incomingIndex];
@@ -136,10 +150,12 @@ export function EditorStage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, frame?.activeIndex]);
 
-  return (
-    <div className={cn('flex min-h-0 flex-col gap-3', className)}>
+  const body = (
+    <div className={cn('flex min-h-0 flex-col gap-3', fullscreen ? 'h-full p-3' : className)}>
       {/* Кадр забирает всю свободную высоту, транспорт остаётся на месте. */}
-      <div className="relative min-h-0 flex-1">
+      {/* overflow-hidden обязателен: холст считает размер сам и на узком экране мог
+          вылезти за свою колонку, накрыв шкалу. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         {shownScene && (
           <SceneCanvas
             key={`scene-${shownIndex}`}
@@ -190,7 +206,7 @@ export function EditorStage({
         })}
       </div>
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <button
           type="button"
           onClick={toggle}
@@ -222,10 +238,30 @@ export function EditorStage({
           aria-label="Позиция в ролике"
           className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 accent-amber-400"
         />
-        <span className="shrink-0 font-mono text-xs text-slate-400">
+        <span className="hidden shrink-0 font-mono text-xs text-slate-400 sm:inline">
           {formatTimelineDuration(time)} / {formatTimelineDuration(total)}
         </span>
+        <button
+          type="button"
+          onClick={() => setFullscreen((current) => !current)}
+          aria-label={fullscreen ? 'Выйти из полноэкранного режима' : 'Во весь экран'}
+          title={fullscreen ? 'Выйти из полноэкранного режима' : 'Во весь экран'}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
+        >
+          {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </button>
       </div>
     </div>
   );
+
+  if (!fullscreen) return body;
+
+  // Портал, а не CSS: холст должен вырваться из колонки редактора со всеми её
+  // ограничениями по высоте, иначе «во весь экран» покажет тот же маленький кадр.
+  return typeof document === 'undefined'
+    ? body
+    : createPortal(
+        <div className="fixed inset-0 z-[140] bg-slate-950">{body}</div>,
+        document.body,
+      );
 }

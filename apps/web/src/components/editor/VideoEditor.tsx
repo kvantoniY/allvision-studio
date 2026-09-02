@@ -140,7 +140,7 @@ export function VideoEditor({ id }: { id: string }) {
   const [activeTrackIndex, setActiveTrackIndex] = useState(0);
   const [tool, setTool] = useState<ToolCode>('media');
   // Внутри инструмента ИИ две подвкладки: сама генерация и её результаты.
-  const [aiTab, setAiTab] = useState<'generate' | 'library'>('generate');
+  const [aiTab, setAiTab] = useState<EditorAiTab>('generate');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [exportId, setExportId] = useState<string | null>(null);
   const [showExportScreen, setShowExportScreen] = useState(false);
@@ -856,7 +856,7 @@ export function VideoEditor({ id }: { id: string }) {
   ];
 
   return (
-    <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden md:h-dvh">
+    <div className="flex min-h-[calc(100dvh-3.5rem)] flex-col lg:h-dvh lg:overflow-hidden">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-2 lg:px-4">
         <Link
           href="/editor"
@@ -972,7 +972,7 @@ export function VideoEditor({ id }: { id: string }) {
       ) : (
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         {/* Лента инструментов. На узком экране становится горизонтальной строкой. */}
-        <nav className="flex shrink-0 gap-2 overflow-x-auto border-b border-slate-800 p-2 lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r">
+        <nav className="order-1 flex shrink-0 gap-2 overflow-x-auto border-b border-slate-800 p-2 lg:order-none lg:w-[76px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r">
           {TOOLS.map((item) => (
             <button
               key={item.code}
@@ -995,12 +995,7 @@ export function VideoEditor({ id }: { id: string }) {
          * Панель инструмента стоит сбоку, а не под холстом: иначе она вклинивается между
          * кадром и шкалой, и рабочая область уезжает на два экрана вниз.
          */}
-        <section
-          className={cn(
-            'shrink-0 overflow-y-auto border-b border-slate-800 px-3 pt-3 lg:w-[330px] lg:border-b-0 lg:border-r',
-            tool === 'ai' ? 'pb-0' : 'pb-3',
-          )}
-        >
+        <section className="order-3 shrink-0 overflow-y-auto border-b border-slate-800 p-3 lg:order-none lg:w-[330px] lg:border-b-0 lg:border-r">
           <ToolBar
             tool={tool}
             aiTab={aiTab}
@@ -1063,7 +1058,7 @@ export function VideoEditor({ id }: { id: string }) {
           />
         </section>
 
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 p-3">
+        <main className="order-2 flex h-[46dvh] min-h-0 min-w-0 shrink-0 flex-col gap-2 p-3 lg:order-none lg:h-auto lg:flex-1">
           <EditorStage
             className="min-h-0 flex-1"
             generationOverlay={generationOverlay}
@@ -1082,7 +1077,7 @@ export function VideoEditor({ id }: { id: string }) {
           </p>
         </main>
 
-        <aside className="shrink-0 space-y-3 overflow-y-auto border-t border-slate-800 p-3 lg:w-[330px] lg:border-l lg:border-t-0">
+        <aside className="order-4 shrink-0 space-y-3 overflow-y-auto border-t border-slate-800 p-3 lg:order-none lg:w-[330px] lg:border-l lg:border-t-0">
           <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
             {selectedClip ? (
               <ClipInspector
@@ -1221,8 +1216,8 @@ function ToolBar({
   onInsertGeneration,
 }: {
   tool: ToolCode;
-  aiTab: 'generate' | 'library';
-  onAiTabChange: (tab: 'generate' | 'library') => void;
+  aiTab: EditorAiTab;
+  onAiTabChange: (tab: EditorAiTab) => void;
   uploading: boolean;
   musicOptions: Array<{ id: string; title: string; publicUrl: string }>;
   timeline: Timeline;
@@ -1316,10 +1311,11 @@ function ToolBar({
   }
 
   const aiTabs = (
-    <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-950/60 p-1">
+    <div className="mb-2 grid grid-cols-3 gap-1 rounded-lg border border-slate-800 bg-slate-950/60 p-1">
       {([
-        { code: 'generate', title: 'Сгенерировать' },
-        { code: 'library', title: 'Мои генерации' },
+        { code: 'generate', title: 'Своя' },
+        { code: 'services', title: 'Услуги' },
+        { code: 'library', title: 'Мои' },
       ] as const).map((item) => (
         <button
           key={item.code}
@@ -1356,6 +1352,7 @@ function ToolBar({
         balance={balance}
         running={generating}
         selectedLayer={selectedLayer}
+        tab={aiTab === 'services' ? 'services' : 'generate'}
         onUploadReference={onUploadReference}
         onGenerate={onGenerate}
         onRunService={onRunService}
@@ -1364,6 +1361,14 @@ function ToolBar({
     </div>
   ) : null;
 }
+
+/**
+ * Под-вкладки инструмента ИИ.
+ *
+ * «Своя» — собственная генерация, «Услуги» — готовые сценарии владельца, «Мои» — то, что
+ * уже посчиталось. Раньше первые две жили в одной простыне и не помещались на экран.
+ */
+type EditorAiTab = 'generate' | 'services' | 'library';
 
 /** Ступени скорости: те же, что в любой монтажке, и все укладываются в границы ffmpeg. */
 const CLIP_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 4] as const;

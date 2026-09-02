@@ -24,13 +24,16 @@ export function UserWorkspaceShell({ children }: { children: React.ReactNode }) 
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const showPublicFooter = pathname === '/' || pathname?.startsWith('/services');
+  // В редакторе меню свёрнуто в колонку иконок: каждый пиксель ширины там уходит на
+  // холст и шкалу. Полное меню выезжает поверх при наведении, раскладка не съезжает.
+  const railSidebar = Boolean(pathname?.startsWith('/editor'));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Realtime-обновление статусов генераций на любом экране (SSE); поллинг — фолбэк. */}
       <ProjectEventsBridge enabled={Boolean(user)} />
-      <DashboardSidebar />
-      <div className="flex min-h-screen min-w-0 flex-col md:pl-64">
+      <DashboardSidebar rail={railSidebar} />
+      <div className={`flex min-h-screen min-w-0 flex-col ${railSidebar ? 'md:pl-16' : 'md:pl-64'}`}>
         {user && (
           <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-slate-800 bg-slate-950/95 px-3 backdrop-blur md:hidden">
             <DashboardSidebarMobile />

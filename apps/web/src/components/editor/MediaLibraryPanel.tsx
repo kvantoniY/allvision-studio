@@ -14,8 +14,9 @@ import { cn } from '@/lib/utils';
  * или перетаскиванием. Без этого списка загруженный файл существовал только внутри той
  * сцены, куда его положили: чтобы поставить его второй раз, приходилось загружать заново.
  *
- * Сюда же попадают образы Студии — аватары и локации. Они тот же материал для ролика,
- * и заставлять человека помнить, в каком разделе что лежит, незачем.
+ * Образы Студии — аватары и локации — лежат отдельной вкладкой. Это тот же материал для
+ * ролика, но приходит он из другого места и живёт своей жизнью, поэтому в общей куче
+ * загруженные кадры и образы мешали друг друга искать.
  */
 
 export type MediaLibraryItem = {
@@ -43,6 +44,7 @@ export function MediaLibraryPanel({
   /** Ставит материал на дорожку. Длительность видео редактор измеряет сам. */
   onAdd: (item: MediaLibraryItem) => void;
 }) {
+  const [tab, setTab] = useState<MediaLibraryItem['group']>('upload');
   const [search, setSearch] = useState('');
   const uploads = useListUserMediaAssetsQuery({ kind: 'user-upload', limit: 100 });
   const avatars = useListUserMediaAssetsQuery({ kind: 'user-avatar', limit: 100 });
@@ -63,12 +65,38 @@ export function MediaLibraryPanel({
     ];
   }, [uploads.data, avatars.data, locations.data]);
 
+  const inTab = items.filter((item) => item.group === tab);
   const query = search.trim().toLowerCase();
-  const shown = query ? items.filter((item) => item.title.toLowerCase().includes(query)) : items;
-  const loading = uploads.isLoading || avatars.isLoading || locations.isLoading;
+  const shown = query ? inTab.filter((item) => item.title.toLowerCase().includes(query)) : inTab;
+  const loading = tab === 'upload' ? uploads.isLoading : avatars.isLoading || locations.isLoading;
+  const counts = {
+    upload: items.filter((item) => item.group === 'upload').length,
+    studio: items.filter((item) => item.group === 'studio').length,
+  };
 
   return (
     <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-900/60 p-1">
+        {([
+          { code: 'upload', title: 'В проекте' },
+          { code: 'studio', title: 'Студия' },
+        ] as const).map((option) => (
+          <button
+            key={option.code}
+            type="button"
+            onClick={() => setTab(option.code)}
+            className={cn(
+              'rounded-md px-2 py-1.5 text-xs font-medium transition',
+              tab === option.code ? 'bg-amber-400/15 text-amber-200' : 'text-slate-400 hover:text-slate-200',
+            )}
+          >
+            {option.title}
+            {counts[option.code] > 0 && <span className="ml-1 text-slate-500">{counts[option.code]}</span>}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'upload' && (
       <button
         type="button"
         onClick={onPickFile}
@@ -78,8 +106,9 @@ export function MediaLibraryPanel({
         {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
         {uploading ? 'Загружаем…' : 'Загрузить файл'}
       </button>
+      )}
 
-      {items.length > 6 && (
+      {inTab.length > 6 && (
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
           <Input
@@ -98,8 +127,9 @@ export function MediaLibraryPanel({
         </p>
       ) : shown.length === 0 ? (
         <p className="py-4 text-xs leading-5 text-slate-500">
-          Пока пусто. Загруженные файлы и образы из Студии появятся здесь — их можно будет ставить
-          на дорожку сколько угодно раз.
+          {tab === 'upload'
+            ? 'Пока пусто. Загруженные файлы появятся здесь — их можно будет ставить на дорожку сколько угодно раз.'
+            : 'В Студии пока нет образов. Аватары и локации оттуда появятся здесь и станут материалом для ролика.'}
         </p>
       ) : (
         <div className="grid grid-cols-3 gap-1.5">
@@ -135,11 +165,6 @@ export function MediaLibraryPanel({
               <span className="absolute left-1 top-1 grid h-4 w-4 place-items-center rounded bg-slate-950/80 text-slate-300">
                 {item.kind === 'video' ? <Video className="h-2.5 w-2.5" /> : <ImageIcon className="h-2.5 w-2.5" />}
               </span>
-              {item.group === 'studio' && (
-                <span className="absolute right-1 top-1 rounded bg-violet-500/80 px-1 text-[9px] text-white">
-                  Студия
-                </span>
-              )}
               <span className="absolute inset-x-0 bottom-0 truncate bg-slate-950/85 px-1 py-0.5 text-left text-[10px] text-slate-300">
                 {item.title}
               </span>

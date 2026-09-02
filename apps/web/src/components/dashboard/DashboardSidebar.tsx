@@ -130,10 +130,87 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
   );
 }
 
-export function DashboardSidebar() {
+/**
+ * Свёрнутая колонка: только иконки разделов.
+ *
+ * Нужна там, где место на вес золота — прежде всего в редакторе. Полное меню при
+ * наведении выезжает ПОВЕРХ страницы, поэтому раскладка не пересчитывается и кадр на
+ * холсте не прыгает: места занимает ровно свёрнутая колонка.
+ */
+function SidebarRailIcons() {
+  const { user } = useAuth();
+  const pathname = usePathname();
+  if (!user) return null;
+
+  const items = SIDEBAR_SECTIONS.flatMap((section) => section.items);
+  const railItems = user.role === 'ADMIN'
+    ? [...items, { href: '/admin', label: 'Админ панель', icon: ShieldCheck }]
+    : items;
+
   return (
-    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-800 bg-slate-950 md:block">
-      <DashboardSidebarContent />
+    <div className="flex h-full flex-col items-center gap-1 border-r border-slate-800 bg-slate-950 py-3">
+      <Link href="/" className="mb-2 grid h-9 w-9 place-items-center" aria-label="Allvision Studio">
+        <BrandLogo className="h-6 w-auto" />
+      </Link>
+      {railItems.map((item) => {
+        const active = isActive(item.href, pathname);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            title={item.label}
+            aria-label={item.label}
+            className={cn(
+              'grid h-10 w-10 place-items-center rounded-lg transition-colors',
+              active ? 'bg-violet-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+            )}
+          >
+            <Icon className="h-4 w-4" />
+          </Link>
+        );
+      })}
+      <div className="mt-auto flex flex-col items-center gap-2">
+        <Link
+          href="/profile?tab=billing"
+          title={`Баланс: ${user.tokenBalance}`}
+          className="grid h-10 w-10 place-items-center rounded-lg text-amber-400 transition hover:bg-slate-800"
+        >
+          <TokenIcon className="h-5 w-5" />
+        </Link>
+        <Link href="/profile" title={user.name ?? user.email}>
+          <Avatar className="h-8 w-8">
+            {user.avatar && <AvatarImage src={user.avatar} alt={user.name ?? user.email} />}
+            <AvatarFallback>{initialsOf(user.name, user.email)}</AvatarFallback>
+          </Avatar>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export function DashboardSidebar({ rail = false }: { rail?: boolean }) {
+  if (!rail) {
+    return (
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-800 bg-slate-950 md:block">
+        <DashboardSidebarContent />
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="group fixed inset-y-0 left-0 z-40 hidden w-16 md:block">
+      <SidebarRailIcons />
+      {/* Полное меню лежит поверх: на странице оно места не занимает. */}
+      <div
+        className={cn(
+          'pointer-events-none absolute inset-y-0 left-0 w-64 -translate-x-3 border-r border-slate-800 bg-slate-950 opacity-0 shadow-2xl shadow-black/60 transition duration-150',
+          'group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100',
+          'focus-within:pointer-events-auto focus-within:translate-x-0 focus-within:opacity-100',
+        )}
+      >
+        <DashboardSidebarContent />
+      </div>
     </aside>
   );
 }
