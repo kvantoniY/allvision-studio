@@ -2435,14 +2435,6 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const { data, isLoading, isError } = useGetServiceQuery(slug);
   const { data: categoriesData } = useGetServiceCategoriesQuery();
   const categoryLabel = (code: string) => categoriesData?.categories.find((item) => item.code === code)?.title ?? code;
-  /**
-   * Шаблон поздравления запускается иначе, чем услуга.
-   *
-   * Услуга спрашивает всё и считает сама; шаблон только раскладывает кадры в редакторе,
-   * поэтому у него другой вопрос к человеку: сколько кадров и какой формат.
-   */
-  const isGreetingTemplate = categoriesData?.categories
-    .find((item) => item.code === service?.category)?.section === 'greetings';
   const [launchService, launchState] = useLaunchServiceMutation();
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
@@ -2463,6 +2455,20 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   );
 
   const service = data?.service;
+  /**
+   * Шаблон поздравления запускается иначе, чем услуга.
+   *
+   * Услуга спрашивает всё и считает сама; шаблон только раскладывает кадры в редакторе,
+   * поэтому у него другой вопрос к человеку: сколько кадров и какой формат.
+   *
+   * Считается СТРОГО после service. Раньше эта строка стояла выше его объявления, и
+   * обращение к нему из колбэка find роняло страницу с «Cannot access before
+   * initialization». На сервере не проявлялось: там categoriesData ещё пуст, и
+   * необязательная цепочка обрывалась до вызова колбэка — страница падала уже в браузере,
+   * когда приезжали категории.
+   */
+  const isGreetingTemplate = categoriesData?.categories
+    .find((item) => item.code === service?.category)?.section === 'greetings';
   const projects = useMemo(() => projectsQuery.data?.items ?? [], [projectsQuery.data?.items]);
   // Поллим, пока есть незавершённая генерация ИЛИ юзер только что запустил услугу
   // (lock держится несколько секунд, пока проект ещё не успел появиться в списке).

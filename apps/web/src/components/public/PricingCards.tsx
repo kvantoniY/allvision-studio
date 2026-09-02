@@ -89,7 +89,7 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
 
   if (isLoading) {
     return (
-      <div className="mx-auto grid max-w-5xl gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid w-full gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {Array.from({ length: 3 }).map((_, index) => (
           <Skeleton key={index} className="h-72 rounded-lg" />
         ))}
@@ -103,7 +103,7 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
         * Поле промокода стоит НАД пакетами, а не в каждой карточке: код один на покупку, и
         * скидку надо увидеть сразу на всех вариантах, чтобы выбрать осознанно.
         */}
-      <div className="mx-auto flex w-full max-w-md flex-wrap items-center gap-2">
+      <div className="flex w-full max-w-md flex-wrap items-center gap-2">
         <Input
           value={promoInput}
           onChange={(event) => setPromoInput(event.target.value.toUpperCase())}
@@ -134,13 +134,13 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
       </div>
 
       {promo && (
-        <p className="text-center text-sm text-emerald-300">
+        <p className="text-sm text-emerald-300">
           {promo.code}: скидка {promo.discountType === 'PERCENT' ? `${promo.discountValue}%` : `${promo.discountValue} ₽`} на пополнение.
           Токенов начислится столько же.
         </p>
       )}
 
-      <div className={cn('mx-auto grid w-full gap-5', items.length <= 3 ? 'max-w-5xl' : '', columnsClass)}>
+      <div className={cn('grid w-full gap-5', columnsClass)}>
         {items.map((pkg) => (
           <TokenPackageCard
             key={pkg.id}

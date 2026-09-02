@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Loader2, Plus, Search, Trash2, Wand2, X } from 'lucide-react';
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Search, Trash2, Wand2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
@@ -82,6 +82,36 @@ export function ServiceIdeaCards({
     void persist([...categories, { id: '', title: title.trim(), serviceSlugs: [] }]);
   };
 
+  const renameCategory = (category: EditorServiceCategory) => {
+    const title = window.prompt('Название категории', category.title);
+    if (!title?.trim() || title.trim() === category.title) return;
+    void persist(categories.map((item) => (item.id === category.id ? { ...item, title: title.trim() } : item)));
+  };
+
+  /** Порядок категорий — это порядок вкладок у пользователя, значит им надо управлять. */
+  const moveCategory = (id: string, direction: -1 | 1) => {
+    const from = categories.findIndex((category) => category.id === id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= categories.length) return;
+    const next = [...categories];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    void persist(next);
+  };
+
+  /** Порядок услуг внутри категории виден на плитках, поэтому тоже настраивается. */
+  const moveService = (categoryId: string, slug: string, direction: -1 | 1) => {
+    const category = categories.find((item) => item.id === categoryId);
+    if (!category) return;
+    const from = category.serviceSlugs.indexOf(slug);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= category.serviceSlugs.length) return;
+    const slugs = [...category.serviceSlugs];
+    const [moved] = slugs.splice(from, 1);
+    slugs.splice(to, 0, moved);
+    void setSlugs(categoryId, slugs);
+  };
+
   const removeCategory = (id: string) => {
     if (!window.confirm('Удалить категорию из подборки?')) return;
     void persist(categories.filter((category) => category.id !== id));
@@ -159,15 +189,35 @@ export function ServiceIdeaCards({
                     </span>
                   </button>
                   {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => setSlugs(active.id, active.serviceSlugs.filter((item) => item !== slug))}
-                      title="Убрать из категории"
-                      aria-label="Убрать из категории"
-                      className="absolute -right-1 -top-1 hidden h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-950 text-slate-400 transition hover:text-rose-300 group-hover:grid"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    <div className="absolute -right-1 -top-1 hidden gap-1 group-hover:flex">
+                      <button
+                        type="button"
+                        onClick={() => moveService(active.id, slug, -1)}
+                        title="Левее"
+                        aria-label="Переместить левее"
+                        className="grid h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-950 text-slate-400 transition hover:text-amber-200"
+                      >
+                        <ChevronLeft className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveService(active.id, slug, 1)}
+                        title="Правее"
+                        aria-label="Переместить правее"
+                        className="grid h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-950 text-slate-400 transition hover:text-amber-200"
+                      >
+                        <ChevronRight className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSlugs(active.id, active.serviceSlugs.filter((item) => item !== slug))}
+                        title="Убрать из категории"
+                        aria-label="Убрать из категории"
+                        className="grid h-5 w-5 place-items-center rounded-full border border-slate-700 bg-slate-950 text-slate-400 transition hover:text-rose-300"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
                   )}
                 </div>
               );
@@ -186,13 +236,45 @@ export function ServiceIdeaCards({
           </div>
 
           {isAdmin && (
-            <button
-              type="button"
-              onClick={() => removeCategory(active.id)}
-              className="text-[11px] text-slate-600 transition hover:text-rose-300"
-            >
-              Удалить категорию «{active.title}»
-            </button>
+            <div className="flex flex-wrap items-center gap-3 text-[11px]">
+              <button
+                type="button"
+                onClick={() => renameCategory(active)}
+                className="inline-flex items-center gap-1 text-slate-500 transition hover:text-amber-200"
+              >
+                <Pencil className="h-3 w-3" />
+                Переименовать
+              </button>
+              <span className="inline-flex items-center gap-1 text-slate-600">
+                Порядок
+                <button
+                  type="button"
+                  onClick={() => moveCategory(active.id, -1)}
+                  title="Категорию левее"
+                  aria-label="Категорию левее"
+                  className="grid h-5 w-5 place-items-center rounded border border-slate-800 transition hover:text-amber-200"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveCategory(active.id, 1)}
+                  title="Категорию правее"
+                  aria-label="Категорию правее"
+                  className="grid h-5 w-5 place-items-center rounded border border-slate-800 transition hover:text-amber-200"
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </span>
+              <button
+                type="button"
+                onClick={() => removeCategory(active.id)}
+                className="inline-flex items-center gap-1 text-slate-600 transition hover:text-rose-300"
+              >
+                <Trash2 className="h-3 w-3" />
+                Удалить «{active.title}»
+              </button>
+            </div>
           )}
         </>
       )}
