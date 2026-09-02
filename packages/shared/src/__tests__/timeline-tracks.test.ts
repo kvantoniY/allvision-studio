@@ -189,6 +189,57 @@ describe('скорость клипа', () => {
   });
 });
 
+describe('шаблон поздравления', () => {
+  /** Ровно то, что кладёт эндпоинт «шаблон → новый ролик»: пустые кадры встык. */
+  function templateTimeline(frames: number, frameSec: number) {
+    return parseTimeline({
+      aspect: '9:16',
+      template: { slug: 'birthday', title: 'День рождения', model: 'kling-3-std', durationSec: frameSec },
+      tracks: [
+        {
+          id: 'main',
+          clips: Array.from({ length: frames }, (_, index) => ({
+            id: `frame_${index + 1}`,
+            startSec: index * frameSec,
+            durationSec: frameSec,
+            transition: 'cut',
+            layer: {
+              id: `frame_${index + 1}_layer`,
+              kind: 'media',
+              source: { kind: 'color', color: '#0b1020' },
+              box: { x: 0, y: 0, w: 1, h: 1 },
+            },
+          })),
+        },
+      ],
+    });
+  }
+
+  it('пустые кадры складываются в ролик без пауз', () => {
+    const timeline = templateTimeline(6, 3);
+    expect(timelineScenes(timeline)).toHaveLength(6);
+    // Шесть кадров по три секунды — восемнадцать секунд, без дыр между ними.
+    expect(timelineDurationSec(timeline)).toBeCloseTo(18, 3);
+  });
+
+  it('рецепт шаблона переживает разбор схемой', () => {
+    const timeline = templateTimeline(3, 4);
+    expect(timeline.template?.slug).toBe('birthday');
+    expect(timeline.template?.model).toBe('kling-3-std');
+    expect(timeline.template?.durationSec).toBe(4);
+  });
+
+  it('удалённый кадр не ломает ролик — остаётся пауза, которую видно', () => {
+    const timeline = templateTimeline(3, 4);
+    const kept = (timeline.tracks ?? [])[0].clips.filter((clip) => clip.id !== 'frame_2');
+    const withGap = parseTimeline({ ...timeline, tracks: [{ ...(timeline.tracks ?? [])[0], clips: kept }] });
+    const scenes = timelineScenes(withGap);
+    // Первый кадр, заливка на месте удалённого, третий кадр.
+    expect(scenes).toHaveLength(3);
+    expect(scenes[1].id).toContain('gap');
+  });
+});
+
 describe('clipTransitionSec', () => {
   it('без наложения перехода нет', () => {
     expect(clipTransitionSec(clip('a', 0, 3, { transition: 'dissolve' }), clip('b', 3, 3))).toBe(0);

@@ -53,6 +53,13 @@ export const videoProjectsApi = createApi({
       query: (body) => ({ url: '/from-project', method: 'POST', body }),
       invalidatesTags: ['VideoProject'],
     }),
+    createFromTemplate: build.mutation<
+      { project: VideoProjectSummary },
+      { slug: string; frames: number; aspect: string }
+    >({
+      query: (body) => ({ url: '/from-template', method: 'POST', body }),
+      invalidatesTags: ['VideoProject'],
+    }),
     deleteVideoProject: build.mutation<void, string>({
       query: (id) => ({ url: `/${id}`, method: 'DELETE' }),
       invalidatesTags: ['VideoProject'],
@@ -133,6 +140,7 @@ export const videoProjectsApi = createApi({
 export const {
   useListVideoProjectsQuery,
   useGetVideoProjectQuery,
+  useCreateFromTemplateMutation,
   useCreateVideoProjectMutation,
   useCreateFromProjectMutation,
   useUpdateVideoProjectMutation,

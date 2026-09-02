@@ -37,6 +37,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { ResultMedia } from '@/components/ui/result-media';
 import { PhotoFramingTip } from '@/components/services/PhotoFramingTip';
+import { TemplateStartPanel } from '@/components/services/TemplateStartPanel';
 import { VoicePicker } from '@/components/editor/VoicePicker';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/use-auth';
@@ -2434,6 +2435,14 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
   const { data, isLoading, isError } = useGetServiceQuery(slug);
   const { data: categoriesData } = useGetServiceCategoriesQuery();
   const categoryLabel = (code: string) => categoriesData?.categories.find((item) => item.code === code)?.title ?? code;
+  /**
+   * Шаблон поздравления запускается иначе, чем услуга.
+   *
+   * Услуга спрашивает всё и считает сама; шаблон только раскладывает кадры в редакторе,
+   * поэтому у него другой вопрос к человеку: сколько кадров и какой формат.
+   */
+  const isGreetingTemplate = categoriesData?.categories
+    .find((item) => item.code === service?.category)?.section === 'greetings';
   const [launchService, launchState] = useLaunchServiceMutation();
   const [values, setValues] = useState<FormValues>({});
   const [files, setFiles] = useState<FileValues>({});
@@ -2858,6 +2867,12 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
                   </AlertDescription>
                 </Alert>
               </div>
+            ) : isGreetingTemplate ? (
+              <TemplateStartPanel
+                slug={service.slug}
+                authorized={Boolean(user)}
+                onRequireAuth={() => router.push(`/login?next=/services/${service.slug}`)}
+              />
             ) : (
               <>
                 <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 pb-5 lg:pr-5">

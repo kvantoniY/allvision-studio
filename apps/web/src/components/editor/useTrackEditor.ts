@@ -283,7 +283,7 @@ export function useTrackEditor(timeline: Timeline | null, apply: (next: Timeline
         }),
       );
     },
-    [locate, tracks, patchClip, setTracks],
+    [locate, tracks, mapTrack, patchClip, setTracks],
   );
 
   /**

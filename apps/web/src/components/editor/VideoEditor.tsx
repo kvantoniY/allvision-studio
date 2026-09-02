@@ -24,6 +24,9 @@ import {
   TIMELINE_LIMITS,
   applyGeneratedSource,
   clipEndSec,
+  estimateChatGenerationPriceCoins,
+  markLayerGeneration,
+  sortedClips,
   collageBoxes,
   createTimelineHistory,
   formatTimelineDuration,
@@ -62,6 +65,7 @@ import { MediaLibraryPanel, type MediaLibraryItem } from '@/components/editor/Me
 import { SceneGenerator, type SceneGenerationRequest } from '@/components/editor/SceneGenerator';
 import { AudioTools, type VoiceRecording, type VoiceoverRequest } from '@/components/editor/AudioTools';
 import { GenerationLibrary } from '@/components/editor/GenerationLibrary';
+import { TemplateBar, TemplateHint } from '@/components/editor/TemplateFrames';
 import type { EditorCatalogService } from '@/store/api/editor-catalog-api';
 import { ExportOverlay } from '@/components/editor/ExportOverlay';
 import {
@@ -147,6 +151,8 @@ export function VideoEditor({ id }: { id: string }) {
   const [tool, setTool] = useState<ToolCode>('media');
   // Внутри инструмента ИИ две подвкладки: сама генерация и её результаты.
   const [aiTab, setAiTab] = useState<EditorAiTab>('generate');
+  const [hintOpen, setHintOpen] = useState(false);
+  const [generatingAll, setGeneratingAll] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [exportId, setExportId] = useState<string | null>(null);
   const [showExportScreen, setShowExportScreen] = useState(false);
@@ -689,6 +695,137 @@ export function VideoEditor({ id }: { id: string }) {
     [timeline, currentScene, targetClipForGeneration, ops, id, updateProject, generateSceneService],
   );
 
+  // --- шаблон поздравления ---
+  const template = timeline?.template;
+
+  /** Кадры шаблона — это клипы основной дорожки: остальное человек добавил сам. */
+  const frameClips = useMemo(
+    () => (template ? sortedClips(tracks[0] ?? { id: 'main', clips: [], hidden: false, muted: false }) : []),
+    [template, tracks],
+  );
+
+  /** Кадр готов к запуску, когда в нём лежит фотография и он ещё не оживлён. */
+  const framesToGenerate = useMemo(
+    () => frameClips.filter((clip) =>
+      clip.layer.kind === 'media'
+      && clip.layer.source.kind === 'image'
+      && !clip.layer.generationProjectId),
+    [frameClips],
+  );
+
+  const framePrice = useMemo(() => {
+    if (!template) return 0;
+    return estimateChatGenerationPriceCoins(template.model, {
+      duration: template.durationSec,
+      priceOverrides: chatPricing?.modelPriceOverrides,
+    });
+  }, [template, chatPricing?.modelPriceOverrides]);
+
+  /**
+   * Оживление одного кадра шаблона.
+   *
+   * Настройки берём из рецепта ролика, а не спрашиваем: шаблон затем и выбран, чтобы не
+   * подбирать модель и промпт вручную. Метку ставит сервер — результат встанет в этот же
+   * кадр, даже если вкладку закроют.
+   */
+  const handleFrameGenerate = useCallback(
+    async (clipId: string) => {
+      const current = timelineRef.current;
+      const recipe = current?.template;
+      if (!recipe) return false;
+      const found = ops.locate(clipId);
+      const layer = found?.clip.layer;
+      if (!found || !layer || layer.kind !== 'media' || layer.source.kind !== 'image' || !layer.source.url) {
+        toast({ title: 'Сначала вставьте фотографию в кадр', variant: 'destructive' });
+        return false;
+      }
+
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      try {
+        // Сервер ищет клип в своей копии ролика — сначала досохраняем.
+        await updateProject({ id, timeline: current }).unwrap();
+        const result = await generateScene({
+          id,
+          sceneId: clipId,
+          body: {
+            modelSlug: recipe.model,
+            prompt: recipe.prompt ?? '',
+            aspectRatio: current.aspect === '4:5' ? '9:16' : current.aspect,
+            duration: recipe.durationSec,
+            layerId: layer.id,
+            imageInputRef: layer.source.url,
+          },
+        }).unwrap();
+        appliedGenerationRef.current = null;
+        /*
+         * Метку ставим от АКТУАЛЬНОЙ копии ролика, а не через операции редактора.
+         *
+         * «Сгенерировать всё» запускает кадры в цикле, без перерисовки между итерациями, а
+         * операции замкнуты на дорожки того рендера, в котором создавались. Через них
+         * второй кадр стирал бы метку первого — и оплаченный результат не нашёл бы, куда
+         * встать. Тот же помощник, что и на сервере, работает от переданного ролика.
+         */
+        const after = timelineRef.current;
+        if (after) {
+          const marked = markLayerGeneration(after, clipId, layer.id, result.projectId);
+          if (marked.changed) applyWithoutHistory(marked.timeline);
+        }
+        return true;
+      } catch (err) {
+        const message = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
+        toast({ title: 'Не удалось оживить кадр', description: message, variant: 'destructive' });
+        return false;
+      }
+    },
+    [id, ops, updateProject, generateScene, applyWithoutHistory],
+  );
+
+  /**
+   * Запуск всех заполненных кадров подряд.
+   *
+   * Ставим их в очередь по одному и останавливаемся на первой ошибке: если кончились
+   * токены, продолжать бессмысленно, а списывать за половину ролика — нечестно.
+   */
+  const handleGenerateAll = useCallback(async () => {
+    if (framesToGenerate.length === 0) return;
+    setGeneratingAll(true);
+    let started = 0;
+    for (const clip of framesToGenerate) {
+      // eslint-disable-next-line no-await-in-loop
+      const ok = await handleFrameGenerate(clip.id);
+      if (!ok) break;
+      started += 1;
+    }
+    setGeneratingAll(false);
+    if (started > 0) {
+      toast({
+        title: `Запустили кадров: ${started}`,
+        description: 'Они считаются по очереди — готовые кадры встанут в ролик сами.',
+      });
+    }
+  }, [framesToGenerate, handleFrameGenerate]);
+
+  /** Подсказку показываем один раз на ролик: дальше она живёт под знаком вопроса. */
+  const hintKey = `allvision.templateHint.${id}`;
+  useEffect(() => {
+    if (!template) return;
+    try {
+      if (window.localStorage.getItem(hintKey)) return;
+    } catch {
+      // Приватный режим и заблокированное хранилище — не повод прятать подсказку.
+    }
+    setHintOpen(true);
+  }, [template, hintKey]);
+
+  const closeHint = useCallback(() => {
+    setHintOpen(false);
+    try {
+      window.localStorage.setItem(hintKey, '1');
+    } catch {
+      // Ничего страшного: подсказка просто появится в следующий раз.
+    }
+  }, [hintKey]);
+
   const handleGenerate = useCallback(
     async (request: SceneGenerationRequest) => {
       if (!timeline) return;
@@ -1042,6 +1179,21 @@ export function VideoEditor({ id }: { id: string }) {
         </Alert>
       )}
 
+      {template && !showExportScreen && (
+        <TemplateBar
+          template={template}
+          total={frameClips.length}
+          withPhoto={framesToGenerate.length}
+          generated={frameClips.filter((clip) => clip.layer.kind === 'media' && clip.layer.source.kind === 'video').length}
+          running={generatingAll || generating}
+          pricePerFrame={framePrice}
+          onGenerateAll={handleGenerateAll}
+          onShowHint={() => setHintOpen(true)}
+        />
+      )}
+
+      {template && hintOpen && <TemplateHint template={template} onClose={closeHint} />}
+
       {showExportScreen ? (
         <ExportOverlay
           projectId={id}
@@ -1238,6 +1390,13 @@ export function VideoEditor({ id }: { id: string }) {
           onRemoveTrack={ops.removeTrack}
           onPatchTrack={ops.patchTrack}
           onSnapToPrevious={ops.snapToPrevious}
+          templateMode={Boolean(template)}
+          framePriceCoins={framePrice}
+          onFramePick={(clipId) => {
+            setSelectedClipId(clipId);
+            pickFileFor(clipId);
+          }}
+          onFrameGenerate={(clipId) => void handleFrameGenerate(clipId)}
           onChangeAudio={changeAudioTrack}
           onRemoveAudio={removeAudioTrack}
           onSplitAudio={splitAudioTrack}

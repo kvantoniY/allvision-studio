@@ -13,9 +13,11 @@ import {
   Repeat,
   ArrowLeftRight,
   ChevronsLeftRight,
+  ImagePlus,
   Scissors,
   SplitSquareHorizontal,
   Trash2,
+  Wand2,
   Volume2,
   VolumeX,
   ZoomIn,
@@ -127,6 +129,16 @@ export type ClipTimelineProps = {
   onTransition: (clipId: string, transition: TimelineTransition, durationSec?: number) => void;
   /** Придвигает клип вплотную к предыдущему: без стыка переход невозможен. */
   onSnapToPrevious: (clipId: string) => void;
+  /**
+   * Ролик заведён из шаблона: кадры ведут себя как заготовки под фотографии.
+   *
+   * Пустой кадр зовёт вставить фото, кадр с фотографией — оживить. Без этого пустые
+   * заливки на дорожке ничего человеку не говорят.
+   */
+  templateMode?: boolean;
+  onFramePick?: (clipId: string) => void;
+  onFrameGenerate?: (clipId: string) => void;
+  framePriceCoins?: number;
   onAddTrack: () => void;
   onRemoveTrack: (trackIndex: number) => void;
   onPatchTrack: (trackIndex: number, patch: { hidden?: boolean; muted?: boolean }) => void;
@@ -154,6 +166,10 @@ export function ClipTimeline({
   onSplitClip,
   onTransition,
   onSnapToPrevious,
+  templateMode = false,
+  onFramePick,
+  onFrameGenerate,
+  framePriceCoins = 0,
   onAddTrack,
   onRemoveTrack,
   onPatchTrack,
@@ -608,6 +624,13 @@ function JointMark({
                       left={secToPx(shown.startSec)}
                       width={Math.max(14, secToPx(shown.durationSec))}
                       selected={selected}
+                      frame={templateMode && trackIndex === 0
+                        ? {
+                          price: framePriceCoins,
+                          onPick: () => onFramePick?.(clip.id),
+                          onGenerate: () => onFrameGenerate?.(clip.id),
+                        }
+                        : undefined}
                       onPointerDown={(event) => beginClipDrag(event, clip, trackIndex)}
                       onTrimStart={(event) => beginTrim(event, clip, 'start')}
                       onTrimEnd={(event) => beginTrim(event, clip, 'end')}
@@ -716,6 +739,7 @@ function ClipBlock({
   width,
   selected,
   splitAvailable,
+  frame,
   onPointerDown,
   onTrimStart,
   onTrimEnd,
@@ -728,6 +752,8 @@ function ClipBlock({
   width: number;
   selected: boolean;
   splitAvailable: boolean;
+  /** Кадр шаблона: вставить фото и оживить прямо на дорожке. */
+  frame?: { price: number; onPick: () => void; onGenerate: () => void };
   onPointerDown: (event: React.PointerEvent) => void;
   onTrimStart: (event: React.PointerEvent) => void;
   onTrimEnd: (event: React.PointerEvent) => void;
@@ -778,6 +804,38 @@ function ClipBlock({
           {clip.durationSec.toFixed(1)}с
         </span>
       </div>
+
+      {/*
+        * Кадр шаблона говорит, что с ним делать дальше. Пустой — «вставьте фото»,
+        * с фотографией — «оживить». Оживлённый кадр (видео) ничем не отличается от
+        * обычного клипа: работа с ним закончена.
+        */}
+      {frame && !pending && layer.kind === 'media' && layer.source.kind !== 'video' && (
+        layer.source.kind === 'color' ? (
+          <button
+            type="button"
+            onClick={frame.onPick}
+            title="Вставить фотографию в этот кадр"
+            className="absolute inset-0 z-20 grid place-items-center rounded border border-dashed border-slate-600 bg-slate-950/60 text-[11px] text-slate-400 transition hover:border-violet-400 hover:text-violet-200"
+          >
+            <span className="flex items-center gap-1">
+              <ImagePlus className="h-3.5 w-3.5" />
+              фото
+            </span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={frame.onGenerate}
+            title={`Оживить этот кадр — спишется ${frame.price} токенов`}
+            aria-label="Оживить кадр"
+            className="absolute left-1 top-1 z-20 flex h-5 items-center gap-1 rounded-full border border-violet-400/70 bg-slate-950/90 px-1.5 text-[10px] text-violet-200 transition hover:bg-violet-500/20"
+          >
+            <Wand2 className="h-2.5 w-2.5" />
+            оживить
+          </button>
+        )
+      )}
 
       <span
         onPointerDown={onTrimStart}

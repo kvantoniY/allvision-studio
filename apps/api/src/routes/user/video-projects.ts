@@ -3,6 +3,8 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import { prisma } from '@allvision/database';
 import {
+  TEMPLATE_FRAME_LIMITS,
+  TIMELINE_ASPECTS,
   TIMELINE_LIMITS,
   VOICEOVER_MAX_LENGTH,
   applyModelPriceOverride,
@@ -241,6 +243,103 @@ videoProjectsRouter.post('/from-project', async (req: Request, res: Response, ne
         title: (body.title ?? source.title ?? 'Ролик').slice(0, 120),
         timeline: timeline as never,
       },
+      select: listSelect,
+    });
+    res.status(201).json({ project });
+  } catch (err) {
+    next(err);
+  }
+});
+
+const fromTemplateSchema = z.object({
+  slug: z.string().trim().min(1).max(120),
+  frames: z.number().int().min(TEMPLATE_FRAME_LIMITS.min).max(TEMPLATE_FRAME_LIMITS.max),
+  aspect: z.enum(TIMELINE_ASPECTS),
+});
+
+/** Настройки оживления кадра, зашитые в пайплайн шаблона. */
+type TemplateRecipe = { model: string; prompt?: string; durationSec: number };
+
+/**
+ * Достаёт из пайплайна шаблона то, чем оживляется один кадр.
+ *
+ * Шаблон описан как обычная услуга: шаг scene-batch повторял одну операцию для каждой
+ * загруженной фотографии. Теперь тот же шаг служит рецептом для редактора — повторять его
+ * будет человек, кадр за кадром, и видеть результат сразу.
+ */
+function templateRecipe(pipelineConfig: unknown): TemplateRecipe {
+  const steps = Array.isArray(pipelineConfig) ? pipelineConfig : [];
+  const batch = steps.find(
+    (step): step is { params?: Record<string, unknown> } =>
+      Boolean(step) && typeof step === 'object' && (step as { blockSlug?: string }).blockSlug === 'scene-batch',
+  );
+  const params = batch?.params ?? {};
+  const model = typeof params.model === 'string' && params.model.length > 0 ? params.model : 'kling-3-std';
+  const prompt = typeof params.prompt === 'string' && params.prompt.trim().length > 0 ? params.prompt.trim() : undefined;
+  const duration = Number(params.duration);
+  return {
+    model,
+    ...(prompt ? { prompt } : {}),
+    durationSec: Number.isFinite(duration) && duration > 0 ? Math.min(20, Math.max(1, duration)) : 4,
+  };
+}
+
+/**
+ * Новый ролик из шаблона поздравления.
+ *
+ * Раньше шаблон генерировал всё разом по загруженной пачке фотографий: человек платил
+ * вперёд и получал готовый ролик, не видя промежуточных кадров. Теперь шаблон только
+ * раскладывает в редакторе пустые кадры — по одному на будущую фотографию — и запоминает,
+ * чем их оживлять. Дальше человек сам ставит фото и жмёт «сгенерировать»: по кадру или все
+ * разом. Так видно, что получается, и переснять неудачный кадр стоит один кадр, а не ролик.
+ *
+ * Здесь ничего не списывается: платной будет каждая генерация кадра.
+ */
+videoProjectsRouter.post('/from-template', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.user!.id;
+    const body = fromTemplateSchema.parse(req.body ?? {});
+
+    const service = await prisma.service.findFirst({
+      where: { slug: body.slug, isActive: true },
+      select: { id: true, slug: true, title: true, pipelineConfig: true },
+    });
+    if (!service) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон не найден');
+
+    const recipe = templateRecipe(service.pipelineConfig);
+
+    // Кадры стоят встык: между ними ничего не должно быть, иначе в готовом ролике
+    // появятся паузы, которых никто не просил.
+    const clips = Array.from({ length: body.frames }, (_, index) => ({
+      id: `frame_${index + 1}`,
+      startSec: Number((index * recipe.durationSec).toFixed(3)),
+      durationSec: recipe.durationSec,
+      transition: 'cut' as const,
+      layer: {
+        id: `frame_${index + 1}_layer`,
+        kind: 'media' as const,
+        // Пустой кадр — заливка: она даёт клипу видимые границы и не притворяется
+        // материалом, которого ещё нет.
+        source: { kind: 'color' as const, color: '#0b1020' },
+        box: { x: 0, y: 0, w: 1, h: 1 },
+        fit: 'contain' as const,
+      },
+    }));
+
+    const timeline = timelineSchema.parse({
+      aspect: body.aspect,
+      tracks: [{ id: 'main', title: 'Кадры', clips }],
+      template: {
+        slug: service.slug,
+        title: service.title,
+        model: recipe.model,
+        ...(recipe.prompt ? { prompt: recipe.prompt } : {}),
+        durationSec: recipe.durationSec,
+      },
+    });
+
+    const project = await prisma.videoProject.create({
+      data: { userId, title: service.title.slice(0, 120), timeline: timeline as never },
       select: listSelect,
     });
     res.status(201).json({ project });

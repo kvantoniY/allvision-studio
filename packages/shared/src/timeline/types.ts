@@ -154,9 +154,39 @@ export const timelineNamedAudioTrackSchema = timelineAudioTrackSchema.extend({
 
 export type TimelineNamedAudioTrack = z.infer<typeof timelineNamedAudioTrackSchema>;
 
+/**
+ * Границы шаблона поздравления.
+ *
+ * Меньше трёх кадров — это не поздравление, а один клип; больше двух десятков человек не
+ * соберёт: каждый кадр — отдельная платная генерация и отдельная загруженная фотография.
+ */
+export const TEMPLATE_FRAME_LIMITS = { min: 3, max: 24, default: 6 } as const;
+
+/**
+ * Рецепт шаблона: чем оживлять кадры этого ролика.
+ *
+ * Шаблон перестал быть «нажал и жди готовое»: он раскладывает в редакторе пустые кадры, а
+ * человек сам подставляет фотографии и запускает генерацию — по кадру или все разом.
+ * Настройки при этом у всех кадров общие, поэтому лежат один раз на ролике, а не на каждом
+ * клипе: иначе правка промпта означала бы обход двух десятков копий.
+ */
+export const timelineTemplateSchema = z.object({
+  /** Слаг услуги-шаблона: по нему видно, из чего собран ролик. */
+  slug: z.string().trim().min(1).max(120),
+  title: z.string().trim().min(1).max(160),
+  /** Модель оживления кадра — из пайплайна шаблона. */
+  model: z.string().trim().min(1).max(120),
+  prompt: z.string().trim().max(2000).optional(),
+  durationSec: z.number().min(1).max(20).default(4),
+});
+
+export type TimelineTemplate = z.infer<typeof timelineTemplateSchema>;
+
 export const timelineSchema = z.object({
   version: z.literal(TIMELINE_VERSION).default(TIMELINE_VERSION),
   aspect: z.enum(TIMELINE_ASPECTS).default('9:16'),
+  /** Рецепт шаблона, если ролик заведён из готового поздравления. */
+  template: timelineTemplateSchema.optional(),
   /**
    * Прежняя форма записи: кадры друг за другом. Пусто, если ролик собран дорожками.
    * Читать сцены нужно через timelineScenes(), а не отсюда: тогда обе формы работают.
