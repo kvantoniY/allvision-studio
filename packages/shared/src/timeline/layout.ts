@@ -87,7 +87,12 @@ export type SceneTiming = {
  * не равно сумме предыдущих длительностей — это и есть причина считать раскладку
  * в одном месте, а не по месту использования.
  */
+/** Раскладка по времени кэшируется по той же причине, что и сцены: ролик неизменяем. */
+const timingsCache = new WeakMap<Timeline, SceneTiming[]>();
+
 export function timelineTimings(timeline: Timeline): SceneTiming[] {
+  const cached = timingsCache.get(timeline);
+  if (cached) return cached;
   const timings: SceneTiming[] = [];
   let cursor = 0;
   const scenes = timelineScenes(timeline);
@@ -97,6 +102,7 @@ export function timelineTimings(timeline: Timeline): SceneTiming[] {
     timings.push({ scene, index, startSec: cursor, durationSec: duration, transitionOutSec: transitionOut });
     cursor += duration - transitionOut;
   });
+  timingsCache.set(timeline, timings);
   return timings;
 }
 

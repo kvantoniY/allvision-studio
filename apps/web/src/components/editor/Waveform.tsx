@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { useWaveform } from './useWaveform';
 
 /**
@@ -13,7 +13,7 @@ import { useWaveform } from './useWaveform';
  * заканчивается там, где кончается фрагмент. Иначе картинка врала бы — под курсором была бы
  * одна форма, а в ролике звучала другая.
  */
-export function Waveform({
+export const Waveform = memo(function Waveform({
   src,
   fromSec,
   lengthSec,
@@ -80,4 +80,4 @@ export function Waveform({
       <canvas ref={canvasRef} className="h-full w-full" />
     </div>
   );
-}
+});

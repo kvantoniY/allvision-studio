@@ -88,7 +88,22 @@ export function EditorStage({
   const timings = useMemo(() => timelineTimings(timeline), [timeline]);
   const total = useMemo(() => timelineDurationSec(timeline), [timeline]);
 
-  const { time, playing, seek, toggle, rewind } = playback;
+  const { time, playing, seek, toggle, rewind, subscribe } = playback;
+  const sliderRef = useRef<HTMLInputElement | null>(null);
+  const clockRef = useRef<HTMLSpanElement | null>(null);
+
+  /*
+   * Плавные элементы транспорта обновляем напрямую в DOM.
+   *
+   * Держать их в состоянии значит перерисовывать весь редактор на каждый кадр — а это
+   * шкала со всеми клипами, панели и инспектор. Подписка двигает ровно два узла.
+   */
+  useEffect(() => subscribe((seconds) => {
+    const slider = sliderRef.current;
+    if (slider && document.activeElement !== slider) slider.value = String(Math.min(seconds, total));
+    const clock = clockRef.current;
+    if (clock) clock.textContent = `${formatTimelineDuration(seconds)} / ${formatTimelineDuration(total)}`;
+  }), [subscribe, total]);
   // По элементу на дорожку: их может быть несколько, и предпросмотр обязан звучать так же,
   // как готовый файл — иначе добавленная дорожка была бы слышна только после сборки.
   const audioRefs = useRef(new Map<string, HTMLAudioElement>());
@@ -143,7 +158,7 @@ export function EditorStage({
     return () => window.removeEventListener('keydown', onKey);
   }, [fullscreen]);
 
-  const scenes = timelineScenes(timeline);
+  const scenes = useMemo(() => timelineScenes(timeline), [timeline]);
   const shownScene = scenes[shownIndex];
   const incomingScene = incomingIndex === null ? null : scenes[incomingIndex];
 
@@ -228,21 +243,21 @@ export function EditorStage({
           <RotateCcw className="h-4 w-4" />
         </button>
         <input
+          ref={sliderRef}
           type="range"
           min={0}
           max={Math.max(total, 0.1)}
           step={0.05}
-          value={Math.min(time, total)}
+          defaultValue={0}
           onChange={(event) => {
-            const next = Number(event.target.value);
-            seek(next);
-            const at = sceneAtTime(timeline, next);
-            if (at) onSelectScene(at.activeIndex);
+            // Только перемотка: выбор сцены и так пересчитывается от времени, а искать её
+            // здесь значило бы раскладывать весь ролик на каждое движение мыши.
+            seek(Number(event.target.value));
           }}
           aria-label="Позиция в ролике"
           className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-700 accent-amber-400"
         />
-        <span className="hidden shrink-0 font-mono text-xs text-slate-400 sm:inline">
+        <span ref={clockRef} className="hidden shrink-0 font-mono text-xs text-slate-400 sm:inline">
           {formatTimelineDuration(time)} / {formatTimelineDuration(total)}
         </span>
         <button

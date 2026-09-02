@@ -251,13 +251,30 @@ export function flattenTracks(tracks: TimelineTrack[], options?: { background?: 
  * `timeline.scenes`. Пока в проекте живут обе формы записи, проверка «а вдруг дорожки»
  * в трёх местах — верный способ забыть её в четвёртом.
  */
+/**
+ * Кэш разложенных сцен.
+ *
+ * Раскладка дорожек — не бесплатная операция: она нарезает клипы по стыкам и разбирает
+ * схемой каждый слой. Вызывают её многие (рендер, плеер, шкала, подсчёт длительности), и
+ * во время проигрывания — по многу раз в секунду. Ролик при этом неизменяем: любая правка
+ * создаёт новый объект, поэтому по ссылке можно кэшировать без риска отдать устаревшее.
+ *
+ * WeakMap, а не Map: закрытый ролик не должен держать свои сцены в памяти вкладки.
+ */
+const scenesCache = new WeakMap<Timeline, TimelineScene[]>();
+
 export function timelineScenes(timeline: Timeline): TimelineScene[] {
+  const cached = scenesCache.get(timeline);
+  if (cached) return cached;
+
   const tracks = timelineTracks(timeline);
+  let scenes: TimelineScene[] = timeline.scenes ?? [];
   if (tracks.length > 0) {
-    const scenes = flattenTracks(tracks);
-    if (scenes.length > 0) return scenes;
+    const flattened = flattenTracks(tracks);
+    if (flattened.length > 0) scenes = flattened;
   }
-  return timeline.scenes ?? [];
+  scenesCache.set(timeline, scenes);
+  return scenes;
 }
 
 /**

@@ -1108,7 +1108,7 @@ export function VideoEditor({ id }: { id: string }) {
               const active = tracks
                 .flatMap((track) => track.clips)
                 .filter((clip) => clip.layer.kind === 'media')
-                .filter((clip) => playback.time >= clip.startSec && playback.time < clipEndSec(clip));
+                .filter((clip) => playback.getTime() >= clip.startSec && playback.getTime() < clipEndSec(clip));
               active.forEach((clip, index) => {
                 const box = layout === 'single' ? boxes[0] : boxes[index];
                 if (!box) return;
@@ -1171,7 +1171,7 @@ export function VideoEditor({ id }: { id: string }) {
                 onTransition={(value) => ops.setTransition(selectedClip.id, value)}
                 onSpeed={(value) => ops.setClipSpeed(selectedClip.id, value)}
                 onSplit={() => {
-                  const tailId = ops.splitClip(selectedClip.id, playback.time);
+                  const tailId = ops.splitClip(selectedClip.id, playback.getTime());
                   if (tailId) setSelectedClipId(tailId);
                   else toast({ title: 'Поставьте курсор внутри клипа', variant: 'destructive' });
                 }}
@@ -1202,6 +1202,7 @@ export function VideoEditor({ id }: { id: string }) {
           tracks={tracks}
           time={playback.time}
           onSeek={playback.seek}
+          subscribeTime={playback.subscribe}
           selectedClipId={selectedClipId}
           onSelectClip={(clipId) => {
             setSelectedClipId(clipId);

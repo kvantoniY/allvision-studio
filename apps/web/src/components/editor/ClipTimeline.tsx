@@ -108,6 +108,14 @@ export type ClipTimelineProps = {
   tracks: TimelineTrack[];
   time: number;
   onSeek: (sec: number) => void;
+  /**
+   * Подписка на точное время ролика.
+   *
+   * Линия курсора обязана идти плавно, но перерисовывать ради неё шкалу со всеми клипами
+   * шестьдесят раз в секунду нельзя — на этом вкладка и подвисала. Подписка двигает один
+   * узел напрямую в DOM, а React об этом не знает.
+   */
+  subscribeTime: (listener: (seconds: number) => void) => () => void;
   selectedClipId: string | null;
   onSelectClip: (clipId: string | null) => void;
   onMoveClip: (clipId: string, target: { startSec: number; trackIndex?: number }) => void;
@@ -135,6 +143,7 @@ export function ClipTimeline({
   tracks,
   time,
   onSeek,
+  subscribeTime,
   selectedClipId,
   onSelectClip,
   onMoveClip,
@@ -162,9 +171,18 @@ export function ClipTimeline({
   const [drag, setDrag] = useState<{ clipId: string; startSec: number; trackIndex: number } | null>(null);
   const [trim, setTrim] = useState<{ clipId: string; edge: 'start' | 'end'; deltaSec: number } | null>(null);
   const [menuJointId, setMenuJointId] = useState<string | null>(null);
+  const playheadRef = useRef<HTMLDivElement | null>(null);
+  /** Точное время для прилипания: читаем в момент жеста, а не держим в состоянии. */
+  const timeRef = useRef(time);
 
   const laneWidth = Math.max(320, (total + 4) * pxPerSec);
   const secToPx = useCallback((sec: number) => sec * pxPerSec, [pxPerSec]);
+
+  useEffect(() => subscribeTime((seconds) => {
+    timeRef.current = seconds;
+    const node = playheadRef.current;
+    if (node) node.style.transform = `translateX(${seconds * pxPerSec}px)`;
+  }), [subscribeTime, pxPerSec]);
 
   const pointerSec = useCallback(
     (clientX: number) => {
@@ -320,7 +338,9 @@ function JointMark({
 
 /** Точки, к которым клип прилипает: края соседей, ноль и курсор. */
   const snapPoints = useMemo(() => {
-    const points = new Set<number>([0, Number(time.toFixed(3))]);
+    // Курсор добавляем как точку прилипания отдельно, в самом snap: держать его здесь
+    // значило бы пересчитывать весь список на каждый кадр проигрывания.
+    const points = new Set<number>([0]);
     for (const track of tracks) {
       for (const clip of track.clips) {
         points.add(clip.startSec);
@@ -328,7 +348,7 @@ function JointMark({
       }
     }
     return [...points];
-  }, [tracks, time]);
+  }, [tracks]);
 
   const snap = useCallback(
     (sec: number, ignoreClipId: string) => {
@@ -339,7 +359,7 @@ function JointMark({
         .flatMap((clip) => [clip.startSec, clipEndSec(clip)]);
       let best = sec;
       let bestDistance = tolerance;
-      for (const point of snapPoints) {
+      for (const point of [...snapPoints, Number(timeRef.current.toFixed(3))]) {
         if (ignored.includes(point)) continue;
         const distance = Math.abs(point - sec);
         if (distance < bestDistance) {
@@ -651,8 +671,9 @@ function JointMark({
 
           {/* Курсор поверх всех дорожек: видно, какой кадр сейчас на экране. */}
           <div
+            ref={playheadRef}
             className="pointer-events-none absolute bottom-0 top-6 z-30 w-px bg-amber-300"
-            style={{ left: GUTTER_PX + secToPx(time) }}
+            style={{ left: GUTTER_PX, transform: `translateX(${secToPx(time)}px)` }}
           >
             <span className="absolute -left-[5px] -top-2 h-2.5 w-2.5 rounded-sm bg-amber-300" />
           </div>
