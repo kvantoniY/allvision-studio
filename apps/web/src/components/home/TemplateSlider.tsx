@@ -14,40 +14,65 @@ function mediaUrl(value?: string | null) {
   return value;
 }
 
-/** Протяжка меньше этого — не листание, а дрожание руки или обычный клик. */
-const SWIPE_THRESHOLD_PX = 70;
-/** Дальше этого лента не оттягивается: резинка должна чувствоваться, но не уезжать. */
-const MAX_DRAG_PX = 260;
+/** Доля ширины, после которой отпускание листает, а не возвращает слайд на место. */
+const COMMIT_RATIO = 0.22;
+/** Длительность доводки после отпускания — столько же живёт CSS-переход. */
+const SETTLE_MS = 300;
 
 /**
  * Слайдер готовых шаблонов.
  *
- * Лента слушается пальца и мыши: во время протяжки слайды едут за курсором, на отпускании
- * либо переключаются, либо возвращаются на место. Стрелок нет намеренно — соседние слайды
- * видны по краям и кликабельны, а этого достаточно, чтобы понять, что лента продолжается.
+ * Листание сделано перекрёстным затуханием, привязанным к пальцу: чем дальше протянули,
+ * тем сильнее проявляется соседний слайд и тем прозрачнее становится текущий. Раньше лента
+ * просто сдвигалась целиком на несколько десятков пикселей — жест был, а ощущения листания
+ * не возникало: ничего не появлялось и не исчезало.
  *
- * Видео идёт без звука: десяток роликов, заигравших разом при заходе на страницу, — худшее,
- * что может случиться с главной. Звук включается кнопкой на активном слайде.
+ * Отпускание либо доводит начатое до конца, либо возвращает слайд на место — решает
+ * пройденная доля ширины, а не абсолютные пиксели: на телефоне и на широком мониторе
+ * «половина экрана» должна значить одно и то же.
+ *
+ * Стрелок нет намеренно: соседние слайды видны по краям и кликабельны, этого достаточно,
+ * чтобы понять, что лента продолжается.
  */
 export function TemplateSlider({ services }: { services: PublicService[] }) {
   const [index, setIndex] = useState(0);
   const [soundOn, setSoundOn] = useState(false);
-  const [dragX, setDragX] = useState(0);
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef<{ startX: number; pointerId: number | null } | null>(null);
+  /** −1 — тянем влево (проявляется следующий), +1 — вправо (предыдущий). */
+  const [progress, setProgress] = useState(0);
+  const [phase, setPhase] = useState<'idle' | 'drag' | 'settle'>('idle');
+  const dragRef = useRef<{ startX: number } | null>(null);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const settleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const total = services.length;
-  const go = useCallback(
-    (next: number) => {
-      if (total === 0) return;
-      setIndex(((next % total) + total) % total);
-    },
-    [total],
-  );
 
   useEffect(() => {
     setIndex(0);
   }, [total]);
+
+  useEffect(() => () => {
+    if (settleRef.current) clearTimeout(settleRef.current);
+  }, []);
+
+  /**
+   * Доводка: сначала докручиваем затухание до конца, и только потом меняем активный слайд.
+   *
+   * Если поменять индекс сразу, новый слайд появится с полной непрозрачностью — вместо
+   * плавного проявления получится скачок.
+   */
+  const settle = useCallback(
+    (direction: -1 | 0 | 1) => {
+      if (settleRef.current) clearTimeout(settleRef.current);
+      setPhase('settle');
+      setProgress(direction === 0 ? 0 : direction > 0 ? -1 : 1);
+      settleRef.current = setTimeout(() => {
+        if (direction !== 0) setIndex((current) => ((current + direction) % total + total) % total);
+        setProgress(0);
+        setPhase('idle');
+      }, SETTLE_MS);
+    },
+    [total],
+  );
 
   if (total === 0) return null;
 
@@ -55,35 +80,44 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
   const prev = services[(index - 1 + total) % total];
   const next = services[(index + 1) % total];
 
-  const beginDrag = (clientX: number, pointerId: number | null) => {
-    dragRef.current = { startX: clientX, pointerId };
-    setDragging(true);
+  const shift = Math.abs(progress);
+  // Кто проявляется: тянем влево — следующий, вправо — предыдущий.
+  const incoming = progress < 0 ? next : prev;
+  const showIncoming = shift > 0.002 && total > 1;
+
+  const beginDrag = (clientX: number) => {
+    if (settleRef.current) clearTimeout(settleRef.current);
+    dragRef.current = { startX: clientX };
+    setPhase('drag');
   };
 
   const moveDrag = (clientX: number) => {
     const drag = dragRef.current;
     if (!drag) return;
-    const delta = clientX - drag.startX;
-    // Резинка: у краёв тянется тяжелее, чем в середине.
-    setDragX(Math.max(-MAX_DRAG_PX, Math.min(MAX_DRAG_PX, delta)));
+    const width = boxRef.current?.clientWidth ?? 1;
+    const delta = (clientX - drag.startX) / Math.max(1, width);
+    setProgress(Math.max(-1, Math.min(1, delta)));
   };
 
-  const endDrag = (clientX: number) => {
+  const endDrag = () => {
     const drag = dragRef.current;
     dragRef.current = null;
-    setDragging(false);
-    setDragX(0);
     if (!drag) return;
-    const delta = clientX - drag.startX;
-    if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
-    go(delta < 0 ? index + 1 : index - 1);
+    if (Math.abs(progress) < COMMIT_RATIO || total < 2) {
+      settle(0);
+      return;
+    }
+    settle(progress < 0 ? 1 : -1);
   };
 
   /** Клик по соседнему слайду листает — но только если это был именно клик, а не протяжка. */
   const clickSide = (direction: -1 | 1) => {
-    if (Math.abs(dragX) > 4) return;
-    go(index + direction);
+    if (Math.abs(progress) > 0.01) return;
+    settle(direction);
   };
+
+  const animate = phase !== 'drag';
+  const transition = animate ? `opacity ${SETTLE_MS}ms ease-out, transform ${SETTLE_MS}ms cubic-bezier(0.22, 1, 0.36, 1)` : 'none';
 
   return (
     <div className="relative select-none">
@@ -92,66 +126,65 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
 
       <div
         className="relative flex touch-pan-y items-center justify-center gap-3"
-        style={{
-          transform: `translateX(${dragX}px)`,
-          transition: dragging ? 'none' : 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)',
-        }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture?.(event.pointerId);
-          beginDrag(event.clientX, event.pointerId);
+          beginDrag(event.clientX);
         }}
         onPointerMove={(event) => moveDrag(event.clientX)}
-        onPointerUp={(event) => endDrag(event.clientX)}
+        onPointerUp={endDrag}
         onPointerCancel={() => {
           dragRef.current = null;
-          setDragging(false);
-          setDragX(0);
+          settle(0);
         }}
       >
-        <SideSlide service={prev} side="left" onClick={() => clickSide(-1)} />
+        <SideSlide
+          service={prev}
+          side="left"
+          onClick={() => clickSide(-1)}
+          // Слайд, который вот-вот встанет в центр, по дороге растворяется.
+          fade={progress > 0 ? shift : 0}
+        />
 
-        <div className="relative w-full max-w-[520px] shrink-0">
-          <div
-            className={cn(
-              'group relative overflow-hidden rounded-2xl border border-amber-300/30 bg-slate-950',
-              'shadow-[0_0_60px_-12px_rgba(251,191,36,0.35)] transition duration-500',
-              !dragging && 'hover:shadow-[0_0_80px_-10px_rgba(251,191,36,0.5)]',
+        <div ref={boxRef} className="relative w-full max-w-[520px] shrink-0">
+          <div className="relative aspect-[4/5] sm:aspect-[16/11]">
+            {showIncoming && (
+              <SlideCard
+                key={`incoming-${incoming.id}`}
+                service={incoming}
+                muted
+                dragging={phase === 'drag'}
+                style={{
+                  opacity: shift,
+                  transform: `translateX(${(1 - shift) * (progress < 0 ? 12 : -12)}%) scale(${0.94 + shift * 0.06})`,
+                  transition,
+                }}
+              />
             )}
-          >
-            <div className="relative aspect-[4/5] sm:aspect-[16/11]">
-              <SlideMedia service={active} muted={!soundOn} playing />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-transparent" />
 
-              <button
-                type="button"
-                onClick={() => setSoundOn((value) => !value)}
-                aria-label={soundOn ? 'Выключить звук' : 'Включить звук'}
-                className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border border-white/20 bg-slate-950/70 text-slate-100 backdrop-blur transition hover:bg-slate-900"
-              >
-                {soundOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-              </button>
-
-              <div className="absolute inset-x-0 bottom-0 p-4">
-                <h3 className="text-lg font-bold text-white drop-shadow sm:text-xl">{active.title}</h3>
-                <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{active.shortDesc}</p>
-                <Link
-                  href={`/services/${active.slug}`}
-                  // Ссылку открываем только по настоящему клику: иначе свайп, начатый
-                  // с карточки, уводил бы со страницы.
-                  onClick={(event) => {
-                    if (Math.abs(dragX) > 4) event.preventDefault();
-                  }}
-                  draggable={false}
-                  className="mt-3 inline-flex h-8 items-center rounded-full bg-amber-400 px-4 text-xs font-semibold text-slate-950 transition hover:bg-amber-300"
-                >
-                  Выбрать этот шаблон
-                </Link>
-              </div>
-            </div>
+            <SlideCard
+              key={`active-${active.id}`}
+              service={active}
+              muted={!soundOn}
+              dragging={phase === 'drag'}
+              interactive
+              soundOn={soundOn}
+              onToggleSound={() => setSoundOn((value) => !value)}
+              blockLink={Math.abs(progress) > 0.01}
+              style={{
+                opacity: 1 - shift,
+                transform: `translateX(${progress * 12}%) scale(${1 - shift * 0.06})`,
+                transition,
+              }}
+            />
           </div>
         </div>
 
-        <SideSlide service={next} side="right" onClick={() => clickSide(1)} />
+        <SideSlide
+          service={next}
+          side="right"
+          onClick={() => clickSide(1)}
+          fade={progress < 0 ? shift : 0}
+        />
       </div>
 
       <div className="mt-4 flex justify-center gap-1.5">
@@ -159,7 +192,12 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
           <button
             key={service.id}
             type="button"
-            onClick={() => go(dotIndex)}
+            onClick={() => {
+              if (settleRef.current) clearTimeout(settleRef.current);
+              setProgress(0);
+              setPhase('idle');
+              setIndex(dotIndex);
+            }}
             aria-label={`Шаблон ${dotIndex + 1}`}
             className={cn(
               'h-1.5 rounded-full transition-all',
@@ -172,14 +210,92 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
   );
 }
 
-/** Боковой слайд: уменьшенный, растворяется к краю и листает лента по клику. */
-function SideSlide({ service, side, onClick }: { service: PublicService; side: 'left' | 'right'; onClick: () => void }) {
+/** Карточка слайда. Лежит в общем боксе абсолютом, поэтому слайды могут накладываться. */
+function SlideCard({
+  service,
+  muted,
+  dragging,
+  interactive = false,
+  soundOn = false,
+  onToggleSound,
+  blockLink = false,
+  style,
+}: {
+  service: PublicService;
+  muted: boolean;
+  dragging: boolean;
+  /** Только у активного слайда есть звук и ссылка: у проявляющегося они бы мешали. */
+  interactive?: boolean;
+  soundOn?: boolean;
+  onToggleSound?: () => void;
+  blockLink?: boolean;
+  style: React.CSSProperties;
+}) {
+  return (
+    <div
+      className={cn(
+        'absolute inset-0 overflow-hidden rounded-2xl border border-amber-300/30 bg-slate-950',
+        'shadow-[0_0_60px_-12px_rgba(251,191,36,0.35)]',
+        !dragging && interactive && 'hover:shadow-[0_0_80px_-10px_rgba(251,191,36,0.5)]',
+      )}
+      style={style}
+    >
+      <SlideMedia service={service} muted={muted} playing />
+      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-transparent" />
+
+      {interactive && (
+        <button
+          type="button"
+          onClick={onToggleSound}
+          aria-label={soundOn ? 'Выключить звук' : 'Включить звук'}
+          className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full border border-white/20 bg-slate-950/70 text-slate-100 backdrop-blur transition hover:bg-slate-900"
+        >
+          {soundOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+        </button>
+      )}
+
+      <div className="absolute inset-x-0 bottom-0 p-4">
+        <h3 className="text-lg font-bold text-white drop-shadow sm:text-xl">{service.title}</h3>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{service.shortDesc}</p>
+        {interactive && (
+          <Link
+            href={`/services/${service.slug}`}
+            // Ссылку открываем только по настоящему клику: иначе свайп, начатый
+            // с карточки, уводил бы со страницы.
+            onClick={(event) => {
+              if (blockLink) event.preventDefault();
+            }}
+            draggable={false}
+            className="mt-3 inline-flex h-8 items-center rounded-full bg-amber-400 px-4 text-xs font-semibold text-slate-950 transition hover:bg-amber-300"
+          >
+            Выбрать этот шаблон
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Боковой слайд: уменьшенный, растворяется к краю и листает ленту по клику. */
+function SideSlide({
+  service,
+  side,
+  onClick,
+  fade,
+}: {
+  service: PublicService;
+  side: 'left' | 'right';
+  onClick: () => void;
+  /** 0..1 — насколько слайд уже «уехал» в центр во время протяжки. */
+  fade: number;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-label={side === 'left' ? 'Предыдущий шаблон' : 'Следующий шаблон'}
-      className="relative hidden h-[220px] w-[180px] shrink-0 overflow-hidden rounded-xl border border-white/10 opacity-45 transition hover:opacity-70 lg:block"
+      className="relative hidden h-[220px] w-[180px] shrink-0 overflow-hidden rounded-xl border border-white/10 transition hover:opacity-70 lg:block"
+      style={{ opacity: 0.45 * (1 - fade) }}
     >
       <SlideMedia service={service} muted playing={false} />
       <div

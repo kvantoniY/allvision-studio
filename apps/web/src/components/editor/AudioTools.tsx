@@ -50,6 +50,7 @@ export function AudioTools({
   voiceoverRunning,
   priceOverrides,
   onAddMusic,
+  onPickMusicFile,
   onPickVoiceFile,
   onRecordVoice,
   onGenerateVoiceover,
@@ -64,6 +65,7 @@ export function AudioTools({
   voiceoverRunning: boolean;
   priceOverrides?: Record<string, number>;
   onAddMusic: (url: string, title: string) => void;
+  onPickMusicFile: () => void;
   onPickVoiceFile: () => void;
   onRecordVoice: (file: File) => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
@@ -85,7 +87,7 @@ export function AudioTools({
       </div>
 
       {tab === 'music' ? (
-        <MusicTab musicOptions={musicOptions} onAddMusic={onAddMusic} />
+        <MusicTab musicOptions={musicOptions} onAddMusic={onAddMusic} onPickMusicFile={onPickMusicFile} />
       ) : (
         <VoiceTab
           timeline={timeline}
@@ -139,9 +141,12 @@ function TabButton({
 function MusicTab({
   musicOptions,
   onAddMusic,
+  onPickMusicFile,
 }: {
   musicOptions: Array<{ id: string; title: string; publicUrl: string }>;
   onAddMusic: (url: string, title: string) => void;
+  /** Своя музыка: загрузка тем же путём, что и запись голоса. */
+  onPickMusicFile: () => void;
 }) {
   const [selected, setSelected] = useState('');
 
@@ -177,9 +182,22 @@ function MusicTab({
         Добавить дорожку
       </Button>
 
-      {musicOptions.length === 0 && <p className="text-xs text-slate-500">Библиотека музыки пока пуста.</p>}
+      {musicOptions.length === 0 && (
+        <p className="text-xs text-slate-500">Библиотека пуста — загрузите свой трек.</p>
+      )}
+
+      <button
+        type="button"
+        onClick={onPickMusicFile}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-700 py-2.5 text-sm text-slate-300 transition hover:border-amber-400/60 hover:text-amber-200"
+      >
+        <Upload className="h-4 w-4" />
+        Загрузить свою музыку
+      </button>
+
       <p className="text-xs text-slate-500">
-        Громкость, начало и обрезку настраивайте на дорожке внизу. Под голос музыка приглушается сама.
+        Громкость, начало, обрезку и разрез настраивайте на дорожке внизу — там видна звуковая
+        волна. Под голос музыка приглушается сама.
       </p>
     </div>
   );

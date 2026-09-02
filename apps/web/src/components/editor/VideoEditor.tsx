@@ -149,6 +149,7 @@ export function VideoEditor({ id }: { id: string }) {
   const uploadTargetRef = useRef<{ clipId: string | null } | null>(null);
   const addFileRef = useRef<HTMLInputElement | null>(null);
   const voiceFileRef = useRef<HTMLInputElement | null>(null);
+  const musicFileRef = useRef<HTMLInputElement | null>(null);
   const timelineRef = useRef<Timeline | null>(null);
   // Буфер обмена живёт в ref: он переживает перерисовку и не должен её вызывать.
   const clipboardRef = useRef<TimelineClip | null>(null);
@@ -376,6 +377,62 @@ export function VideoEditor({ id }: { id: string }) {
     [applyTimeline],
   );
 
+  /**
+   * Режет дорожку надвое под курсором.
+   *
+   * Хвост продолжает файл ровно с той секунды, где кончилась голова, — как разрез клипа
+   * на видеодорожке. Затухание на месте разреза снимаем: иначе на стыке двух кусков,
+   * стоящих вплотную, звук проваливался бы в тишину и снова возвращался.
+   *
+   * Повтор у обоих кусков выключаем: после разреза это уже не «песня на весь ролик», а
+   * два фрагмента с явными границами, и зацикливание внутри них только путает.
+   */
+  const splitAudioTrack = useCallback(
+    (trackId: string, atSec: number) => {
+      const current = timelineRef.current;
+      if (!current) return;
+      const base = timelineWithAudioTracks(current);
+      const list = base.audio ?? [];
+      const track = list.find((item) => item.id === trackId);
+      if (!track) return;
+      if (list.length >= TIMELINE_LIMITS.maxAudioTracks) {
+        toast({ title: 'Больше дорожек не поместится', variant: 'destructive' });
+        return;
+      }
+
+      const startAt = track.startAtSec ?? 0;
+      const rollEnd = Math.max(timelineDurationSec(current), atSec + 0.5);
+      const end = track.durationSec && track.durationSec > 0 ? startAt + track.durationSec : rollEnd;
+      if (atSec <= startAt + 0.2 || atSec >= end - 0.2) {
+        toast({ title: 'Поставьте курсор внутри дорожки', variant: 'destructive' });
+        return;
+      }
+
+      const headLength = Number((atSec - startAt).toFixed(2));
+      const head: TimelineNamedAudioTrack = {
+        ...track,
+        durationSec: headLength,
+        loop: false,
+        fadeOutSec: 0,
+      };
+      const tail: TimelineNamedAudioTrack = {
+        ...track,
+        id: uid(track.kind),
+        startAtSec: Number(atSec.toFixed(2)),
+        trimStartSec: Number(((track.trimStartSec ?? 0) + headLength).toFixed(2)),
+        durationSec: Number((end - atSec).toFixed(2)),
+        loop: false,
+        fadeInSec: 0,
+      };
+
+      applyTimeline({
+        ...base,
+        audio: list.flatMap((item) => (item.id === trackId ? [head, tail] : [item])),
+      });
+    },
+    [applyTimeline],
+  );
+
   const removeAudioTrack = useCallback(
     (trackId: string) => {
       const current = timelineRef.current;
@@ -408,6 +465,23 @@ export function VideoEditor({ id }: { id: string }) {
       }
     },
     [id, uploadMedia, setVoiceover],
+  );
+
+  const handleMusicUpload = useCallback(
+    async (file: File) => {
+      try {
+        const uploaded = await uploadMedia({ id, file }).unwrap();
+        if (uploaded.mediaKind !== 'audio') {
+          toast({ title: 'Нужен аудиофайл', description: 'MP3, WAV или M4A.', variant: 'destructive' });
+          return;
+        }
+        // Имя файла без расширения — единственное осмысленное название своей музыки.
+        addAudioTrack('music', uploaded.url, file.name.replace(/\.[^.]+$/, '').slice(0, 60) || 'Моя музыка');
+      } catch {
+        toast({ title: 'Не удалось загрузить музыку', description: 'Проверьте формат и размер.', variant: 'destructive' });
+      }
+    },
+    [id, uploadMedia, addAudioTrack],
   );
 
   const [voiceoverProjectId, setVoiceoverProjectId] = useState<string | null>(null);
@@ -1039,6 +1113,7 @@ export function VideoEditor({ id }: { id: string }) {
               });
             }}
             onAddMusic={(url, trackTitle) => addAudioTrack('music', url, trackTitle)}
+            onPickMusicFile={() => musicFileRef.current?.click()}
             recordings={voiceRecordings}
             onAddVoiceTrack={(url, trackTitle) => addAudioTrack('voice', url, trackTitle)}
             onRemoveVoiceTrack={(url) => {
@@ -1153,6 +1228,7 @@ export function VideoEditor({ id }: { id: string }) {
           onPatchTrack={ops.patchTrack}
           onChangeAudio={changeAudioTrack}
           onRemoveAudio={removeAudioTrack}
+          onSplitAudio={splitAudioTrack}
           onDropMedia={(trackIndex, startSec, item) => void addFromLibrary(item, { trackIndex, startSec })}
         />
       </footer>
@@ -1166,6 +1242,17 @@ export function VideoEditor({ id }: { id: string }) {
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) void handleVoiceUpload(file);
+          event.target.value = '';
+        }}
+      />
+      <input
+        ref={musicFileRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void handleMusicUpload(file);
           event.target.value = '';
         }}
       />
@@ -1207,6 +1294,7 @@ function ToolBar({
   onAddVoiceTrack,
   onRemoveVoiceTrack,
   onPickVoiceFile,
+  onPickMusicFile,
   onRecordVoice,
   onGenerateVoiceover,
   onGenerate,
@@ -1237,6 +1325,7 @@ function ToolBar({
   onAddVoiceTrack: (url: string, title: string) => void;
   onRemoveVoiceTrack: (url: string) => void;
   onPickVoiceFile: () => void;
+  onPickMusicFile: () => void;
   onRecordVoice: (file: File) => void;
   onGenerateVoiceover: (request: VoiceoverRequest) => void;
   onUploadReference: (file: File) => Promise<string | null>;
@@ -1300,6 +1389,7 @@ function ToolBar({
         voiceoverRunning={voiceoverRunning}
         priceOverrides={priceOverrides}
         onAddMusic={onAddMusic}
+        onPickMusicFile={onPickMusicFile}
         recordings={recordings}
         onAddVoiceTrack={onAddVoiceTrack}
         onRemoveVoiceTrack={onRemoveVoiceTrack}

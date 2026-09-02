@@ -187,6 +187,38 @@ describe('planScene', () => {
   });
 });
 
+describe('planFinal: фрагменты звука', () => {
+  function withTrack(track: Record<string, unknown>) {
+    const timeline = parseTimeline({
+      scenes: [videoScene({ id: 'a' })],
+      audio: [{ id: 'm1', kind: 'music', url: 'https://cdn.test/song.mp3', ...track }],
+    });
+    return filterGraph(planFinal({
+      timeline,
+      scenePaths: ['/tmp/0.mp4'],
+      audioPaths: ['/tmp/song.mp3'],
+      outputPath: '/tmp/out.mp4',
+      quality: 'balanced',
+    }).args);
+  }
+
+  it('разрезанная дорожка звучит только свой кусок', () => {
+    const graph = withTrack({ trimStartSec: 12, durationSec: 3, startAtSec: 1, fadeInSec: 0, fadeOutSec: 0 });
+    expect(graph).toContain('atrim=start=12.000:end=15.000');
+  });
+
+  it('затухание привязано к концу фрагмента, а не к концу ролика', () => {
+    // Ролик длится 5 секунд, фрагмент кончается на второй — хвост должен уводить там.
+    const graph = withTrack({ startAtSec: 0, durationSec: 2, fadeOutSec: 0.5 });
+    expect(graph).toContain('afade=t=out:st=1.500:d=0.500');
+  });
+
+  it('целая дорожка команду не меняет', () => {
+    const graph = withTrack({ startAtSec: 0, fadeInSec: 0, fadeOutSec: 0 });
+    expect(graph).not.toContain('atrim=');
+  });
+});
+
 describe('planFinal', () => {
   it('joins cuts with concat and transitions with xfade at the computed offset', () => {
     const timeline = parseTimeline({

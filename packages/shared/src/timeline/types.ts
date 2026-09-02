@@ -125,6 +125,14 @@ export const timelineAudioTrackSchema = z.object({
    * с припева, а не со вступления).
    */
   trimStartSec: z.number().min(0).max(3600).default(0),
+  /**
+   * Сколько секунд дорожка звучит. Пусто — до конца файла (или до конца ролика, если
+   * дорожка зациклена).
+   *
+   * Появилось вместе с резкой звука: без верхней границы трек нельзя разделить на куски —
+   * второй фрагмент звучал бы поверх первого до самого конца.
+   */
+  durationSec: z.number().min(0.2).max(TIMELINE_LIMITS.maxTotalDurationSec).optional(),
 });
 
 export type TimelineAudioTrack = z.infer<typeof timelineAudioTrackSchema>;

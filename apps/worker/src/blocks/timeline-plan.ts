@@ -1,5 +1,6 @@
 import {
   TIMELINE_FPS,
+  audioTrackEndSec,
   sceneDurationSec,
   timelineResolution,
   timelineAudioTracks,
@@ -318,14 +319,21 @@ export type FinalPlanInput = {
  * длительности и сдвинул бы весь дальнейший тайминг относительно расчётного.
  */
 /**
- * Обрезка начала аудиофайла.
+ * Кусок аудиофайла: с какой секунды и сколько.
  *
  * asetpts обязателен: без него отрезанный кусок сохраняет исходные метки времени и
  * вступает в ролике позже, чем просили, — а поверх ещё ляжет adelay, и звук уедет.
+ *
+ * Верхняя граница нужна разрезанным дорожкам: без неё второй фрагмент звучал бы поверх
+ * первого до конца ролика. Для зацикленного трека она же обрывает бесконечный вход.
  */
-function trimStages(trimStartSec?: number): string[] {
-  if (!trimStartSec || trimStartSec <= 0) return [];
-  return [`atrim=start=${fixed(trimStartSec)}`, 'asetpts=PTS-STARTPTS'];
+function trimStages(trimStartSec?: number, durationSec?: number): string[] {
+  const start = trimStartSec && trimStartSec > 0 ? trimStartSec : 0;
+  const hasEnd = typeof durationSec === 'number' && durationSec > 0;
+  if (start <= 0 && !hasEnd) return [];
+  const spec = [`start=${fixed(start)}`];
+  if (hasEnd) spec.push(`end=${fixed(start + durationSec)}`);
+  return [`atrim=${spec.join(':')}`, 'asetpts=PTS-STARTPTS'];
 }
 
 export function planFinal(input: FinalPlanInput): FinalPlan {
@@ -384,7 +392,7 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
     // Под голос музыка уводится в фон фиксированным коэффициентом. Это грубее
     // сайдчейн-компрессии, но предсказуемо и не зависит от версии ffmpeg.
     const volume = track.kind === 'music' && hasVoice ? track.volume * 0.35 : track.volume;
-    const stages = [...trimStages(track.trimStartSec), `volume=${fixed(volume, 3)}`];
+    const stages = [...trimStages(track.trimStartSec, track.durationSec), `volume=${fixed(volume, 3)}`];
     if (track.startAtSec > 0) {
       const delayMs = Math.round(track.startAtSec * 1000);
       stages.push(`adelay=${delayMs}|${delayMs}`);
@@ -393,7 +401,10 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
       stages.push(`afade=t=in:st=${fixed(track.startAtSec)}:d=${fixed(track.fadeInSec)}`);
     }
     if (track.fadeOutSec > 0) {
-      stages.push(`afade=t=out:st=${fixed(Math.max(0, totalDurationSec - track.fadeOutSec))}:d=${fixed(track.fadeOutSec)}`);
+      // Затухание привязано к концу САМОЙ дорожки: у фрагмента он раньше конца ролика,
+      // и общий хвост увёл бы в тишину не тот кусок.
+      const endSec = audioTrackEndSec(track, totalDurationSec);
+      stages.push(`afade=t=out:st=${fixed(Math.max(0, endSec - track.fadeOutSec))}:d=${fixed(track.fadeOutSec)}`);
     }
     stages.push('aformat=sample_fmts=fltp:channel_layouts=stereo');
     const label = `atrack${order}`;

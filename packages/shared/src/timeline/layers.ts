@@ -327,6 +327,22 @@ export function timelineAudioTracks(timeline: Timeline): TimelineNamedAudioTrack
 }
 
 /**
+ * Последняя секунда ролика, на которой дорожка ещё звучит.
+ *
+ * У фрагмента конец задан явно; у целого трека он равен концу ролика — зацикленная музыка
+ * играет до финальных титров, а обычная обрывается вместе с роликом.
+ */
+export function audioTrackEndSec(
+  track: Pick<TimelineNamedAudioTrack, 'startAtSec' | 'durationSec'>,
+  totalSec: number,
+): number {
+  if (typeof track.durationSec === 'number' && track.durationSec > 0) {
+    return Math.min(totalSec, track.startAtSec + track.durationSec);
+  }
+  return totalSec;
+}
+
+/**
  * Переводит ролик на список дорожек.
  *
  * Вызывается перед любой правкой звука: пока ролик живёт в старой форме, добавить вторую

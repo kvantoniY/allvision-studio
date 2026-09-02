@@ -41,14 +41,18 @@ import { cn } from '@/lib/utils';
  */
 function syncTrack(
   element: HTMLAudioElement | null,
-  track: { volume: number; startAtSec: number; trimStartSec?: number } | undefined,
+  track: { volume: number; startAtSec: number; trimStartSec?: number; durationSec?: number } | undefined,
   time: number,
   playing: boolean,
   volumeScale: number,
 ) {
   if (!element || !track) return;
   element.volume = Math.min(1, Math.max(0, track.volume * volumeScale));
-  const started = time >= track.startAtSec;
+  // Фрагмент замолкает на своей секунде, а не тянется до конца ролика.
+  const ends = typeof track.durationSec === 'number' && track.durationSec > 0
+    ? track.startAtSec + track.durationSec
+    : Number.POSITIVE_INFINITY;
+  const started = time >= track.startAtSec && time < ends;
   const expected = Math.max(0, time - track.startAtSec) + (track.trimStartSec ?? 0);
   if (Math.abs(element.currentTime - expected) > 0.4) element.currentTime = expected;
   if (playing && started && element.paused) void element.play().catch(() => undefined);

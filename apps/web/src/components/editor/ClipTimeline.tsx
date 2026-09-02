@@ -19,6 +19,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import {
+  TIMELINE_LIMITS,
   clipEndSec,
   formatTimelineDuration,
   sortedClips,
@@ -31,6 +32,7 @@ import {
   type TimelineTransition,
 } from '@allvision/shared';
 import { mediaUrl } from '@/components/editor/canvas/useMediaElements';
+import { Waveform } from '@/components/editor/Waveform';
 import type { MediaLibraryItem } from '@/components/editor/MediaLibraryPanel';
 import { cn } from '@/lib/utils';
 
@@ -111,6 +113,8 @@ export type ClipTimelineProps = {
   onPatchTrack: (trackIndex: number, patch: { hidden?: boolean; muted?: boolean }) => void;
   onChangeAudio: (trackId: string, patch: Partial<TimelineNamedAudioTrack>) => void;
   onRemoveAudio: (trackId: string) => void;
+  /** Режет дорожку на два фрагмента под курсором. */
+  onSplitAudio: (trackId: string, atSec: number) => void;
   /** Материал, брошенный из медиатеки прямо на дорожку. */
   onDropMedia: (trackIndex: number, startSec: number, item: MediaLibraryItem) => void;
   className?: string;
@@ -134,6 +138,7 @@ export function ClipTimeline({
   onPatchTrack,
   onChangeAudio,
   onRemoveAudio,
+  onSplitAudio,
   onDropMedia,
   className,
 }: ClipTimelineProps) {
@@ -462,7 +467,9 @@ export function ClipTimeline({
                   track={track}
                   total={total}
                   pxPerSec={pxPerSec}
+                  playheadSec={time}
                   onChange={(patch) => onChangeAudio(track.id, patch)}
+                  onSplit={() => onSplitAudio(track.id, time)}
                   onRemove={() => onRemoveAudio(track.id)}
                 />
               </div>
@@ -674,67 +681,69 @@ function IconButton({
  * Тело двигают мышью — это момент вступления в ролике. Левая ручка режет начало файла:
  * песню можно начать с припева, а не со вступления.
  */
+/**
+ * Клип звуковой дорожки.
+ *
+ * Ведёт себя как клип видео: его двигают, тянут за оба края и режут под курсором. Внутри
+ * рисуется звуковая волна — по ней видно, где пауза, а где вступает голос, и резать можно
+ * осмысленно, а не на глаз.
+ */
 function AudioClip({
   track,
   total,
   pxPerSec,
+  playheadSec,
   onChange,
+  onSplit,
   onRemove,
 }: {
   track: TimelineNamedAudioTrack;
   total: number;
   pxPerSec: number;
+  /** Секунда курсора: по ней режем. */
+  playheadSec: number;
   onChange: (patch: Partial<TimelineNamedAudioTrack>) => void;
+  onSplit: () => void;
   onRemove: () => void;
 }) {
-  const duration = useAudioDuration(track.url);
-  const [draft, setDraft] = useState<{ startAtSec: number; trimStartSec: number } | null>(null);
+  const fileDuration = useAudioDuration(track.url);
+  const [draft, setDraft] = useState<{ startAtSec: number; trimStartSec: number; durationSec?: number } | null>(null);
 
   const commit = useCallback(() => {
     setDraft((current) => {
-      if (current) onChange({ startAtSec: current.startAtSec, trimStartSec: current.trimStartSec });
+      if (current) {
+        onChange({
+          startAtSec: current.startAtSec,
+          trimStartSec: current.trimStartSec,
+          durationSec: current.durationSec,
+        });
+      }
       return null;
     });
   }, [onChange]);
 
   const startAt = draft?.startAtSec ?? track.startAtSec ?? 0;
   const trimStart = draft?.trimStartSec ?? track.trimStartSec ?? 0;
-  const playable = duration === null ? total - startAt : Math.max(0.5, duration - trimStart);
-  const barSeconds = track.loop ? total - startAt : Math.min(playable, total - startAt);
+  const fragment = draft ? draft.durationSec : track.durationSec;
 
-  const beginMove = (event: React.PointerEvent) => {
-    event.preventDefault();
-    const fromX = event.clientX;
-    const originalStart = track.startAtSec ?? 0;
-    const move = (moveEvent: PointerEvent) => {
-      const delta = (moveEvent.clientX - fromX) / pxPerSec;
-      setDraft({
-        startAtSec: Math.max(0, Number((originalStart + delta).toFixed(2))),
-        trimStartSec: trimStart,
-      });
-    };
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      commit();
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-  };
+  // Сколько осталось в файле после обрезки: правый край дальше этого не растянуть.
+  const playable = fileDuration === null ? total - startAt : Math.max(0.5, fileDuration - trimStart);
+  const barSeconds = fragment && fragment > 0
+    ? fragment
+    : track.loop
+      ? Math.max(0.5, total - startAt)
+      : Math.min(playable, Math.max(0.5, total - startAt));
 
-  const beginTrim = (event: React.PointerEvent) => {
+  const source = mediaUrl(track.url);
+
+  const drag = (
+    event: React.PointerEvent,
+    onDelta: (deltaSec: number) => void,
+  ) => {
     event.preventDefault();
     event.stopPropagation();
     const fromX = event.clientX;
-    const originalTrim = track.trimStartSec ?? 0;
-    const move = (moveEvent: PointerEvent) => {
-      const delta = (moveEvent.clientX - fromX) / pxPerSec;
-      const nextTrim = Math.max(0, Number((originalTrim + delta).toFixed(2)));
-      setDraft({
-        startAtSec: startAt,
-        trimStartSec: duration ? Math.min(nextTrim, duration - 0.5) : nextTrim,
-      });
-    };
+    const move = (moveEvent: PointerEvent) => onDelta((moveEvent.clientX - fromX) / pxPerSec);
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
@@ -744,7 +753,51 @@ function AudioClip({
     window.addEventListener('pointerup', up);
   };
 
+  const beginMove = (event: React.PointerEvent) => {
+    const originalStart = track.startAtSec ?? 0;
+    drag(event, (delta) => {
+      setDraft({
+        startAtSec: Math.max(0, Number((originalStart + delta).toFixed(2))),
+        trimStartSec: trimStart,
+        durationSec: track.durationSec,
+      });
+    });
+  };
+
+  /**
+   * Левый край режет начало: одновременно уезжает и позиция в ролике, и точка входа в файле.
+   * Кусок при этом остаётся тем же — как у видео.
+   */
+  const beginTrimStart = (event: React.PointerEvent) => {
+    const originalTrim = track.trimStartSec ?? 0;
+    const originalStart = track.startAtSec ?? 0;
+    const originalLength = barSeconds;
+    drag(event, (delta) => {
+      const shift = Math.max(-originalTrim, Math.min(delta, originalLength - 0.5));
+      setDraft({
+        startAtSec: Math.max(0, Number((originalStart + shift).toFixed(2))),
+        trimStartSec: Number((originalTrim + shift).toFixed(2)),
+        durationSec: Number((originalLength - shift).toFixed(2)),
+      });
+    });
+  };
+
+  /** Правый край задаёт длину фрагмента — дальше конца файла не растянуть. */
+  const beginTrimEnd = (event: React.PointerEvent) => {
+    const originalLength = barSeconds;
+    drag(event, (delta) => {
+      const limit = track.loop ? TIMELINE_LIMITS.maxTotalDurationSec : playable;
+      const next = Math.max(0.5, Math.min(limit, originalLength + delta));
+      setDraft({
+        startAtSec: startAt,
+        trimStartSec: trimStart,
+        durationSec: Number(next.toFixed(2)),
+      });
+    });
+  };
+
   const accent = track.kind === 'music' ? 'amber' : 'violet';
+  const insideClip = playheadSec > startAt + 0.2 && playheadSec < startAt + barSeconds - 0.2;
 
   return (
     <>
@@ -756,16 +809,29 @@ function AudioClip({
         )}
         style={{ left: startAt * pxPerSec, width: Math.max(20, barSeconds * pxPerSec) }}
       >
-        <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-[10px] text-slate-200">
+        <Waveform
+          src={source}
+          fromSec={trimStart}
+          lengthSec={barSeconds}
+          fileDurationSec={fileDuration}
+          color={accent === 'amber' ? 'rgba(251, 191, 36, 0.55)' : 'rgba(167, 139, 250, 0.55)'}
+        />
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded bg-slate-950/70 px-1 font-mono text-[10px] text-slate-200">
           {formatTimelineDuration(startAt)}
           {trimStart > 0 && <span className="ml-1 text-slate-400">c {formatTimelineDuration(trimStart)} трека</span>}
         </span>
-        {track.loop && <Repeat className="absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-300" />}
+        {track.loop && <Repeat className="pointer-events-none absolute right-2 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-300" />}
         <span
-          onPointerDown={beginTrim}
+          onPointerDown={beginTrimStart}
           role="separator"
-          aria-label="Обрезать начало трека"
+          aria-label="Обрезать начало"
           className="absolute inset-y-0 left-0 z-10 w-2 cursor-col-resize transition group-hover:bg-white/30"
+        />
+        <span
+          onPointerDown={beginTrimEnd}
+          role="separator"
+          aria-label="Обрезать конец"
+          className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize transition group-hover:bg-white/30"
         />
       </div>
 
@@ -784,6 +850,16 @@ function AudioClip({
           aria-label="Громкость"
           title={`Громкость: ${Math.round(track.volume * 100)}%`}
         />
+        <button
+          type="button"
+          onClick={onSplit}
+          disabled={!insideClip}
+          title={insideClip ? 'Разрезать под курсором' : 'Поставьте курсор внутри дорожки'}
+          aria-label="Разрезать дорожку"
+          className="grid h-5 w-5 place-items-center rounded border border-slate-700 text-slate-400 transition hover:border-slate-500 hover:text-slate-200 disabled:opacity-40"
+        >
+          <Scissors className="h-3 w-3" />
+        </button>
         {track.kind === 'music' && (
           <button
             type="button"
