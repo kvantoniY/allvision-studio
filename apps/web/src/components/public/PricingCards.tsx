@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Check, Loader2, Sparkles } from 'lucide-react';
@@ -8,10 +9,11 @@ import type { PublicTokenPackage } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/use-auth';
-import { useTopupMutation } from '@/store/api/payments-api';
+import { useCheckPromoCodeMutation, useTopupMutation } from '@/store/api/payments-api';
 import { getPackageTotal } from '@/lib/public-content';
 import { submitPaymentConfirmation } from '@/lib/payment-confirmation';
 import { cn } from '@/lib/utils';
@@ -39,6 +41,22 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
   const router = useRouter();
   const { toast } = useToast();
   const [topup, { isLoading: isTopupLoading, originalArgs }] = useTopupMutation();
+  const [checkPromo, promoState] = useCheckPromoCodeMutation();
+  const [promoInput, setPromoInput] = useState('');
+  const [promo, setPromo] = useState<PromoTerms | null>(null);
+
+  const applyPromo = async () => {
+    if (!promoInput.trim()) return;
+    try {
+      const result = await checkPromo({ code: promoInput }).unwrap();
+      setPromo(result.promo);
+      toast({ title: `Промокод ${result.promo.code} применён`, description: 'Цены пересчитаны ниже.' });
+    } catch (err) {
+      setPromo(null);
+      const message = (err as { data?: { error?: { message?: string } } })?.data?.error?.message;
+      toast({ title: 'Промокод не подошёл', description: message, variant: 'destructive' });
+    }
+  };
 
   const handleBuy = async (tokenPackageId: string) => {
     if (!user) {
@@ -47,7 +65,8 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
     }
 
     try {
-      const result = await topup({ tokenPackageId }).unwrap();
+      // Код передаём серверу: итоговую сумму всё равно считает он, здесь только показ.
+      const result = await topup({ tokenPackageId, ...(promo ? { promoCode: promo.code } : {}) }).unwrap();
       submitPaymentConfirmation(result);
     } catch {
       toast({
@@ -79,20 +98,83 @@ export function PricingCards({ packages, isLoading, fallbackHref = '/pricing' }:
   }
 
   return (
-    <div className={cn('mx-auto grid w-full gap-5', items.length <= 3 ? 'max-w-5xl' : '', columnsClass)}>
-      {items.map((pkg) => (
-        <TokenPackageCard
-          key={pkg.id}
-          pkg={pkg}
-          onBuy={handleBuy}
-          userPresent={!!user}
-          fallbackHref={fallbackHref}
-          isTopupLoading={isTopupLoading}
-          activePackageId={originalArgs?.tokenPackageId}
+    <div className="space-y-5">
+      {/*
+        * Поле промокода стоит НАД пакетами, а не в каждой карточке: код один на покупку, и
+        * скидку надо увидеть сразу на всех вариантах, чтобы выбрать осознанно.
+        */}
+      <div className="mx-auto flex w-full max-w-md flex-wrap items-center gap-2">
+        <Input
+          value={promoInput}
+          onChange={(event) => setPromoInput(event.target.value.toUpperCase())}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') void applyPromo();
+          }}
+          placeholder="Промокод"
+          aria-label="Промокод"
+          className="h-10 flex-1 font-mono uppercase"
         />
-      ))}
+        {promo ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setPromo(null);
+              setPromoInput('');
+            }}
+          >
+            Убрать
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" disabled={promoState.isLoading || !promoInput.trim()} onClick={() => void applyPromo()}>
+            {promoState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Применить
+          </Button>
+        )}
+      </div>
+
+      {promo && (
+        <p className="text-center text-sm text-emerald-300">
+          {promo.code}: скидка {promo.discountType === 'PERCENT' ? `${promo.discountValue}%` : `${promo.discountValue} ₽`} на пополнение.
+          Токенов начислится столько же.
+        </p>
+      )}
+
+      <div className={cn('mx-auto grid w-full gap-5', items.length <= 3 ? 'max-w-5xl' : '', columnsClass)}>
+        {items.map((pkg) => (
+          <TokenPackageCard
+            key={pkg.id}
+            pkg={pkg}
+            onBuy={handleBuy}
+            userPresent={!!user}
+            fallbackHref={fallbackHref}
+            isTopupLoading={isTopupLoading}
+            activePackageId={originalArgs?.tokenPackageId}
+            promo={promo}
+          />
+        ))}
+      </div>
     </div>
   );
+}
+
+/** Условия применённого кода: тип и величина скидки. */
+type PromoTerms = { code: string; discountType: 'PERCENT' | 'FIXED'; discountValue: number; description: string | null };
+
+/**
+ * Цена пакета со скидкой — предпросмотр.
+ *
+ * Считаем ровно по тому же правилу, что и сервер (процент вниз, минимум рубль к оплате),
+ * но окончательная сумма всё равно считается там: показывать одно, а списывать другое
+ * нельзя, и единственный способ этого избежать — повторить формулу буква в букву.
+ */
+function promoPriceRub(priceRub: number, promo: PromoTerms | null): number | null {
+  if (!promo) return null;
+  const discount = promo.discountType === 'PERCENT'
+    ? Math.floor((priceRub * promo.discountValue) / 100)
+    : promo.discountValue;
+  const capped = Math.max(0, Math.min(discount, priceRub - 1));
+  return capped > 0 ? priceRub - capped : null;
 }
 
 function TokenPackageCard({
@@ -102,6 +184,7 @@ function TokenPackageCard({
   fallbackHref,
   isTopupLoading,
   activePackageId,
+  promo,
 }: {
   pkg: PublicTokenPackage;
   onBuy: (id: string) => void;
@@ -109,7 +192,9 @@ function TokenPackageCard({
   fallbackHref: string;
   isTopupLoading: boolean;
   activePackageId?: string;
+  promo?: PromoTerms | null;
 }) {
+  const promoPrice = promoPriceRub(pkg.priceRub, promo ?? null);
   const discount = discountPercent(pkg);
   const badgeText = pkg.badgeText || (pkg.isPopular ? 'Выбирают чаще всего' : '');
   const features = pkg.features?.length ? pkg.features : DEFAULT_PACKAGE_FEATURES;
@@ -145,10 +230,20 @@ function TokenPackageCard({
           </div>
         </div>
         <div className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          {pkg.originalPriceRub && pkg.originalPriceRub > pkg.priceRub && (
-            <span className="text-lg font-semibold text-muted-foreground line-through">{pkg.originalPriceRub} ₽</span>
+          {/* С промокодом обычную цену зачёркиваем: скидка должна быть видна, а не подразумеваться. */}
+          {promoPrice != null ? (
+            <>
+              <span className="text-lg font-semibold text-muted-foreground line-through">{pkg.priceRub} ₽</span>
+              <span className="text-3xl font-bold text-emerald-500 dark:text-emerald-300">{promoPrice} ₽</span>
+            </>
+          ) : (
+            <>
+              {pkg.originalPriceRub && pkg.originalPriceRub > pkg.priceRub && (
+                <span className="text-lg font-semibold text-muted-foreground line-through">{pkg.originalPriceRub} ₽</span>
+              )}
+              <span className="text-3xl font-bold">{pkg.priceRub} ₽</span>
+            </>
           )}
-          <span className="text-3xl font-bold">{pkg.priceRub} ₽</span>
           <span className="text-sm text-muted-foreground">разово</span>
         </div>
         {pkg.bonus > 0 && (

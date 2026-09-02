@@ -27,22 +27,23 @@ model User {
   deletedAt              DateTime?
   createdAt              DateTime       @default(now())
 
-  projects   Project[]
-  payments   Payment[]
-  orders     Order[]
-  tokenTxns  TokenTransaction[]
-  fairyTales FairyTaleScriptRecord[]
-  characters Character[]
-  scenes     Scene[]
-  episodes   Episode[]
-  mediaAssets MediaAsset[]
-  chats     Chat[]
-  videoProjects VideoProject[]
-  customOrders  CustomOrder[]
-  customOrderMessages CustomOrderMessage[]
-  supportTickets SupportTicket[] @relation("SupportTicketOwner")
-  supportMessages SupportMessage[] @relation("SupportMessageAuthor")
-  resolvedSupportTickets SupportTicket[] @relation("SupportTicketResolvedBy")
+  projects               Project[]
+  payments               Payment[]
+  promoUses              PromoCodeUse[]
+  orders                 Order[]
+  tokenTxns              TokenTransaction[]
+  fairyTales             FairyTaleScriptRecord[]
+  characters             Character[]
+  scenes                 Scene[]
+  episodes               Episode[]
+  mediaAssets            MediaAsset[]
+  chats                  Chat[]
+  videoProjects          VideoProject[]
+  customOrders           CustomOrder[]
+  customOrderMessages    CustomOrderMessage[]
+  supportTickets         SupportTicket[]         @relation("SupportTicketOwner")
+  supportMessages        SupportMessage[]        @relation("SupportMessageAuthor")
+  resolvedSupportTickets SupportTicket[]         @relation("SupportTicketResolvedBy")
 }
 
 enum Role {
@@ -60,23 +61,23 @@ enum MessengerType {
 
 // === Каталог услуг ===
 model Service {
-  id             String  @id @default(cuid())
-  slug           String  @unique
+  id             String         @id @default(cuid())
+  slug           String         @unique
   title          String
-  description    String  @db.Text
+  description    String         @db.Text
   shortDesc      String
   category       String
   priceTokens    Int
   costUsd        Float
   coverImage     String?
   galleryImages  String[]
-  isActive       Boolean         @default(true)
-  isFeatured     Boolean         @default(false)
-  sortOrder      Int             @default(0)
+  isActive       Boolean        @default(true)
+  isFeatured     Boolean        @default(false)
+  sortOrder      Int            @default(0)
   // Порядок в кураторской вкладке «Популярное» (G1). Меньше — выше.
-  featuredOrder  Int             @default(0)
+  featuredOrder  Int            @default(0)
   // Сквозные теги поводов витрины (G1): BIRTHDAY, NEW_YEAR, MARCH_8 и т.д.
-  occasionTags   String[]        @default([])
+  occasionTags   String[]       @default([])
   aiProvider     String?
   aiModel        String?
   aiConfig       Json?
@@ -186,10 +187,10 @@ model Project {
   completedAt DateTime?
   expiresAt   DateTime?
 
-  user        User         @relation(fields: [userId], references: [id])
-  service     Service?     @relation(fields: [serviceId], references: [id], onDelete: SetNull)
-  trend       Trend?       @relation(fields: [trendId], references: [id], onDelete: SetNull)
-  aiUsageLogs AIUsageLog[]
+  user         User          @relation(fields: [userId], references: [id])
+  service      Service?      @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  trend        Trend?        @relation(fields: [trendId], references: [id], onDelete: SetNull)
+  aiUsageLogs  AIUsageLog[]
   chatMessages ChatMessage[]
 
   @@index([userId, mode])
@@ -197,11 +198,11 @@ model Project {
 }
 
 model Chat {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   title     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -216,7 +217,7 @@ model ChatMessage {
   chatId    String
   createdAt DateTime @default(now())
 
-  prompt      String @db.Text
+  prompt      String  @db.Text
   modelSlug   String
   aspectRatio String?
   duration    Int?
@@ -239,8 +240,8 @@ model SupportTicket {
   resolvedAt   DateTime?
   resolvedById String?
 
-  user       User                 @relation("SupportTicketOwner", fields: [userId], references: [id], onDelete: Cascade)
-  resolvedBy User?                @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  user       User             @relation("SupportTicketOwner", fields: [userId], references: [id], onDelete: Cascade)
+  resolvedBy User?            @relation("SupportTicketResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
   messages   SupportMessage[]
 
   @@index([userId, updatedAt])
@@ -282,15 +283,15 @@ model SupportAttachment {
 // Ролик, который пользователь собирает сам. Вся раскладка живёт в timeline —
 // той же схеме, что читают предпросмотр в браузере и рендер на сервере.
 model VideoProject {
-  id        String   @id @default(uuid())
-  userId    String
-  title     String
-  timeline  Json
+  id           String    @id @default(uuid())
+  userId       String
+  title        String
+  timeline     Json
   /// Последний экспорт: Project с mode = "video-export".
   lastExportId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -302,25 +303,25 @@ model VideoProject {
 // Тип заказа целиком настраивается в админке: поля брифа, вилка цен, письма.
 // Новый вид заказа не требует кода — только заполненной формы в /admin/order-types.
 model OrderTypeDef {
-  id          String  @id @default(uuid())
-  slug        String  @unique
-  title       String
-  shortDesc   String
-  description String  @db.Text
-  coverImage  String?
-  previewVideo String?
+  id             String   @id @default(uuid())
+  slug           String   @unique
+  title          String
+  shortDesc      String
+  description    String   @db.Text
+  coverImage     String?
+  previewVideo   String?
   /// Поля брифа (схема в @allvision/shared).
-  briefFields Json
+  briefFields    Json
   priceFromCoins Int
   priceToCoins   Int
   /// Ориентировочный срок в днях — показывается на карточке.
-  leadTimeDays Int @default(5)
+  leadTimeDays   Int      @default(5)
   /// Письма по статусам: { QUOTED: { subject, body }, ... }
   emailTemplates Json?
-  isActive  Boolean @default(true)
-  sortOrder Int     @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   orders CustomOrder[]
 
@@ -328,20 +329,20 @@ model OrderTypeDef {
 }
 
 model CustomOrder {
-  id     String            @id @default(uuid())
-  userId String
+  id          String            @id @default(uuid())
+  userId      String
   /// Тип может быть удалён админом; заявка при этом должна выжить.
   orderTypeId String?
   /// Название типа на момент заявки — чтобы карточка читалась и после удаления типа.
   typeTitle   String
-  status CustomOrderStatus @default(NEW)
+  status      CustomOrderStatus @default(NEW)
 
   /// Ответы на поля брифа.
-  brief       Json
-  attachments String[]
-  contactName  String
-  contactEmail String
-  contactPhone String?
+  brief            Json
+  attachments      String[]
+  contactName      String
+  contactEmail     String
+  contactPhone     String?
   /// Мессенджер для связи: max | telegram | whatsapp. Пусто — общаемся почтой.
   contactMessenger String?
   /// Ник или номер в этом мессенджере.
@@ -355,8 +356,8 @@ model CustomOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orderType OrderTypeDef? @relation(fields: [orderTypeId], references: [id], onDelete: SetNull)
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderType OrderTypeDef?        @relation(fields: [orderTypeId], references: [id], onDelete: SetNull)
   messages  CustomOrderMessage[]
 
   @@index([userId, updatedAt])
@@ -365,12 +366,12 @@ model CustomOrder {
 
 /// Переписка по заявке: вопросы админа и ответы заказчика.
 model CustomOrderMessage {
-  id       String  @id @default(uuid())
-  orderId  String
+  id        String   @id @default(uuid())
+  orderId   String
   /// Автор: null — системное сообщение о смене статуса.
-  authorId String?
-  fromAdmin Boolean @default(false)
-  body     String  @db.Text
+  authorId  String?
+  fromAdmin Boolean  @default(false)
+  body      String   @db.Text
   createdAt DateTime @default(now())
 
   order  CustomOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -798,12 +799,12 @@ model MediaAsset {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  kind        String
-  groupCode   String?
-  title       String
-  description String?
-  tags        String[]
-  ownerUserId String?
+  kind          String
+  groupCode     String?
+  title         String
+  description   String?
+  tags          String[]
+  ownerUserId   String?
   parentAssetId String?
 
   storageKey   String
@@ -820,9 +821,9 @@ model MediaAsset {
   isActive  Boolean @default(true)
   sortOrder Int     @default(0)
 
-  owner User? @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  parentAsset MediaAsset? @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)
-  variations MediaAsset[] @relation("MediaAssetVariations")
+  owner       User?        @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  parentAsset MediaAsset?  @relation("MediaAssetVariations", fields: [parentAssetId], references: [id], onDelete: SetNull)
+  variations  MediaAsset[] @relation("MediaAssetVariations")
 
   @@index([kind])
   @@index([kind, groupCode])
@@ -844,6 +845,62 @@ model StylePreset {
   createdAt   DateTime @default(now())
 
   @@index([kind, isActive, sortOrder])
+}
+
+enum PromoDiscountType {
+  PERCENT
+  FIXED
+}
+
+/// Промокод на пополнение баланса.
+///
+/// Скидка бывает двух видов: процент от суммы или фиксированные рубли. Токенов при этом
+/// начисляется столько же, сколько в пакете: код удешевляет покупку, а не увеличивает её.
+///
+/// Поле source — метка канала («ролик у блогера», «инстаграм»): ради неё всё и затевалось,
+/// по числу использований видно, откуда пришли платящие.
+model PromoCode {
+  id            String            @id @default(cuid())
+  /// Всегда в верхнем регистре: человек введёт как угодно, а искать надо однозначно.
+  code          String            @unique
+  description   String?
+  source        String?
+  discountType  PromoDiscountType @default(PERCENT)
+  /// Проценты (1..90) или рубли — смотря какой тип скидки.
+  discountValue Int
+  /// null — без ограничения по числу использований.
+  maxUses       Int?
+  /// Считается только по фактически оплаченным пополнениям.
+  usedCount     Int               @default(0)
+  isActive      Boolean           @default(true)
+  expiresAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  uses PromoCodeUse[]
+
+  @@index([isActive])
+}
+
+/// Факт использования промокода.
+///
+/// Строка появляется ТОЛЬКО после успешной оплаты и зачисления токенов: код, введённый в
+/// форме и брошенный на полпути, не должен съедать лимит и портить статистику канала.
+/// Поле paymentId уникален — повторный webhook по той же оплате не удвоит счётчик.
+model PromoCodeUse {
+  id          String   @id @default(cuid())
+  promoCodeId String
+  userId      String
+  paymentId   String   @unique
+  /// Копии на момент оплаты: код потом могут отредактировать, а отчёт должен остаться верным.
+  discountRub Int
+  amountRub   Int
+  createdAt   DateTime @default(now())
+
+  promoCode PromoCode @relation(fields: [promoCodeId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([promoCodeId, createdAt])
 }
 
 model TokenPackage {

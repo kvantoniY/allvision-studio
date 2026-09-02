@@ -16,7 +16,14 @@ export const paymentsApi = createApi({
   baseQuery: createBaseQueryWithReauth('/api/payments'),
   tagTypes: ['Payment'],
   endpoints: (build) => ({
-    topup: build.mutation<CreatePaymentResponse, { tokenPackageId: string }>({
+    /** Проверка промокода до оплаты: ничего не списывает и лимит кода не расходует. */
+    checkPromoCode: build.mutation<
+      { promo: { code: string; discountType: 'PERCENT' | 'FIXED'; discountValue: number; description: string | null } },
+      { code: string }
+    >({
+      query: (body) => ({ url: '/promo/check', method: 'POST', body }),
+    }),
+    topup: build.mutation<CreatePaymentResponse, { tokenPackageId: string; promoCode?: string }>({
       query: (body) => ({ url: '/topup', method: 'POST', body }),
       invalidatesTags: ['Payment'],
       async onQueryStarted(_arg, { dispatch, queryFulfilled }) {
@@ -60,6 +67,7 @@ export function invalidatePaymentSideEffects(dispatch: (action: InvalidateAction
 }
 
 export const {
+  useCheckPromoCodeMutation,
   useTopupMutation,
   usePayOrderMutation,
   useGetPaymentQuery,

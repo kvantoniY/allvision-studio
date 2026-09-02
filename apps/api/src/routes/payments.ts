@@ -4,11 +4,17 @@ import { requireAuth, optionalAuth } from '../middleware/auth';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
 import * as payments from '../services/payment-service';
+import { resolvePromoTerms } from '../services/promo-code-service';
 
 export const paymentsRouter = Router();
 
 const topupSchema = z.object({
   tokenPackageId: z.string().min(1),
+  promoCode: z.string().trim().max(40).optional(),
+});
+
+const promoCheckSchema = z.object({
+  code: z.string().trim().min(1).max(40),
 });
 
 function paramsToRawBody(value: unknown) {
@@ -49,8 +55,25 @@ function paymentSignature(req: Request) {
 paymentsRouter.post('/topup', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = topupSchema.parse(req.body);
-    const result = await payments.createTopupPayment(req.user!.id, data.tokenPackageId);
+    const result = await payments.createTopupPayment(req.user!.id, data.tokenPackageId, data.promoCode);
     res.json(result);
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * Проверка промокода до оплаты.
+ *
+ * Отдельным запросом, а не «узнаете на кассе»: человек должен видеть итоговую сумму до
+ * того, как уйдёт на страницу оплаты. Ничего не списывает и лимит кода не расходует —
+ * использование засчитывается только после успешной оплаты.
+ */
+paymentsRouter.post('/promo/check', requireAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = promoCheckSchema.parse(req.body);
+    const terms = await resolvePromoTerms(data.code);
+    res.json({ promo: terms });
   } catch (e) {
     next(e);
   }

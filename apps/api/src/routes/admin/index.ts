@@ -16,6 +16,7 @@ import { adminStylePresetsRouter } from './style-presets';
 import { adminHomePageRouter } from './home-page';
 import { adminPaymentsRouter } from './payments';
 import { adminTokenPackagesRouter } from './token-packages';
+import { adminPromoCodesRouter } from './promo-codes';
 import { adminWaitlistRouter } from './waitlist';
 import { adminOrderTypesRouter, adminOrdersRouter } from './orders';
 
@@ -31,6 +32,7 @@ adminRouter.use('/payments', adminPaymentsRouter);
 adminRouter.use('/token-packages', adminTokenPackagesRouter);
 adminRouter.use('/support', adminSupportRouter);
 adminRouter.use('/waitlist', adminWaitlistRouter);
+adminRouter.use('/promo-codes', adminPromoCodesRouter);
 adminRouter.use('/order-types', adminOrderTypesRouter);
 adminRouter.use('/orders', adminOrdersRouter);
 adminRouter.use('/', adminUsageRouter);

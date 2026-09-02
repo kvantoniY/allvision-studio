@@ -231,8 +231,10 @@ describe('шаблон поздравления', () => {
 
   it('удалённый кадр не ломает ролик — остаётся пауза, которую видно', () => {
     const timeline = templateTimeline(3, 4);
-    const kept = (timeline.tracks ?? [])[0].clips.filter((clip) => clip.id !== 'frame_2');
-    const withGap = parseTimeline({ ...timeline, tracks: [{ ...(timeline.tracks ?? [])[0], clips: kept }] });
+    // tracks в схеме хранится как unknown[] (разбирается лениво), поэтому читаем помощником.
+    const [main] = timelineTracks(timeline);
+    const kept = main.clips.filter((clip) => clip.id !== 'frame_2');
+    const withGap = parseTimeline({ ...timeline, tracks: [{ ...main, clips: kept }] });
     const scenes = timelineScenes(withGap);
     // Первый кадр, заливка на месте удалённого, третий кадр.
     expect(scenes).toHaveLength(3);

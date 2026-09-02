@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { HttpError } from '../utils/http-error';
 import { getPaymentProvider } from './payment-provider';
 import { logger } from '../utils/logger';
+import { promoMetadata, redeemPromoForPayment, resolvePromoDiscount } from './promo-code-service';
 
 type PaymentListItem = Pick<Payment, 'id' | 'amountRub' | 'tokensAdded' | 'expiresAt'>;
 type WebhookHandleResult = { ok: true; providerPaymentId?: string };
@@ -221,6 +222,7 @@ async function getUserEmail(userId: string) {
 export async function createTopupPayment(
   userId: string,
   tokenPackageId: string,
+  promoCodeInput?: string,
 ): Promise<PaymentCreateResult> {
   const pkg = await prisma.tokenPackage.findUnique({ where: { id: tokenPackageId } });
   if (!pkg) {
@@ -234,17 +236,28 @@ export async function createTopupPayment(
   const tokensAdded = pkg.tokens + pkg.bonus;
   const provider = paymentProviderName();
   const expiresAt = paymentExpiresAt();
+
+  /*
+   * Промокод удешевляет платёж, но не трогает токены: в пакете сколько было, столько и
+   * начислится. Скидку фиксируем в метаданных — по ним зачёт после оплаты найдёт код, и
+   * отчёт не поедет, даже если код потом отредактируют или удалят.
+   */
+  const fullAmountKopecks = pkg.priceRub * 100;
+  const promo = promoCodeInput
+    ? await resolvePromoDiscount(promoCodeInput, fullAmountKopecks)
+    : null;
   const metadata = {
     tokenPackageId: pkg.id,
     packageTitle: pkg.title,
     baseTokens: pkg.tokens,
     bonusTokens: pkg.bonus,
+    ...(promo ? promoMetadata(promo) : {}),
   };
 
   const payment = await prisma.payment.create({
     data: {
       userId,
-      amountRub: pkg.priceRub * 100,
+      amountRub: promo ? promo.amountKopecks : fullAmountKopecks,
       tokensAdded,
       status: 'PENDING',
       provider,
@@ -734,6 +747,9 @@ async function applyPaymentEvent(event: WebhookEvent): Promise<WebhookHandleResu
             balanceAfter: user.tokenBalance,
           },
         });
+
+        // Код засчитываем ровно здесь: токены уже на балансе, оплата прошла полностью.
+        await redeemPromoForPayment(tx, payment);
 
         creditedTokens = tokensAdded;
         return;
