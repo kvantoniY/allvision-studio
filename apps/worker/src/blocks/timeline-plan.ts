@@ -367,9 +367,13 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
    * файл — со своей шкалой (1/15360). Ролик, где встык и переход стоят рядом, падал целиком
    * («First input link main timebase do not match»). Ролики только со встыками или только
    * с переходами при этом собирались, поэтому дефект и дожил до продакшена.
+   *
+   * Порядок фильтров тут принципиален: fps сам переустанавливает шкалу в 1/частоту, поэтому
+   * settb обязан идти ПОСЛЕ него. С обратным порядком ошибка просто меняла числа в тексте
+   * (1/30 вместо 1/15360), а сборка падала так же.
    */
   scenePaths.forEach((_, index) => {
-    chain.push(`[${index}:v]settb=AVTB,fps=${TIMELINE_FPS},setsar=1,format=yuv420p[sv${index}]`);
+    chain.push(`[${index}:v]fps=${TIMELINE_FPS},settb=AVTB,setsar=1,format=yuv420p[sv${index}]`);
   });
 
   // Видео: накопительная цепочка слева направо.

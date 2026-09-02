@@ -1024,7 +1024,7 @@ export function VideoEditor({ id }: { id: string }) {
         </Alert>
       )}
 
-      {exportUrl && (
+      {exportUrl && !showExportScreen && (
         <Alert className="mx-3 mt-2 shrink-0 border-emerald-500/40 bg-emerald-500/10 lg:mx-4">
           <Check className="h-4 w-4" />
           <AlertTitle>Ролик готов</AlertTitle>
@@ -1046,8 +1046,11 @@ export function VideoEditor({ id }: { id: string }) {
         <ExportOverlay
           projectId={id}
           running={Boolean(exportRunning)}
+          failed={exportStatus?.status === 'FAILED'}
+          errorMessage={exportStatus?.errorMessage}
           progress={exportStatus?.progress ?? 0}
           resultUrl={exportUrl}
+          onRetry={handleExport}
           onBackToEditor={() => setShowExportScreen(false)}
         />
       ) : (

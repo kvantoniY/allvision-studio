@@ -241,7 +241,8 @@ describe('planFinal', () => {
     expect(graph).toContain('xfade=transition=fade:duration=1.000:offset=9.000');
     expect(final.totalDurationSec).toBe(14);
     // Общая шкала времени у всех входов: без неё xfade после concat отказывается работать.
-    expect(graph).toContain('[2:v]settb=AVTB');
+    // settb обязан идти ПОСЛЕ fps: fps сам переустанавливает шкалу в 1/частоту.
+    expect(graph).toContain('[2:v]fps=30,settb=AVTB');
   });
 
   it('places each scene audio at its own second and keeps the mix at full volume', () => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Copy,
   Eye,
@@ -243,6 +244,27 @@ function JointMark({
 }) {
   const active = overlapSec > 0.01 && prevClip.transition !== 'cut';
   const apart = gapSec > JOINT_TOLERANCE_SEC;
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [menuStyle, setMenuStyle] = useState<{ left: number; top?: number; bottom?: number }>({ left: 0 });
+
+  /*
+   * Меню открывается порталом, поэтому его положение считаем сами — от кнопки стыка.
+   * Раньше оно висело внутри шкалы и обрезалось её прокруткой: наружу торчал кусок
+   * подсказки, который закрывал линейку и перехватывал клики.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const node = buttonRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    const spaceAbove = rect.top;
+    // Над шкалой места обычно нет — тогда раскрываемся вниз.
+    setMenuStyle(
+      spaceAbove > 260
+        ? { left: rect.left + rect.width / 2, bottom: window.innerHeight - rect.top + 8 }
+        : { left: rect.left + rect.width / 2, top: rect.bottom + 8 },
+    );
+  }, [open]);
 
   if (apart) {
     return (
@@ -269,6 +291,7 @@ function JointMark({
       )}
 
       <button
+        ref={buttonRef}
         type="button"
         onClick={onToggle}
         title={`Переход: ${TRANSITION_TITLES[prevClip.transition]}${active ? ` · ${overlapSec.toFixed(1)}с` : ''}`}
@@ -285,11 +308,14 @@ function JointMark({
         {active && <span className="font-mono">{overlapSec.toFixed(1)}с</span>}
       </button>
 
-      {open && (
-        <div
-          className="absolute bottom-full z-40 mb-2 w-52 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-1.5 shadow-xl"
-          style={{ left: jointPx }}
-        >
+      {open && typeof document !== 'undefined' && createPortal((
+        <>
+          {/* Клик мимо закрывает меню: иначе оно остаётся висеть над шкалой. */}
+          <div className="fixed inset-0 z-[130]" onClick={onToggle} />
+          <div
+            className="fixed z-[131] w-52 -translate-x-1/2 rounded-lg border border-slate-700 bg-slate-900 p-1.5 shadow-xl"
+            style={menuStyle}
+          >
           <div className="px-1 pb-1 text-[10px] uppercase tracking-wide text-slate-500">Переход</div>
           {TRANSITION_ORDER.map((option) => (
             <button
@@ -329,9 +355,10 @@ function JointMark({
             <p className="px-1 pt-1.5 text-[10px] leading-4 text-slate-500">
               Переход — это наложение: ролик станет короче на его длину.
             </p>
+            </div>
           </div>
-        </div>
-      )}
+        </>
+      ), document.body)}
     </>
   );
 }
@@ -765,8 +792,15 @@ function ClipBlock({
         className="absolute inset-y-0 right-0 z-10 w-2 cursor-col-resize transition group-hover:bg-amber-400/40"
       />
 
+      {/*
+        * Кнопки лежат ВНУТРИ клипа, а не над ним.
+        *
+        * Над дорожкой их обрезал контейнер прокрутки (в Edge особенно заметно), а главное —
+        * они висели ровно там, куда человек целится курсором времени, и перехватывали клик:
+        * вместо перемотки срабатывало «дублировать».
+        */}
       {selected && (
-        <div className="absolute -top-6 right-0 z-30 flex gap-1">
+        <div className="absolute right-1 top-1 z-30 flex gap-1">
           <IconButton title="Разрезать под курсором" onClick={onSplit} disabled={!splitAvailable}>
             <SplitSquareHorizontal className="h-3 w-3" />
           </IconButton>
