@@ -39,9 +39,15 @@ export function GreetingsHero({
 
   return (
     <section
-      className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950"
+      className="relative isolate overflow-hidden"
       data-home-section={block.sectionKey}
     >
+      {/*
+       * Фон первого экрана растворяется книзу, а не обрывается по краю секции.
+       * Без этого низ экрана читался как приклеенная полоса фотографии: под ней
+       * начинался общий звёздный фон, и стык был виден линейкой. Маска — один
+       * градиент на том же элементе, дополнительных слоёв не нужно.
+       */}
       {block.media.type === 'video' ? (
         <video
           src={background}
@@ -49,17 +55,23 @@ export function GreetingsHero({
           muted
           loop
           playsInline
-          className="absolute inset-0 h-full w-full object-cover opacity-25"
+          className="absolute inset-0 h-full w-full object-cover opacity-25 [mask-image:linear-gradient(to_bottom,#000_45%,transparent_92%)]"
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={background} alt={block.media.alt} className="absolute inset-0 h-full w-full object-cover opacity-25" />
+        <img
+          src={background}
+          alt={block.media.alt}
+          className="absolute inset-0 h-full w-full object-cover opacity-25 [mask-image:linear-gradient(to_bottom,#000_45%,transparent_92%)]"
+        />
       )}
 
-      {/* Градиентные пятна нарисованы статикой: никаких пересчётов на скролле, только blur. */}
-      <div className="pointer-events-none absolute -left-32 top-10 h-80 w-80 rounded-full bg-violet-600/25 blur-[120px]" />
-      <div className="pointer-events-none absolute -right-24 top-40 h-96 w-96 rounded-full bg-amber-500/20 blur-[130px]" />
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/90 via-slate-950/80 to-slate-950" />
+      {/*
+       * Затемнение поверх фонового ролика. Пятна света сюда больше не рисуем: они
+       * живут одним слоем на всю страницу (AmbientBackground), и дублировать их
+       * здесь значило бы платить размытием дважды за одну и ту же картинку.
+       */}
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-950/70 via-slate-950/35 to-transparent" />
 
       {editor?.enabled && (
         <button
@@ -77,13 +89,20 @@ export function GreetingsHero({
       <div className="relative mx-auto w-full max-w-[1480px] px-4 py-12 sm:px-6 sm:py-14 lg:px-8 lg:py-16">
         {templates.length > 0 && (
           <Reveal delayMs={100}>
-            <h2 className="mb-5 text-center text-lg font-bold tracking-tight text-white sm:text-xl">
-              Готовые видео-поздравления
-            </h2>
+            {/*
+             * Подпись над лентой — светящаяся строка, а не заголовок: главное здесь
+             * сами ролики, и крупный текст отбирал бы у них внимание.
+             */}
+            <div className="mb-5 flex justify-center">
+              <span className="av-pill inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-bold uppercase tracking-[0.18em] text-amber-100 sm:text-sm">
+                <Sparkles className="h-3.5 w-3.5 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
+                Готовые видео-поздравления
+              </span>
+            </div>
             <TemplateSlider services={templates} />
 
             <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button asChild size="lg" className="group h-12 bg-amber-400 px-6 text-slate-950 hover:bg-amber-300">
+              <Button asChild size="lg" className="av-btn-gradient av-pulse group h-12 px-7 text-base font-bold">
                 <Link href="/services?tab=greetings">
                   Перейти ко всем шаблонам
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -93,7 +112,7 @@ export function GreetingsHero({
                 asChild
                 size="lg"
                 variant="outline"
-                className="h-12 border-white/20 bg-white/10 px-6 text-white hover:bg-white/20 hover:text-white"
+                className="av-btn-glass h-12 px-7 text-base font-semibold text-white hover:text-white"
               >
                 <Link href="/editor">
                   <Sparkles className="h-4 w-4" />
@@ -108,11 +127,12 @@ export function GreetingsHero({
         <div className="mt-12 grid gap-3 sm:grid-cols-3">
           {block.steps.map((step, index) => (
             <Reveal key={step.key} delayMs={index * 90}>
-              <div className="group h-full rounded-xl border border-white/10 bg-white/[0.04] p-5 backdrop-blur transition hover:border-violet-400/40 hover:bg-white/[0.07]">
-                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-violet-500/20 text-xs font-bold text-violet-200">
+              <div className="av-card av-card-hover av-card-quiet group h-full rounded-2xl p-5">
+                {/* Номер шага — светящийся кружок: взгляд сразу считывает порядок. */}
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-violet-300/50 bg-violet-500/20 text-sm font-black text-violet-100 shadow-[0_0_18px_-4px_rgba(139,92,246,0.9)]">
                   {index + 1}
                 </span>
-                <h3 className="mt-3 text-sm font-semibold text-white">
+                <h3 className="mt-3 text-sm font-bold text-white">
                   <EditableText editor={editor} path={['greetings', 'steps', index, 'title']} label="Шаг" value={step.title}>
                     {step.title}
                   </EditableText>
@@ -135,9 +155,9 @@ export function GreetingsHero({
 
         {/* Редактор показываем интерфейсом: это убедительнее, чем обещать простоту словами. */}
         <Reveal delayMs={120} className="mt-8">
-          <div className="grid gap-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70 backdrop-blur lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <div className="av-card av-card-violet av-glow-violet grid gap-0 overflow-hidden rounded-3xl lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
             <div className="flex flex-col justify-center gap-3 p-6 lg:p-8">
-              <h3 className="text-xl font-bold text-white sm:text-2xl">
+              <h3 className="text-xl font-black text-white sm:text-2xl lg:text-3xl">
                 <EditableText editor={editor} path={['greetings', 'editorTitle']} label="Заголовок карточки редактора" value={block.editorTitle}>
                   {block.editorTitle}
                 </EditableText>
@@ -149,10 +169,11 @@ export function GreetingsHero({
               </p>
               <Link
                 href="/editor"
-                className="inline-flex w-fit items-center gap-1.5 text-sm font-semibold text-violet-300 transition hover:text-violet-200"
+                className="group inline-flex w-fit items-center gap-2 rounded-full border border-violet-300/40 bg-violet-500/10 px-4 py-2 text-sm font-bold text-violet-100 transition hover:border-violet-200/70 hover:bg-violet-500/20 hover:shadow-[0_0_26px_-8px_rgba(139,92,246,0.95)]"
               >
-                <Play className="h-4 w-4" />
+                <Play className="h-4 w-4 fill-violet-200 text-violet-200" />
                 Открыть редактор
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </Link>
             </div>
 

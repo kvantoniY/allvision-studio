@@ -56,14 +56,22 @@ export function Header() {
   );
   const visibleNavItems = user ? userNavItems : navItems;
 
+  // Шапка полупрозрачная: сквозь неё видно звёздный фон страницы, и верх экрана
+  // перестаёт выглядеть отрезанной серой полосой. Размытие здесь дешёвое — полоса
+  // высотой 64px, а не экран целиком.
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950">
+    <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
           {userWorkspaceRoute && <DashboardSidebarMobile />}
-          <Link href="/" className="flex items-center gap-2 font-semibold">
-            <BrandLogo className="h-6 w-auto" />
-            <span>Allvision Studio</span>
+          {/*
+           * На узком экране остаётся только знак: вместе с «Вход» и «Регистрация»
+           * полное название не помещалось в 390px и переносилось на вторую строку,
+           * ломая шапку.
+           */}
+          <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold">
+            <BrandLogo className="h-6 w-auto shrink-0" />
+            <span className="hidden whitespace-nowrap sm:inline">Allvision Studio</span>
           </Link>
         </div>
 
@@ -166,10 +174,10 @@ export function Header() {
             </div>
           ) : (
             <>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="text-slate-200 hover:text-white">
                 <Link href="/login">Вход</Link>
               </Button>
-              <Button asChild size="sm">
+              <Button asChild size="sm" className="av-btn-gradient h-9 rounded-full px-4 font-bold">
                 <Link href="/register">Регистрация</Link>
               </Button>
             </>

@@ -22,8 +22,11 @@ const socials = [
 ];
 
 export function Footer() {
+  // Подвал полупрозрачный: на витрине под ним продолжается звёздный фон страницы,
+  // и низ экрана не обрывается плотной плашкой. На страницах без своего фона под
+  // ним всё та же тёмная подложка body, поэтому вид там не меняется.
   return (
-    <footer className="border-t bg-slate-50 dark:border-slate-800 dark:bg-slate-950">
+    <footer className="border-t bg-slate-50 dark:border-white/10 dark:bg-slate-950/60 dark:backdrop-blur-xl">
       <div className="container grid gap-10 py-12 md:grid-cols-2 lg:grid-cols-4">
         <div>
           <Link href="/" className="flex items-center gap-2 font-semibold">

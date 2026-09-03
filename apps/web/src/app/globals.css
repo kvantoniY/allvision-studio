@@ -138,3 +138,314 @@
 .studio-scroll::-webkit-scrollbar-thumb:hover {
   background-color: rgb(71 85 105);
 }
+
+/* ============================================================================
+ * Визуальная система витрины: неон, свечения, космический фон.
+ *
+ * Всё держится на трёх дешёвых приёмах, потому что лендинг обязан оставаться
+ * лёгким на телефоне:
+ *
+ * 1. Свечения нарисованы радиальными градиентами, а не размытием больших
+ *    блоков. Размытие огромного пятна браузер пересчитывает при каждой
+ *    перерисовке; градиент с мягким краем выглядит так же, но стоит один
+ *    проход растеризации.
+ * 2. Движение — только transform и opacity: их считает видеокарта, раскладка
+ *    не трогается.
+ * 3. Неоновая рамка — не второй DOM-узел, а два фона на одном элементе:
+ *    подложка под контент и градиент под рамку. Нет лишних элементов — нет
+ *    лишней работы при скролле.
+ *
+ * Кто отключил анимации в системе, получает ту же картинку без движения.
+ * ========================================================================== */
+
+@layer components {
+  /* --- Фон страницы: звёзды -------------------------------------------- */
+
+  /*
+   * Звёздное поле одним элементом: набор точечных радиальных градиентов,
+   * замощённых плиткой. Никаких частиц и canvas — статичная картинка, которую
+   * браузер рисует один раз и дальше только композитит.
+   */
+  .av-stars {
+    background-image:
+      radial-gradient(1.4px 1.4px at 18% 22%, rgba(255, 255, 255, 0.85), transparent 60%),
+      radial-gradient(1.2px 1.2px at 72% 14%, rgba(214, 232, 255, 0.7), transparent 60%),
+      radial-gradient(1px 1px at 42% 62%, rgba(255, 255, 255, 0.6), transparent 60%),
+      radial-gradient(1.6px 1.6px at 88% 48%, rgba(255, 226, 189, 0.75), transparent 60%),
+      radial-gradient(1px 1px at 8% 76%, rgba(226, 214, 255, 0.65), transparent 60%),
+      radial-gradient(1.2px 1.2px at 58% 88%, rgba(255, 255, 255, 0.55), transparent 60%),
+      radial-gradient(1px 1px at 32% 38%, rgba(255, 255, 255, 0.45), transparent 60%);
+    background-size: 420px 420px;
+    background-repeat: repeat;
+  }
+
+  /* Второй слой мельче и медленно дышит — небо перестаёт быть обоями. */
+  .av-stars-twinkle {
+    background-image:
+      radial-gradient(1px 1px at 12% 44%, rgba(255, 255, 255, 0.7), transparent 60%),
+      radial-gradient(1px 1px at 64% 30%, rgba(186, 230, 253, 0.6), transparent 60%),
+      radial-gradient(1px 1px at 84% 78%, rgba(255, 255, 255, 0.5), transparent 60%),
+      radial-gradient(1px 1px at 26% 92%, rgba(253, 224, 71, 0.45), transparent 60%);
+    background-size: 260px 260px;
+    background-repeat: repeat;
+    animation: av-twinkle 7s ease-in-out infinite;
+  }
+
+  /* --- Фон страницы: туманности ---------------------------------------- */
+
+  /*
+   * Цветное пятно. Мягкий край даёт сам градиент, поэтому размытие не нужно.
+   * Дрейф медленный, чтобы фон читался как живой, а не как слайдер.
+   */
+  .av-nebula {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    animation: av-drift 26s ease-in-out infinite;
+  }
+
+  .av-nebula-amber {
+    background: radial-gradient(circle at 50% 50%, rgba(251, 146, 60, 0.22) 0%, rgba(249, 115, 22, 0.09) 38%, transparent 70%);
+  }
+
+  .av-nebula-violet {
+    background: radial-gradient(circle at 50% 50%, rgba(139, 92, 246, 0.24) 0%, rgba(109, 40, 217, 0.09) 38%, transparent 70%);
+  }
+
+  .av-nebula-rose {
+    background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.18) 0%, rgba(219, 39, 119, 0.07) 40%, transparent 70%);
+  }
+
+  .av-nebula-cyan {
+    background: radial-gradient(circle at 50% 50%, rgba(34, 211, 238, 0.17) 0%, rgba(14, 165, 233, 0.07) 40%, transparent 70%);
+  }
+
+  /*
+   * Световая дуга — та самая «комета» с референса. Тонкое кольцо, у которого
+   * видно только край: коническая заливка гасит три четверти окружности, а
+   * маска оставляет от круга одну линию.
+   */
+  .av-arc {
+    position: absolute;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: conic-gradient(
+      from 20deg,
+      transparent 0deg,
+      rgba(253, 224, 71, 0.95) 38deg,
+      rgba(251, 146, 60, 0.9) 62deg,
+      rgba(236, 72, 153, 0.8) 92deg,
+      rgba(139, 92, 246, 0.6) 128deg,
+      transparent 170deg
+    );
+    /*
+     * Полоса шириной около полутора процентов радиуса с мягкими краями. Плавные
+     * переходы в маске дают неоновое размытие без `filter: blur()` — фильтр на
+     * элементе в полтора экрана стоил бы дороже всей остальной страницы.
+     */
+    -webkit-mask: radial-gradient(circle, transparent 59%, rgba(0, 0, 0, 0.5) 61.5%, #000 62.6%, rgba(0, 0, 0, 0.5) 63.8%, transparent 66%);
+    mask: radial-gradient(circle, transparent 59%, rgba(0, 0, 0, 0.5) 61.5%, #000 62.6%, rgba(0, 0, 0, 0.5) 63.8%, transparent 66%);
+  }
+
+  /* --- Карточки --------------------------------------------------------- */
+
+  /*
+   * Премиальная карточка: тёмная подложка плюс градиентная рамка. Оба слоя
+   * живут в фоне, поэтому рамка не занимает отдельный элемент и не мешает
+   * обрезке содержимого по скруглению.
+   */
+  .av-card {
+    position: relative;
+    border: 1px solid transparent;
+    background:
+      linear-gradient(168deg, rgba(17, 24, 39, 0.94), rgba(2, 6, 23, 0.96)) padding-box,
+      linear-gradient(140deg, rgba(251, 191, 36, 0.75), rgba(236, 72, 153, 0.5) 42%, rgba(99, 102, 241, 0.55) 78%, rgba(34, 211, 238, 0.45)) border-box;
+    box-shadow:
+      0 20px 45px -28px rgba(2, 6, 23, 0.95),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+  }
+
+  .av-card-hover:hover {
+    transform: translateY(-5px);
+    box-shadow:
+      0 30px 70px -30px rgba(249, 115, 22, 0.55),
+      0 0 40px -18px rgba(168, 85, 247, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  }
+
+  /* Холодный вариант рамки — для блоков, где акцент фиолетовый, а не янтарный. */
+  .av-card-violet {
+    background:
+      linear-gradient(168deg, rgba(17, 24, 39, 0.94), rgba(2, 6, 23, 0.96)) padding-box,
+      linear-gradient(140deg, rgba(167, 139, 250, 0.55), rgba(56, 189, 248, 0.35) 55%, rgba(236, 72, 153, 0.35)) border-box;
+  }
+
+  /* Приглушённая рамка для второстепенных плиток: те же правила, тише голос. */
+  .av-card-quiet {
+    background:
+      linear-gradient(168deg, rgba(15, 23, 42, 0.9), rgba(2, 6, 23, 0.94)) padding-box,
+      linear-gradient(140deg, rgba(148, 163, 184, 0.3), rgba(99, 102, 241, 0.22) 60%, rgba(148, 163, 184, 0.18)) border-box;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .av-card-quiet:hover {
+    background:
+      linear-gradient(168deg, rgba(17, 24, 39, 0.94), rgba(2, 6, 23, 0.96)) padding-box,
+      linear-gradient(140deg, rgba(251, 191, 36, 0.45), rgba(168, 85, 247, 0.35) 60%, rgba(56, 189, 248, 0.3)) border-box;
+  }
+
+  /*
+   * Живая обводка: коническая заливка едет по кругу, а маска оставляет от неё
+   * только рамку. Углом крутит зарегистрированное свойство — без регистрации
+   * браузер считает угол просто текстом и анимация не запускается.
+   *
+   * Приём дорогой (перерисовка каждый кадр), поэтому применяется точечно: на
+   * центральной карточке ленты, а не на всех карточках подряд.
+   */
+  .av-live-ring::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: conic-gradient(
+      from var(--av-angle),
+      rgba(251, 191, 36, 0.95),
+      rgba(236, 72, 153, 0.9) 25%,
+      rgba(139, 92, 246, 0.9) 50%,
+      rgba(34, 211, 238, 0.85) 75%,
+      rgba(251, 191, 36, 0.95)
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    animation: av-rotate 9s linear infinite;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* --- Свечения --------------------------------------------------------- */
+
+  .av-glow-amber {
+    box-shadow: 0 0 34px -10px rgba(251, 146, 60, 0.75), 0 0 90px -40px rgba(236, 72, 153, 0.6);
+  }
+
+  .av-glow-violet {
+    box-shadow: 0 0 34px -10px rgba(139, 92, 246, 0.75), 0 0 90px -40px rgba(56, 189, 248, 0.55);
+  }
+
+  /* Пульс на главной кнопке: дыхание света, без движения самой кнопки. */
+  .av-pulse {
+    animation: av-pulse 3.6s ease-in-out infinite;
+  }
+
+  /* --- Текст и кнопки --------------------------------------------------- */
+
+  .av-text-gradient {
+    background: linear-gradient(100deg, #fcd34d 0%, #fb923c 28%, #f472b6 62%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .av-btn-gradient {
+    background-image: linear-gradient(115deg, #f59e0b 0%, #fb7185 52%, #a855f7 100%);
+    background-size: 180% 100%;
+    background-position: 0% 50%;
+    color: #0b1020;
+    border: 0;
+    transition: background-position 0.5s ease, box-shadow 0.35s ease, transform 0.25s ease;
+    box-shadow: 0 14px 34px -16px rgba(249, 115, 22, 0.85);
+  }
+
+  .av-btn-gradient:hover {
+    background-position: 100% 50%;
+    box-shadow: 0 18px 44px -14px rgba(217, 70, 239, 0.85);
+    transform: translateY(-1px);
+    color: #0b1020;
+  }
+
+  /* Стеклянная кнопка второго плана: читается рядом с градиентной, не спорит. */
+  .av-btn-glass {
+    background: rgba(148, 163, 184, 0.08);
+    border: 1px solid rgba(226, 232, 240, 0.16);
+    backdrop-filter: blur(8px);
+    transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .av-btn-glass:hover {
+    background: rgba(148, 163, 184, 0.16);
+    border-color: rgba(251, 191, 36, 0.45);
+    box-shadow: 0 0 26px -12px rgba(251, 191, 36, 0.8);
+  }
+
+  /* Бейдж-таблетка над заголовком секции. */
+  .av-pill {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 0.95)) padding-box,
+      linear-gradient(120deg, rgba(251, 191, 36, 0.7), rgba(236, 72, 153, 0.5) 55%, rgba(139, 92, 246, 0.6)) border-box;
+    box-shadow: 0 0 26px -14px rgba(251, 191, 36, 0.9);
+  }
+
+  /* Тонкая светящаяся линия-разделитель между экранами. */
+  .av-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(251, 191, 36, 0.55), rgba(236, 72, 153, 0.5) 45%, rgba(168, 85, 247, 0.55), transparent);
+  }
+}
+
+@property --av-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes av-rotate {
+  to {
+    --av-angle: 360deg;
+  }
+}
+
+@keyframes av-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(3%, -4%, 0) scale(1.12);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes av-twinkle {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes av-pulse {
+  0%,
+  100% {
+    box-shadow: 0 14px 34px -16px rgba(249, 115, 22, 0.85), 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+  50% {
+    box-shadow: 0 18px 44px -14px rgba(236, 72, 153, 0.9), 0 0 34px -6px rgba(251, 191, 36, 0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .av-nebula,
+  .av-stars-twinkle,
+  .av-pulse,
+  .av-live-ring::after {
+    animation: none;
+  }
+}

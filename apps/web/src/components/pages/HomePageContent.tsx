@@ -31,6 +31,7 @@ import {
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import { giftServicePriceFrom } from '@/lib/gift-factory';
+import { AmbientBackground } from '@/components/home/AmbientBackground';
 import { GreetingsHero } from '@/components/home/GreetingsHero';
 import { Reveal } from '@/components/home/Reveal';
 import { mergeHomeLandingContent, type HomeLandingContent, type HomeMedia, type HomeModelFamily, type HomeTrendingSlot } from '@/lib/home-landing-content';
@@ -40,21 +41,56 @@ import { useListServicesQuery } from '@/store/api/services-api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
 
+/*
+ * Бейдж на карточке. Цвет тона задаёт свечение, а не только рамку: на тёмном
+ * фоне подсвеченная плашка читается как метка, а бледная — как поле ввода.
+ */
 const toneClasses: Record<HomeTrendingSlot['tone'], string> = {
-  violet: 'border-violet-400/45 bg-violet-500/10 text-violet-100',
-  amber: 'border-amber-300/50 bg-amber-500/10 text-amber-100',
-  cyan: 'border-cyan-300/45 bg-cyan-500/10 text-cyan-100',
-  rose: 'border-rose-300/45 bg-rose-500/10 text-rose-100',
+  violet: 'border-violet-300/60 bg-violet-500/20 text-violet-50 shadow-[0_0_20px_-6px_rgba(139,92,246,0.9)]',
+  amber: 'border-amber-200/70 bg-amber-400/25 text-amber-50 shadow-[0_0_20px_-6px_rgba(251,191,36,0.9)]',
+  cyan: 'border-cyan-200/60 bg-cyan-400/20 text-cyan-50 shadow-[0_0_20px_-6px_rgba(34,211,238,0.9)]',
+  rose: 'border-rose-200/60 bg-rose-500/20 text-rose-50 shadow-[0_0_20px_-6px_rgba(244,63,94,0.9)]',
 };
 
+/*
+ * Карточка семейства моделей. Цвет живёт в подсветке и в свечении под карточкой,
+ * а подложка у всех одна тёмная: иначе шесть разноцветных прямоугольников рядом
+ * читаются как набор наклеек, а не как один каталог.
+ */
 const modelAccentClasses: Record<HomeModelFamily['accent'], string> = {
-  violet: 'border-violet-400/40 bg-violet-500/10 text-violet-200',
-  cyan: 'border-cyan-300/40 bg-cyan-500/10 text-cyan-200',
-  emerald: 'border-emerald-300/40 bg-emerald-500/10 text-emerald-200',
-  amber: 'border-amber-300/40 bg-amber-500/10 text-amber-200',
-  rose: 'border-rose-300/40 bg-rose-500/10 text-rose-200',
-  sky: 'border-sky-300/40 bg-sky-500/10 text-sky-200',
+  violet: 'border-violet-400/35 text-violet-200 hover:border-violet-300/70 hover:shadow-[0_18px_46px_-24px_rgba(139,92,246,0.95)]',
+  cyan: 'border-cyan-300/35 text-cyan-200 hover:border-cyan-200/70 hover:shadow-[0_18px_46px_-24px_rgba(34,211,238,0.95)]',
+  emerald: 'border-emerald-300/35 text-emerald-200 hover:border-emerald-200/70 hover:shadow-[0_18px_46px_-24px_rgba(16,185,129,0.95)]',
+  amber: 'border-amber-300/35 text-amber-200 hover:border-amber-200/70 hover:shadow-[0_18px_46px_-24px_rgba(251,191,36,0.95)]',
+  rose: 'border-rose-300/35 text-rose-200 hover:border-rose-200/70 hover:shadow-[0_18px_46px_-24px_rgba(244,63,94,0.95)]',
+  sky: 'border-sky-300/35 text-sky-200 hover:border-sky-200/70 hover:shadow-[0_18px_46px_-24px_rgba(56,189,248,0.95)]',
 };
+
+/**
+ * Заголовок с цветным хвостом.
+ *
+ * Последние слова уходят в градиент — так строка получает акцент, не превращаясь
+ * целиком в цветное пятно (сплошной градиентный заголовок хуже читается). Сколько
+ * слов красить, решаем по длине: в короткой фразе двух цветных слов из трёх было бы
+ * слишком много.
+ *
+ * Текст при этом остаётся одной строкой в данных: редактору главной уходит исходное
+ * значение, разбивка живёт только в разметке.
+ */
+function GradientTail({ text }: { text: string }) {
+  const words = text.trim().split(/\s+/);
+  if (words.length < 2) return <span className="av-text-gradient">{text}</span>;
+
+  const accentCount = words.length >= 4 ? 2 : 1;
+  const head = words.slice(0, words.length - accentCount).join(' ');
+  const tail = words.slice(words.length - accentCount).join(' ');
+
+  return (
+    <>
+      {head} <span className="av-text-gradient">{tail}</span>
+    </>
+  );
+}
 
 function sectionAttrs(section: string) {
   return { 'data-home-section': section };
@@ -159,7 +195,13 @@ export function HomePageContent() {
   const firstPackage = tokenPackages.data?.packages?.[0];
 
   return (
-    <main className="min-w-0 bg-slate-950 text-slate-100">
+    <main className="relative min-w-0 text-slate-100">
+      {/*
+       * Свет и звёзды нарисованы один раз на всю страницу. Раньше у каждой секции
+       * было своё размытое пятно: это и стоило дороже, и давало «лоскутный» фон,
+       * где границы блоков читались по смене подсветки.
+       */}
+      <AmbientBackground />
       {isAdmin && (
         <HomeAdminToolbar
           enabled={editMode}
@@ -227,14 +269,14 @@ function HeroLanding({
   const serviceBySlug = new Map(services.map((service) => [service.slug, service]));
 
   return (
-    <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950" {...sectionAttrs(content.trending.sectionKey)}>
-      <div className="pointer-events-none absolute -right-32 top-0 h-72 w-72 rounded-full bg-cyan-500/10 blur-[120px]" />
+    <section className="relative" {...sectionAttrs(content.trending.sectionKey)}>
+      <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="relative mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8">
         <Reveal className="mb-6 flex flex-col justify-between gap-3 md:flex-row md:items-end">
           <div>
             <h2 className="text-2xl font-black tracking-tight text-white sm:text-3xl" {...fieldAttrs(content.trending.sectionKey, 'title')}>
               <EditableText editor={editor} path={['trending', 'title']} label="Заголовок трендовых услуг" value={content.trending.title} multiline>
-                {content.trending.title}
+                <GradientTail text={content.trending.title} />
               </EditableText>
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400" {...fieldAttrs(content.trending.sectionKey, 'description')}>
@@ -291,7 +333,7 @@ function TrendingServiceCard({
       className="group block min-w-0"
       {...sectionAttrs(`trending-services.${slot.slotId}`)}
     >
-      <article className="h-full overflow-hidden rounded-lg border border-white/10 bg-slate-900/80 transition duration-300 hover:-translate-y-1 hover:border-amber-300/60">
+      <article className="av-card av-card-hover av-card-quiet h-full overflow-hidden rounded-2xl">
         <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
           <MediaBlock media={media} className="transition duration-500 group-hover:scale-105" />
           <div className={cn('absolute left-3 top-3 rounded-full border px-2.5 py-1 text-xs font-semibold backdrop-blur', toneClasses[slot.tone])}>
@@ -327,7 +369,7 @@ function TrendingServiceCard({
             {description}
           </p>
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="font-semibold text-amber-300">{price ? `от ${price} токенов` : 'быстрый старт'}</span>
+            <span className="av-text-gradient font-bold">{price ? `от ${price} токенов` : 'быстрый старт'}</span>
             <span className="text-slate-500">2-5 мин</span>
           </div>
         </div>
@@ -340,14 +382,14 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
   const chat = content.chat;
 
   return (
-    <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950" {...sectionAttrs(chat.sectionKey)}>
-      <div className="pointer-events-none absolute right-0 top-10 h-96 w-96 rounded-full bg-violet-600/15 blur-[140px]" />
+    <section className="relative" {...sectionAttrs(chat.sectionKey)}>
+      <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="relative mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[minmax(0,0.84fr)_minmax(420px,1fr)] lg:items-center lg:px-8 lg:py-16 xl:gap-12">
         <div className="max-w-xl">
           <SectionEyebrow icon={<Bot className="h-4 w-4" />} text={chat.eyebrow} section={chat.sectionKey} editor={editor} path={['chat', 'eyebrow']} label="Бейдж блока чата" />
           <h2 className="mt-4 text-3xl font-black tracking-normal text-white sm:text-4xl xl:text-5xl" {...fieldAttrs(chat.sectionKey, 'title')}>
             <EditableText editor={editor} path={['chat', 'title']} label="Заголовок блока чата" value={chat.title} multiline>
-              {chat.title}
+              <GradientTail text={chat.title} />
             </EditableText>
           </h2>
           <p className="mt-4 text-base leading-7 text-slate-400" {...fieldAttrs(chat.sectionKey, 'lead')}>
@@ -357,7 +399,7 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
           </p>
           <div className="mt-6 grid gap-2.5">
             {chat.prompts.map((prompt, index) => (
-              <div key={`${prompt}-${index}`} className="flex items-start gap-3 rounded-md border border-slate-800 bg-slate-900 p-3.5" {...fieldAttrs(chat.sectionKey, `prompt-${index}`)}>
+              <div key={`${prompt}-${index}`} className="av-card av-card-quiet flex items-start gap-3 rounded-xl p-3.5 transition hover:-translate-y-0.5" {...fieldAttrs(chat.sectionKey, `prompt-${index}`)}>
                 <MessageSquareText className="mt-0.5 h-5 w-5 shrink-0 text-cyan-300" />
                 <span className="text-sm leading-6 text-slate-200">
                   <EditableText editor={editor} path={['chat', 'prompts', index]} label="Пример запроса" value={prompt} multiline>
@@ -369,9 +411,9 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
           </div>
         </div>
 
-        <div className="min-w-0 rounded-lg border border-slate-800 bg-slate-900 p-3 shadow-2xl shadow-black/20 sm:p-4">
-          <div className="rounded-md border border-slate-800 bg-slate-950">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 p-3">
+        <div className="av-card av-card-violet av-glow-violet min-w-0 rounded-2xl p-3 sm:p-4">
+          <div className="rounded-xl border border-white/10 bg-slate-950/80">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-3">
               <div className="flex items-center gap-2 text-sm font-semibold text-white">
                 <Sparkles className="h-4 w-4 text-violet-300" />
                 Allvision AI
@@ -389,7 +431,7 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
                 <ChatMockControl icon={<Film className="h-4 w-4" />} label="Формат" value="9:16" />
                 <ChatMockControl icon={<Library className="h-4 w-4" />} label="Референс" value="опционально" />
               </div>
-              <div className="overflow-hidden rounded-md border border-slate-800 bg-slate-900">
+              <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
                 <div className="aspect-[16/7] bg-slate-950">
                   <EditableMedia editor={editor} path={['chat', 'mock', 'media']} label="Медиа примера чата" media={chat.mock.media}>
                     <MediaBlock media={chat.mock.media} />
@@ -408,7 +450,7 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
                       </EditableText>
                     </div>
                   </div>
-                  <Button asChild size="sm" className="bg-violet-600 hover:bg-violet-500">
+                  <Button asChild size="sm" className="av-btn-gradient font-semibold">
                     <Link href={actionHref('/ai', isAuthed)}>Открыть чат</Link>
                   </Button>
                 </div>
@@ -426,14 +468,15 @@ function ModelCatalogSection({ content, editor }: { content: HomeLandingContent;
   const audioModels = CHAT_MODELS.filter((model) => model.supportsAudio).length;
 
   return (
-    <section className="border-b border-slate-800 bg-slate-900/40" {...sectionAttrs(models.sectionKey)}>
+    <section className="relative" {...sectionAttrs(models.sectionKey)}>
+      <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
         <div className="grid gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:items-start">
           <div className="max-w-2xl">
             <SectionEyebrow icon={<Layers3 className="h-4 w-4" />} text={models.eyebrow} section={models.sectionKey} editor={editor} path={['models', 'eyebrow']} label="Бейдж блока моделей" />
             <h2 className="mt-4 text-3xl font-black tracking-normal text-white sm:text-4xl lg:text-5xl" {...fieldAttrs(models.sectionKey, 'title')}>
               <EditableText editor={editor} path={['models', 'title']} label="Заголовок блока моделей" value={models.title} multiline>
-                {models.title}
+                <GradientTail text={models.title} />
               </EditableText>
             </h2>
             <p className="mt-4 text-base leading-7 text-slate-400 sm:text-lg" {...fieldAttrs(models.sectionKey, 'lead')}>
@@ -454,7 +497,10 @@ function ModelCatalogSection({ content, editor }: { content: HomeLandingContent;
                 key={family.key}
                 as="article"
                 delayMs={(index % 3) * 80}
-                className={cn('rounded-lg border p-4 transition hover:-translate-y-0.5', modelAccentClasses[family.accent])}
+                className={cn(
+                  'rounded-2xl border bg-slate-950/60 p-4 backdrop-blur-sm transition duration-300 hover:-translate-y-1',
+                  modelAccentClasses[family.accent],
+                )}
                 {...sectionAttrs(`${models.sectionKey}.${family.key}`)}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -515,16 +561,15 @@ function ServicesShowcase({
   };
 
   return (
-    <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950" {...sectionAttrs(readyServices.sectionKey)}>
-      {/* Пятно света за сеткой: статичное, без пересчётов на скролле. */}
-      <div className="pointer-events-none absolute -left-40 top-24 h-96 w-96 rounded-full bg-amber-500/10 blur-[140px]" />
+    <section className="relative" {...sectionAttrs(readyServices.sectionKey)}>
+      <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="relative mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
         <Reveal className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div className="max-w-3xl">
             <SectionEyebrow icon={<Zap className="h-4 w-4" />} text={readyServices.eyebrow} section={readyServices.sectionKey} editor={editor} path={['readyServices', 'eyebrow']} label="Бейдж блока услуг" />
             <h2 className="mt-4 text-3xl font-black tracking-normal text-white sm:text-4xl" {...fieldAttrs(readyServices.sectionKey, 'title')}>
               <EditableText editor={editor} path={['readyServices', 'title']} label="Заголовок блока услуг" value={readyServices.title} multiline>
-                {readyServices.title}
+                <GradientTail text={readyServices.title} />
               </EditableText>
             </h2>
             <p className="mt-4 text-base leading-7 text-slate-400" {...fieldAttrs(readyServices.sectionKey, 'lead')}>
@@ -533,7 +578,7 @@ function ServicesShowcase({
               </EditableText>
             </p>
           </div>
-          <Button asChild size="lg" className="h-12 bg-amber-400 px-6 text-slate-950 hover:bg-amber-300">
+          <Button asChild size="lg" className="av-btn-gradient h-12 px-6 text-base font-bold">
             <Link href="/services">
               <EditableText editor={editor} path={['readyServices', 'cta']} label="Текст кнопки услуг" value={readyServices.cta}>
                 {readyServices.cta}
@@ -665,14 +710,16 @@ function ServiceShowcaseSlot({
           * работа, а не как поле формы. На наведении оно усиливается — обратная связь
           * без движения всей сетки.
           */}
-        <article className="flex h-full flex-col overflow-hidden rounded-xl border border-amber-300/20 bg-slate-900 shadow-[0_0_35px_-18px_rgba(251,191,36,0.55)] transition duration-300 hover:-translate-y-1 hover:border-amber-300/60 hover:shadow-[0_0_45px_-12px_rgba(251,191,36,0.65)]">
-          <div className="aspect-[16/10] overflow-hidden bg-slate-950">
+        <article className="av-card av-card-hover flex h-full flex-col overflow-hidden rounded-2xl">
+          <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
             <MediaBlock media={media} className="transition duration-500 group-hover:scale-105" />
+            {/* Затемнение к низу кадра: заголовок под ним читается на любом превью. */}
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950 to-transparent" />
           </div>
           <div className="flex flex-1 flex-col gap-3 p-4">
             <h3 className="line-clamp-2 text-base font-bold text-white">{service.title}</h3>
             <div className="mt-auto flex justify-end">
-              <span className="inline-flex items-center gap-1 rounded-full bg-amber-400 px-3 py-1 text-xs font-semibold text-slate-950 transition group-hover:bg-amber-300">
+              <span className="av-btn-gradient inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold">
                 К услуге
                 <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
               </span>
@@ -701,13 +748,14 @@ function StudioPricingSection({
   const audioPrice = estimateChatGenerationPriceCoins('veo-3.1-fast', { duration: 8, generateAudio: true });
 
   return (
-    <section className="border-b border-slate-800 bg-slate-900/40" {...sectionAttrs(studio.sectionKey)}>
+    <section className="relative" {...sectionAttrs(studio.sectionKey)}>
+      <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8 lg:py-20">
         <div>
           <SectionEyebrow icon={<Library className="h-4 w-4" />} text={studio.eyebrow} section={studio.sectionKey} editor={editor} path={['studio', 'eyebrow']} label="Бейдж блока Студии" />
           <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-normal text-white sm:text-4xl lg:text-5xl" {...fieldAttrs(studio.sectionKey, 'title')}>
             <EditableText editor={editor} path={['studio', 'title']} label="Заголовок блока Студии" value={studio.title} multiline>
-              {studio.title}
+              <GradientTail text={studio.title} />
             </EditableText>
           </h2>
           <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg" {...fieldAttrs(studio.sectionKey, 'lead')}>
@@ -716,7 +764,7 @@ function StudioPricingSection({
             </EditableText>
           </p>
 
-          <div className="mt-6 overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-2xl shadow-black/20">
+          <div className="av-card av-card-violet av-glow-violet mt-6 overflow-hidden rounded-2xl">
             <div className="relative aspect-[16/9]">
               <EditableMedia editor={editor} path={['studio', 'media']} label="Картинка блока Студии" media={studio.media} className="absolute inset-0">
                 <MediaBlock media={studio.media} />
@@ -726,7 +774,7 @@ function StudioPricingSection({
 
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
             {studio.items.map((item, index) => (
-              <article key={item.key} className="rounded-lg border border-slate-800 bg-slate-950 p-5" {...sectionAttrs(`${studio.sectionKey}.${item.key}`)}>
+              <article key={item.key} className="av-card av-card-quiet rounded-2xl p-5 transition hover:-translate-y-1" {...sectionAttrs(`${studio.sectionKey}.${item.key}`)}>
                 <h3 className="font-bold text-white" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'title')}>
                   <EditableText editor={editor} path={['studio', 'items', index, 'title']} label="Название преимущества Студии" value={item.title}>
                     {item.title}
@@ -741,7 +789,7 @@ function StudioPricingSection({
             ))}
           </div>
 
-          <Button asChild className="mt-7 h-11 bg-violet-600 px-5 hover:bg-violet-500">
+          <Button asChild className="av-btn-gradient mt-7 h-11 px-5 font-bold">
             <Link href={actionHref('/studio', isAuthed)}>
               <Sparkles className="h-4 w-4" />
               <EditableText editor={editor} path={['studio', 'cta']} label="Текст кнопки Студии" value={studio.cta}>
@@ -752,20 +800,22 @@ function StudioPricingSection({
           </Button>
         </div>
 
-        <aside className="rounded-lg border border-amber-300/30 bg-slate-950 p-5 shadow-2xl shadow-black/20 lg:self-start" {...sectionAttrs('pricing-card')}>
+        <aside className="av-card av-glow-amber rounded-2xl p-5 lg:self-start" {...sectionAttrs('pricing-card')}>
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-sm font-medium text-amber-300">Стоимость</div>
-              <h3 className="mt-1 text-2xl font-black text-white">Низкие цены без подписки</h3>
+              <div className="text-sm font-semibold uppercase tracking-wide text-amber-300">Стоимость</div>
+              <h3 className="mt-1 text-2xl font-black text-white">
+                Низкие цены <span className="av-text-gradient">без подписки</span>
+              </h3>
             </div>
-            <TokenIcon className="h-9 w-9 text-amber-300" />
+            <TokenIcon className="h-9 w-9 shrink-0 text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
           </div>
           <div className="mt-6 space-y-3">
             <PriceRow label="Фото / образ" value={`от ${formatCoins(photoPrice)}`} icon={<ImageIcon className="h-4 w-4" />} />
             <PriceRow label="Видео по промпту" value={`от ${formatCoins(videoPrice)}`} icon={<Film className="h-4 w-4" />} />
             <PriceRow label="Видео со звуком" value={`от ${formatCoins(audioPrice)}`} icon={<Volume2 className="h-4 w-4" />} />
           </div>
-          <div className="mt-5 rounded-md border border-slate-800 bg-slate-900 p-4">
+          <div className="av-card av-card-quiet mt-5 rounded-xl p-4">
             <div className="text-sm font-semibold text-white">
               {starterPackage ? `${starterPackage.tokens + starterPackage.bonus} токенов за ${starterPackage.priceRub} ₽` : 'Пакеты токенов'}
             </div>
@@ -773,7 +823,7 @@ function StudioPricingSection({
               Пополняйте баланс тогда, когда нужно. Цена конкретного запуска видна до списания.
             </p>
           </div>
-          <Button asChild className="mt-5 h-11 w-full bg-amber-500 text-slate-950 hover:bg-amber-400">
+          <Button asChild className="av-btn-gradient av-pulse mt-5 h-11 w-full font-bold">
             <Link href={isAuthed ? '/profile?tab=billing' : '/pricing'}>
               {isAuthed ? 'Пополнить баланс' : 'Смотреть цены'}
               <ArrowRight className="h-4 w-4" />
@@ -789,14 +839,19 @@ function FinalCta({ content, editor, isAuthed }: { content: HomeLandingContent; 
   const finalCta = content.finalCta;
 
   return (
-    <section className="bg-slate-950" {...sectionAttrs(finalCta.sectionKey)}>
+    <section className="relative" {...sectionAttrs(finalCta.sectionKey)}>
+      <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-        <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
-          <div className="grid gap-6 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
+        {/* Финальный экран — самый яркий: последнее, что человек видит перед решением. */}
+        <div className="av-card av-glow-amber relative overflow-hidden rounded-3xl">
+          {/* Свет внутри карточки, чтобы она светилась изнутри, а не только по краю. */}
+          <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 av-nebula-amber rounded-full" />
+          <div className="pointer-events-none absolute -bottom-28 right-0 h-80 w-80 av-nebula-violet rounded-full" />
+          <div className="relative grid gap-6 p-6 sm:p-10 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
-              <h2 className="text-2xl font-black text-white sm:text-3xl" {...fieldAttrs(finalCta.sectionKey, 'title')}>
+              <h2 className="text-2xl font-black text-white sm:text-4xl" {...fieldAttrs(finalCta.sectionKey, 'title')}>
                 <EditableText editor={editor} path={['finalCta', 'title']} label="Заголовок финального CTA" value={finalCta.title} multiline>
-                  {finalCta.title}
+                  <GradientTail text={finalCta.title} />
                 </EditableText>
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base" {...fieldAttrs(finalCta.sectionKey, 'lead')}>
@@ -806,13 +861,13 @@ function FinalCta({ content, editor, isAuthed }: { content: HomeLandingContent; 
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button asChild className="h-11 bg-violet-600 hover:bg-violet-500">
+              <Button asChild className="av-btn-gradient av-pulse h-12 px-6 text-base font-bold">
                 <Link href={actionHref('/ai', isAuthed)}>
                   <Sparkles className="h-4 w-4" />
                   Allvision AI
                 </Link>
               </Button>
-              <Button asChild variant="outline" className="h-11 border-slate-700 bg-slate-950">
+              <Button asChild variant="outline" className="av-btn-glass h-12 px-6 text-base font-semibold text-white hover:text-white">
                 <Link href="/services">Услуги</Link>
               </Button>
             </div>
@@ -852,8 +907,8 @@ function SectionEyebrow({
   label?: string;
 }) {
   return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm font-medium text-slate-200" {...fieldAttrs(section, 'eyebrow')}>
-      <span className="text-amber-300">{icon}</span>
+    <div className="av-pill inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold text-slate-100" {...fieldAttrs(section, 'eyebrow')}>
+      <span className="text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]">{icon}</span>
       {path ? (
         <EditableText editor={editor} path={path} label={label ?? 'Бейдж'} value={text}>
           {text}
@@ -877,7 +932,7 @@ function ChatMockRow({
   path?: HomeEditorPath;
 }) {
   return (
-    <div className="rounded-md border border-slate-800 bg-slate-900 p-3">
+    <div className="av-card av-card-quiet rounded-xl p-3">
       <div className="text-xs font-medium uppercase text-slate-500">{label}</div>
       <div className="mt-2 text-sm leading-6 text-slate-200">
         {path ? (
@@ -894,7 +949,7 @@ function ChatMockRow({
 
 function ChatMockControl({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
   return (
-    <div className="min-w-0 rounded-md border border-slate-800 bg-slate-900 p-3">
+    <div className="av-card av-card-quiet min-w-0 rounded-xl p-3">
       <div className="flex items-center gap-2 text-xs text-slate-500">
         <span className="text-violet-300">{icon}</span>
         {label}
@@ -906,21 +961,21 @@ function ChatMockControl({ icon, label, value }: { icon: ReactNode; label: strin
 
 function StatPill({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950 p-4">
-      <div className="text-2xl font-black text-white">{value}</div>
-      <div className="mt-1 text-xs text-slate-500">{label}</div>
+    <div className="av-card av-card-quiet rounded-2xl p-4 transition hover:-translate-y-1">
+      <div className="av-text-gradient text-2xl font-black">{value}</div>
+      <div className="mt-1 text-xs text-slate-400">{label}</div>
     </div>
   );
 }
 
 function PriceRow({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md border border-slate-800 bg-slate-900 p-3">
+    <div className="av-card av-card-quiet flex items-center justify-between gap-4 rounded-xl p-3">
       <div className="flex items-center gap-2 text-sm text-slate-300">
-        <span className="text-amber-300">{icon}</span>
+        <span className="text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]">{icon}</span>
         {label}
       </div>
-      <div className="text-sm font-bold text-white">{value}</div>
+      <div className="av-text-gradient text-sm font-black">{value}</div>
     </div>
   );
 }

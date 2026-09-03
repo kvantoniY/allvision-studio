@@ -132,8 +132,11 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
 
   return (
     <div className="relative select-none">
-      {/* Светящаяся дуга позади ленты: статичная, без пересчётов на скролле. */}
-      <div className="pointer-events-none absolute inset-x-0 -top-10 mx-auto h-64 max-w-3xl rounded-[100%] bg-amber-400/10 blur-[90px]" />
+      {/*
+       * Свет под лентой. Радиальный градиент вместо размытого пятна: та же мягкость,
+       * но без пересчёта размытия при каждом кадре перетаскивания.
+       */}
+      <div className="pointer-events-none absolute inset-x-0 -top-6 mx-auto h-72 max-w-4xl rounded-[100%] bg-[radial-gradient(closest-side,rgba(251,191,36,0.22),rgba(168,85,247,0.12)_55%,transparent_80%)]" />
 
       <div
         ref={boxRef}
@@ -204,7 +207,9 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
             aria-label={`Шаблон ${dotIndex + 1}`}
             className={cn(
               'h-1.5 rounded-full transition-all',
-              dotIndex === index ? 'w-6 bg-amber-400' : 'w-1.5 bg-slate-600 hover:bg-slate-500',
+              dotIndex === index
+                ? 'w-7 bg-gradient-to-r from-amber-400 via-rose-400 to-violet-400 shadow-[0_0_12px_-2px_rgba(251,191,36,0.9)]'
+                : 'w-1.5 bg-slate-600 hover:bg-slate-400',
             )}
           />
         ))}
@@ -240,11 +245,15 @@ function SlideCard({
     <div
       onClick={centered ? undefined : onSideClick}
       className={cn(
-        'relative h-full w-full overflow-hidden rounded-2xl border bg-slate-950',
+        'relative h-full w-full overflow-hidden rounded-3xl border bg-slate-950',
         centered
-          ? 'border-amber-300/40 shadow-[0_0_60px_-12px_rgba(251,191,36,0.35)]'
+          ? // Живая обводка только у центральной карточки: она одна в фокусе, и
+            // покадровая перерисовка рамки здесь стоит недорого.
+            'av-live-ring border-transparent shadow-[0_0_80px_-14px_rgba(251,191,36,0.55),0_0_120px_-30px_rgba(168,85,247,0.6)]'
           : 'cursor-pointer border-white/10',
-        !dragging && centered && 'transition-shadow hover:shadow-[0_0_80px_-10px_rgba(251,191,36,0.5)]',
+        !dragging &&
+          centered &&
+          'transition-shadow hover:shadow-[0_0_100px_-10px_rgba(251,191,36,0.7),0_0_140px_-24px_rgba(217,70,239,0.7)]',
       )}
     >
       <SlideMedia service={service} muted={!centered || !soundOn} playing={centered} />
@@ -273,7 +282,7 @@ function SlideCard({
               if (blockLink) event.preventDefault();
             }}
             draggable={false}
-            className="mt-3 inline-flex h-8 items-center rounded-full bg-amber-400 px-4 text-xs font-semibold text-slate-950 transition hover:bg-amber-300"
+            className="av-btn-gradient mt-3 inline-flex h-9 items-center rounded-full px-5 text-xs font-bold"
           >
             Выбрать этот шаблон
           </Link>
