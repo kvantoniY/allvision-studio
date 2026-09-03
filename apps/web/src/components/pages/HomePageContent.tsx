@@ -4,7 +4,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowRight, Bot, Film, ImagePlus, ImageIcon, Layers3, Library, MessageSquareText, PlayCircle, Plus, Sparkles, Trash2, Video, Volume2, Wand2, Zap } from 'lucide-react';
+import { ArrowRight, Bookmark, Bot, ChevronDown, Download, Film, ImagePlus, ImageIcon, Layers3, Library, Paperclip, Play, PlayCircle, Plus, Sparkles, Trash2, UploadCloud, UserRound, Video, Volume2, Wand2, Zap } from 'lucide-react';
 import { TokenIcon } from '@/components/ui/token-icon';
 import {
   CHAT_MODELS,
@@ -65,6 +65,17 @@ const modelAccentClasses: Record<HomeModelFamily['accent'], string> = {
   rose: 'border-rose-300/35 text-rose-200 hover:border-rose-200/70 hover:shadow-[0_18px_46px_-24px_rgba(244,63,94,0.95)]',
   sky: 'border-sky-300/35 text-sky-200 hover:border-sky-200/70 hover:shadow-[0_18px_46px_-24px_rgba(56,189,248,0.95)]',
 };
+
+/*
+ * Иконки к примерам запросов в блоке чата. Список запросов админ правит текстом,
+ * поэтому оформление привязано к позиции, а не к содержимому: три записи, три
+ * узнаваемых значка (ролик, картинка, персонаж), дальше по кругу.
+ */
+const promptAccents = [
+  { icon: <Film className="h-5 w-5 text-violet-200" />, accent: 'border-violet-300/40 bg-violet-500/15' },
+  { icon: <ImageIcon className="h-5 w-5 text-cyan-200" />, accent: 'border-cyan-300/40 bg-cyan-500/15' },
+  { icon: <UserRound className="h-5 w-5 text-amber-200" />, accent: 'border-amber-300/40 bg-amber-500/15' },
+];
 
 /**
  * Заголовок с цветным хвостом.
@@ -397,62 +408,111 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
               {chat.lead}
             </EditableText>
           </p>
-          <div className="mt-6 grid gap-2.5">
-            {chat.prompts.map((prompt, index) => (
-              <div key={`${prompt}-${index}`} className="av-card av-card-quiet flex items-start gap-3 rounded-xl p-3.5 transition hover:-translate-y-0.5" {...fieldAttrs(chat.sectionKey, `prompt-${index}`)}>
-                <MessageSquareText className="mt-0.5 h-5 w-5 shrink-0 text-cyan-300" />
-                <span className="text-sm leading-6 text-slate-200">
-                  <EditableText editor={editor} path={['chat', 'prompts', index]} label="Пример запроса" value={prompt} multiline>
-                    {prompt}
-                  </EditableText>
-                </span>
-              </div>
-            ))}
+          <div className="mt-6 grid gap-3">
+            {chat.prompts.map((prompt, index) => {
+              const { icon, accent } = promptAccents[index % promptAccents.length];
+              return (
+                <div
+                  key={`${prompt}-${index}`}
+                  className="av-card av-card-quiet group flex items-center gap-3.5 rounded-xl p-3.5 transition hover:-translate-y-0.5"
+                  {...fieldAttrs(chat.sectionKey, `prompt-${index}`)}
+                >
+                  {/* Иконка в подсвеченном квадрате: строка запроса перестаёт быть просто списком. */}
+                  <span className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-lg border', accent)}>{icon}</span>
+                  <span className="min-w-0 flex-1 text-sm font-medium leading-6 text-slate-100">
+                    <EditableText editor={editor} path={['chat', 'prompts', index]} label="Пример запроса" value={prompt} multiline>
+                      {prompt}
+                    </EditableText>
+                  </span>
+                  <ArrowRight className="h-4 w-4 shrink-0 text-slate-500 transition group-hover:translate-x-0.5 group-hover:text-amber-300" />
+                </div>
+              );
+            })}
           </div>
+
+          {/*
+           * Кнопка переехала из мокапа сюда. В мокапе она конкурировала с самим
+           * интерфейсом на картинке: два призыва нажать в одном кадре. Слева она
+           * заканчивает мысль текста и стоит там, где взгляд уже находится.
+           */}
+          <Button asChild size="lg" className="av-btn-gradient av-pulse mt-7 h-12 px-7 text-base font-bold">
+            <Link href={actionHref('/ai', isAuthed)}>
+              <Sparkles className="h-4 w-4" />
+              Открыть Allvision AI
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </Button>
         </div>
 
-        <div className="av-card av-card-violet av-glow-violet min-w-0 rounded-2xl p-3 sm:p-4">
-          <div className="rounded-xl border border-white/10 bg-slate-950/80">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-3">
-              <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                <Sparkles className="h-4 w-4 text-violet-300" />
+        {/*
+         * Мокап интерфейса. Всё внутри — картинка продукта, а не рабочие элементы:
+         * поля и кнопки здесь не кликаются и убраны из порядка обхода (`aria-hidden`),
+         * чтобы с клавиатуры не проваливаться в декорации. Настоящий переход — одна
+         * кнопка в левой колонке.
+         */}
+        <div className="av-tilt av-card av-card-violet av-glow-violet min-w-0 rounded-3xl p-2.5 sm:p-3">
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-slate-950/85">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 p-3.5">
+              <div className="flex items-center gap-2 text-sm font-bold text-white">
+                <Sparkles className="h-4 w-4 text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
                 Allvision AI
               </div>
-              <div className="flex flex-wrap gap-2 text-xs text-slate-400">
-                <span className="rounded-full bg-slate-900 px-2.5 py-1">Фото</span>
-                <span className="rounded-full bg-slate-900 px-2.5 py-1">Видео</span>
-                <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-emerald-200">Звук</span>
+              {/* Сегментированный переключатель: видно, что режимов три и один выбран. */}
+              <div aria-hidden className="flex items-center gap-1 rounded-lg border border-white/10 bg-slate-900/70 p-1 text-xs">
+                <span className="av-segment-active rounded-md px-3 py-1.5 font-bold text-amber-200">Фото</span>
+                <span className="rounded-md px-3 py-1.5 text-slate-400">Видео</span>
+                <span className="rounded-md px-3 py-1.5 text-slate-400">Звук</span>
               </div>
             </div>
+
             <div className="space-y-3 p-3 sm:p-4">
               <ChatMockRow label="Промпт" value={chat.mock.prompt} editor={editor} path={['chat', 'mock', 'prompt']} />
+
               <div className="grid gap-3 sm:grid-cols-3">
-                <ChatMockControl icon={<Wand2 className="h-4 w-4" />} label="Модель" value="Veo / Kling / Sora" />
-                <ChatMockControl icon={<Film className="h-4 w-4" />} label="Формат" value="9:16" />
-                <ChatMockControl icon={<Library className="h-4 w-4" />} label="Референс" value="опционально" />
+                <ChatMockControl label="Модель" value="Veo / Kling / Sora" trailing={<ChevronDown className="h-4 w-4" />} />
+                <ChatMockControl label="Формат" value="9:16" trailing={<ChevronDown className="h-4 w-4" />} />
+                <ChatMockControl label="Референс" value="Прикрепить" leading={<Paperclip className="h-4 w-4 text-amber-300" />} />
               </div>
+
               <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
-                <div className="aspect-[16/7] bg-slate-950">
-                  <EditableMedia editor={editor} path={['chat', 'mock', 'media']} label="Медиа примера чата" media={chat.mock.media}>
+                <div className="relative aspect-[16/8] bg-slate-950">
+                  <EditableMedia editor={editor} path={['chat', 'mock', 'media']} label="Медиа примера чата" media={chat.mock.media} className="absolute inset-0">
                     <MediaBlock media={chat.mock.media} />
                   </EditableMedia>
+                  {/* Кнопка play поверх кадра: сразу понятно, что на выходе ролик. */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute left-1/2 top-1/2 grid h-14 w-14 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-slate-950/45 backdrop-blur-sm"
+                  >
+                    <Play className="ml-0.5 h-5 w-5 fill-white text-white" />
+                  </span>
                 </div>
-                <div className="flex flex-col justify-between gap-3 p-3 sm:flex-row sm:items-center">
-                  <div>
-                    <div className="text-sm font-semibold text-white">
+
+                <div className="flex flex-col justify-between gap-3 p-3.5 sm:flex-row sm:items-center">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-white">
                       <EditableText editor={editor} path={['chat', 'mock', 'resultTitle']} label="Заголовок результата в мокапе" value={chat.mock.resultTitle}>
                         {chat.mock.resultTitle}
                       </EditableText>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">
+                    <div className="mt-1 text-xs leading-5 text-slate-500">
                       <EditableText editor={editor} path={['chat', 'mock', 'resultDescription']} label="Описание результата в мокапе" value={chat.mock.resultDescription} multiline>
                         {chat.mock.resultDescription}
                       </EditableText>
                     </div>
                   </div>
-                  <Button asChild size="sm" className="av-btn-gradient font-semibold">
-                    <Link href={actionHref('/ai', isAuthed)}>Открыть чат</Link>
-                  </Button>
+                  {/* Три действия над готовым файлом — скачать, сохранить в Студию, оставить у себя. */}
+                  <div aria-hidden className="flex shrink-0 gap-2">
+                    <span className="grid h-10 w-10 place-items-center rounded-lg border border-white/12 bg-slate-950/70 text-slate-300">
+                      <Download className="h-4 w-4" />
+                    </span>
+                    <span className="grid h-10 w-10 place-items-center rounded-lg border border-white/12 bg-slate-950/70 text-slate-300">
+                      <UploadCloud className="h-4 w-4" />
+                    </span>
+                    <span className="grid h-10 w-10 place-items-center rounded-lg border border-amber-300/60 bg-amber-400/15 text-amber-200 shadow-[0_0_20px_-8px_rgba(251,191,36,0.95)]">
+                      <Bookmark className="h-4 w-4" />
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -932,9 +992,18 @@ function ChatMockRow({
   path?: HomeEditorPath;
 }) {
   return (
-    <div className="av-card av-card-quiet rounded-xl p-3">
-      <div className="text-xs font-medium uppercase text-slate-500">{label}</div>
-      <div className="mt-2 text-sm leading-6 text-slate-200">
+    <div className="av-card av-card-quiet rounded-xl px-3 py-2.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
+          <span className="truncate text-[11px] text-slate-600">Опишите вашу идею детально…</span>
+        </div>
+        {/* Счётчик символов — деталь, по которой поле читается как настоящее. */}
+        <span aria-hidden className="shrink-0 text-[11px] tabular-nums text-slate-600">
+          230 / 2500
+        </span>
+      </div>
+      <div className="mt-1.5 text-sm leading-6 text-slate-200">
         {path ? (
           <EditableText editor={editor} path={path} label="Промпт в мокапе чата" value={value} multiline>
             {value}
@@ -947,14 +1016,32 @@ function ChatMockRow({
   );
 }
 
-function ChatMockControl({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+/**
+ * Поле управления в мокапе.
+ *
+ * Выглядит как выпадающий список: подпись сверху, значение снизу, шеврон справа.
+ * Так читатель узнаёт привычный элемент интерфейса и понимает, что модель и формат
+ * выбираются, а не заданы навсегда.
+ */
+function ChatMockControl({
+  label,
+  value,
+  leading,
+  trailing,
+}: {
+  label: string;
+  value: string;
+  leading?: ReactNode;
+  trailing?: ReactNode;
+}) {
   return (
-    <div className="av-card av-card-quiet min-w-0 rounded-xl p-3">
-      <div className="flex items-center gap-2 text-xs text-slate-500">
-        <span className="text-violet-300">{icon}</span>
-        {label}
+    <div className="av-card av-card-quiet min-w-0 rounded-xl px-3 py-2.5">
+      <div className="text-[11px] font-medium text-slate-500">{label}</div>
+      <div className="mt-1 flex items-center gap-2">
+        {leading}
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{value}</span>
+        {trailing && <span className="shrink-0 text-slate-500">{trailing}</span>}
       </div>
-      <div className="mt-2 truncate text-sm font-semibold text-white">{value}</div>
     </div>
   );
 }

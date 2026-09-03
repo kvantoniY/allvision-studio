@@ -449,3 +449,49 @@
     animation: none;
   }
 }
+
+@layer components {
+  /*
+   * Панель-мокап, повёрнутая к читателю.
+   *
+   * Наклон нужен, чтобы интерфейс на картинке читался как предмет в пространстве,
+   * а не как второй столбец текста. Разворачиваем ЛЕВЫМ краем к зрителю: слева
+   * стоит колонка с текстом, и панель смотрит именно туда, откуда её читают.
+   *
+   * Наклон живёт только на широком экране: на телефоне панель занимает всю ширину,
+   * и повёрнутый край просто срезался бы краем экрана.
+   *
+   * `backface-visibility` и целые доли градуса — против замыленного текста: браузер
+   * растеризует повёрнутый слой один раз, и на дробных углах шрифт «плывёт».
+   */
+  .av-tilt {
+    transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+    backface-visibility: hidden;
+  }
+
+  @media (min-width: 1024px) {
+    .av-tilt {
+      transform: perspective(1900px) rotateY(6deg) rotateX(2deg);
+    }
+
+    /* На наведении панель разворачивается лицом: «взял в руки и посмотрел прямо». */
+    .av-tilt:hover {
+      transform: perspective(1900px) rotateY(0deg) rotateX(0deg);
+    }
+  }
+
+  /* Сегментированный переключатель в мокапе: активная вкладка светится. */
+  .av-segment-active {
+    border: 1px solid transparent;
+    background:
+      linear-gradient(180deg, rgba(30, 22, 8, 0.95), rgba(12, 10, 6, 0.95)) padding-box,
+      linear-gradient(120deg, rgba(251, 191, 36, 0.85), rgba(249, 115, 22, 0.55)) border-box;
+    box-shadow: 0 0 22px -10px rgba(251, 191, 36, 0.95);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .av-tilt {
+    transition: none;
+  }
+}
