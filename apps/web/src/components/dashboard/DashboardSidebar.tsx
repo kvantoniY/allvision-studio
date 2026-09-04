@@ -192,7 +192,7 @@ function SidebarRailIcons() {
 export function DashboardSidebar({ rail = false }: { rail?: boolean }) {
   if (!rail) {
     return (
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-slate-800 bg-slate-950 md:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-white/10 bg-slate-950/70 backdrop-blur-xl md:block">
         <DashboardSidebarContent />
       </aside>
     );
@@ -201,10 +201,14 @@ export function DashboardSidebar({ rail = false }: { rail?: boolean }) {
   return (
     <aside className="group fixed inset-y-0 left-0 z-40 hidden w-16 md:block">
       <SidebarRailIcons />
-      {/* Полное меню лежит поверх: на странице оно места не занимает. */}
+      {/*
+       * Полное меню лежит поверх: на странице оно места не занимает. Выезжающая панель
+       * оставлена плотной — она перекрывает рабочую область, и сквозь неё не должно
+       * просвечивать содержимое страницы.
+       */}
       <div
         className={cn(
-          'pointer-events-none absolute inset-y-0 left-0 w-64 -translate-x-3 border-r border-slate-800 bg-slate-950 opacity-0 shadow-2xl shadow-black/60 transition duration-150',
+          'pointer-events-none absolute inset-y-0 left-0 w-64 -translate-x-3 border-r border-white/10 bg-slate-950/95 opacity-0 shadow-2xl shadow-black/60 backdrop-blur-xl transition duration-150',
           'group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:opacity-100',
           'focus-within:pointer-events-auto focus-within:translate-x-0 focus-within:opacity-100',
         )}

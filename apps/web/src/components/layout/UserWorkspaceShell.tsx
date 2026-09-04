@@ -28,8 +28,17 @@ export function UserWorkspaceShell({ children }: { children: React.ReactNode }) 
   // холст и шкалу. Полное меню выезжает поверх при наведении, раскладка не съезжает.
   const railSidebar = Boolean(pathname?.startsWith('/editor'));
 
+  /*
+   * Оболочка кабинета БЕЗ своей заливки.
+   *
+   * Раньше здесь стоял непрозрачный `bg-slate-950`, и он закрывал звёздный фон: слой
+   * AmbientBackground живёт внутри страницы с отрицательным z-index, то есть позади
+   * этого элемента — и его фон перекрывал обои целиком. Цвет при этом не теряется:
+   * тот же `slate-950` задан у `body` в globals.css, поэтому страницы без своих обоев
+   * выглядят как прежде.
+   */
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen text-slate-100">
       {/* Realtime-обновление статусов генераций на любом экране (SSE); поллинг — фолбэк. */}
       <ProjectEventsBridge enabled={Boolean(user)} />
       <DashboardSidebar rail={railSidebar} />

@@ -879,23 +879,6 @@ function StudioPricingSection({
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            {studio.items.map((item, index) => (
-              <article key={item.key} className="av-card av-card-quiet rounded-2xl p-5 transition hover:-translate-y-1" {...sectionAttrs(`${studio.sectionKey}.${item.key}`)}>
-                <h3 className="font-bold text-white" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'title')}>
-                  <EditableText editor={editor} path={['studio', 'items', index, 'title']} label="Название преимущества Студии" value={item.title}>
-                    {item.title}
-                  </EditableText>
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-400" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'description')}>
-                  <EditableText editor={editor} path={['studio', 'items', index, 'description']} label="Описание преимущества Студии" value={item.description} multiline>
-                    {item.description}
-                  </EditableText>
-                </p>
-              </article>
-            ))}
-          </div>
-
           <Button asChild className="av-btn-gradient mt-7 h-11 px-5 font-bold">
             <Link href={actionHref('/studio', isAuthed)}>
               <Sparkles className="h-4 w-4" />
@@ -937,6 +920,31 @@ function StudioPricingSection({
             </Link>
           </Button>
         </aside>
+
+        {/*
+         * Преимущества Студии идут отдельной строкой сетки во всю ширину.
+         *
+         * Раньше они лежали внутри левой колонки, и получалось так: слева высокий столбец
+         * с картинкой и тремя карточками, справа короткая карточка цены — а под ней до
+         * самого низа пустой угол. Три карточки под обеими колонками закрывают этот угол
+         * и выстраиваются по той же сетке, что и всё остальное на странице.
+         */}
+        <div className="grid gap-4 sm:grid-cols-3 lg:col-span-2">
+          {studio.items.map((item, index) => (
+            <article key={item.key} className="av-card av-card-quiet rounded-2xl p-5 transition hover:-translate-y-1" {...sectionAttrs(`${studio.sectionKey}.${item.key}`)}>
+              <h3 className="font-bold text-white" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'title')}>
+                <EditableText editor={editor} path={['studio', 'items', index, 'title']} label="Название преимущества Студии" value={item.title}>
+                  {item.title}
+                </EditableText>
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-slate-400" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'description')}>
+                <EditableText editor={editor} path={['studio', 'items', index, 'description']} label="Описание преимущества Студии" value={item.description} multiline>
+                  {item.description}
+                </EditableText>
+              </p>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
