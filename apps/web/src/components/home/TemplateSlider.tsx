@@ -87,9 +87,22 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
 
   if (total === 0) return null;
 
-  // Карточка шириной чуть больше половины ленты: соседи должны заглядывать с обеих сторон.
-  const cardWidth = Math.min(520, Math.max(220, width * 0.62));
-  const step = cardWidth * 0.78;
+  /*
+   * Геометрия карточки.
+   *
+   * Кадр строго 16:9 — в этом формате сняты сами ролики. Раньше карточка была
+   * заметно выше (0.68 от ширины), и `object-cover` срезал кадр по бокам: на
+   * телефоне это читалось как сильное приближение.
+   *
+   * Ширину на узком экране берём почти во всю ленту. При прежних 62% карточка на
+   * 390px выходила меньше 230px — соседи заглядывали с обеих сторон, но сам
+   * шаблон разглядеть было нельзя, а ради него лента и существует. На большом
+   * экране соседи по-прежнему видны.
+   */
+  const narrow = width < 640;
+  const cardWidth = Math.min(520, Math.max(220, width * (narrow ? 0.9 : 0.62)));
+  const cardHeight = cardWidth * (9 / 16);
+  const step = cardWidth * (narrow ? 0.94 : 0.78);
 
   const beginDrag = (clientX: number) => {
     if (settleRef.current) clearTimeout(settleRef.current);
@@ -133,15 +146,24 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
   return (
     <div className="relative select-none">
       {/*
-       * Свет под лентой. Радиальный градиент вместо размытого пятна: та же мягкость,
-       * но без пересчёта размытия при каждом кадре перетаскивания.
+       * Свет под лентой.
+       *
+       * Прежний градиент был задан через `closest-side`: на широком и низком блоке
+       * его радиус равен половине ВЫСОТЫ, поэтому свет обрывался ровной
+       * горизонтальной кромкой — читалось как подсвеченная полоса, а не как ореол.
+       * Здесь эллипс задан явными долями по обеим осям и гаснет до нуля задолго до
+       * края, так что видимой границы не остаётся.
+       *
+       * По-прежнему без `blur`: размытое пятно такого размера браузер пересчитывал бы
+       * на каждом кадре перетаскивания ленты, а два статичных градиента он рисует
+       * один раз и дальше только композитит.
        */}
-      <div className="pointer-events-none absolute inset-x-0 -top-6 mx-auto h-72 max-w-4xl rounded-[100%] bg-[radial-gradient(closest-side,rgba(251,191,36,0.22),rgba(168,85,247,0.12)_55%,transparent_80%)]" />
+      <div className="pointer-events-none absolute inset-x-0 -top-10 mx-auto h-[130%] max-w-5xl bg-[radial-gradient(ellipse_58%_62%_at_50%_45%,rgba(251,146,60,0.20),transparent_72%),radial-gradient(ellipse_82%_54%_at_50%_58%,rgba(139,92,246,0.16),transparent_78%)]" />
 
       <div
         ref={boxRef}
         className="relative touch-pan-y overflow-hidden"
-        style={{ height: cardWidth * 0.72 }}
+        style={{ height: cardHeight * 1.08 }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture?.(event.pointerId);
           beginDrag(event.clientX);
@@ -167,7 +189,7 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
               className="absolute left-1/2 top-1/2"
               style={{
                 width: cardWidth,
-                height: cardWidth * 0.68,
+                height: cardHeight,
                 transform: `translate(-50%, -50%) translateX(${position * step}px) scale(${Math.max(0.68, 1 - distance * 0.16)})`,
                 // Дальние карточки уходят в тень и обесцвечиваются — центр всегда читается первым.
                 opacity: Math.max(0, 1 - distance * 0.42),
@@ -179,6 +201,7 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
               <SlideCard
                 service={service}
                 centered={centered}
+                compact={narrow}
                 soundOn={soundOn}
                 dragging={dragging}
                 onToggleSound={() => setSoundOn((value) => !value)}
@@ -227,6 +250,7 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
 function SlideCard({
   service,
   centered,
+  compact,
   soundOn,
   dragging,
   onToggleSound,
@@ -235,6 +259,8 @@ function SlideCard({
 }: {
   service: PublicService;
   centered: boolean;
+  /** Узкий экран: на обложке остаются только название и кнопка. */
+  compact: boolean;
   soundOn: boolean;
   dragging: boolean;
   onToggleSound: () => void;
@@ -270,9 +296,16 @@ function SlideCard({
         </button>
       )}
 
-      <div className="absolute inset-x-0 bottom-0 p-4">
-        <h3 className="text-lg font-bold text-white drop-shadow sm:text-xl">{service.title}</h3>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{service.shortDesc}</p>
+      {/*
+       * Подпись на обложке. На телефоне остаются только название и кнопка: карточка
+       * там 16:9 и невысокая, а название плюс два абзаца описания закрывали собой
+       * добрую половину кадра — то есть ровно то, ради чего на ленту и смотрят.
+       */}
+      <div className={cn('absolute inset-x-0 bottom-0', compact ? 'p-3' : 'p-4')}>
+        <h3 className={cn('font-bold text-white drop-shadow', compact ? 'line-clamp-1 text-sm' : 'text-lg sm:text-xl')}>
+          {service.title}
+        </h3>
+        {!compact && <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-300">{service.shortDesc}</p>}
         {centered && (
           <Link
             href={`/services/${service.slug}`}
@@ -282,7 +315,10 @@ function SlideCard({
               if (blockLink) event.preventDefault();
             }}
             draggable={false}
-            className="av-btn-gradient mt-3 inline-flex h-9 items-center rounded-full px-5 text-xs font-bold"
+            className={cn(
+              'av-btn-gradient inline-flex items-center rounded-full font-bold',
+              compact ? 'mt-2 h-8 px-4 text-[11px]' : 'mt-3 h-9 px-5 text-xs',
+            )}
           >
             Выбрать этот шаблон
           </Link>

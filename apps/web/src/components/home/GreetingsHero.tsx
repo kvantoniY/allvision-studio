@@ -102,7 +102,7 @@ export function GreetingsHero({
             <TemplateSlider services={templates} />
 
             <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Button asChild size="lg" className="av-btn-gradient av-pulse group h-12 px-7 text-base font-bold">
+              <Button asChild size="lg" className="av-btn-gradient av-orbit group h-12 px-7 text-base font-bold">
                 <Link href="/services?tab=greetings">
                   Перейти ко всем шаблонам
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />

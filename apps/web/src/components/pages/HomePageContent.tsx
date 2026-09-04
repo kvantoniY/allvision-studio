@@ -220,8 +220,13 @@ export function HomePageContent() {
           onToggle={() => setEditMode((current) => !current)}
         />
       )}
-      <GreetingsHero content={content} editor={editor} />
+      {/*
+       * Готовые услуги открывают страницу: это главный товар витрины, и он должен
+       * попадаться на глаза до того, как человек начнёт листать что-либо ещё.
+       * Видео-поздравления идут вторым экраном.
+       */}
       <ServicesShowcase content={content} editor={editor} services={allServices} isLoading={services.isLoading} />
+      <GreetingsHero content={content} editor={editor} />
       <HeroLanding content={content} editor={editor} services={allServices} isAuthed={isAuthed} />
       <ChatSection content={content} editor={editor} isAuthed={isAuthed} />
       <ModelCatalogSection content={content} editor={editor} />
@@ -435,7 +440,7 @@ function ChatSection({ content, editor, isAuthed }: { content: HomeLandingConten
            * интерфейсом на картинке: два призыва нажать в одном кадре. Слева она
            * заканчивает мысль текста и стоит там, где взгляд уже находится.
            */}
-          <Button asChild size="lg" className="av-btn-gradient av-pulse mt-7 h-12 px-7 text-base font-bold">
+          <Button asChild size="lg" className="av-btn-gradient av-orbit mt-7 h-12 px-7 text-base font-bold">
             <Link href={actionHref('/ai', isAuthed)}>
               <Sparkles className="h-4 w-4" />
               Открыть Allvision AI
@@ -592,6 +597,9 @@ function ModelCatalogSection({ content, editor }: { content: HomeLandingContent;
   );
 }
 
+/** Сколько карточек услуг показываем сразу и сколько добавляет «Показать больше». */
+const SHOWCASE_PAGE_SIZE = 6;
+
 function ServicesShowcase({
   content,
   editor,
@@ -606,6 +614,19 @@ function ServicesShowcase({
   const readyServices = content.readyServices;
   const slugs = readyServices.serviceSlugs ?? [];
   const serviceBySlug = new Map(services.map((service) => [service.slug, service]));
+
+  /*
+   * Показываем две полных строки по три карточки, остальное — по кнопке. Шесть
+   * штук дают понять, что каталог не из трёх позиций, и при этом не превращают
+   * первый экран в бесконечную сетку.
+   *
+   * В режиме редактирования показываем всё: админ управляет составом блока и
+   * должен видеть каждый слот, включая скрытые за кнопкой.
+   */
+  const [visibleCount, setVisibleCount] = useState(SHOWCASE_PAGE_SIZE);
+  const editing = editor?.enabled ?? false;
+  const visibleSlugs = editing ? slugs : slugs.slice(0, visibleCount);
+  const hiddenCount = slugs.length - visibleSlugs.length;
 
   const removeAt = (index: number) => {
     const next = slugs.filter((_, i) => i !== index);
@@ -622,43 +643,47 @@ function ServicesShowcase({
 
   return (
     <section className="relative" {...sectionAttrs(readyServices.sectionKey)}>
-      <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="relative mx-auto w-full max-w-[1480px] px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-        <Reveal className="mb-8 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-          <div className="max-w-3xl">
-            <SectionEyebrow icon={<Zap className="h-4 w-4" />} text={readyServices.eyebrow} section={readyServices.sectionKey} editor={editor} path={['readyServices', 'eyebrow']} label="Бейдж блока услуг" />
-            <h2 className="mt-4 text-3xl font-black tracking-normal text-white sm:text-4xl" {...fieldAttrs(readyServices.sectionKey, 'title')}>
+        <Reveal className="mb-8">
+          <SectionEyebrow icon={<Zap className="h-4 w-4" />} text={readyServices.eyebrow} section={readyServices.sectionKey} editor={editor} path={['readyServices', 'eyebrow']} label="Бейдж блока услуг" />
+          {/*
+           * Заголовок и кнопка стоят на одной линии: кнопка — продолжение мысли
+           * заголовка, а не подпись к абзацу под ним. Описание уходит третьей
+           * строкой и ширину кнопки не двигает.
+           */}
+          <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between lg:gap-8">
+            <h2 className="max-w-3xl text-3xl font-black tracking-normal text-white sm:text-4xl" {...fieldAttrs(readyServices.sectionKey, 'title')}>
               <EditableText editor={editor} path={['readyServices', 'title']} label="Заголовок блока услуг" value={readyServices.title} multiline>
                 <GradientTail text={readyServices.title} />
               </EditableText>
             </h2>
-            <p className="mt-4 text-base leading-7 text-slate-400" {...fieldAttrs(readyServices.sectionKey, 'lead')}>
-              <EditableText editor={editor} path={['readyServices', 'lead']} label="Описание блока услуг" value={readyServices.lead} multiline>
-                {readyServices.lead}
-              </EditableText>
-            </p>
+            <Button asChild size="lg" className="av-btn-gradient h-12 shrink-0 px-6 text-base font-bold">
+              <Link href="/services">
+                <EditableText editor={editor} path={['readyServices', 'cta']} label="Текст кнопки услуг" value={readyServices.cta}>
+                  {readyServices.cta}
+                </EditableText>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
           </div>
-          <Button asChild size="lg" className="av-btn-gradient h-12 px-6 text-base font-bold">
-            <Link href="/services">
-              <EditableText editor={editor} path={['readyServices', 'cta']} label="Текст кнопки услуг" value={readyServices.cta}>
-                {readyServices.cta}
-              </EditableText>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
+          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400" {...fieldAttrs(readyServices.sectionKey, 'lead')}>
+            <EditableText editor={editor} path={['readyServices', 'lead']} label="Описание блока услуг" value={readyServices.lead} multiline>
+              {readyServices.lead}
+            </EditableText>
+          </p>
         </Reveal>
 
         {isLoading ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, index) => <Skeleton key={index} className="h-72 rounded-lg bg-slate-900" />)}
           </div>
         ) : (
-          <div className="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
-            {slugs.map((slug, index) => (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleSlugs.map((slug, index) => (
               <Reveal
                 key={`${slug}-${index}`}
                 delayMs={(index % 3) * 90}
-                className="w-[80%] shrink-0 snap-start sm:w-[46%] xl:w-[31%]"
+                className="min-w-0"
               >
                 <ServiceShowcaseSlot
                   slug={slug}
@@ -688,14 +713,36 @@ function ServicesShowcase({
                 </span>
               </button>
             )}
-            {slugs.length === 0 && !editor?.enabled && (
+            {slugs.length === 0 && !editing && (
               <div className="col-span-full rounded-lg border border-dashed border-slate-800 bg-slate-900/40 p-8 text-center text-sm text-slate-400">
                 Услуги для этого блока пока не выбраны.
               </div>
             )}
           </div>
         )}
+
+        {/*
+         * «Показать больше» досыпает ещё одну сетку, а не уводит на каталог: у
+         * человека, который уже смотрит карточки, спрос простой — покажи ещё,
+         * и уходить со страницы ради этого не нужно. Кнопка «Все услуги» наверху
+         * остаётся для тех, кому нужен весь каталог с фильтрами.
+         */}
+        {hiddenCount > 0 && !isLoading && (
+          <div className="mt-8 flex justify-center">
+            <Button
+              type="button"
+              size="lg"
+              variant="outline"
+              onClick={() => setVisibleCount((current) => current + SHOWCASE_PAGE_SIZE)}
+              className="av-btn-glass h-12 px-7 text-base font-semibold text-white hover:text-white"
+            >
+              Показать больше
+              <span className="ml-1 text-slate-400">({hiddenCount})</span>
+            </Button>
+          </div>
+        )}
       </div>
+      <div className="av-divider mx-auto max-w-[1480px]" />
     </section>
   );
 }
@@ -883,7 +930,7 @@ function StudioPricingSection({
               Пополняйте баланс тогда, когда нужно. Цена конкретного запуска видна до списания.
             </p>
           </div>
-          <Button asChild className="av-btn-gradient av-pulse mt-5 h-11 w-full font-bold">
+          <Button asChild className="av-btn-gradient av-orbit mt-5 h-11 w-full font-bold">
             <Link href={isAuthed ? '/profile?tab=billing' : '/pricing'}>
               {isAuthed ? 'Пополнить баланс' : 'Смотреть цены'}
               <ArrowRight className="h-4 w-4" />
@@ -921,7 +968,7 @@ function FinalCta({ content, editor, isAuthed }: { content: HomeLandingContent; 
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <Button asChild className="av-btn-gradient av-pulse h-12 px-6 text-base font-bold">
+              <Button asChild className="av-btn-gradient av-orbit h-12 px-6 text-base font-bold">
                 <Link href={actionHref('/ai', isAuthed)}>
                   <Sparkles className="h-4 w-4" />
                   Allvision AI
