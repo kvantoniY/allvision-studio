@@ -1,13 +1,21 @@
 import { formatTokens, tokensToRub, type PublicService, type PublicTokenPackage } from '@allvision/shared';
 import { legalDocumentVersion, merchantInfo } from './merchant';
 
+/*
+ * Ссылки подвала ведут на РАЗДЕЛЫ, а не на конкретные услуги.
+ *
+ * Раньше здесь лежали шесть слугов эпохи Studio v1 (`photo-restore`, `fairy-tale` и
+ * прочие) — все шесть давно отдавали 404: каталог управляется из админки, услуги там
+ * переименовывают и удаляют, а подвал об этом не узнаёт. Разделы — это маршруты
+ * приложения, они не исчезают вместе с записью в базе, поэтому гнить больше нечему.
+ */
 export const serviceLinks = [
-  { href: '/services/photo-restore', label: 'Улучшение старых фото' },
-  { href: '/services/photo-animate', label: 'Оживление фото' },
-  { href: '/services/trends', label: 'Трендовые видео' },
-  { href: '/services/cartoon-custom', label: 'Мультфильм на заказ' },
-  { href: '/services/realistic-custom', label: 'Реалистичное видео' },
-  { href: '/services/fairy-tale', label: 'Сказка для ребёнка' },
+  { href: '/services', label: 'Все услуги' },
+  { href: '/services?tab=greetings', label: 'Видео-поздравления' },
+  { href: '/editor', label: 'Редактор роликов' },
+  { href: '/trends', label: 'Тренды' },
+  { href: '/scenarios', label: 'Сценарии' },
+  { href: '/pricing', label: 'Цены' },
 ];
 
 export const legalNotice = `Актуальная редакция документов сервиса ${merchantInfo.brandName}. Версия от ${legalDocumentVersion}.`;

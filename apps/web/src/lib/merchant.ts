@@ -12,4 +12,4 @@ export const merchantInfo = {
   workingHours: 'ежедневно с 9:00 до 22:00 МСК',
 } as const;
 
-export const legalDocumentVersion = '21.05.2026';
+export const legalDocumentVersion = '04.09.2026';

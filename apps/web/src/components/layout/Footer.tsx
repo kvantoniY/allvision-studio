@@ -5,7 +5,6 @@ import { merchantInfo } from '@/lib/merchant';
 import { serviceLinks } from '@/lib/public-content';
 
 const companyLinks = [
-  { href: '/about', label: 'О проекте' },
   { href: '/contacts', label: 'Контакты' },
   { href: '/privacy', label: 'Политика конфиденциальности' },
   { href: '/terms', label: 'Пользовательское соглашение' },
@@ -34,7 +33,9 @@ export function Footer() {
             <span>Allvision Studio</span>
           </Link>
           <p className="mt-4 max-w-xs text-sm leading-6 text-muted-foreground">
-            AI-сервис для создания и обработки медиа: фото, видео, тренды, мультфильмы и персональные сказки.
+            {/* Описание под продукт, а не под Studio v1: сказок и мультфильмов на заказ в каталоге давно нет. */}
+            AI-сервис цифровых подарков: видео-поздравления, оживление фото, трендовые ролики и редактор,
+            в котором ролик собирается вручную.
           </p>
           <div className="mt-5 flex gap-2">
             {socials.map((item) => (

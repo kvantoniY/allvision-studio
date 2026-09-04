@@ -35,11 +35,20 @@ export function TemplateBar({
   onShowHint: () => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 bg-violet-500/5 px-3 py-2 lg:px-4">
+    /*
+     * Тоже строго одна строка: `flex-wrap` уводил кнопку запуска на вторую полосу и
+     * вместе с шапкой отнимал у кадра половину экрана. Счётчик сжат до «6 · 0» с
+     * расшифровкой в подсказке — на телефоне слова «кадров» и «оживлено» стоили строки.
+     */
+    <div className="flex items-center gap-2 border-b border-slate-800 bg-violet-500/5 px-2 py-1.5 lg:px-4 lg:py-2">
       <Sparkles className="h-4 w-4 shrink-0 text-violet-300" />
-      <span className="min-w-0 truncate text-sm font-medium text-slate-100">{template.title}</span>
-      <span className="text-xs text-slate-400">
-        кадров {total} · оживлено {generated}
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-100">{template.title}</span>
+      <span
+        className="shrink-0 text-xs tabular-nums text-slate-400"
+        title={`Кадров ${total}, оживлено ${generated}`}
+      >
+        <span className="lg:hidden">{generated}/{total}</span>
+        <span className="hidden lg:inline">кадров {total} · оживлено {generated}</span>
       </span>
 
       <button
@@ -52,19 +61,21 @@ export function TemplateBar({
         <HelpCircle className="h-3.5 w-3.5" />
       </button>
 
-      <div className="ml-auto flex items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          disabled={running || withPhoto === 0}
-          onClick={onGenerateAll}
-          title={
-            withPhoto === 0
-              ? 'Сначала вставьте фотографии в кадры — оживлять пока нечего'
-              : `Оживит все кадры с фотографиями подряд: ${withPhoto} шт. по ${pricePerFrame} токенов`
-          }
-        >
-          {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+      <Button
+        type="button"
+        size="sm"
+        disabled={running || withPhoto === 0}
+        onClick={onGenerateAll}
+        aria-label="Сгенерировать все кадры"
+        className="h-8 w-8 shrink-0 p-0 lg:w-auto lg:px-3"
+        title={
+          withPhoto === 0
+            ? 'Сначала вставьте фотографии в кадры — оживлять пока нечего'
+            : `Оживит все кадры с фотографиями подряд: ${withPhoto} шт. по ${pricePerFrame} токенов`
+        }
+      >
+        {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+        <span className="hidden lg:inline">
           {running ? 'Запускаем…' : (
             <>
               Сгенерировать всё
@@ -75,8 +86,8 @@ export function TemplateBar({
               )}
             </>
           )}
-        </Button>
-      </div>
+        </span>
+      </Button>
     </div>
   );
 }

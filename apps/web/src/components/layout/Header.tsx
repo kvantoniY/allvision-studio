@@ -102,9 +102,6 @@ export function Header() {
                 ))}
                 {!user && (
                   <>
-                    <Link href="/about" className="text-lg font-medium">
-                      О проекте
-                    </Link>
                     <Link href="/contacts" className="text-lg font-medium">
                       Контакты
                     </Link>

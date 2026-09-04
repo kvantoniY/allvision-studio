@@ -1108,10 +1108,18 @@ export function VideoEditor({ id }: { id: string }) {
 
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col overflow-hidden lg:h-dvh">
-      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-2 lg:px-4">
+      {/*
+       * Шапка строго в одну строку.
+       *
+       * Раньше стоял `flex-wrap`, и на телефоне она разворачивалась в две строки: под
+       * названием отдельной полосой уезжали отмена, повтор и широкая кнопка сборки. Вместе
+       * с панелью шаблона это съедало четыре полосы над кадром — больше, чем сам кадр.
+       * Здесь всё, что можно, свёрнуто до значка, а подписи возвращаются на широком экране.
+       */}
+      <header className="flex shrink-0 items-center gap-2 border-b border-slate-800 px-2 py-2 lg:gap-3 lg:px-4">
         <Link
           href="/editor"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white"
           aria-label="К списку роликов"
         >
           <ArrowLeft className="h-4 w-4" />
@@ -1122,41 +1130,53 @@ export function VideoEditor({ id }: { id: string }) {
             setTitle(event.target.value);
             scheduleSave({ title: event.target.value });
           }}
-          className="h-10 max-w-xs flex-1 border-slate-700 bg-slate-900/80 text-base font-semibold"
+          className="h-9 min-w-0 flex-1 border-slate-700 bg-slate-900/80 text-sm font-semibold lg:max-w-xs lg:text-base"
           aria-label="Название ролика"
         />
-        <span className="flex items-center gap-1.5 text-xs text-slate-500">
+        {/* Состояние сохранения: на телефоне только значок, слово занимает полстроки. */}
+        <span className="flex shrink-0 items-center gap-1.5 text-xs text-slate-500">
           {saveState === 'saving' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {saveState === 'saved' && <Check className="h-3.5 w-3.5 text-emerald-400" />}
-          {saveState === 'saving' ? 'Сохраняем…' : saveState === 'saved' ? 'Сохранено' : ''}
+          <span className="hidden lg:inline">
+            {saveState === 'saving' ? 'Сохраняем…' : saveState === 'saved' ? 'Сохранено' : ''}
+          </span>
         </span>
-        <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={undo}
-              disabled={historyDepth.past === 0}
-              title="Отменить (Ctrl+Z)"
-              aria-label="Отменить"
-              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white disabled:opacity-35 disabled:hover:border-slate-700"
-            >
-              <Undo2 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={redo}
-              disabled={historyDepth.future === 0}
-              title="Вернуть (Ctrl+Shift+Z)"
-              aria-label="Вернуть"
-              className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white disabled:opacity-35 disabled:hover:border-slate-700"
-            >
-              <Redo2 className="h-4 w-4" />
-            </button>
-          </div>
-          <span className="hidden font-mono text-xs text-slate-500 sm:inline">{formatTimelineDuration(duration)}</span>
-          <Button type="button" onClick={handleExport} disabled={exporting || exportRunning}>
+        <div className="ml-auto flex shrink-0 items-center gap-1 lg:gap-2">
+          <button
+            type="button"
+            onClick={undo}
+            disabled={historyDepth.past === 0}
+            title="Отменить (Ctrl+Z)"
+            aria-label="Отменить"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white disabled:opacity-35 disabled:hover:border-slate-700"
+          >
+            <Undo2 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={historyDepth.future === 0}
+            title="Вернуть (Ctrl+Shift+Z)"
+            aria-label="Вернуть"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-700 text-slate-300 transition hover:border-slate-500 hover:text-white disabled:opacity-35 disabled:hover:border-slate-700"
+          >
+            <Redo2 className="h-4 w-4" />
+          </button>
+          <span className="hidden font-mono text-xs text-slate-500 xl:inline">{formatTimelineDuration(duration)}</span>
+          {/*
+           * Сборка. На телефоне — значок с подписью цены в подсказке; на широком экране
+           * возвращается полный текст, потому что это главное действие страницы.
+           */}
+          <Button
+            type="button"
+            onClick={handleExport}
+            disabled={exporting || exportRunning}
+            title={exportRunning ? 'Собираем ролик' : 'Собрать ролик за 2 токена'}
+            aria-label="Собрать ролик"
+            className="h-9 w-9 p-0 lg:w-auto lg:px-4"
+          >
             {exporting || exportRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
-            {exportRunning ? 'Собираем…' : 'Собрать ролик за 2 токена'}
+            <span className="hidden lg:inline">{exportRunning ? 'Собираем…' : 'Собрать ролик за 2 токена'}</span>
           </Button>
         </div>
       </header>
@@ -1257,18 +1277,25 @@ export function VideoEditor({ id }: { id: string }) {
             * выделению: выделен клип — его настройки, ничего не выделено — настройки ролика.
             * Иначе формат кадра на телефоне было бы негде поменять.
             */}
+          {/*
+           * На телефоне кнопки — одинаковые квадраты без подписей. Раньше ширина зависела
+           * от длины слова («Ролик» против «ИИ»), и полоса выглядела неровной лесенкой.
+           * Значка достаточно: инструментов пять и они узнаются по картинке, а название
+           * остаётся в подсказке и на широком экране.
+           */}
           <button
             type="button"
             onClick={() => setMobileSheet((current) => (current === 'clip' ? null : 'clip'))}
+            title={selectedClip ? 'Настройки клипа' : 'Настройки ролика'}
+            aria-label={selectedClip ? 'Настройки клипа' : 'Настройки ролика'}
             className={cn(
-              'flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-[11px] font-medium transition lg:hidden',
+              'grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition lg:hidden',
               mobileSheet === 'clip'
                 ? 'border-amber-400 bg-amber-400/10 text-amber-200'
                 : 'border-slate-800 bg-slate-900/60 text-slate-400',
             )}
           >
-            <SlidersHorizontal className="h-4 w-4" />
-            {selectedClip ? 'Клип' : 'Ролик'}
+            <SlidersHorizontal className="h-[18px] w-[18px]" />
           </button>
           {TOOLS.map((item) => (
             <button
@@ -1280,15 +1307,18 @@ export function VideoEditor({ id }: { id: string }) {
                 // вернуться к шкале, чем искать крестик.
                 setMobileSheet((current) => (current === item.code ? null : item.code));
               }}
+              title={item.label}
+              aria-label={item.label}
               className={cn(
-                'flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2.5 text-[11px] font-medium transition lg:w-full',
+                'grid h-11 w-11 shrink-0 place-items-center rounded-xl border transition',
+                'lg:flex lg:h-auto lg:w-full lg:flex-col lg:gap-1 lg:px-3 lg:py-2.5 lg:text-[11px] lg:font-medium',
                 tool === item.code && (mobileSheet === item.code || mobileSheet === null)
                   ? 'border-amber-400 bg-amber-400/10 text-amber-200'
                   : 'border-slate-800 bg-slate-900/60 text-slate-400 hover:border-slate-700 hover:text-slate-200',
               )}
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
+              <item.icon className="h-[18px] w-[18px]" />
+              <span className="hidden lg:inline">{item.label}</span>
             </button>
           ))}
         </nav>
