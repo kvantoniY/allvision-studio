@@ -93,13 +93,25 @@ export function controlledAdvancedKeys(model: ChatModelOption) {
   ]);
 }
 
+/*
+ * Негативный промпт убран из интерфейса.
+ *
+ * Современные модели изображения и видео его либо игнорируют, либо понимают ровно
+ * наоборот: перечисленное «чего не должно быть» попадает в результат. Поле путало
+ * больше, чем помогало, и занимало место в и без того плотных настройках. В каталоге
+ * параметр остаётся — админ может задать его в пайплайне услуги.
+ */
+const hiddenAdvancedKeys = new Set(['negative_prompt']);
+
 export function visibleAdvancedParams(model: ChatModelOption) {
   const controlled = controlledAdvancedKeys(model);
   // Слот-параметры (последний кадр, видео движения, target video...) прикрепляются единой
   // скрепкой — прячем их из расширенных настроек, чтобы у одного референса не было двух
   // конкурирующих мест прикрепления.
   const slotParams = new Set(chatReferenceSlots(model).map((slot) => slot.param));
-  return model.advancedParams.filter((param) => !controlled.has(param.key) && !slotParams.has(param.key));
+  return model.advancedParams.filter(
+    (param) => !controlled.has(param.key) && !slotParams.has(param.key) && !hiddenAdvancedKeys.has(param.key),
+  );
 }
 
 export function defaultAdvancedParams(model: ChatModelOption): ChatAdvancedParams {

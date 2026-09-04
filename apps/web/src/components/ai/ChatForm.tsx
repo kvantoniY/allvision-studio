@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Check, ChevronDown, Clock3, Frame, ImageIcon, Loader2, Mic, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, Clock3, Frame, ImageIcon, Loader2, Mic, Paperclip, Send, Settings2, Sparkles, UploadCloud, Video, Volume2, VolumeX, X } from 'lucide-react';
 import { CHAT_MODELS, CHAT_PROMPT_MAX_LENGTH, chatReferenceSlots, estimateChatGenerationPriceCoins, type ChatAspectRatio, type ChatCategory, type ChatModelOption, type ChatReferenceSlot, type PiAPIParamCapability } from '@allvision/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -448,6 +448,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       ? `Прикрепите: ${extraSlots.find((s) => s.required && !extraRefs[s.key]?.ref)?.label ?? 'референс'}`
       : dualInput && !audioSource
       ? 'Прикрепите аудио-озвучку'
+      : needsVoice
+        ? 'Выберите голос диктора в настройках'
       : missingAdvanced
         ? missingAdvanced
       : promptTooLong
@@ -531,6 +533,8 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
       advancedParams={advancedParams}
       familyModels={familyModels}
       priceOverrides={modelPriceOverrides}
+      voice={chatVoice}
+      onVoiceChange={setChatVoice}
       onModelChange={setModelSlug}
       onAspectRatioChange={setAspectRatio}
       onDurationChange={setDuration}
@@ -542,12 +546,20 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
 
   const actionControl = (
     <>
-      <div className="text-right leading-tight">
-        <div className="flex items-center justify-end gap-1">
-          <TokenIcon className={cn('h-3.5 w-3.5', canPay ? 'text-amber-300' : 'text-red-300')} />
-          <span className={cn('text-xs font-semibold', canPay ? 'text-amber-200' : 'text-red-200')}>{costText}</span>
-        </div>
-        <div className="text-[11px] text-slate-500">Баланс {balance}</div>
+      {/*
+       * Цена запуска — только значок токена и число. Слово «токенов» и строка
+       * «Баланс N» отсюда убраны: баланс всегда виден в шапке, а рядом с кнопкой
+       * нужен ответ ровно на один вопрос — сколько спишется. Полная подпись
+       * остаётся в title, если число надо расшифровать.
+       */}
+      <div
+        className="flex shrink-0 items-center gap-1"
+        title={`${costText} · баланс ${balance}`}
+      >
+        <TokenIcon className={cn('h-4 w-4', canPay ? 'text-amber-300' : 'text-red-300')} />
+        <span className={cn('text-sm font-bold tabular-nums', canPay ? 'text-amber-200' : 'text-red-200')}>
+          {estimatedCostCoins}
+        </span>
       </div>
       <Button type="submit" disabled={!canSubmit} className="h-8 shrink-0 bg-amber-500 px-3 text-slate-950 hover:bg-amber-400">
         {createMessageState.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -645,19 +657,11 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
           </div>
         )}
 
-        {isVoiceModel && (
-          <div className="mb-2 space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-slate-300">Голос диктора</span>
-              <span className="truncate text-xs text-violet-200">{chatVoice?.name ?? 'не выбран'}</span>
-            </div>
-            <VoicePicker value={chatVoice?.id ?? null} onChange={(id, name) => setChatVoice({ id, name })} />
-            <p className="text-[11px] text-slate-500">
-              Текст запроса и будет озвучен. Паузу задавайте разметкой {'{{pause=1.5}}'} — она бесплатна.
-            </p>
-          </div>
-        )}
-
+        {/*
+         * Выбор диктора переехал в окно настроек. Список голосов с прослушиванием —
+         * это отдельное занятие на минуту, а не переключатель у поля ввода: висел он
+         * тут постоянно и занимал место даже после того, как голос уже выбран.
+         */}
         {/* Поле ввода. На мобайле кнопки живут внутри инпута снизу, на ПК инпут чистый. */}
         <div className="relative" onPaste={handlePaste}>
           <Textarea
@@ -808,28 +812,44 @@ export function ChatForm({ chatId, onCreated, initialReference, initialPrompt, o
   );
 }
 
+const categoryIcons = { image: ImageIcon, video: Video, audio: Mic } as const;
+
+/**
+ * Что генерируем: фото, видео или голос.
+ *
+ * Было тремя кнопками в ряд — на телефоне они вместе с выбором модели занимали
+ * целую строку под полем ввода. Категорию выбирают один раз за сеанс и дальше не
+ * трогают, поэтому она свёрнута в меню: на кнопке видно текущий выбор, остальное
+ * открывается по стрелке. Стрелка смотрит вверх — меню и раскрывается вверх, над
+ * панелью.
+ */
 function CategoryControl({ category, onChange }: { category: ChatCategory; onChange: (value: ChatCategory) => void }) {
+  const Current = categoryIcons[category];
   return (
-    <div className="inline-grid h-8 grid-cols-3 rounded-md border border-slate-700 bg-slate-950 p-0.5">
-      {(['image', 'video', 'audio'] as const).map((item) => {
-        const active = category === item;
-        const Icon = item === 'image' ? ImageIcon : item === 'video' ? Video : Mic;
-        return (
-          <button
-            key={item}
-            type="button"
-            onClick={() => onChange(item)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded px-2.5 text-[13px] font-medium transition',
-              active ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white',
-            )}
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {categoryLabels[item]}
-          </button>
-        );
-      })}
-    </div>
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline" size="sm" className="h-8 shrink-0 border-slate-700 bg-slate-950 px-2.5 text-[13px]">
+          <Current className="h-3.5 w-3.5 text-violet-300" />
+          <span>{categoryLabels[category]}</span>
+          <ChevronUp className="h-3.5 w-3.5 text-slate-500" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="w-48 border-slate-800 bg-slate-950 text-slate-100">
+        <DropdownMenuLabel>Что создаём</DropdownMenuLabel>
+        <DropdownMenuSeparator className="bg-slate-800" />
+        <DropdownMenuRadioGroup value={category} onValueChange={(value) => onChange(value as ChatCategory)}>
+          {(['image', 'video', 'audio'] as const).map((item) => {
+            const Icon = categoryIcons[item];
+            return (
+              <DropdownMenuRadioItem key={item} value={item} className="gap-2 py-2 focus:bg-slate-900">
+                <Icon className="h-4 w-4 text-slate-400" />
+                {categoryLabels[item]}
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -881,6 +901,8 @@ function DetailedSettingsControl({
   advancedParams,
   familyModels,
   priceOverrides,
+  voice,
+  onVoiceChange,
   onModelChange,
   onAspectRatioChange,
   onDurationChange,
@@ -897,6 +919,9 @@ function DetailedSettingsControl({
   advancedParams: ChatAdvancedParams;
   familyModels: ChatModelOption[];
   priceOverrides?: Record<string, number>;
+  /** Диктор для моделей категории «Голос»: выбирается здесь же, в настройках. */
+  voice: { id: string; name: string } | null;
+  onVoiceChange: (value: { id: string; name: string }) => void;
   onModelChange: (value: string) => void;
   onAspectRatioChange: (value: ChatAspectRatio) => void;
   onDurationChange: (value: number) => void;
@@ -984,6 +1009,26 @@ function DetailedSettingsControl({
                 ))}
               </select>
             </div>
+
+            {/*
+             * Диктор. Живёт здесь, а не у поля ввода: список голосов с прослушиванием —
+             * занятие на минуту, и постоянно держать его на экране незачем. Показывается
+             * только в категории «Голос», где без него не запустить.
+             */}
+            {category === 'audio' && (
+              <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Голос диктора</span>
+                  <span className={cn('truncate text-xs', voice ? 'text-violet-200' : 'text-amber-300')}>
+                    {voice?.name ?? 'не выбран'}
+                  </span>
+                </div>
+                <VoicePicker value={voice?.id ?? null} onChange={(id, name) => onVoiceChange({ id, name })} />
+                <p className="mt-2 text-[11px] leading-4 text-slate-500">
+                  Озвучен будет текст запроса. Паузу задавайте разметкой {'{{pause=1.5}}'} — она бесплатна.
+                </p>
+              </div>
+            )}
 
             {!model.tool && (
             <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">

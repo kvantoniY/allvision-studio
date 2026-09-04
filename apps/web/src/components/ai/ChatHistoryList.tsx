@@ -100,8 +100,12 @@ export function ChatHistoryList({ items, selectedId, isLoading, onSelect, onNew 
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="line-clamp-2 text-sm font-medium text-slate-100">{item.title}</div>
+                  {/*
+                   * Число сообщений в списке не показываем: выбирают чат по названию и
+                   * превью последнего результата, а счётчик только добавлял карточке
+                   * третью строку и делал список вдвое длиннее.
+                   */}
                   <div className="mt-1 text-xs text-slate-500">{formatDateTime(item.updatedAt)}</div>
-                  <div className="mt-2 text-xs text-slate-500">{item.messageCount} сообщений</div>
                 </div>
               </button>
             );
