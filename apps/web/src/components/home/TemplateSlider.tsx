@@ -160,9 +160,15 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
        */}
       <div className="pointer-events-none absolute inset-x-0 -top-10 mx-auto h-[130%] max-w-5xl bg-[radial-gradient(ellipse_58%_62%_at_50%_45%,rgba(251,146,60,0.20),transparent_72%),radial-gradient(ellipse_82%_54%_at_50%_58%,rgba(139,92,246,0.16),transparent_78%)]" />
 
+      {/*
+       * Лента растворяется у краёв контейнера, а не обрывается по ним. Без маски
+       * крайние карточки упирались в границу и вместе с соседями складывались в
+       * прямоугольник во всю ширину — именно его ровные кромки читались как обрезанное
+       * свечение.
+       */}
       <div
         ref={boxRef}
-        className="relative touch-pan-y overflow-hidden"
+        className="relative touch-pan-y overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_14%,#000_86%,transparent)]"
         style={{ height: cardHeight * 1.08 }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -192,8 +198,16 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
                 height: cardHeight,
                 transform: `translate(-50%, -50%) translateX(${position * step}px) scale(${Math.max(0.68, 1 - distance * 0.16)})`,
                 // Дальние карточки уходят в тень и обесцвечиваются — центр всегда читается первым.
-                opacity: Math.max(0, 1 - distance * 0.42),
-                filter: `brightness(${Math.max(0.35, 1 - distance * 0.5)}) saturate(${Math.max(0.25, 1 - distance * 0.6)})`,
+                /*
+                 * Соседи гаснут быстрее, чем раньше (0.42).
+                 *
+                 * Пять карточек одной высоты закрывали всю ширину контейнера и смыкались
+                 * в светлую полосу с ровными верхней и нижней кромками — она читалась как
+                 * обрезанное свечение, хотя это были сами карточки. Чем быстрее гаснут
+                 * дальние, тем меньше полоса собирается.
+                 */
+                opacity: Math.max(0, 1 - distance * 0.58),
+                filter: `brightness(${Math.max(0.3, 1 - distance * 0.55)}) saturate(${Math.max(0.2, 1 - distance * 0.65)})`,
                 zIndex: 10 - Math.round(distance * 10),
                 transition,
               }}
@@ -276,7 +290,9 @@ function SlideCard({
           ? // Живая обводка только у центральной карточки: она одна в фокусе, и
             // покадровая перерисовка рамки здесь стоит недорого.
             'av-live-ring border-transparent shadow-[0_0_80px_-14px_rgba(251,191,36,0.55),0_0_120px_-30px_rgba(168,85,247,0.6)]'
-          : 'cursor-pointer border-white/10',
+          : // У боковых карточек края растушёваны: прямоугольник с чёткими кромками
+            // рядом с центральной читался как обрезок, а не как уходящий вглубь кадр.
+            'cursor-pointer border-transparent [mask-image:radial-gradient(ellipse_86%_80%_at_50%_50%,#000_45%,transparent_100%)]',
         !dragging &&
           centered &&
           'transition-shadow hover:shadow-[0_0_100px_-10px_rgba(251,191,36,0.7),0_0_140px_-24px_rgba(217,70,239,0.7)]',

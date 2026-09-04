@@ -17,7 +17,7 @@ export function AmbientBackground() {
       <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,#131a3a_0%,#0a0f24_42%,#020617_100%)]" />
 
       {/* Звёзды в два слоя: ровный и медленно мерцающий. */}
-      <div className="av-stars absolute inset-0 opacity-80" />
+      <div className="av-stars absolute inset-0 opacity-95" />
       <div className="av-stars-twinkle absolute inset-0" />
 
       {/* Туманности. Разные задержки — чтобы пятна не дышали в такт. */}

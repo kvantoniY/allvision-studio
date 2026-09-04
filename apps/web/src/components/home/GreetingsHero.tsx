@@ -55,14 +55,14 @@ export function GreetingsHero({
           muted
           loop
           playsInline
-          className="absolute inset-0 h-full w-full object-cover opacity-25 [mask-image:linear-gradient(to_bottom,#000_45%,transparent_92%)]"
+          className="absolute inset-0 h-full w-full object-cover opacity-[0.10] [mask-image:linear-gradient(to_bottom,#000_30%,transparent_85%)]"
         />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={background}
           alt={block.media.alt}
-          className="absolute inset-0 h-full w-full object-cover opacity-25 [mask-image:linear-gradient(to_bottom,#000_45%,transparent_92%)]"
+          className="absolute inset-0 h-full w-full object-cover opacity-[0.10] [mask-image:linear-gradient(to_bottom,#000_30%,transparent_85%)]"
         />
       )}
 
