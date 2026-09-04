@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ResultMedia } from '@/components/ui/result-media';
 import { GenerationLoader } from '@/components/ui/generation-loader';
+import { AudioResultPlayer } from '@/components/ui/audio-result-player';
 import { isAudioUrl } from '@/lib/media-kind';
 import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
@@ -240,7 +241,7 @@ function MessageCard({
               <Volume2 className="h-4 w-4 text-violet-300" />
               Озвучка готова
             </div>
-            <audio src={resultAudio} controls preload="metadata" className="w-full" />
+            <AudioResultPlayer src={resultAudio} />
           </div>
         )}
 

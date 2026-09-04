@@ -21,7 +21,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
+import { GenerationLoader } from '@/components/ui/generation-loader';
+import { AudioResultPlayer } from '@/components/ui/audio-result-player';
+import { isAudioUrl } from '@/lib/media-kind';
 import { ResultMedia } from '@/components/ui/result-media';
 import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -137,21 +139,15 @@ function ProjectProgressBody({ progress, projectId }: { progress: number; projec
   const safeProgress = useLivelyProgress(progress, true, projectId);
   const stuck = useStuckHint(safeProgress, true);
   return (
-    <>
-      <div className="mb-4 flex items-center justify-between gap-4 text-sm">
-        <span className="flex min-w-0 items-center gap-2 font-medium text-slate-100">
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
-          <span className="truncate">{progressMessage(safeProgress)}</span>
-        </span>
-        <span className="shrink-0 text-slate-400">{safeProgress}%</span>
-      </div>
-      <Progress value={safeProgress} />
-      <p className="mt-5 text-sm leading-6 text-slate-400">
-        {stuck
+    <GenerationLoader
+      progress={safeProgress}
+      label={progressMessage(safeProgress)}
+      hint={
+        stuck
           ? 'Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного. Страницу можно закрыть, результат появится тут автоматически.'
-          : 'Можно закрыть страницу: генерация продолжится, а результат появится в проектах автоматически.'}
-      </p>
-    </>
+          : 'Можно закрыть страницу: генерация продолжится, а результат появится в проектах автоматически.'
+      }
+    />
   );
 }
 
@@ -293,7 +289,12 @@ export function ProjectPageContent({ id, initialProject }: ProjectPageContentPro
           <Card className="border-slate-800 bg-slate-900">
             <CardContent className="p-4">
               <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
-                {finalVideoUrl ? (
+                {/* Озвучка приезжает полем видео, но проигрывать её надо звуком, а не кадром. */}
+                {finalVideoUrl && isAudioUrl(finalVideoUrl) ? (
+                  <div className="p-4">
+                    <AudioResultPlayer src={finalVideoUrl} />
+                  </div>
+                ) : finalVideoUrl ? (
                   <ResultMedia
                     key={finalVideoUrl}
                     type="video"

@@ -32,7 +32,7 @@ export function OrdersList() {
   return (
     <div className="container space-y-10 py-10">
       <header className="max-w-2xl">
-        <h1 className="text-3xl font-black tracking-tight sm:text-4xl">Заказы</h1>
+        <h1 className="text-3xl font-black tracking-tight sm:text-4xl">На заказ</h1>
         <p className="mt-3 leading-7 text-slate-400">
           Поздравления, которые мы делаем под вас: вы оставляете бриф, мы уточняем детали,
           называем цену и берём в работу.

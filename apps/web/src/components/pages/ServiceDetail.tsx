@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowRight,
   Check,
   ChevronDown,
   ChevronRight,
@@ -37,6 +38,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { ResultMedia } from '@/components/ui/result-media';
 import { GenerationLoader } from '@/components/ui/generation-loader';
+import { AudioResultPlayer } from '@/components/ui/audio-result-player';
+import { isAudioUrl } from '@/lib/media-kind';
 import { PhotoFramingTip } from '@/components/services/PhotoFramingTip';
 import { TemplateStartPanel } from '@/components/services/TemplateStartPanel';
 import { VoicePicker } from '@/components/editor/VoicePicker';
@@ -1920,6 +1923,20 @@ function GenerationPreview({
   const previewUrl = projectServicePreviewUrl(project);
   const previewVideoUrl = projectServicePreviewVideoUrl(project);
   const isResultVideo = !!resultUrl && isVideoUrl(resultUrl);
+  const isResultAudio = !!resultUrl && isAudioUrl(resultUrl);
+
+  /*
+   * Озвучка. Звук приезжает тем же полем, что и видео, но видеофайлом не является —
+   * без этой ветки mp3 уходил в тег <img> и показывался битой картинкой-заглушкой,
+   * хотя генерация прошла успешно.
+   */
+  if (project.status === 'COMPLETED' && resultUrl && isResultAudio) {
+    return (
+      <div className="rounded-md border border-violet-400/30 bg-slate-950 p-3">
+        <AudioResultPlayer src={resultUrl} />
+      </div>
+    );
+  }
 
   if (project.status === 'COMPLETED' && resultUrl) {
     return (
@@ -2472,6 +2489,11 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
     () => projects.some((project) => isActiveProjectStatus(project.status)),
     [projects],
   );
+  /** Самая свежая незавершённая генерация — её показываем и на вкладке «Услуга». */
+  const activeProject = useMemo(
+    () => projects.find((project) => isActiveProjectStatus(project.status)) ?? null,
+    [projects],
+  );
   const fields = useMemo(() => parseFields(service?.userInputForm), [service?.userInputForm]);
   const photoFields = useMemo(() => fields.filter((field) => field.type === 'photo'), [fields]);
   const tierField = useMemo(() => fields.find((field) => field.type === 'tier'), [fields]);
@@ -2781,6 +2803,35 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
             </button>
           ))}
         </div>
+
+        {/*
+         * Идущая генерация видна и на вкладке «Услуга».
+         *
+         * Раньше индикатор жил только внутри карточек в «Генерациях», и стоило уйти на
+         * соседнюю вкладку — прогресс пропадал совсем, будто ничего не запускалось.
+         * А уходят туда постоянно: со вкладки услуги запускают следующую генерацию.
+         */}
+        {activeView === 'service' && activeProject && (
+          <button
+            type="button"
+            onClick={() => setActiveView('generations')}
+            className="av-card av-card-quiet flex w-full items-center gap-4 rounded-2xl p-4 text-left transition hover:-translate-y-0.5"
+          >
+            <GenerationLoader
+              progress={typeof activeProject.progress === 'number' ? activeProject.progress : 0}
+              size={72}
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-slate-100">
+                {currentStage(activeProject) ?? 'Генерация идёт'}
+              </span>
+              <span className="mt-1 block text-xs text-slate-400">
+                Нажмите, чтобы открыть «Генерации». Страницу можно закрыть — результат сохранится.
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 shrink-0 text-slate-500" />
+          </button>
+        )}
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start">
           <div className="space-y-8">
