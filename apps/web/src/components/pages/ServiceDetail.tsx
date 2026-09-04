@@ -36,6 +36,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ImageWithSkeleton } from '@/components/ui/image-with-skeleton';
 import { ResultMedia } from '@/components/ui/result-media';
+import { GenerationLoader } from '@/components/ui/generation-loader';
 import { PhotoFramingTip } from '@/components/services/PhotoFramingTip';
 import { TemplateStartPanel } from '@/components/services/TemplateStartPanel';
 import { VoicePicker } from '@/components/editor/VoicePicker';
@@ -2057,33 +2058,27 @@ function currentStage(project: ProjectListItem): string | null {
 /**
  * Ход генерации на странице услуги.
  *
- * Процента здесь намеренно нет. Он рисовался сглаженной анимацией поверх редких обновлений
- * и на длинных генерациях подолгу стоял на месте — выглядело как зависание, хотя всё шло.
- * К тому же страница услуги не место ожидания: человек может тут же запустить эту же услугу
- * ещё раз. Поэтому здесь только факт «идёт работа», а точный прогресс — в разделе генераций.
+ * Процент сюда вернулся, но уже не полосой. Раньше полоса подолгу стояла на месте между
+ * редкими обновлениями с сервера и читалась как зависание — поэтому её и убрали. У кольца
+ * два независимых слоя: число и уровень заливки показывают настоящий прогресс и могут
+ * стоять, а волны и ореол идут всегда, так что «работа идёт» видно и на длинной паузе.
+ *
+ * Стадию («Сцена 4 из 10») показываем рядом: для ролика из десяти сцен она понятнее
+ * процента, который на таком масштабе двигается почти незаметно.
  */
 function GenerationProgress({ project, compact = false }: { project: ProjectListItem; compact?: boolean }) {
   const active = isActiveProjectStatus(project.status);
   const stage = currentStage(project);
+  const progress = typeof project.progress === 'number' ? project.progress : 0;
+  const label = stage ?? (active ? 'Генерация идёт' : 'Готовим результат');
+
   return (
-    <div className={compact ? 'space-y-1.5' : 'space-y-3'}>
-      <div className="flex items-start justify-between gap-3 text-sm">
-        <span className={cn('flex min-w-0 items-start gap-2 font-medium', compact ? 'text-amber-200' : 'text-slate-100')}>
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
-          <span className={compact ? 'line-clamp-2 min-w-0' : 'min-w-0'}>
-            {active ? 'Генерация идёт — можно закрыть страницу или запустить ещё одну' : 'Готовим результат'}
-          </span>
-        </span>
-      </div>
-      {stage && (
-        <p className={cn('text-slate-400', compact ? 'text-xs' : 'text-sm')}>{stage}</p>
-      )}
-      {!compact && (
-        <p className="text-sm leading-6 text-slate-400">
-          Можно закрыть страницу: генерация продолжится, а результат появится здесь автоматически.
-        </p>
-      )}
-    </div>
+    <GenerationLoader
+      progress={progress}
+      size={compact ? 84 : 116}
+      label={label}
+      hint={compact ? null : 'Можно закрыть страницу: генерация продолжится, а результат появится здесь автоматически.'}
+    />
   );
 }
 

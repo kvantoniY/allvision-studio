@@ -284,6 +284,16 @@ async function normaliseChatParams(raw: Record<string, unknown> | undefined, use
     'camera_control',
     'enable_audio',
     'generate_audio',
+    // Озвучка. Без этих ключей выбранный в чате диктор молча терялся здесь, и Lumean
+    // всегда озвучивал голосом по умолчанию — выбор голоса выглядел нерабочим.
+    'voice',
+    'speed',
+    'emotion',
+    'language',
+    'stability',
+    'similarity_boost',
+    'style',
+    'use_speaker_boost',
     // fal-generic (своя модель fal) — пользователь задаёт endpoint/функцию/доп. поля.
     'endpoint',
     'kind',

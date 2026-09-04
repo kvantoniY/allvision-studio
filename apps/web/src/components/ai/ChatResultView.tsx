@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, Download, ImageIcon, Loader2, Maximize2, RotateCcw, Sparkles, Video, X } from 'lucide-react';
+import { AlertTriangle, Download, ImageIcon, Loader2, Maximize2, RotateCcw, Sparkles, Video, Volume2, X } from 'lucide-react';
 import { getUserFriendlyError } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
 import { ResultMedia } from '@/components/ui/result-media';
+import { GenerationLoader } from '@/components/ui/generation-loader';
+import { isAudioUrl } from '@/lib/media-kind';
 import { useLivelyProgress, useStuckHint } from '@/lib/use-lively-progress';
 import { PROJECT_STATUS_COLOR, PROJECT_STATUS_LABEL, formatDateTime } from '@/components/dashboard/labels';
 import { DeleteGenerationButton } from '@/components/generations/DeleteGenerationButton';
@@ -136,6 +137,8 @@ function MessageCard({
   const resultVideo = mediaUrl(project.resultVideo);
   const resultThumbnail = mediaUrl(project.resultThumbnail);
   const resultUrl = resultVideo ?? resultImage ?? resultThumbnail;
+  // Звук приезжает в поле видео — отличаем его по расширению файла.
+  const resultAudio = resultVideo && isAudioUrl(resultVideo) ? resultVideo : null;
   const failed = status === 'FAILED';
   const processing = isActive(status);
   const safeProgress = useLivelyProgress(progress, processing, project.id);
@@ -202,20 +205,16 @@ function MessageCard({
         </div>
 
         {processing && (
-          <div>
-            <div className="mb-3 flex items-center justify-between gap-3 text-sm text-slate-300">
-              <span className="flex min-w-0 items-center gap-2 font-medium text-slate-100">
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-amber-300" />
-                <span className="truncate">{creativeProgressMessage(safeProgress)}</span>
-              </span>
-              <span className="shrink-0 text-slate-400">{safeProgress}%</span>
-            </div>
-            <Progress value={safeProgress} />
-            {stuckHint && (
-              <p className="mt-2 text-xs leading-5 text-amber-300/90">
-                Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного.
-              </p>
-            )}
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+            <GenerationLoader
+              progress={safeProgress}
+              label={creativeProgressMessage(safeProgress)}
+              hint={
+                stuckHint
+                  ? 'Серверы сейчас загружены — приносим извинения. Результат почти готов, нужно подождать ещё немного.'
+                  : 'Можно закрыть вкладку: результат появится здесь сам.'
+              }
+            />
           </div>
         )}
 
@@ -229,8 +228,24 @@ function MessageCard({
           </Alert>
         )}
 
-        {!processing && !failed && (
-          <div className="group relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
+        {!processing && !failed && resultAudio && (
+          /*
+           * Озвучка. Файл приходит тем же полем, что и видео (в контракте у звука нет
+           * своего типа вывода), но <video> с mp3 рисует пустой чёрный прямоугольник —
+           * человек видит «ничего не сгенерировалось». Поэтому звук отделён по
+           * расширению файла и показывается нормальным аудио-плеером.
+           */
+          <div className="av-reveal relative overflow-hidden rounded-lg border border-violet-400/30 bg-slate-950 p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-violet-100">
+              <Volume2 className="h-4 w-4 text-violet-300" />
+              Озвучка готова
+            </div>
+            <audio src={resultAudio} controls preload="metadata" className="w-full" />
+          </div>
+        )}
+
+        {!processing && !failed && !resultAudio && (
+          <div className="av-reveal group relative overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
             {resultVideo ? (
               <ResultMedia
                 key={resultVideo}
@@ -312,7 +327,8 @@ function MessageCard({
               Использовать как референс
             </Button>
           )}
-          {resultVideo && (
+          {/* Озвучку как видео-референс не предлагаем: это mp3, и модели ждут не его. */}
+          {resultVideo && !resultAudio && (
             <Button
               type="button"
               variant="outline"

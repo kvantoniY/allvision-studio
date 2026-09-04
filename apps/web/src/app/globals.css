@@ -517,3 +517,124 @@
     transition: none;
   }
 }
+
+/* ============================================================================
+ * Индикатор генерации и появление результата.
+ *
+ * Волны и свечение крутятся бесконечно, поэтому здесь особенно важно правило
+ * всей витрины: анимируются только transform и opacity. Ни ширина, ни фон, ни
+ * фильтры по кадрам не меняются — иначе браузер пересчитывал бы раскладку по
+ * шестьдесят раз в секунду всё время, пока идёт генерация (а это минуты).
+ * ========================================================================== */
+
+@layer components {
+  /*
+   * Волна внутри круга. Путь нарисован на два периода и уезжает ровно на один —
+   * поэтому петля не видна, шва на стыке нет.
+   */
+  .av-wave-a {
+    animation: av-wave-shift 3.6s linear infinite;
+  }
+
+  .av-wave-b {
+    animation: av-wave-shift 5.4s linear infinite reverse;
+  }
+
+  /* Дыхание жидкости: чуть качается по вертикали, чтобы уровень не выглядел мёртвым. */
+  .av-wave-bob {
+    animation: av-wave-bob 2.8s ease-in-out infinite;
+  }
+
+  /* Ореол вокруг кольца: медленно вращается, давая неоновый отблеск. */
+  .av-loader-halo {
+    background: conic-gradient(
+      from 0deg,
+      rgba(251, 191, 36, 0) 0deg,
+      rgba(251, 191, 36, 0.45) 40deg,
+      rgba(236, 72, 153, 0.5) 120deg,
+      rgba(139, 92, 246, 0.45) 210deg,
+      rgba(34, 211, 238, 0.4) 290deg,
+      rgba(251, 191, 36, 0) 360deg
+    );
+    animation: av-halo-spin 6s linear infinite;
+  }
+
+  /*
+   * Появление результата. Кадр слегка подрастает и проявляется, а поверх один раз
+   * проходит световой блик — «проявка», а не резкая подстановка картинки.
+   */
+  .av-reveal {
+    animation: av-reveal-in 0.62s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .av-reveal::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.18) 48%,
+      rgba(196, 181, 253, 0.24) 54%,
+      transparent 68%
+    );
+    transform: translateX(-120%);
+    animation: av-reveal-sheen 1.05s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+  }
+}
+
+@keyframes av-wave-shift {
+  to {
+    transform: translateX(-100px);
+  }
+}
+
+@keyframes av-wave-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2.5px);
+  }
+}
+
+@keyframes av-halo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes av-reveal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes av-reveal-sheen {
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .av-wave-a,
+  .av-wave-b,
+  .av-wave-bob,
+  .av-loader-halo,
+  .av-reveal,
+  .av-reveal::after {
+    animation: none;
+  }
+
+  /* Без анимации блик не должен остаться лежать поверх картинки. */
+  .av-reveal::after {
+    display: none;
+  }
+}
