@@ -166,9 +166,27 @@ export function TemplateSlider({ services }: { services: PublicService[] }) {
        * прямоугольник во всю ширину — именно его ровные кромки читались как обрезанное
        * свечение.
        */}
+      {/*
+       * Ореол центральной карточки живёт СНАРУЖИ ленты.
+       *
+       * Пока свечение было тенью на самой карточке, его срезал `overflow-hidden`
+       * контейнера: мягкий свет уходил далеко за карточку, упирался в край и обрывался
+       * ровной горизонтальной линией сверху и снизу. Отдельный слой позади ленты ничем
+       * не обрезается, поэтому свет гаснет плавно, как ему и положено.
+       *
+       * Размер и положение повторяют центральную карточку — она всегда ровно в центре.
+       */}
+      <div className="pointer-events-none relative" style={{ height: cardHeight * 1.08 }}>
+        <div
+          aria-hidden
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-3xl shadow-[0_0_80px_-14px_rgba(251,191,36,0.55),0_0_120px_-30px_rgba(168,85,247,0.6)]"
+          style={{ width: cardWidth, height: cardHeight }}
+        />
+      </div>
+
       <div
         ref={boxRef}
-        className="relative touch-pan-y overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_14%,#000_86%,transparent)]"
+        className="absolute inset-x-0 top-0 touch-pan-y overflow-hidden [mask-image:linear-gradient(to_right,transparent,#000_14%,#000_86%,transparent)]"
         style={{ height: cardHeight * 1.08 }}
         onPointerDown={(event) => {
           event.currentTarget.setPointerCapture?.(event.pointerId);
@@ -287,9 +305,18 @@ function SlideCard({
       className={cn(
         'relative h-full w-full overflow-hidden rounded-3xl border bg-slate-950',
         centered
-          ? // Живая обводка только у центральной карточки: она одна в фокусе, и
-            // покадровая перерисовка рамки здесь стоит недорого.
-            'av-live-ring border-transparent shadow-[0_0_80px_-14px_rgba(251,191,36,0.55),0_0_120px_-30px_rgba(168,85,247,0.6)]'
+          ? /*
+             * Живая обводка только у центральной карточки: она одна в фокусе, и
+             * покадровая перерисовка рамки здесь стоит недорого.
+             *
+             * Свечения здесь НЕТ намеренно. Раньше на карточке висела мягкая тень,
+             * а лента обрезает содержимое (`overflow-hidden`): тень уходила далеко за
+             * карточку, упиралась в край контейнера и обрывалась ровной горизонтальной
+             * линией сверху и снизу — именно это и читалось как «обрезанное свечение».
+             * Резалась не карточка, а её ореол, поэтому маски на соседях не помогали.
+             * Ореол теперь рисуется отдельным слоем СНАРУЖИ ленты.
+             */
+            'av-live-ring border-transparent'
           : /*
              * У боковых карточек края растворяются.
              *
@@ -306,7 +333,7 @@ function SlideCard({
             'cursor-pointer border-transparent [mask-image:radial-gradient(ellipse_52%_52%_at_50%_50%,#000_28%,transparent_100%)]',
         !dragging &&
           centered &&
-          'transition-shadow hover:shadow-[0_0_100px_-10px_rgba(251,191,36,0.7),0_0_140px_-24px_rgba(217,70,239,0.7)]',
+          'transition-shadow',
       )}
     >
       <SlideMedia service={service} muted={!centered || !soundOn} playing={centered} />

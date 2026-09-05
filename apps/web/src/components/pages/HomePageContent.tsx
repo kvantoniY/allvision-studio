@@ -5,10 +5,8 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ArrowRight, Bookmark, Bot, ChevronDown, Download, Film, ImagePlus, ImageIcon, Layers3, Library, Paperclip, Play, PlayCircle, Plus, Sparkles, Trash2, UploadCloud, UserRound, Video, Volume2, Wand2, Zap } from 'lucide-react';
-import { TokenIcon } from '@/components/ui/token-icon';
 import {
   CHAT_MODELS,
-  estimateChatGenerationPriceCoins,
   type PublicService,
 } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
@@ -36,7 +34,7 @@ import { GreetingsHero } from '@/components/home/GreetingsHero';
 import { Reveal } from '@/components/home/Reveal';
 import { mergeHomeLandingContent, type HomeLandingContent, type HomeMedia, type HomeModelFamily, type HomeTrendingSlot } from '@/lib/home-landing-content';
 import { useUpdateAdminHomePageContentMutation } from '@/store/api/admin-home-page-api';
-import { useGetHomePageContentQuery, useGetTokenPackagesQuery } from '@/store/api/public-api';
+import { useGetHomePageContentQuery } from '@/store/api/public-api';
 import { useListServicesQuery } from '@/store/api/services-api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:4000');
@@ -136,10 +134,6 @@ function serviceMedia(service?: PublicService): HomeMedia | null {
   return { type: 'image', url: '/mock_preview.png', alt: service.title };
 }
 
-function formatCoins(value: number) {
-  return `${value} токенов`;
-}
-
 function actionHref(path: string, isAuthed: boolean) {
   return isAuthed ? path : '/register';
 }
@@ -166,7 +160,6 @@ export function HomePageContent() {
   const isAuthed = !!user;
   const services = useListServicesQuery();
   const homePage = useGetHomePageContentQuery();
-  const tokenPackages = useGetTokenPackagesQuery();
   const [updateHomePage, updateHomePageState] = useUpdateAdminHomePageContentMutation();
   const mergedContent = useMemo(() => mergeHomeLandingContent(homePage.data?.content), [homePage.data?.content]);
   const [content, setContent] = useState<HomeLandingContent>(mergedContent);
@@ -203,7 +196,6 @@ export function HomePageContent() {
   // рендерится на сервере с реальным текстом; isAuthed (false при загрузке) влияет только на
   // ссылки CTA, а не на разметку, поэтому контент для поисковиков всегда в HTML.
   const allServices = services.data?.services ?? [];
-  const firstPackage = tokenPackages.data?.packages?.[0];
 
   return (
     <main className="relative min-w-0 text-slate-100">
@@ -230,7 +222,7 @@ export function HomePageContent() {
       <HeroLanding content={content} editor={editor} services={allServices} isAuthed={isAuthed} />
       <ChatSection content={content} editor={editor} isAuthed={isAuthed} />
       <ModelCatalogSection content={content} editor={editor} />
-      <StudioPricingSection content={content} editor={editor} isAuthed={isAuthed} starterPackage={firstPackage} />
+      <StudioPricingSection content={content} editor={editor} isAuthed={isAuthed} />
       <FinalCta content={content} editor={editor} isAuthed={isAuthed} />
       <HomeTextEditorModal
         edit={textEdit}
@@ -852,32 +844,23 @@ function StudioPricingSection({
   content,
   editor,
   isAuthed,
-  starterPackage,
 }: {
   content: HomeLandingContent;
   editor?: HomeEditorController;
   isAuthed: boolean;
-  starterPackage?: { tokens: number; bonus: number; priceRub: number } | null;
 }) {
   const studio = content.studio;
-  const photoPrice = estimateChatGenerationPriceCoins('nano-banana');
-  const videoPrice = estimateChatGenerationPriceCoins('veo-3.1-fast', { duration: 8 });
-  const audioPrice = estimateChatGenerationPriceCoins('veo-3.1-fast', { duration: 8, generateAudio: true });
 
   return (
     <section className="relative" {...sectionAttrs(studio.sectionKey)}>
       <div className="av-divider mx-auto max-w-[1480px]" />
-      <div className="mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8 lg:py-20">
+      <div className="mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
         {/*
-         * Текст и карточка цен стоят рядом, и низы у них выровнены.
-         *
-         * Раньше в левой колонке лежал ещё и большой кадр, из-за чего она была заметно
-         * выше карточки цен — справа снизу оставался пустой угол, а нижний ряд не
-         * совпадал с сеткой. Теперь кадр вынесен отдельной строкой во всю ширину, а
-         * колонка текста растянута (`justify-between`), так что кнопка «Открыть Студию»
-         * встаёт вровень с нижним краем карточки цен.
+         * Секция в одну колонку: карточка цен из неё убрана, и делить ширину больше
+         * не с чем. Ряды идут сверху вниз — текст с кнопкой, кадр, три карточки — и
+         * каждый занимает всю ширину, поэтому пустых углов не остаётся.
          */}
-        <div className="flex flex-col justify-between">
+        <div>
           <div>
             <SectionEyebrow icon={<Library className="h-4 w-4" />} text={studio.eyebrow} section={studio.sectionKey} editor={editor} path={['studio', 'eyebrow']} label="Бейдж блока Студии" />
             <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-normal text-white sm:text-4xl lg:text-5xl" {...fieldAttrs(studio.sectionKey, 'title')}>
@@ -903,39 +886,8 @@ function StudioPricingSection({
           </Button>
         </div>
 
-        <aside className="av-card av-glow-amber rounded-2xl p-5 lg:self-start" {...sectionAttrs('pricing-card')}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-semibold uppercase tracking-wide text-amber-300">Стоимость</div>
-              <h3 className="mt-1 text-2xl font-black text-white">
-                Низкие цены <span className="av-text-gradient">без подписки</span>
-              </h3>
-            </div>
-            <TokenIcon className="h-9 w-9 shrink-0 text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]" />
-          </div>
-          <div className="mt-6 space-y-3">
-            <PriceRow label="Фото / образ" value={`от ${formatCoins(photoPrice)}`} icon={<ImageIcon className="h-4 w-4" />} />
-            <PriceRow label="Видео по промпту" value={`от ${formatCoins(videoPrice)}`} icon={<Film className="h-4 w-4" />} />
-            <PriceRow label="Видео со звуком" value={`от ${formatCoins(audioPrice)}`} icon={<Volume2 className="h-4 w-4" />} />
-          </div>
-          <div className="av-card av-card-quiet mt-5 rounded-xl p-4">
-            <div className="text-sm font-semibold text-white">
-              {starterPackage ? `${starterPackage.tokens + starterPackage.bonus} токенов за ${starterPackage.priceRub} ₽` : 'Пакеты токенов'}
-            </div>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              Пополняйте баланс тогда, когда нужно. Цена конкретного запуска видна до списания.
-            </p>
-          </div>
-          <Button asChild className="av-btn-gradient av-orbit mt-5 h-11 w-full font-bold">
-            <Link href={isAuthed ? '/profile?tab=billing' : '/pricing'}>
-              {isAuthed ? 'Пополнить баланс' : 'Смотреть цены'}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </Button>
-        </aside>
-
-        {/* Кадр Студии — своя строка во всю ширину: рядом с текстом он и создавал перекос. */}
-        <div className="av-card av-card-violet av-glow-violet overflow-hidden rounded-2xl lg:col-span-2">
+        {/* Кадр Студии — своя строка во всю ширину. */}
+        <div className="av-card av-card-violet av-glow-violet overflow-hidden rounded-2xl">
           <div className="relative aspect-[16/9] lg:aspect-[21/9]">
             <EditableMedia editor={editor} path={['studio', 'media']} label="Картинка блока Студии" media={studio.media} className="absolute inset-0">
               <MediaBlock media={studio.media} />
@@ -951,7 +903,7 @@ function StudioPricingSection({
          * самого низа пустой угол. Три карточки под обеими колонками закрывают этот угол
          * и выстраиваются по той же сетке, что и всё остальное на странице.
          */}
-        <div className="grid gap-4 sm:grid-cols-3 lg:col-span-2">
+        <div className="grid gap-4 sm:grid-cols-3">
           {studio.items.map((item, index) => (
             <article key={item.key} className="av-card av-card-quiet rounded-2xl p-5 transition hover:-translate-y-1" {...sectionAttrs(`${studio.sectionKey}.${item.key}`)}>
               <h3 className="font-bold text-white" {...fieldAttrs(`${studio.sectionKey}.${item.key}`, 'title')}>
@@ -1132,14 +1084,3 @@ function StatPill({ value, label }: { value: string; label: string }) {
   );
 }
 
-function PriceRow({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
-  return (
-    <div className="av-card av-card-quiet flex items-center justify-between gap-4 rounded-xl p-3">
-      <div className="flex items-center gap-2 text-sm text-slate-300">
-        <span className="text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]">{icon}</span>
-        {label}
-      </div>
-      <div className="av-text-gradient text-sm font-black">{value}</div>
-    </div>
-  );
-}
