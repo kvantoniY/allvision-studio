@@ -823,9 +823,19 @@ function ServiceShowcaseSlot({
             {/* Затемнение к низу кадра: заголовок под ним читается на любом превью. */}
             <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-slate-950 to-transparent" />
           </div>
-          <div className="flex flex-1 flex-col gap-3 p-4">
-            <h3 className="line-clamp-2 text-base font-bold text-white">{service.title}</h3>
-            <div className="mt-auto flex justify-end">
+          {/*
+           * Название и кнопка — на одной линии.
+           *
+           * Кнопка стояла отдельной строкой под заголовком, и подвал карточки занимал
+           * вдвое больше места без всякой пользы. Название сжимается до одной строки с
+           * многоточием (`truncate`), а кнопка не сжимается вовсе (`shrink-0`): длинное
+           * имя услуги должно обрезаться само, а не выдавливать действие из карточки.
+           */}
+          <div className="flex flex-1 items-center justify-between gap-3 p-4">
+            <h3 className="min-w-0 flex-1 truncate text-base font-bold text-white" title={service.title}>
+              {service.title}
+            </h3>
+            <div className="shrink-0">
               <span className="av-btn-gradient inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold">
                 К услуге
                 <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
@@ -858,28 +868,31 @@ function StudioPricingSection({
     <section className="relative" {...sectionAttrs(studio.sectionKey)}>
       <div className="av-divider mx-auto max-w-[1480px]" />
       <div className="mx-auto grid w-full max-w-[1480px] gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8 lg:py-20">
-        <div>
-          <SectionEyebrow icon={<Library className="h-4 w-4" />} text={studio.eyebrow} section={studio.sectionKey} editor={editor} path={['studio', 'eyebrow']} label="Бейдж блока Студии" />
-          <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-normal text-white sm:text-4xl lg:text-5xl" {...fieldAttrs(studio.sectionKey, 'title')}>
-            <EditableText editor={editor} path={['studio', 'title']} label="Заголовок блока Студии" value={studio.title} multiline>
-              <GradientTail text={studio.title} />
-            </EditableText>
-          </h2>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg" {...fieldAttrs(studio.sectionKey, 'lead')}>
-            <EditableText editor={editor} path={['studio', 'lead']} label="Описание блока Студии" value={studio.lead} multiline>
-              {studio.lead}
-            </EditableText>
-          </p>
-
-          <div className="av-card av-card-violet av-glow-violet mt-6 overflow-hidden rounded-2xl">
-            <div className="relative aspect-[16/9]">
-              <EditableMedia editor={editor} path={['studio', 'media']} label="Картинка блока Студии" media={studio.media} className="absolute inset-0">
-                <MediaBlock media={studio.media} />
-              </EditableMedia>
-            </div>
+        {/*
+         * Текст и карточка цен стоят рядом, и низы у них выровнены.
+         *
+         * Раньше в левой колонке лежал ещё и большой кадр, из-за чего она была заметно
+         * выше карточки цен — справа снизу оставался пустой угол, а нижний ряд не
+         * совпадал с сеткой. Теперь кадр вынесен отдельной строкой во всю ширину, а
+         * колонка текста растянута (`justify-between`), так что кнопка «Открыть Студию»
+         * встаёт вровень с нижним краем карточки цен.
+         */}
+        <div className="flex flex-col justify-between">
+          <div>
+            <SectionEyebrow icon={<Library className="h-4 w-4" />} text={studio.eyebrow} section={studio.sectionKey} editor={editor} path={['studio', 'eyebrow']} label="Бейдж блока Студии" />
+            <h2 className="mt-4 max-w-3xl text-3xl font-black tracking-normal text-white sm:text-4xl lg:text-5xl" {...fieldAttrs(studio.sectionKey, 'title')}>
+              <EditableText editor={editor} path={['studio', 'title']} label="Заголовок блока Студии" value={studio.title} multiline>
+                <GradientTail text={studio.title} />
+              </EditableText>
+            </h2>
+            <p className="mt-4 max-w-3xl text-base leading-7 text-slate-400 sm:text-lg" {...fieldAttrs(studio.sectionKey, 'lead')}>
+              <EditableText editor={editor} path={['studio', 'lead']} label="Описание блока Студии" value={studio.lead} multiline>
+                {studio.lead}
+              </EditableText>
+            </p>
           </div>
 
-          <Button asChild className="av-btn-gradient mt-7 h-11 px-5 font-bold">
+          <Button asChild className="av-btn-gradient mt-7 h-11 w-fit px-5 font-bold">
             <Link href={actionHref('/studio', isAuthed)}>
               <Sparkles className="h-4 w-4" />
               <EditableText editor={editor} path={['studio', 'cta']} label="Текст кнопки Студии" value={studio.cta}>
@@ -920,6 +933,15 @@ function StudioPricingSection({
             </Link>
           </Button>
         </aside>
+
+        {/* Кадр Студии — своя строка во всю ширину: рядом с текстом он и создавал перекос. */}
+        <div className="av-card av-card-violet av-glow-violet overflow-hidden rounded-2xl lg:col-span-2">
+          <div className="relative aspect-[16/9] lg:aspect-[21/9]">
+            <EditableMedia editor={editor} path={['studio', 'media']} label="Картинка блока Студии" media={studio.media} className="absolute inset-0">
+              <MediaBlock media={studio.media} />
+            </EditableMedia>
+          </div>
+        </div>
 
         {/*
          * Преимущества Студии идут отдельной строкой сетки во всю ширину.
