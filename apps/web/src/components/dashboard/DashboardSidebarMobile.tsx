@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Menu } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetClose, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { DashboardSidebarContent } from './DashboardSidebar';
 
 export function DashboardSidebarMobile() {
@@ -16,11 +16,29 @@ export function DashboardSidebarMobile() {
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-72 p-0">
-        <SheetHeader className="border-b border-slate-800 p-4">
-          <SheetTitle>Allvision Studio</SheetTitle>
-        </SheetHeader>
-        <DashboardSidebarContent onNavigate={() => setOpen(false)} />
+      {/*
+       * Своей строки заголовка у листа нет: её роль играет логотип внутри меню, а
+       * шапка повторяла то же название вторым этажом. Для скринридера заголовок
+       * остаётся скрытым текстом — Radix требует его у диалога.
+       */}
+      <SheetContent side="left" hideClose aria-describedby={undefined} className="w-72 p-0">
+        <SheetTitle className="sr-only">Меню кабинета</SheetTitle>
+        <DashboardSidebarContent
+          onNavigate={() => setOpen(false)}
+          headerAction={
+            <SheetClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Скрыть меню"
+                className="h-9 w-9 shrink-0 text-slate-400 hover:bg-slate-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </SheetClose>
+          }
+        />
       </SheetContent>
     </Sheet>
   );

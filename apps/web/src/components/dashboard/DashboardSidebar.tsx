@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LogOut, ShieldCheck } from 'lucide-react';
@@ -19,7 +20,14 @@ function initialsOf(name: string | null | undefined, email: string) {
   return email[0]?.toUpperCase() ?? '?';
 }
 
-export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+export function DashboardSidebarContent({
+  onNavigate,
+  headerAction,
+}: {
+  onNavigate?: () => void;
+  /** Кнопка справа от логотипа. На телефоне это «скрыть меню»; на компьютере пусто. */
+  headerAction?: ReactNode;
+}) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
 
@@ -37,10 +45,13 @@ export function DashboardSidebarContent({ onNavigate }: { onNavigate?: () => voi
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-6 p-4">
-      <Link href="/" onClick={onNavigate} className="flex items-center gap-2 px-2 py-1 font-semibold text-white">
-        <BrandLogo className="h-6 w-auto" />
-        <span>Allvision Studio</span>
-      </Link>
+      <div className="flex items-center justify-between gap-2">
+        <Link href="/" onClick={onNavigate} className="flex min-w-0 items-center gap-2 px-2 py-1 font-semibold text-white">
+          <BrandLogo className="h-6 w-auto shrink-0" />
+          <span className="truncate">Allvision Studio</span>
+        </Link>
+        {headerAction}
+      </div>
 
       <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
         {sidebarSections.map((section, sectionIndex) => (
