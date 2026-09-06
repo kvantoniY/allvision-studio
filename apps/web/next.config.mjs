@@ -19,6 +19,19 @@ const nextConfig = {
     config.resolve.alias = { ...config.resolve.alias, canvas: false };
     return config;
   },
+  // www отдавал ПОЛНУЮ копию сайта (200, не редирект): для поисковика это второй
+  // сайт с тем же содержимым. Канонический адрес — без www, значит www обязан
+  // отвечать постоянным редиректом, а не собственной копией страницы.
+  async redirects() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'www.allvision-pulse.ru' }],
+        destination: 'https://allvision-pulse.ru/:path*',
+        permanent: true,
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

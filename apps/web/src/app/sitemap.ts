@@ -8,12 +8,16 @@ const staticPaths = [
   '/scenarios',
   '/pricing',
   '/contacts',
-  '/support',
   '/privacy',
   '/terms',
   '/offer',
   '/pd-consent',
 ];
+
+// Время старта процесса ≈ время выката. Раньше здесь стоял new Date() на каждый
+// запрос: карта сайта уверяла краулер, что ВСЕ страницы изменились только что, —
+// такой lastmod поисковик перестаёт учитывать вовсе.
+const BUILD_TIME = new Date();
 
 async function fetchJson<T>(path: string): Promise<T | null> {
   try {
@@ -45,7 +49,6 @@ async function getScenarioPaths(): Promise<string[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const now = new Date();
   const [services, trends, scenarios] = await Promise.all([
     getServicePaths(),
     getTrendPaths(),
@@ -55,7 +58,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return paths.map((path) => ({
     url: `${SITE_URL}${path}`,
-    lastModified: now,
+    lastModified: BUILD_TIME,
     changeFrequency: path === '' ? 'daily' : path.startsWith('/services') ? 'weekly' : 'weekly',
     priority: path === ''
       ? 1

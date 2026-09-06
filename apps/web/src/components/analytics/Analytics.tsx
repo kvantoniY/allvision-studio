@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import Script from 'next/script';
+import { RouteAnalytics } from './RouteAnalytics';
 
 // Аналитика подключается через env (build-time NEXT_PUBLIC_*). Пока id не задан —
 // ничего не рендерится. Заполнить NEXT_PUBLIC_YANDEX_METRICA_ID / NEXT_PUBLIC_GA_ID
@@ -18,6 +20,10 @@ export function Analytics() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`https://mc.yandex.ru/watch/${YANDEX_METRICA_ID}`} style={{ position: 'absolute', left: '-9999px' }} alt="" />
           </noscript>
+          {/* useSearchParams требует Suspense, иначе статические страницы уходят в динамический рендер. */}
+          <Suspense fallback={null}>
+            <RouteAnalytics metricaId={YANDEX_METRICA_ID} />
+          </Suspense>
         </>
       ) : null}
 
