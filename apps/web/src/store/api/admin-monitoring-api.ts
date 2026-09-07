@@ -60,6 +60,19 @@ export type MonitoringState = {
     captcha: { enabled: boolean; configured: boolean; health: MonitoringHealth; note?: string; checkedAt?: string };
     falBalance: { available: boolean; balanceUsd?: number; currency?: string; health: MonitoringHealth; error?: string; checkedAt?: string };
   };
+  providers: {
+    mode: string;
+    falBlocksEnv: string[];
+    piapiKeySet: boolean;
+    total: number;
+    onFal: number;
+    issues: Array<{
+      id: string;
+      slug: string;
+      title: string;
+      steps: Array<{ blockSlug: string; provider: string; model: string | null }>;
+    }>;
+  };
   errors: {
     since: string;
     failedCount: number;

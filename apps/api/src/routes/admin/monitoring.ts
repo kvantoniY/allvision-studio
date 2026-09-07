@@ -2,6 +2,7 @@ import net from 'node:net';
 import tls from 'node:tls';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { prisma } from '@allvision/database';
+import { resolveBlockProvider, resolveRuntimeProviderMode } from '@allvision/shared';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { requireAuth } from '../../middleware/auth';
@@ -359,23 +360,82 @@ async function readGenerationErrors() {
   };
 }
 
+
+/**
+ * Аудит провайдеров: какие услуги ещё уходят не на fal.
+ *
+ * Вопрос «все ли услуги на fal» иначе проверяется только чтением прод-БД руками. Правило
+ * маршрутизации берём общее с воркером (resolveBlockProvider), поэтому отчёт не может
+ * разойтись с тем, что происходит на самом деле. Показываем только проблемные услуги:
+ * пустой список и есть ответ «все на fal».
+ */
+async function readProviderAudit() {
+  const mode = resolveRuntimeProviderMode(process.env.PROVIDER_MODE, process.env.NODE_ENV);
+  const falBlocks = (process.env.FAL_BLOCKS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+
+  const services = await prisma.service.findMany({
+    where: { isActive: true },
+    select: { id: true, slug: true, title: true, pipelineConfig: true },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  const issues: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    steps: Array<{ blockSlug: string; provider: string; model: string | null }>;
+  }> = [];
+  let onFal = 0;
+
+  for (const service of services) {
+    const steps = Array.isArray(service.pipelineConfig) ? service.pipelineConfig : [];
+    const offFal: Array<{ blockSlug: string; provider: string; model: string | null }> = [];
+    for (const step of steps) {
+      if (!step || typeof step !== 'object') continue;
+      const blockSlug = (step as { blockSlug?: unknown }).blockSlug;
+      if (typeof blockSlug !== 'string') continue;
+      const provider = resolveBlockProvider(blockSlug, { mode, falBlocks });
+      if (provider === 'fal') continue;
+      const rawModel = (step as { params?: Record<string, unknown> }).params?.model;
+      offFal.push({
+        blockSlug,
+        provider,
+        model: typeof rawModel === 'string' ? rawModel : null,
+      });
+    }
+    if (offFal.length === 0) onFal += 1;
+    else issues.push({ id: service.id, slug: service.slug, title: service.title, steps: offFal });
+  }
+
+  return {
+    mode,
+    falBlocksEnv: falBlocks,
+    piapiKeySet: Boolean(process.env.PIAPI_API_KEY),
+    total: services.length,
+    onFal,
+    issues,
+  };
+}
+
 // --- Routes -----------------------------------------------------------------
 
 adminMonitoringRouter.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const domain = monitoredDomain();
-    const [stored, ssl, whois, captcha, falBalance, errors] = await Promise.all([
+    const [stored, ssl, whois, captcha, falBalance, errors, providers] = await Promise.all([
       readIndicators(),
       checkSsl(domain),
       checkDomainWhois(domain),
       checkCaptcha(),
       checkFalBalance(),
       readGenerationErrors(),
+      readProviderAudit(),
     ]);
 
     res.json({
       indicators: stored.map(computeIndicator),
       auto: { domain, ssl, whois, captcha, falBalance },
+      providers,
       errors,
       generatedAt: new Date().toISOString(),
     });

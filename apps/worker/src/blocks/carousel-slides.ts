@@ -92,7 +92,6 @@ export const carouselSlidesBlock: BlockDefinition = {
       metadata: {
         slides: urls,
         slideCount: urls.length,
-        provider: 'piapi',
         model,
       },
     };

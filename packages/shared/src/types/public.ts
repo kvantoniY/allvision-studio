@@ -24,6 +24,12 @@ export type PublicService = {
   featuredOrder: number;
   occasionTags: string[];
   userInputForm?: unknown;
+  /**
+   * Только у шаблонов видео-поздравлений: цена ОДНОГО оживлённого кадра и его длительность.
+   * Считает сервер по модели из пайплайна — той же функцией, которой потом списываются
+   * токены за генерацию кадра в редакторе, поэтому показанная цена не расходится со списанием.
+   */
+  template?: { framePriceCoins: number; frameDurationSec: number };
   processingType: ProcessingType;
   sortOrder: number;
 };

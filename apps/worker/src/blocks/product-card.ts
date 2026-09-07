@@ -143,7 +143,7 @@ export const productCardBlock: BlockDefinition = {
     const output: BlockOutput = {
       type: assets[0].type,
       url: assets[0].url,
-      metadata: { assets, provider: 'piapi' },
+      metadata: { assets },
     };
     return output;
   },

@@ -74,7 +74,7 @@ export const photo2017Block: BlockDefinition = {
       const output: BlockOutput = {
         type: 'image',
         url: imageResult.outputUrl,
-        metadata: { provider: 'piapi', model: imageModel, peopleCount },
+        metadata: { model: imageModel, peopleCount },
       };
       return output;
     }

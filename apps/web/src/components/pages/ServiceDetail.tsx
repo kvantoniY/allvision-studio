@@ -27,7 +27,7 @@ import {
   Video,
   X,
 } from 'lucide-react';
-import { formatTokens, getUserFriendlyError, type ProjectStatus, type PublicService } from '@allvision/shared';
+import { TEMPLATE_FRAME_LIMITS, formatTokens, getUserFriendlyError, type ProjectStatus, type PublicService } from '@allvision/shared';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -2905,9 +2905,24 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
           <CardContent className="flex min-h-0 flex-1 flex-col p-0">
             {!user && !isAuthLoading ? (
               <div className="space-y-5 px-6 pb-6">
+                {/*
+                  * У шаблона поздравления цены «за услугу» не существует: платится каждый
+                  * оживлённый кадр, а сколько их будет — человек выбирает сам. Показывать
+                  * здесь priceCoinsPro значило бы назвать гостю сумму, которой не будет
+                  * ни в одном списании.
+                  */}
                 <div className="rounded-lg border border-amber-400/60 bg-amber-400/10 p-4 text-center">
-                  <div className="text-xs uppercase tracking-wider text-amber-300">Стоимость услуги</div>
-                  <div className="mt-1 text-3xl font-black text-amber-200"><TokenPrice value={price} /></div>
+                  <div className="text-xs uppercase tracking-wider text-amber-300">
+                    {isGreetingTemplate && service.template ? 'Цена одного кадра' : 'Стоимость услуги'}
+                  </div>
+                  <div className="mt-1 text-3xl font-black text-amber-200">
+                    <TokenPrice value={isGreetingTemplate && service.template ? service.template.framePriceCoins : price} />
+                  </div>
+                  {isGreetingTemplate && service.template ? (
+                    <div className="mt-1 text-xs text-slate-400">
+                      Ролик из {TEMPLATE_FRAME_LIMITS.default} кадров — {service.template.framePriceCoins * TEMPLATE_FRAME_LIMITS.default} токенов
+                    </div>
+                  ) : null}
                 </div>
                 <Alert className="border-slate-700 bg-slate-950">
                   <Lock className="h-4 w-4" />
@@ -2922,6 +2937,7 @@ export function ServiceDetail({ slug }: ServiceDetailProps) {
             ) : isGreetingTemplate ? (
               <TemplateStartPanel
                 slug={service.slug}
+                framePriceCoins={service.template?.framePriceCoins}
                 authorized={Boolean(user)}
                 onRequireAuth={() => router.push(`/login?next=/services/${service.slug}`)}
               />

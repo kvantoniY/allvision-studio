@@ -7,7 +7,7 @@ import type {
   StorageProvider,
   RuntimeProviderMode,
 } from '@allvision/shared';
-import { resolveRuntimeProviderMode } from '@allvision/shared';
+import { resolveRuntimeProviderMode, resolveBlockProvider } from '@allvision/shared';
 import { MockAIProvider } from './mock-ai-provider';
 import type { AIProvider as WorkerAIProvider } from './ai-provider';
 import { PiAPIProvider } from './piapi-provider';
@@ -33,24 +33,17 @@ let falSingleton: FalProvider | undefined;
 let lumeanSingleton: LumeanProvider | undefined;
 let publisherSingleton: FilePublisher | undefined;
 
-const MOCK_ONLY_BLOCKS = new Set(['image-restore', 'image-upscale', 'timeline-render']);
-const PIAPI_BLOCKS = new Set(['image-to-video', 'face-swap-video', 'image-edit', 'text-to-video', 'motion-transfer', 'trend-video-transfer', 'scene-transfer', 'carousel-slides', 'product-card', 'photo-2017', 'video-effect', 'video-watermark-remove', 'video-upscale']);
-
-// Блоки, которые в режиме PROVIDER_MODE=fal идут через FalProvider. Остальные блоки из
-// PIAPI_BLOCKS (video-effect, watermark, upscale)
-// в fal пока не реализованы и остаются на PiAPI (гибрид). Можно переопределить env-ом
-// FAL_BLOCKS="image-edit,text-to-video" чтобы мигрировать поблочно и точечно откатывать.
-// motion-transfer/face-swap/trend/scene реализованы на fal (Kling/Wan motion, Wan Animate Replace,
-// omni). Прод переопределяет env-ом FAL_BLOCKS — туда тоже нужно добавить trend-video-transfer и
-// scene-transfer, чтобы тренд-услуги пошли через fal (Wan Motion для животных).
-const DEFAULT_FAL_BLOCKS = 'image-edit,text-to-video,image-to-video,motion-transfer,face-swap-video,trend-video-transfer,scene-transfer,carousel-slides,product-card,photo-2017,fal-generic,text-to-speech';
-// Синтез речи и лип-синк добавляются в список из env всегда. Откат блока на mock означает не «дешевле
-// и проще», а тишину вместо голоса — и в редакторе человек уже заплатил именно за голос.
-// Полезного mock-поведения у платной озвучки нет, поэтому выключать её нечем.
-const ALWAYS_FAL_BLOCKS = ['text-to-speech', 'talking-avatar'];
-function getFalBlocks(): Set<string> {
-  const raw = process.env.FAL_BLOCKS ?? DEFAULT_FAL_BLOCKS;
-  return new Set([...raw.split(','), ...ALWAYS_FAL_BLOCKS].map((s) => s.trim()).filter(Boolean));
+/*
+ * Куда уходит блок — решает общее правило из shared (resolveBlockProvider): по нему же
+ * админ-мониторинг показывает, какие услуги ещё не на fal. Здесь остаётся только чтение env.
+ *
+ * FAL_BLOCKS из env теперь может лишь ДОБАВИТЬ блок на fal. Раньше список работал наоборот —
+ * «на fal только перечисленное», — и любой блок, появившийся в каталоге после последней правки
+ * прод-env, молча уходил на PiAPI: чужой ключ, чужой баланс, другая цена.
+ */
+export function getFalBlocks(): string[] {
+  const raw = process.env.FAL_BLOCKS ?? '';
+  return raw.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
 /**
@@ -125,26 +118,12 @@ export function getAIProvider(
   if (options.mode === 'test-run') return getMockProvider();
 
   const providerMode = getRuntimeProviderMode();
-  if (providerMode === 'mock') return getMockProvider();
-  if (providerMode === 'piapi') {
-    if (!blockSlug || MOCK_ONLY_BLOCKS.has(blockSlug)) return getMockProvider();
-    if (PIAPI_BLOCKS.has(blockSlug)) return getPiAPIProvider();
-    return getMockProvider();
-  }
-  if (providerMode === 'fal') {
-    if (!blockSlug || MOCK_ONLY_BLOCKS.has(blockSlug)) return getMockProvider();
-    if (getFalBlocks().has(blockSlug)) return getFalProvider();
-    // Не мигрированные на fal блоки остаются на PiAPI (гибрид). Требует PIAPI_API_KEY в env.
-    if (PIAPI_BLOCKS.has(blockSlug)) return getPiAPIProvider();
-    // Незнакомый блок в боевом режиме идёт на fal, а НЕ на mock. Прод переопределяет
-    // FAL_BLOCKS через env, и каждый новый блок оказывался вне списка: пользователь платил
-    // коины и получал чёрные заглушки, а генерация при этом считалась успешной. Молчаливая
-    // подмена результата хуже честной ошибки, после которой коины возвращаются.
-    logger.warn(`[providers] блок ${blockSlug} не перечислен в FAL_BLOCKS — идём на fal, а не в mock`);
-    return getFalProvider();
-  }
+  if (providerMode === 'stub') return getStubProvider();
 
-  return getStubProvider();
+  const target = resolveBlockProvider(blockSlug, { mode: providerMode, falBlocks: getFalBlocks() });
+  if (target === 'fal') return getFalProvider();
+  if (target === 'piapi') return getPiAPIProvider();
+  return getMockProvider();
 }
 
 export async function initialiseWorkerProviders() {

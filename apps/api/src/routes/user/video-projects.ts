@@ -25,6 +25,7 @@ import { logger } from '../../utils/logger';
 import { createFreeChatProject } from '../../services/free-chat-generation';
 import { createEditorServiceGeneration } from '../../services/editor-service-generation';
 import { readModelPriceOverrides } from '../../services/model-pricing';
+import { templateRecipeOrDefault } from '../../services/template-recipe';
 import * as fileService from '../../services/file-service';
 import * as queues from '../../queues';
 
@@ -257,33 +258,6 @@ const fromTemplateSchema = z.object({
   aspect: z.enum(TIMELINE_ASPECTS),
 });
 
-/** Настройки оживления кадра, зашитые в пайплайн шаблона. */
-type TemplateRecipe = { model: string; prompt?: string; durationSec: number };
-
-/**
- * Достаёт из пайплайна шаблона то, чем оживляется один кадр.
- *
- * Шаблон описан как обычная услуга: шаг scene-batch повторял одну операцию для каждой
- * загруженной фотографии. Теперь тот же шаг служит рецептом для редактора — повторять его
- * будет человек, кадр за кадром, и видеть результат сразу.
- */
-function templateRecipe(pipelineConfig: unknown): TemplateRecipe {
-  const steps = Array.isArray(pipelineConfig) ? pipelineConfig : [];
-  const batch = steps.find(
-    (step): step is { params?: Record<string, unknown> } =>
-      Boolean(step) && typeof step === 'object' && (step as { blockSlug?: string }).blockSlug === 'scene-batch',
-  );
-  const params = batch?.params ?? {};
-  const model = typeof params.model === 'string' && params.model.length > 0 ? params.model : 'kling-3-std';
-  const prompt = typeof params.prompt === 'string' && params.prompt.trim().length > 0 ? params.prompt.trim() : undefined;
-  const duration = Number(params.duration);
-  return {
-    model,
-    ...(prompt ? { prompt } : {}),
-    durationSec: Number.isFinite(duration) && duration > 0 ? Math.min(20, Math.max(1, duration)) : 4,
-  };
-}
-
 /**
  * Новый ролик из шаблона поздравления.
  *
@@ -306,7 +280,7 @@ videoProjectsRouter.post('/from-template', async (req: Request, res: Response, n
     });
     if (!service) throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон не найден');
 
-    const recipe = templateRecipe(service.pipelineConfig);
+    const recipe = templateRecipeOrDefault(service.pipelineConfig);
 
     // Кадры стоят встык: между ними ничего не должно быть, иначе в готовом ролике
     // появятся паузы, которых никто не просил.

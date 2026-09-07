@@ -112,6 +112,7 @@ export default function AdminMonitoringPage() {
 
   const auto = data?.auto;
   const errors = data?.errors;
+  const providers = data?.providers;
 
   const indicators = editing ? draft : data?.indicators ?? [];
   const grouped = useMemo(() => {
@@ -270,6 +271,60 @@ export default function AdminMonitoringPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+      </section>
+
+      {/* Провайдеры услуг: что ещё уходит не на fal */}
+      <section>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Провайдеры услуг</h2>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge className="bg-zinc-700">Режим: {providers?.mode ?? '—'}</Badge>
+            <Badge className={providers && providers.issues.length > 0 ? 'bg-amber-600' : 'bg-emerald-600'}>
+              На fal: {providers?.onFal ?? 0} из {providers?.total ?? 0}
+            </Badge>
+            {providers?.piapiKeySet === false && providers.issues.length > 0 ? (
+              <Badge className="bg-red-700">PIAPI_API_KEY не задан</Badge>
+            ) : null}
+          </div>
+        </div>
+
+        {providers && providers.issues.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-zinc-800 p-6 text-center text-sm text-slate-500">
+            Все активные услуги идут через fal. Блоков на PiAPI и заглушек в пайплайнах нет.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {(providers?.issues ?? []).map((service) => (
+              <div key={service.id} className="rounded-lg border border-zinc-800 bg-zinc-950 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <a href={`/admin/services`} className="text-sm font-semibold text-white hover:text-amber-300">
+                    {service.title}
+                  </a>
+                  <span className="font-mono text-xs text-slate-500">{service.slug}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {service.steps.map((step, index) => (
+                    <span
+                      key={`${step.blockSlug}-${index}`}
+                      className={`rounded-full border px-3 py-1 text-xs ${
+                        step.provider === 'mock'
+                          ? 'border-red-800 bg-red-950/40 text-red-200'
+                          : 'border-amber-800 bg-amber-950/40 text-amber-200'
+                      }`}
+                    >
+                      {step.blockSlug} → {step.provider === 'mock' ? 'заглушка' : 'PiAPI'}
+                      {step.model ? <span className="text-slate-400"> · {step.model}</span> : null}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <p className="text-xs text-slate-500">
+              «заглушка» — блок отдаёт демо-файл вместо генерации: человек платит и получает
+              подделку. «PiAPI» — блок ещё не перенесён на fal и работает на старом ключе.
+            </p>
           </div>
         )}
       </section>

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { Prisma, prisma } from '@allvision/database';
 import {
+  estimateChatGenerationPriceCoins,
   generationExpiresAt,
   isCategorySection,
   isOccasionTag,
@@ -14,6 +15,8 @@ import { uploadServiceLaunchInputs } from '../middleware/upload';
 import { HttpError } from '../utils/http-error';
 import { logger } from '../utils/logger';
 import * as fileService from '../services/file-service';
+import { readModelPriceOverrides } from '../services/model-pricing';
+import { templateRecipe } from '../services/template-recipe';
 import * as queues from '../queues';
 
 export const servicesRouter = Router();
@@ -52,6 +55,8 @@ const publicServiceSelect = {
 const publicServiceDetailSelect = {
   ...publicServiceSelect,
   userInputForm: true,
+  // Пайплайн наружу не отдаём — он нужен только чтобы посчитать цену кадра шаблона.
+  pipelineConfig: true,
 } as const;
 
 const serviceForLaunchSelect = {
@@ -66,6 +71,33 @@ const serviceForLaunchSelect = {
   pipelineConfig: true,
   userInputForm: true,
 } as const;
+
+/**
+ * Цена кадра шаблона поздравления.
+ *
+ * Шаблон платится покадрово, и цена кадра считается НЕ по цене услуги, а по модели из её
+ * пайплайна: списывать потом будет та же функция, что и генерация кадра в редакторе. Поэтому
+ * считаем на сервере — рецепт (модель, длительность) лежит в pipelineConfig, а он наружу не
+ * отдаётся. У обычных услуг шага scene-batch нет, и поле просто не появляется.
+ */
+function withTemplatePrice<T extends { pipelineConfig?: unknown }>(
+  service: T,
+  priceOverrides: Awaited<ReturnType<typeof readModelPriceOverrides>>,
+): Omit<T, 'pipelineConfig'> {
+  const { pipelineConfig, ...rest } = service;
+  const recipe = templateRecipe(pipelineConfig);
+  if (!recipe) return rest;
+  return {
+    ...rest,
+    template: {
+      framePriceCoins: estimateChatGenerationPriceCoins(recipe.model, {
+        duration: recipe.durationSec,
+        priceOverrides,
+      }),
+      frameDurationSec: recipe.durationSec,
+    },
+  } as Omit<T, 'pipelineConfig'>;
+}
 
 function parseBoolean(value: unknown): boolean | undefined {
   if (value === 'true' || value === true) return true;
@@ -358,7 +390,14 @@ servicesRouter.get('/:slug', async (req: Request, res: Response, next: NextFunct
       select: publicServiceDetailSelect,
     });
     if (!service) throw new HttpError(404, 'SERVICE_NOT_FOUND', 'Service not found');
-    res.json({ service });
+
+    /*
+     * Шаблон поздравления платится покадрово, и цена кадра считается НЕ по цене услуги, а по
+     * модели из её пайплайна: списывает потом ровно та же функция, что и генерация в редакторе.
+     * Считаем на сервере, потому что рецепт (модель, длительность) лежит в pipelineConfig, а он
+     * наружу не отдаётся.
+     */
+    res.json({ service: withTemplatePrice(service, await readModelPriceOverrides()) });
   } catch (err) {
     next(err);
   }

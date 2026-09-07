@@ -6,9 +6,20 @@ import { ArrowRight, Loader2, Sparkles } from 'lucide-react';
 import { TEMPLATE_FRAME_LIMITS, TIMELINE_ASPECTS, type TimelineAspect } from '@allvision/shared';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { TokenPrice } from '@/components/ui/token-price';
 import { toast } from '@/hooks/use-toast';
 import { useCreateFromTemplateMutation } from '@/store/api/video-projects-api';
 import { cn } from '@/lib/utils';
+
+/** Русское склонение существительного при числе: 1 кадр, 3 кадра, 5 кадров. */
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  const mod10 = n % 10;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
 
 const ASPECT_TITLES: Record<TimelineAspect, string> = {
   '9:16': 'Вертикаль',
@@ -27,10 +38,13 @@ const ASPECT_TITLES: Record<TimelineAspect, string> = {
  */
 export function TemplateStartPanel({
   slug,
+  framePriceCoins,
   authorized,
   onRequireAuth,
 }: {
   slug: string;
+  /** Цена одного оживлённого кадра. Приходит с сервера — считается по модели из пайплайна. */
+  framePriceCoins?: number;
   authorized: boolean;
   onRequireAuth: () => void;
 }) {
@@ -38,6 +52,7 @@ export function TemplateStartPanel({
   const [frames, setFrames] = useState<number>(TEMPLATE_FRAME_LIMITS.default);
   const [aspect, setAspect] = useState<TimelineAspect>('9:16');
   const [createFromTemplate, { isLoading }] = useCreateFromTemplateMutation();
+  const totalPrice = framePriceCoins ? framePriceCoins * frames : undefined;
 
   const start = async () => {
     if (!authorized) {
@@ -86,6 +101,22 @@ export function TemplateStartPanel({
             От {TEMPLATE_FRAME_LIMITS.min} до {TEMPLATE_FRAME_LIMITS.max}. Лишние кадры можно
             удалить прямо в редакторе, а недостающие — добавить.
           </p>
+
+          {totalPrice !== undefined && (
+            <div className="rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xs uppercase tracking-wider text-amber-300">Весь ролик</span>
+                <span className="text-2xl font-black text-amber-200">
+                  <TokenPrice value={totalPrice} />
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                {frames} {plural(frames, 'кадр', 'кадра', 'кадров')} по{' '}
+                <TokenPrice value={framePriceCoins!} className="font-semibold text-amber-200/90" /> — списывается
+                за каждый оживлённый кадр, а не вперёд.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -122,7 +153,11 @@ export function TemplateStartPanel({
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
           Открыть в редакторе
         </Button>
-        <p className="text-center text-xs text-slate-500">Открытие бесплатно — платятся только генерации кадров.</p>
+        <p className="text-center text-xs text-slate-500">
+          {totalPrice !== undefined
+            ? 'Открытие бесплатно. Кадр списывается в момент оживления — неудачный можно переснять поштучно.'
+            : 'Открытие бесплатно — платятся только генерации кадров.'}
+        </p>
       </div>
     </>
   );
