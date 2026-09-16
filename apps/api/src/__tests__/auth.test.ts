@@ -2,6 +2,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { prisma } from '@allvision/database';
 import { app } from '../app';
+import { WELCOME_BONUS_TOKENS } from '../services/auth-service';
 
 const EMAIL = `test-${Date.now()}@example.ru`;
 const PASSWORD = 'password123';
@@ -25,25 +26,16 @@ afterAll(async () => {
 });
 
 describe('POST /api/auth/register', () => {
-  // Продуктовый контракт — ноль на старте. В локальном .env бонус может быть выставлен
-  // для ручных прогонов, но тест проверяет контракт, а не чужую настройку машины.
-  const envBonus = process.env.WELCOME_TOKENS_BONUS;
-  beforeAll(() => {
-    process.env.WELCOME_TOKENS_BONUS = '0';
-  });
-  afterAll(() => {
-    if (envBonus === undefined) delete process.env.WELCOME_TOKENS_BONUS;
-    else process.env.WELCOME_TOKENS_BONUS = envBonus;
-  });
-
-  it('creates user, sets cookies, starts with zero balance and no welcome bonus', async () => {
+  // Продуктовый контракт: стартовый баланс задан в коде (WELCOME_BONUS_TOKENS) и не зависит
+  // от env — раньше прод-.env молча перебивал его нулём.
+  it('creates user, sets cookies and credits the welcome bonus', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({ email: EMAIL, password: PASSWORD, name: NAME });
 
     expect(res.status).toBe(201);
     expect(res.body.user.email).toBe(EMAIL);
-    expect(res.body.user.tokenBalance).toBe(Number(process.env.WELCOME_TOKENS_BONUS ?? 0));
+    expect(res.body.user.tokenBalance).toBe(WELCOME_BONUS_TOKENS);
     expect(res.body.user.passwordHash).toBeUndefined();
 
     const cookies = res.headers['set-cookie'] as unknown as string[] | string | undefined;
@@ -51,11 +43,17 @@ describe('POST /api/auth/register', () => {
     expect(cookieArr.some((c) => c.startsWith('accessToken='))).toBe(true);
     expect(cookieArr.some((c) => c.startsWith('refreshToken='))).toBe(true);
 
-    // Стартовый баланс 0 — приветственный бонус больше не начисляется.
+    // Бонус виден в истории операций пользователя.
     const txns = await prisma.tokenTransaction.findMany({
       where: { user: { email: EMAIL } },
     });
-    expect(txns.length).toBe(0);
+    expect(txns).toEqual([
+      expect.objectContaining({
+        amount: WELCOME_BONUS_TOKENS,
+        reason: 'welcome_bonus',
+        balanceAfter: WELCOME_BONUS_TOKENS,
+      }),
+    ]);
   });
 
   it('rejects duplicate email with 409', async () => {

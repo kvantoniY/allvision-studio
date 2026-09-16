@@ -119,13 +119,23 @@ async function sendPasswordReset(user: Pick<User, 'email' | 'name'>, rawToken: s
   return result;
 }
 
+/**
+ * Стартовый баланс нового пользователя.
+ *
+ * Значение живёт в коде, а не в env: раньше оно читалось из WELCOME_TOKENS_BONUS, и прод-.env
+ * молча перебивал продуктовое решение — поменянный в коде бонус на сайте не появлялся, пока
+ * кто-то руками не отредактировал env на ВМ. Это решение продукта, а не настройка окружения:
+ * меняется тут, приезжает деплоем, покрыто тестом.
+ */
+export const WELCOME_BONUS_TOKENS = 5;
+
 export async function register(data: RegisterInput) {
   const existing = await prisma.user.findUnique({ where: { email: data.email } });
   if (existing) {
     throw new HttpError(409, 'EMAIL_TAKEN', 'Пользователь с таким email уже существует');
   }
 
-  const welcomeBonus = Number(process.env.WELCOME_TOKENS_BONUS ?? 0);
+  const welcomeBonus = WELCOME_BONUS_TOKENS;
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_COST);
 
   const user = await prisma.$transaction(async (tx) => {

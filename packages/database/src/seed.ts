@@ -3059,16 +3059,17 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
   {
     slug: 'trend-cat',
     title: 'Трендовый кот',
-    shortDesc: 'Загрузите фото своего кота — он повторит трендовый ролик',
+    shortDesc: 'Фото питомца — и вокруг него проедет трендовая камера',
     description:
-      'Загрузите одно фото своего кота. Нейросеть берёт готовое трендовое видео (его задаёт студия) как эталон движения, ракурсов и работы камеры и пересобирает этот ролик с вашим котом: та же съёмка, тот же ритм, тот же звук — но в кадре ваш питомец со своим окрасом и мордой. Больше ничего заполнять не нужно.',
+      'Загрузите одно фото своего питомца — кота, собаки, кого угодно. Из трендового ролика (его задаёт студия) берётся только движение камеры: те же ракурсы, тот же пролёт и ритм съёмки. Сам питомец и комната остаются вашими — с фото: тот же окрас, та же морда, та же обстановка вокруг. Больше ничего заполнять не нужно.',
     category: ServiceCategory.TRENDS_MEMES,
-    // Seedance 2.5 reference-to-video на fal: ~$0.284 за секунду 720p, причём биллятся и секунды
-    // референса, и секунды результата. Референс 5–6 сек => ~$3.1–3.4 (≈250–270 ₽) себестоимости.
-    // Если трендовое видео длиннее, цену нужно поднять в /admin/services.
-    priceTokens: 590,
-    priceCoinsStandard: 590,
-    priceCoinsPro: 590,
+    // ВНИМАНИЕ, цена ниже себестоимости — так решил владелец. Seedance 2.5 reference-to-video
+    // на fal стоит ~$0.284 за секунду 720p, причём биллятся и секунды референса, и секунды
+    // результата: референс на 5–6 сек => ~$3.1–3.4 (≈250–270 ₽) за генерацию против 24 токенов
+    // с пользователя. Цена меняется в /admin/services.
+    priceTokens: 24,
+    priceCoinsStandard: 24,
+    priceCoinsPro: 24,
     costUsd: 3.4,
     coverImage: image('gift-trend-cat'),
     galleryImages: [image('gift-trend-cat-1'), image('gift-trend-cat-2')],
@@ -3089,9 +3090,9 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
       {
         id: 'photo',
         type: 'photo',
-        label: 'Фото вашего кота',
+        label: 'Фото вашего питомца',
         required: true,
-        hint: 'Один кот в кадре, желательно целиком и при хорошем свете: по этому фото модель запоминает окрас и морду.',
+        hint: 'Один питомец в кадре, желательно целиком и при хорошем свете: с этого фото берутся и сам питомец, и комната вокруг него.',
         maxSizeMb: 10,
         allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
         allowStudioAvatars: true,
@@ -3120,8 +3121,10 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
           resolution: '720p',
           // Seedance генерит без звука, поэтому в результат муксится дорожка референса.
           keep_original_audio: true,
+          // Из референса берём ТОЛЬКО камеру: питомец и комната остаются такими, как на фото
+          // пользователя. Промпт видовой-нейтральный — кот, собака, кто угодно.
           prompt:
-            'Use @Video1 as the exact reference for the whole video: camera movement, camera angles, shot changes, timing, framing, background, lighting and overall scene. Recreate that same video with the cat from @Image1 as the only subject, repeating the reference shot by shot. Preserve the identity of the cat from @Image1 in every frame and from every camera angle: same breed, fur colour and pattern, markings, eye colour, ear and face shape, natural feline anatomy and proportions. Do not copy the look of the animal from @Video1, do not add other animals or people, do not turn the cat into a human or a cartoon. Photorealistic social video, natural cat movement, believable lighting, no text, no watermark.',
+            'Use @Video1 ONLY as a camera reference: repeat its camera movement, camera path, angles, shot changes, speed and timing. Ignore everything else in @Video1. Keep the scene of @Image1 unchanged: the same single animal and the same room, background, furniture, objects, colours and lighting as in @Image1. Preserve the animal from @Image1 exactly in every frame and from every camera angle: same species and breed, fur colour, pattern and markings, eye colour, face and ear shape, natural anatomy and proportions. The animal stays where it is in @Image1 and keeps calm natural behaviour; only the camera moves around it as in @Video1. Do not copy the animal, the room, the background, the objects, the lighting or the style from @Video1. Do not add other animals or people, do not replace or restyle the room, do not cartoonify. Photorealistic social video, one consistent scene across all frames, no text, no watermark.',
         },
       },
     ],
