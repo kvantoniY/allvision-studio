@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { z } from 'zod';
 import { getBlockCatalogItem } from '@allvision/shared';
 import type { ProviderRunContext } from '../providers/ai-provider';
-import { muxReferenceAudioIfSilent } from './reference-audio';
+import { localStaticFilePath, muxReferenceAudioIfSilent } from './reference-audio';
 import type { BlockContext, BlockDefinition } from './types';
 import {
   anyInputSchema,
@@ -454,6 +454,9 @@ function ffprobeVideoDuration(url: string): Promise<number | undefined> {
       clearTimeout(timer);
       resolve(value);
     };
+    // Наш собственный /static-URL читаем с диска: loopback на публичный домен из контейнера
+    // не проходит, и «длительность из референса» молча уходила в фолбэк через 10 секунд.
+    const target = localStaticFilePath(url) ?? url;
     const child = spawn('ffprobe', [
       '-v',
       'error',
@@ -461,7 +464,7 @@ function ffprobeVideoDuration(url: string): Promise<number | undefined> {
       'format=duration',
       '-of',
       'json',
-      url,
+      target,
     ], { windowsHide: true });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];

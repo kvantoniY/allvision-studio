@@ -61,6 +61,17 @@ export async function muxReferenceAudioIfSilent(input: {
 }
 
 /** Наш /static-URL читается напрямую с диска (loopback на собственный домен из контейнера не работает). */
+/**
+ * Путь на диске для нашего же /static-URL, либо undefined для чужого URL.
+ *
+ * Нужен всем, кто читает медиа локально вместо HTTP: из контейнера запрос на собственный
+ * публичный домен не проходит, и ffprobe/ffmpeg по такому URL молча падают в фолбэк.
+ */
+export function localStaticFilePath(url: string): string | undefined {
+  const key = localStaticKey(url);
+  return key ? path.join(UPLOADS_DIR, ...key.split('/')) : undefined;
+}
+
 function localStaticKey(url: string): string | undefined {
   const clean = (k: string) => decodeURIComponent(k.split('?')[0].replace(/^\/+/, ''));
   const base = (process.env.PUBLIC_API_URL ?? '').replace(/\/+$/, '');

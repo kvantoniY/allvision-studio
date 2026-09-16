@@ -76,6 +76,32 @@ describe('FalProvider reference payload mapping', () => {
     expect(submitted[0].input.duration).toBe('10');
   });
 
+  // Услуга «Трендовый кот» идёт на Seedance 2.5: у него другой неймспейс эндпоинта, но тот же
+  // контракт референсов. Ошибка в маппинге = референс молча выбрасывается.
+  it('routes Seedance 2.5 Omni to the 2.5 reference-to-video endpoint with the same reference contract', async () => {
+    const { provider, submitted } = makeProvider();
+    await provider.textToVideo({
+      prompt: 'repeat @Video1 with the cat from @Image1',
+      durationSec: 6,
+      model: 'seedance-2.5-omni',
+      params: {
+        image_urls: ['https://cdn.test/cat.jpg'],
+        video_urls: ['https://cdn.test/trend-cat.mp4'],
+        aspect_ratio: 'auto',
+        resolution: '720p',
+      },
+      context,
+    });
+
+    expect(submitted[0].endpoint).toBe('bytedance/seedance-2.5/reference-to-video');
+    expect(submitted[0].input.video_urls).toEqual(['https://cdn.test/trend-cat.mp4']);
+    expect(submitted[0].input.image_urls).toEqual(['https://cdn.test/cat.jpg']);
+    expect(submitted[0].input.generate_audio).toBe(false);
+    expect(submitted[0].input.duration).toBe('6');
+    // aspect_ratio 'auto' опускается: формат берётся из референс-видео (P9.6).
+    expect(submitted[0].input.aspect_ratio).toBeUndefined();
+  });
+
   it('sends string duration to Seedance text-to-video and "auto" when requested', async () => {
     // Число -> строковый enum (schema fal: type string). params.duration:'auto' -> 'auto'.
     const numeric = makeProvider();

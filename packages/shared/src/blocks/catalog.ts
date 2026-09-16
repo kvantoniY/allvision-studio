@@ -956,7 +956,7 @@ const TREND_MODE_LABELS: Record<string, string> = {
   // Режим выполняется через Kling O3 Reference V2V (настоящий omni-референс на fal:
   // видео-референс + фото + промпт, keep_audio сохраняет звук референса).
   kling_omni: 'Kling O3 Omni (референс)',
-  seedance_omni: 'Seedance 2.0 Omni (референс)',
+  seedance_omni: 'Seedance Omni (референс)',
 };
 
 const speechModels: ModelOption[] = [
@@ -1296,8 +1296,8 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
       },
       {
         id: 'mode_seedance_omni',
-        title: 'Режим Seedance 2.0 Omni (референс)',
-        description: 'То же, что Kling Omni, но движком Seedance 2.0 (@image1/@image2 + @video1).',
+        title: 'Режим Seedance Omni (референс)',
+        description: 'То же, что Kling Omni, но движком Seedance (@image1/@image2 + @video1). Модель выбирается ниже: 2.5 — точнее и дороже, 2.0 — дешевле.',
         whenFields: ['mode', 'default_mode'],
         whenValues: ['seedance_omni'],
       },
@@ -1444,9 +1444,10 @@ export const BLOCK_CATALOG: BlockCatalogItem[] = [
         seedance_model: {
           type: 'string',
           title: 'Модель Seedance Omni',
-          ...modelEnum(textToVideoModels, ['seedance-2-omni', 'seedance-2-fast-omni']),
+          ...modelEnum(textToVideoModels, ['seedance-2.5-omni', 'seedance-2-omni', 'seedance-2-fast-omni']),
           default: 'seedance-2-omni',
           group: 'mode_seedance_omni',
+          description: 'Seedance 2.5 Omni точнее держит субъект и движение референса, но дороже: на 720p с видео-референсом fal считает тариф за (длина референса + длина результата) секунд.',
         },
         prompt: {
           ...promptSchema,

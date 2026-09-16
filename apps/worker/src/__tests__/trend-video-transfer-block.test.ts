@@ -344,4 +344,41 @@ describe('trend-video-transfer block', () => {
     }));
     expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
   });
+
+  // Форма услуги «Трендовый кот»: один субъект, референс-видео задаёт админ, промпт вшит
+  // в пайплайн. Проверяем, что выбранная модель 2.5 доезжает до провайдера как есть и что
+  // админский промпт не подменяется встроенным.
+  it('runs single-subject Seedance 2.5 Omni with the admin prompt', async () => {
+    const provider = new StubAIProvider();
+    const spy = jest.spyOn(provider, 'textToVideo');
+
+    const output = await trendVideoTransferBlock.executor(
+      {
+        mode: 'seedance_omni',
+        default_mode: 'seedance_omni',
+        people_count: 'one',
+        reference_video: 'https://cdn.test/trend-cat.mp4',
+        primary_photo: 'https://cdn.test/cat.jpg',
+        seedance_model: 'seedance-2.5-omni',
+        duration: 6,
+        aspect_ratio: 'auto',
+        resolution: '720p',
+        prompt: 'Use @Video1 as the exact reference, keep the cat from @Image1.',
+      },
+      undefined,
+      ctx(provider),
+    );
+
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Use @Video1 as the exact reference, keep the cat from @Image1.',
+      durationSec: 6,
+      model: 'seedance-2.5-omni',
+      params: expect.objectContaining({
+        mode: 'omni_reference',
+        image_urls: ['https://cdn.test/cat.jpg'],
+        video_urls: ['https://cdn.test/trend-cat.mp4'],
+      }),
+    }));
+    expect(output).toEqual(expect.objectContaining({ type: 'video', url: 'stub://text-to-video.mp4' }));
+  });
 });

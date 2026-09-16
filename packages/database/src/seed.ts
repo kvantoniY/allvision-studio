@@ -3056,6 +3056,76 @@ Avoid: disproportionate oversized or tiny heads, wrong head-to-body ratio, elong
       },
     ],
   },
+  {
+    slug: 'trend-cat',
+    title: 'Трендовый кот',
+    shortDesc: 'Загрузите фото своего кота — он повторит трендовый ролик',
+    description:
+      'Загрузите одно фото своего кота. Нейросеть берёт готовое трендовое видео (его задаёт студия) как эталон движения, ракурсов и работы камеры и пересобирает этот ролик с вашим котом: та же съёмка, тот же ритм, тот же звук — но в кадре ваш питомец со своим окрасом и мордой. Больше ничего заполнять не нужно.',
+    category: ServiceCategory.TRENDS_MEMES,
+    // Seedance 2.5 reference-to-video на fal: ~$0.284 за секунду 720p, причём биллятся и секунды
+    // референса, и секунды результата. Референс 5–6 сек => ~$3.1–3.4 (≈250–270 ₽) себестоимости.
+    // Если трендовое видео длиннее, цену нужно поднять в /admin/services.
+    priceTokens: 590,
+    priceCoinsStandard: 590,
+    priceCoinsPro: 590,
+    costUsd: 3.4,
+    coverImage: image('gift-trend-cat'),
+    galleryImages: [image('gift-trend-cat-1'), image('gift-trend-cat-2')],
+    previewImage: image('gift-trend-cat-preview'),
+    previewVideo: null,
+    processingType: ProcessingType.AUTO,
+    aiProvider: 'fal',
+    aiModel: 'data-driven-pipeline',
+    aiConfig: {},
+    // Услуга приезжает ВЫКЛЮЧЕННОЙ: пока в step_1.reference_video стоит заглушка, генерация
+    // гарантированно не даст результата, а платит за неё пользователь. Порядок включения:
+    // /admin/services -> «Трендовый кот» -> шаг 1 -> «Референс-видео» -> загрузить трендовый
+    // ролик с котом (MP4 до 15 сек и 25 МБ) -> сохранить -> включить «Активна».
+    isActive: false,
+    isFeatured: false,
+    sortOrder: 10,
+    userInputForm: [
+      {
+        id: 'photo',
+        type: 'photo',
+        label: 'Фото вашего кота',
+        required: true,
+        hint: 'Один кот в кадре, желательно целиком и при хорошем свете: по этому фото модель запоминает окрас и морду.',
+        maxSizeMb: 10,
+        allowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        allowStudioAvatars: true,
+        allowSystemLibrary: false,
+      },
+    ],
+    pipelineConfig: [
+      {
+        id: 'step_1',
+        blockSlug: 'trend-video-transfer',
+        input: '{{user.photo}}',
+        params: {
+          mode: 'seedance_omni',
+          default_mode: 'seedance_omni',
+          people_count: 'one',
+          // Исходное трендовое видео задаёт админ в конструкторе услуги: у поля «Референс-видео»
+          // есть выбор источника с загрузкой файла прямо в медиатеку (kind trend-video).
+          reference_video: 'PLACEHOLDER_UPLOAD_TREND_VIDEO_IN_ADMIN',
+          primary_photo: '{{user.photo}}',
+          seedance_model: 'seedance-2.5-omni',
+          // Длина результата берётся из референса (не больше 15 сек), запасной вариант — 6 сек.
+          duration_from_reference: true,
+          duration: 6,
+          // auto => формат кадра наследуется от референс-видео.
+          aspect_ratio: 'auto',
+          resolution: '720p',
+          // Seedance генерит без звука, поэтому в результат муксится дорожка референса.
+          keep_original_audio: true,
+          prompt:
+            'Use @Video1 as the exact reference for the whole video: camera movement, camera angles, shot changes, timing, framing, background, lighting and overall scene. Recreate that same video with the cat from @Image1 as the only subject, repeating the reference shot by shot. Preserve the identity of the cat from @Image1 in every frame and from every camera angle: same breed, fur colour and pattern, markings, eye colour, ear and face shape, natural feline anatomy and proportions. Do not copy the look of the animal from @Video1, do not add other animals or people, do not turn the cat into a human or a cartoon. Photorealistic social video, natural cat movement, believable lighting, no text, no watermark.',
+        },
+      },
+    ],
+  },
   ...greetingTemplates,
 ];
 
@@ -3571,6 +3641,9 @@ async function ensureUser(options: EnsureUserOptions) {
 // When adding a future batch of services, add their slugs here for that deploy, then clear the list.
 const NEW_SERVICE_SLUGS_TO_CREATE = new Set<string>([
   'talking-character',
+  // «Трендовый кот» (Seedance 2.5 Omni). Создаётся выключенной: сначала админ загружает
+  // трендовое видео в шаг 1, потом включает услугу. Убрать из списка после выката.
+  'trend-cat',
   // G3: шаблоны видео-поздравлений.
   ...greetingTemplateSlugs,
 ]);
