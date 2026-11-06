@@ -3800,7 +3800,7 @@ async function ensureMediaAssetsMigration() {
 async function seedDevUser() {
   const passwordHash = await bcrypt.hash('user123', BCRYPT_COST);
   return prisma.user.upsert({
-    where: { email: 'user@allvision.studio' },
+    where: { email: 'demo@local.ru' },
     update: {
       passwordHash,
       name: 'Test User',
@@ -3809,7 +3809,7 @@ async function seedDevUser() {
       deletedAt: null,
     },
     create: {
-      email: 'user@allvision.studio',
+      email: 'demo@local.ru',
       passwordHash,
       name: 'Test User',
       role: 'USER',

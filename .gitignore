@@ -44,3 +44,18 @@ coverage/
 .turbo/
 
 apps.zip
+
+# Локальные зависимости, настройки и данные
+node_modules/
+.env
+.env.local
+.env.*.local
+.next/
+dist/
+build/
+*.tsbuildinfo
+*.log
+*.sqlite
+*.sqlite-*
+uploads/
+.claude/settings.local.json

@@ -436,7 +436,7 @@ export function planFinal(input: FinalPlanInput): FinalPlan {
   const encode = ENCODE_PRESETS[quality] ?? ENCODE_PRESETS.balanced;
   args.push(
     '-filter_complex', chain.join(';'),
-    '-map', videoLabel.startsWith('vx') ? `[${videoLabel}]` : `${videoLabel}`,
+    '-map', `[${videoLabel}]`,
     '-map', '[aout]',
     '-c:v', 'libx264',
     '-preset', encode.preset,

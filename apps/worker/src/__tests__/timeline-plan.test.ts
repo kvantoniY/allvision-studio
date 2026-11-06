@@ -220,6 +220,17 @@ describe('planFinal: фрагменты звука', () => {
 });
 
 describe('planFinal', () => {
+  it('экспортирует единственную сцену через выход фильтра sv0', () => {
+    const final = planFinal({
+      timeline: parseTimeline({ scenes: [videoScene()] }),
+      scenePaths: ['/tmp/0.mp4'],
+      outputPath: '/tmp/out.mp4',
+      quality: 'balanced',
+    });
+    expect(filterGraph(final.args)).toContain('[sv0]');
+    expect(argAfter(final.args, '-map')).toBe('[sv0]');
+  });
+
   it('joins cuts with concat and transitions with xfade at the computed offset', () => {
     const timeline = parseTimeline({
       scenes: [
